@@ -31,8 +31,7 @@ def calculate_co2_stald_lager(
     Returns:
         float: CO2_stald_lager in kg CO2e
     """
-    co2_stald_lager = (s_co2e / theta_maelk) * fpcm * phi * n_ko
-    return co2_stald_lager
+    return (s_co2e / theta_maelk) * fpcm * phi * n_ko
 
 
 # Testcases

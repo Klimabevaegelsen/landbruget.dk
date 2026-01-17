@@ -17,8 +17,8 @@ from utils.logger import setup_logger
 
 # GCS upload functionality
 try:
-    from google.cloud import storage  # noqa: F401
-    from unified_pipeline.util.gcs_access import GCSDataAccess  # noqa: F401
+    from google.cloud import storage
+    from common.gcs import GCSDataAccess  # noqa: F401
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -360,8 +360,7 @@ def _process_with_streaming(
                 "timestamp": pipeline_start_time.strftime("%Y%m%d_%H%M%S"),
                 "error": str(e),
             }
-        else:
-            raise
+        raise
 
 
 def _get_building_count_from_files(output_dir: Path | None = None) -> int:

@@ -19,6 +19,7 @@ Beregning af kg N2O fra nitratudvaskning
 # Note: AR4 uses 298, but we use AR6 (273) for updated science
 THETA_N2O_CO2 = 273.0  # GWP N2O (IPCC AR6, 100-year)
 
+
 def calculate_n2o_nitratudvaskning(t: float, h: float) -> tuple[float, float]:
     """
     Calculates N2O from nitratudvaskning and its CO2e value.
@@ -41,7 +42,7 @@ if __name__ == "__main__":
     T_vaar = 63.0  # typetal for vårbyg
     H_test_1 = 100.0
     n2o_1, co2e_1 = calculate_n2o_nitratudvaskning(T_vaar, H_test_1)
-    print(f"Test Case 1 (Vårbyg):")
+    print("Test Case 1 (Vårbyg):")
     print(f"  Nitratudvaskning: {n2o_1} kg N2O")
     print(f"  Omregnet til CO2e: {co2e_1} kg CO2e")
     # Expected N2O: 74.25 kg, Expected CO2e: 19676.25 kg (using 265) - formula.md has 22126.5, typo in doc or constant?
@@ -53,7 +54,7 @@ if __name__ == "__main__":
     T_sol = 74.0  # typetal for solsikke
     H_test_2 = 100.0
     n2o_2, co2e_2 = calculate_n2o_nitratudvaskning(T_sol, H_test_2)
-    print(f"\nTest Case 2 (Solsikke):")
+    print("\nTest Case 2 (Solsikke):")
     print(f"  Nitratudvaskning: {n2o_2} kg N2O")
     print(f"  Omregnet til CO2e: {co2e_2} kg CO2e")
     # Expected N2O: 87.21428571428571 kg, Expected CO2e: 23111.78571428571 kg (using 265)
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     n2o_eft_3, _ = calculate_n2o_nitratudvaskning(T_eft, H_test_3)
     total_n2o_3 = n2o_vaar_3 + n2o_eft_3
     total_co2e_3 = total_n2o_3 * THETA_N2O_CO2
-    print(f"\nTest Case 3 (Vårbyg + Efterafgrøder):")
+    print("\nTest Case 3 (Vårbyg + Efterafgrøder):")
     print(f"  Nitratudvaskning (Vårbyg): {n2o_vaar_3} kg N2O")
     print(f"  Nitratudvaskning (Efterafgrøder): {n2o_eft_3} kg N2O")
     print(f"  Total Nitratudvaskning: {total_n2o_3} kg N2O")

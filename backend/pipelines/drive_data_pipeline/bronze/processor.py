@@ -15,14 +15,9 @@ from .metadata import MetadataManager
 from .storage import BronzeStorageManager
 
 # Import the new data tracing system
-try:
-    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-    PIPELINE_METADATA_AVAILABLE = True
-except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
-    PipelineMetadataManager = None
-    PIPELINE_METADATA_AVAILABLE = False
+PIPELINE_METADATA_AVAILABLE = True
 
 # Get logger
 logger = get_logger()
@@ -86,7 +81,7 @@ class BronzeProcessor:
 
     def process_drive_folder(
         self,
-        folder_id: str = None,
+        folder_id: str | None = None,
         drive_folder: DriveFolder = None,
         specific_subfolders: list[str] | None = None,
         supported_file_types: set[str] | None = None,
@@ -182,12 +177,11 @@ class BronzeProcessor:
                         "folder_id": drive_folder.id,
                     },
                 }
-            else:
-                return processed_count
+            return processed_count
 
         except Exception as e:
             folder_ref = drive_folder.id if drive_folder else folder_id
-            logger.error(f"Failed to process folder {folder_ref}: {str(e)}")
+            logger.error(f"Failed to process folder {folder_ref}: {e!s}")
             raise
 
     def _process_folder(
@@ -428,5 +422,5 @@ class BronzeProcessor:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to process file {file.name} (ID: {file.id}): {str(e)}")
+            logger.error(f"Failed to process file {file.name} (ID: {file.id}): {e!s}")
             return False

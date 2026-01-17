@@ -19,6 +19,6 @@ from .config import NLES5NitrogenEstimationGoldConfig
 from .main import NLES5NitrogenEstimationGold
 
 __all__ = [
-    "NLES5NitrogenEstimationGoldConfig",
     "NLES5NitrogenEstimationGold",
+    "NLES5NitrogenEstimationGoldConfig",
 ]

@@ -7,7 +7,7 @@ This creates a foundation dataset for later field-level environmental coverage a
 Optimized for DuckDB Spatial v1.2.2 with ST_Dump for multipolygon decomposition.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
@@ -90,7 +90,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             f"✅ Loaded {bnbo_count:,} BNBO polygons and {projects_count:,} water project polygons"
         )
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Calculate water projects that cover BNBO areas using optimized spatial joins.
 
@@ -136,7 +136,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             "intersection_records": result_count,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save water project-BNBO intersection data to GCS."""
         self._save_stage_output(
             "water_projects_bnbo_intersections", "water_projects_bnbo_intersections"

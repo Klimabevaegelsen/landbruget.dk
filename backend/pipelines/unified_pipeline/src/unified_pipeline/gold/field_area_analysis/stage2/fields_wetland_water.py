@@ -15,11 +15,12 @@ Architectural Benefits:
 - Creates clean geometric pipeline for Stage 3/4 consumption
 """
 
-from typing import Any, Dict
+from typing import Any
+
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
-from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 
 class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
@@ -103,7 +104,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             "water_wetland_count": water_wetland_count,
         }
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Redesigned Stage 2B: Create both total and water-covered wetland geometries.
 
@@ -204,7 +205,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             "unique_fields_with_wetlands": unique_fields_with_wetlands,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save both geometric intersection tables to GCS."""
         # Save 2-way field × wetland intersections
         self._save_stage_output("field_wetland_intersections", "field_wetland_intersections")

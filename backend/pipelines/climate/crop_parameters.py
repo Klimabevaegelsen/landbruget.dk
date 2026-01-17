@@ -13,12 +13,11 @@ Parameters:
 - dry_matter: Dry matter content of harvested product (Table 23)
 """
 
-from typing import Optional, Dict, Any
-
+from typing import Any
 
 # Manual mapping by crop_code - exact matches only
 # Source: pesticide_compliance.py crop codes + IPCC Tables 23-25
-CROP_PARAMETERS: Dict[int, Dict[str, Any]] = {
+CROP_PARAMETERS: dict[int, dict[str, Any]] = {
     # Cereals - Barley
     1: {
         "name": "Vårbyg",
@@ -251,7 +250,7 @@ CROP_PARAMETERS: Dict[int, Dict[str, Any]] = {
 }
 
 
-def get_crop_params(crop_code: int) -> Optional[Dict[str, Any]]:
+def get_crop_params(crop_code: int) -> dict[str, Any] | None:
     """
     Returns emission parameters for exact crop code match.
 
@@ -265,7 +264,7 @@ def get_crop_params(crop_code: int) -> Optional[Dict[str, Any]]:
     return CROP_PARAMETERS.get(crop_code)
 
 
-def get_crop_params_by_name(crop_name: str) -> Optional[Dict[str, Any]]:
+def get_crop_params_by_name(crop_name: str) -> dict[str, Any] | None:
     """
     Fallback: Returns emission parameters by exact crop name match.
 

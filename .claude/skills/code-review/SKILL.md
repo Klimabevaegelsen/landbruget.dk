@@ -272,6 +272,39 @@ import Image from 'next/image';
 />
 ```
 
+## Data Pipeline Review (Backend Python)
+
+### CRS/Geospatial Checks
+
+**CRITICAL: Buffer operations must use metric CRS!**
+
+```python
+# ❌ WRONG - Buffer in degrees (1000 degrees = wraps Earth!)
+ST_Buffer(geometry, 1000)
+
+# ✅ CORRECT - Use crs_utils for metric buffers
+from common.crs_utils import sql_buffer_meters
+buffer_sql = sql_buffer_meters("geometry", 1000)  # 1000 meters
+```
+
+**Check for these patterns in PR reviews:**
+- `ST_Buffer` without `ST_Transform` on EPSG:4326 data = **BUG**
+- `ST_Distance` comparisons with large numbers on degree data = **BUG**
+- Buffer distances > 1 on WGS84 data = likely wrong CRS
+
+### DuckDB Spatial Patterns
+
+```sql
+-- ✅ CORRECT: Transform to UTM, buffer in meters
+ST_Intersects(
+    ST_Transform(geom1, 'EPSG:4326', 'EPSG:25832'),
+    ST_Buffer(ST_Transform(geom2, 'EPSG:4326', 'EPSG:25832'), 1000)
+)
+
+-- ❌ WRONG: Buffer on degree data
+ST_Intersects(geom1, ST_Buffer(geom2, 1000))
+```
+
 ## Code Review Checklist
 
 ### Security
@@ -281,6 +314,12 @@ import Image from 'next/image';
 - [ ] Environment variables properly scoped (NEXT_PUBLIC_ for client)
 - [ ] RLS enabled on new tables
 - [ ] Input validation at boundaries
+
+### Data Pipeline (Backend)
+- [ ] ST_Buffer operations use UTM (EPSG:25832) not WGS84 degrees
+- [ ] CVR/CHR format validation present
+- [ ] Geometry stored in EPSG:4326
+- [ ] No silent transformation failures
 
 ### Performance
 - [ ] No N+1 queries

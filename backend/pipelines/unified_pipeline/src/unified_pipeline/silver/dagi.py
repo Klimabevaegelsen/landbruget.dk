@@ -18,13 +18,20 @@ The data processing includes:
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 from unified_pipeline.util.timing import AsyncTimer
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+# DAGI is a SPECIAL CASE - it provides data in WGS84, so we need to transform TO 25832
+USE_UTM_PROCESSING = True
 
 
 class DAGISilverConfig(BaseJobConfig):
@@ -55,36 +62,27 @@ class DAGISilverConfig(BaseJobConfig):
         "with other datasets",
     )
 
-    endpoints: Dict[str, str] = Field(
-        default={
-            "kommuner": "kommuner",
-            "regioner": "regioner",
-            "landsdele": "landsdele",
-            "postnumre": "postnumre",
-        },
-        description="Mapping of layer names to API endpoints (should match bronze config)",
-    )
+    endpoints: ClassVar[dict[str, str]] = {
+        "kommuner": "kommuner",
+        "regioner": "regioner",
+        "landsdele": "landsdele",
+        "postnumre": "postnumre",
+    }
 
-    required_columns: Dict[str, list] = Field(
-        default={
-            "kommuner": ["kode", "navn", "regionskode"],
-            "regioner": ["kode", "navn"],
-            "landsdele": ["nuts3", "navn"],
-            "postnumre": ["nr", "navn"],
-        },
-        description="Required columns for each layer type",
-    )
+    required_columns: ClassVar[dict[str, list]] = {
+        "kommuner": ["kode", "navn", "regionskode"],
+        "regioner": ["kode", "navn"],
+        "landsdele": ["nuts3", "navn"],
+        "postnumre": ["nr", "navn"],
+    }
 
-    column_mapping: Dict[str, str] = Field(
-        default={
-            "kode": "code",
-            "navn": "name",
-            "nr": "code",
-            "nuts3": "code",
-            "regionskode": "region_code",
-        },
-        description="Mapping of Danish column names to English standardized names",
-    )
+    column_mapping: ClassVar[dict[str, str]] = {
+        "kode": "code",
+        "navn": "name",
+        "nr": "code",
+        "nuts3": "code",
+        "regionskode": "region_code",
+    }
 
 
 class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
@@ -115,7 +113,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
         self.conn.execute("LOAD spatial")
         self.log.info("✅ DuckDB-spatial initialized for DAGI processing")
 
-    def _process_layer(self, raw_geojson: str, layer_type: str) -> Optional[str]:
+    def _process_layer(self, raw_geojson: str, layer_type: str) -> str | None:
         """
         Process a single DAGI layer from raw GeoJSON to clean structured data using DuckDB-spatial.
 
@@ -226,29 +224,41 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                 WHERE geometry_json IS NOT NULL
             """)
 
-            # Apply unified geometry validation and transformation
-            validate_and_transform_geometries_duckdb(
-                self.conn, processed_table, f"dagi_{layer_type}", geometry_column="geometry"
-            )
+            # Apply unified geometry validation
+            # DAGI SPECIAL CASE: Data comes in WGS84 (GeoJSON format)
+            # With new CRS strategy, we transform TO EPSG:25832 for consistent processing
+            if USE_UTM_PROCESSING:
+                # First validate and normalize (will detect WGS84 and transform to 25832)
+                validate_and_normalize_to_utm(
+                    self.conn, processed_table, f"dagi_{layer_type}", geometry_column="geometry"
+                )
+                self.log.info(
+                    f"DAGI {layer_type}: Transformed from WGS84 to EPSG:25832 for processing"
+                )
+            else:
+                # Legacy path: Keep in WGS84
+                validate_and_transform_geometries_duckdb(
+                    self.conn, processed_table, f"dagi_{layer_type}", geometry_column="geometry"
+                )
 
-            # COORDINATE ORDER FIX: Convert from GeoJSON LON/LAT to proper EPSG:4326 LAT/LON
-            # GeoJSON uses [longitude, latitude] order, EPSG:4326 standard is [latitude, longitude]
-            self.log.info(
-                f"Converting {layer_type} from GeoJSON LON/LAT to EPSG:4326 LAT/LON order"
-            )
-            self.conn.execute(f"""
-                UPDATE {processed_table}
-                SET geometry = ST_FlipCoordinates(geometry)
-                WHERE geometry IS NOT NULL
-            """)
-
-            # Transform to target CRS if needed (after validation ensures WGS84)
-            if self.config.target_crs != "EPSG:4326":
+                # COORDINATE ORDER FIX: Convert from GeoJSON LON/LAT to proper EPSG:4326 LAT/LON
+                # GeoJSON uses [longitude, latitude] order, EPSG:4326 standard is [latitude, longitude]
+                self.log.info(
+                    f"Converting {layer_type} from GeoJSON LON/LAT to EPSG:4326 LAT/LON order"
+                )
                 self.conn.execute(f"""
                     UPDATE {processed_table}
-                    SET geometry = ST_Transform(geometry, 'EPSG:4326', '{self.config.target_crs}')
+                    SET geometry = ST_FlipCoordinates(geometry)
                     WHERE geometry IS NOT NULL
                 """)
+
+                # Transform to target CRS if needed (after validation ensures WGS84)
+                if self.config.target_crs != "EPSG:4326":
+                    self.conn.execute(f"""
+                        UPDATE {processed_table}
+                        SET geometry = ST_Transform(geometry, 'EPSG:4326', '{self.config.target_crs}')
+                        WHERE geometry IS NOT NULL
+                    """)
 
             # Get counts for logging
             total_count = self.conn.execute(f"SELECT COUNT(*) FROM {processed_table}").fetchone()[0]
@@ -270,7 +280,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             self.log.error(f"Error processing {layer_type}: {e}")
             return None
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, str]]:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, str] | None:
         """
         Run the complete DAGI silver layer processing job.
 
@@ -292,7 +302,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
         try:
             async with AsyncTimer("DAGI silver layer processing"):
-                for layer_name in self.config.endpoints.keys():
+                for layer_name in self.config.endpoints:
                     try:
                         self.log.info(f"Processing DAGI layer: {layer_name}")
 
@@ -327,7 +337,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                                 raw_geojson_data = self.gcs_access.download_json(latest_file)
 
                                 # Convert back to JSON string for processing (if it's a dict/list)
-                                if isinstance(raw_geojson_data, (dict, list)):
+                                if isinstance(raw_geojson_data, dict | list):
                                     import json
 
                                     raw_geojson = json.dumps(raw_geojson_data)
@@ -372,13 +382,12 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                 # This prevents the "no data returned" error that causes pipeline failure
                 if processed_data:
                     return processed_data
-                else:
-                    # Return a success indicator to prevent pipeline failure
-                    return {
-                        "status": "completed",
-                        "message": "DAGI processing completed but no layers had data to process",
-                        "processed_layers": 0,
-                    }
+                # Return a success indicator to prevent pipeline failure
+                return {
+                    "status": "completed",
+                    "message": "DAGI processing completed but no layers had data to process",
+                    "processed_layers": 0,
+                }
 
         except Exception as e:
             self.log.error(f"Critical error in DAGI silver processing: {e}")

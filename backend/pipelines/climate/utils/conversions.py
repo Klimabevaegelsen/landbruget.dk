@@ -14,7 +14,7 @@ CONSTANTS_DIR = Path(__file__).parent.parent / "constants"
 def load_gwp_factors():
     """Load Global Warming Potential factors from JSON file."""
     gwp_file = CONSTANTS_DIR / "gwp_factors.json"
-    with open(gwp_file, "r") as f:
+    with open(gwp_file) as f:
         return json.load(f)
 
 

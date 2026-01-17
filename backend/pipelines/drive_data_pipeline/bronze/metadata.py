@@ -202,7 +202,7 @@ class MetadataManager:
             return metadata
 
         except Exception as e:
-            error_msg = f"Failed to read metadata from {metadata_path}: {str(e)}"
+            error_msg = f"Failed to read metadata from {metadata_path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -251,7 +251,7 @@ class MetadataManager:
             return is_valid
 
         except Exception as e:
-            logger.error(f"Failed to validate checksum for {file_path}: {str(e)}")
+            logger.error(f"Failed to validate checksum for {file_path}: {e!s}")
             return False
 
     def find_duplicates(self, run_dir: Path, checksum: str) -> list[Path]:
@@ -275,7 +275,7 @@ class MetadataManager:
                     file_path = metadata_path.with_suffix("").with_suffix(metadata.file_extension)
                     duplicates.append(file_path)
             except Exception as e:
-                logger.warning(f"Error reading metadata {metadata_path}: {str(e)}")
+                logger.warning(f"Error reading metadata {metadata_path}: {e!s}")
 
         if duplicates:
             logger.info(f"Found {len(duplicates)} duplicate(s) with checksum {checksum}")
@@ -314,6 +314,6 @@ class MetadataManager:
             return updated_metadata
 
         except Exception as e:
-            error_msg = f"Failed to update metadata at {metadata_path}: {str(e)}"
+            error_msg = f"Failed to update metadata at {metadata_path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e

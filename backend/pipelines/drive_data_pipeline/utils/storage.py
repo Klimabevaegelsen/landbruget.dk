@@ -18,38 +18,14 @@ def _get_gcs_access() -> type | None:
     Returns GCSDataAccess class if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when unified_pipeline is properly installed
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         logger.info("✅ Successfully imported GCSDataAccess")
         return GCSDataAccess
     except ImportError as e:
-        logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-
-        # Try alternative import paths that might work in different environments
-        try:
-            import os
-            import sys
-
-            # Add unified pipeline to path if it exists
-            current_dir = os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            )
-            unified_pipeline_path = os.path.join(current_dir, "unified_pipeline", "src")
-            if os.path.exists(unified_pipeline_path) and unified_pipeline_path not in sys.path:
-                sys.path.insert(0, unified_pipeline_path)
-                logger.info(f"Added unified pipeline path: {unified_pipeline_path}")
-
-            from unified_pipeline.util.gcs_access import GCSDataAccess
-
-            logger.info("✅ Successfully imported GCSDataAccess via alternative path")
-            return GCSDataAccess
-
-        except ImportError as e2:
-            logger.warning(f"⚠️ Alternative import also failed: {e2}")
-
+        logger.warning(f"⚠️ Could not import GCSDataAccess from common.gcs: {e}")
         logger.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed "
+            "⚠️ Falling back to basic storage - ensure common.gcs is installed "
             "for optimal performance"
         )
         return None
@@ -192,7 +168,7 @@ class DriveStorageManager:
                 logger.debug(f"Saved file locally: {full_path}")
 
         except Exception as e:
-            error_msg = f"Failed to save file to {path}: {str(e)}"
+            error_msg = f"Failed to save file to {path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -231,7 +207,7 @@ class DriveStorageManager:
 
             return data
         except Exception as e:
-            error_msg = f"Failed to read file from {path}: {str(e)}"
+            error_msg = f"Failed to read file from {path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -270,7 +246,7 @@ class DriveStorageManager:
 
                 logger.debug(f"Saved JSON locally: {full_path}")
         except Exception as e:
-            error_msg = f"Failed to save JSON to {path}: {str(e)}"
+            error_msg = f"Failed to save JSON to {path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -311,7 +287,7 @@ class DriveStorageManager:
 
             return data
         except Exception as e:
-            error_msg = f"Failed to read JSON from {path}: {str(e)}"
+            error_msg = f"Failed to read JSON from {path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -352,30 +328,28 @@ class DriveStorageManager:
                                 result.append(Path(relative_path))
 
                     return result
-                else:
-                    # Use fallback GCS storage
-                    prefix = str(path).rstrip("/") + "/" if path else ""
-                    blobs = self.gcs_bucket.list_blobs(prefix=prefix)
-                    files = []
-                    for blob in blobs:
-                        if not blob.name.endswith("/"):  # Skip directories
-                            if pattern:
-                                if pattern.replace("*", "") in blob.name:
-                                    files.append(Path(blob.name))
-                            else:
+                # Use fallback GCS storage
+                prefix = str(path).rstrip("/") + "/" if path else ""
+                blobs = self.gcs_bucket.list_blobs(prefix=prefix)
+                files = []
+                for blob in blobs:
+                    if not blob.name.endswith("/"):  # Skip directories
+                        if pattern:
+                            if pattern.replace("*", "") in blob.name:
                                 files.append(Path(blob.name))
-                    return files
+                        else:
+                            files.append(Path(blob.name))
+                return files
+            full_path = self.base_dir / path
+            if pattern:
+                files = list(full_path.glob(pattern))
             else:
-                full_path = self.base_dir / path
-                if pattern:
-                    files = list(full_path.glob(pattern))
-                else:
-                    files = [f for f in full_path.iterdir() if f.is_file()]
+                files = [f for f in full_path.iterdir() if f.is_file()]
 
-                # Return relative paths
-                return [f.relative_to(self.base_dir) for f in files]
+            # Return relative paths
+            return [f.relative_to(self.base_dir) for f in files]
         except Exception as e:
-            error_msg = f"Failed to list files in {path}: {str(e)}"
+            error_msg = f"Failed to list files in {path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -397,7 +371,7 @@ class DriveStorageManager:
                 full_path.mkdir(parents=True, exist_ok=True)
                 logger.debug(f"Directory created locally: {full_path}")
         except Exception as e:
-            error_msg = f"Failed to ensure directory exists: {path}: {str(e)}"
+            error_msg = f"Failed to ensure directory exists: {path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -415,13 +389,11 @@ class DriveStorageManager:
                 if self.use_optimized and self.gcs_access:
                     gcs_path = f"gs://{self.bucket_name}/{path}"
                     return self.gcs_access.file_exists(gcs_path)
-                else:
-                    # Use fallback GCS storage
-                    blob = self.gcs_bucket.blob(str(path))
-                    return blob.exists()
-            else:
-                full_path = self.base_dir / path
-                return full_path.exists() and full_path.is_file()
+                # Use fallback GCS storage
+                blob = self.gcs_bucket.blob(str(path))
+                return blob.exists()
+            full_path = self.base_dir / path
+            return full_path.exists() and full_path.is_file()
         except Exception as e:
             logger.warning(f"Error checking file existence for {path}: {e}")
             return False

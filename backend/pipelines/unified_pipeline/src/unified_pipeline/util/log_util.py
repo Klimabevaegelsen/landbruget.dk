@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import sys
 from enum import Enum
-from typing import Optional
+from typing import ClassVar
 
 import loguru
 from simple_singleton import Singleton
@@ -58,7 +58,7 @@ class Logger(metaclass=Singleton):
         DEFAULT_LOG (str): Default log level if none specified
     """
 
-    _log_level_aliases: dict[str, str] = {
+    _log_level_aliases: ClassVar[dict[str, str]] = {
         "TRACE": "TRACE",
         "DEBUG": "DEBUG",
         "INFO": "INFO",
@@ -69,7 +69,7 @@ class Logger(metaclass=Singleton):
     }
 
     DEFAULT_LOG_DIR = "/tmp/unified_pipeline/"
-    LOG: Optional[loguru.Logger] = None
+    LOG: loguru.Logger | None = None
     DEFAULT_LOG = "INFO"
 
     def __init__(self) -> None:
@@ -102,7 +102,7 @@ class Logger(metaclass=Singleton):
         return cls._log_level_aliases[log_level]
 
     @classmethod
-    def get_logger(cls, level: Optional[str] = None) -> loguru.Logger:
+    def get_logger(cls, level: str | None = None) -> loguru.Logger:
         """
         Get or create a configured logger instance with the specified log level.
 

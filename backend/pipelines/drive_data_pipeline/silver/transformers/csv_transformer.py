@@ -1,5 +1,6 @@
 """CSV file transformer using DuckDB for reading and processing."""
 
+import contextlib
 import time
 from pathlib import Path
 
@@ -90,7 +91,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
                     "data_types": [col[1] for col in table_info],
                 }
             except Exception as e:
-                logger.warning(f"Failed to get schema from table {standardized_table}: {str(e)}")
+                logger.warning(f"Failed to get schema from table {standardized_table}: {e!s}")
                 schema = {"columns": [], "data_types": []}
 
             # Clean up intermediate tables
@@ -111,7 +112,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
             )
 
         except Exception as e:
-            error_msg = f"Failed to transform CSV file {file_path}: {str(e)}"
+            error_msg = f"Failed to transform CSV file {file_path}: {e!s}"
             logger.error(error_msg)
             return TransformResult(
                 success=False,
@@ -170,19 +171,16 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
                             f"using encoding: {encoding}"
                         )
                         return table_name
-                    else:
-                        logger.debug(f"Encoding {encoding} produced empty table, trying next")
-                        self.drop_table(table_name)
-                        continue
+                    logger.debug(f"Encoding {encoding} produced empty table, trying next")
+                    self.drop_table(table_name)
+                    continue
 
                 except Exception as e:
-                    logger.debug(f"Encoding {encoding} failed: {str(e)}")
+                    logger.debug(f"Encoding {encoding} failed: {e!s}")
                     last_error = e
                     # Clean up failed table
-                    try:
+                    with contextlib.suppress(Exception):
                         self.drop_table(table_name)
-                    except Exception:
-                        pass
                     continue
 
             # If all encodings failed, try with ignore_errors=true as last resort
@@ -205,17 +203,16 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
                         f"(some data may be lost)"
                     )
                     return table_name
-                else:
-                    self.drop_table(table_name)
+                self.drop_table(table_name)
             except Exception as ignore_error:
-                logger.debug(f"ignore_errors approach also failed: {str(ignore_error)}")
+                logger.debug(f"ignore_errors approach also failed: {ignore_error!s}")
 
             # All approaches failed
-            logger.error(f"Failed to read CSV file with any encoding: {str(last_error)}")
+            logger.error(f"Failed to read CSV file with any encoding: {last_error!s}")
             return None
 
         except Exception as e:
-            logger.error(f"Failed to read CSV file with DuckDB: {str(e)}")
+            logger.error(f"Failed to read CSV file with DuckDB: {e!s}")
             return None
 
     def _standardize_column_names_duckdb(self, table_name: str) -> str:
@@ -319,7 +316,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
             return result_table
 
         except Exception as e:
-            logger.error(f"Failed to standardize column names: {str(e)}")
+            logger.error(f"Failed to standardize column names: {e!s}")
             # Return original table if standardization fails
             return table_name
 
@@ -418,7 +415,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
 
         except Exception as e:
             logger.warning(
-                f"Failed to add backward compatibility columns to {table_name}: {str(e)}"
+                f"Failed to add backward compatibility columns to {table_name}: {e!s}"
             )
 
     def _standardize_data_types_duckdb(self, table_name: str) -> str:
@@ -489,6 +486,6 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
             return result_table
 
         except Exception as e:
-            logger.error(f"Failed to standardize data types: {str(e)}")
+            logger.error(f"Failed to standardize data types: {e!s}")
             # Return original table if standardization fails
             return table_name

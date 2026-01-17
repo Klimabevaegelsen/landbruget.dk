@@ -3,9 +3,8 @@
 import asyncio
 import logging
 import re
-from typing import Dict, List, Tuple
 
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 
 from .config import PMTilesGeneratorConfig
 
@@ -25,7 +24,7 @@ class DataSourceYearDetector:
         self.config = config
         self.gcs = gcs_access
 
-    async def detect_all_available_years(self) -> Dict[str, List[int]]:
+    async def detect_all_available_years(self) -> dict[str, list[int]]:
         """Detect available years for all data sources.
 
         Returns:
@@ -68,7 +67,7 @@ class DataSourceYearDetector:
 
         return available_years
 
-    async def _detect_years_for_pattern(self, source_name: str, path_pattern: str) -> List[int]:
+    async def _detect_years_for_pattern(self, source_name: str, path_pattern: str) -> list[int]:
         """Detect years for a simple path pattern like 'silver/fvm_marker_YYYY/'.
 
         Args:
@@ -104,13 +103,13 @@ class DataSourceYearDetector:
                         years.add(year)
 
             logger.info(f"Found {len(years)} years for {source_name}: {sorted(years)}")
-            return sorted(list(years))
+            return sorted(years)
 
         except Exception as e:
             logger.error(f"Error detecting years for {source_name}: {e}")
             return []
 
-    async def _detect_pesticide_proximity_years(self) -> List[int]:
+    async def _detect_pesticide_proximity_years(self) -> list[int]:
         """Detect years for pesticide proximity data (YYYY_YYYY+1 pattern).
 
         Returns:
@@ -139,13 +138,13 @@ class DataSourceYearDetector:
                         if next_year == base_year + 1 and 2000 <= base_year <= 2030:
                             years.add(base_year)
 
-            return sorted(list(years))
+            return sorted(years)
 
         except Exception as e:
             logger.error(f"Error detecting pesticide proximity years: {e}")
             return []
 
-    async def _detect_nles5_years(self) -> List[int]:
+    async def _detect_nles5_years(self) -> list[int]:
         """Detect years for NLES5 nitrogen estimation data.
 
         Returns:
@@ -195,9 +194,8 @@ class DataSourceYearDetector:
                 if years:
                     logger.info(f"NLES5 years detected from data: {years}")
                     return years
-                else:
-                    logger.warning("No years found in NLES5 data")
-                    return []
+                logger.warning("No years found in NLES5 data")
+                return []
 
             except Exception as query_error:
                 logger.warning(f"Could not query NLES5 data for years: {query_error}")
@@ -210,7 +208,7 @@ class DataSourceYearDetector:
             logger.error(f"Error detecting NLES5 years: {e}")
             return []
 
-    async def get_optimal_year_ranges(self) -> Dict[str, Tuple[int, int, List[str]]]:
+    async def get_optimal_year_ranges(self) -> dict[str, tuple[int, int, list[str]]]:
         """Get optimal year ranges based on available data sources.
 
         Returns:
@@ -272,7 +270,7 @@ class DataSourceYearDetector:
 
         return ranges
 
-    def get_years_to_process(self, available_years: Dict[str, List[int]]) -> List[int]:
+    def get_years_to_process(self, available_years: dict[str, list[int]]) -> list[int]:
         """Get the final list of years to process based on configuration and available data.
 
         Args:
@@ -313,7 +311,7 @@ class DataSourceYearDetector:
         # Filter to reasonable range
         target_years = {y for y in target_years if 2000 <= y <= 2030}
 
-        final_years = sorted(list(target_years))
+        final_years = sorted(target_years)
         logger.info(f"Final years to process: {final_years}")
 
         return final_years

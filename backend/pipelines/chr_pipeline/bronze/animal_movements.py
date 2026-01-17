@@ -3,7 +3,7 @@
 import logging
 import time
 from datetime import date, timedelta
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 from zeep.exceptions import Fault
@@ -21,10 +21,10 @@ def load_animal_movements(
     chr_dyr_client,
     username: str,
     herd_number: int,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
     max_retries: int = 3,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Fetches animal movement data for a given herd using besListAktOms.
 
@@ -57,10 +57,16 @@ def load_animal_movements(
             "reporting_herd_number": herd_number,
             "movements": [],
             "skipped_reason": "problematic_herd",
-            "summary_stats": {"total_animals_processed": 0, "unique_movement_dates": 0, "counterparty_herds": 0},
+            "summary_stats": {
+                "total_animals_processed": 0,
+                "unique_movement_dates": 0,
+                "counterparty_herds": 0,
+            },
         }
 
-    logger.info(f"🚀 Fetching animal movements for herd {herd_number} from {start_date} to {end_date}")
+    logger.info(
+        f"🚀 Fetching animal movements for herd {herd_number} from {start_date} to {end_date}"
+    )
 
     # Retry logic for problematic herds
     for attempt in range(max_retries + 1):
@@ -78,7 +84,9 @@ def load_animal_movements(
             common_header = glr_chr_ws_info_inbound_factory(**create_base_request(username))
             logger.debug(f"✅ Herd {herd_number}: SOAP auth header created successfully")
 
-            chr_dyr_chr_bes_liste_request_type_factory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+            chr_dyr_chr_bes_liste_request_type_factory = chr_dyr_client.get_type(
+                "ns0:CHR_dyrChrBesListeRequestType"
+            )
 
             # Build request parameters
             request_params_dict = {"BesaetningsNummer": herd_number}
@@ -99,16 +107,24 @@ def load_animal_movements(
             request_start_time = time.time()
 
             try:
-                response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
+                response = chr_dyr_client.service.besListAktOms(
+                    CHR_dyrChrBesListeRequest=payload_content
+                )
                 request_duration = time.time() - request_start_time
-                logger.info(f"✅ Herd {herd_number}: SOAP request completed in {request_duration:.1f}s")
+                logger.info(
+                    f"✅ Herd {herd_number}: SOAP request completed in {request_duration:.1f}s"
+                )
             except Exception as soap_error:
                 request_duration = time.time() - request_start_time
-                logger.error(f"❌ Herd {herd_number}: SOAP request failed after {request_duration:.1f}s: {soap_error}")
+                logger.error(
+                    f"❌ Herd {herd_number}: SOAP request failed after {request_duration:.1f}s: {soap_error}"
+                )
                 raise
 
             if response is None:
-                logger.warning(f"⚠️ No response received for herd {herd_number} (attempt {attempt + 1})")
+                logger.warning(
+                    f"⚠️ No response received for herd {herd_number} (attempt {attempt + 1})"
+                )
                 if attempt < max_retries:
                     continue
                 return None
@@ -116,13 +132,21 @@ def load_animal_movements(
             # Log response structure for debugging
             logger.debug(f"📊 Herd {herd_number}: Response received, analyzing structure...")
             if hasattr(response, "Response") and response.Response:
-                resp = response.Response[0] if isinstance(response.Response, list) else response.Response
+                resp = (
+                    response.Response[0]
+                    if isinstance(response.Response, list)
+                    else response.Response
+                )
                 animals = getattr(resp, "Enkeltdyrsoplysninger", [])
                 if animals:
                     animal_count = len(animals) if hasattr(animals, "__len__") else 1
-                    logger.info(f"📈 Herd {herd_number}: Found {animal_count} individual animal records in response")
+                    logger.info(
+                        f"📈 Herd {herd_number}: Found {animal_count} individual animal records in response"
+                    )
                 else:
-                    logger.info(f"📭 Herd {herd_number}: No individual animal records found in response")
+                    logger.info(
+                        f"📭 Herd {herd_number}: No individual animal records found in response"
+                    )
             else:
                 logger.warning(f"⚠️ Herd {herd_number}: Response structure is unexpected or empty")
 
@@ -159,12 +183,16 @@ def load_animal_movements(
             try:
                 movement_summaries = aggregate_cattle_movements(response, herd_number)
                 aggregation_duration = time.time() - aggregation_start_time
-                logger.info(f"✅ Herd {herd_number}: Data aggregation completed in {aggregation_duration:.1f}s")
+                logger.info(
+                    f"✅ Herd {herd_number}: Data aggregation completed in {aggregation_duration:.1f}s"
+                )
 
                 # Log aggregation results
                 if movement_summaries and movement_summaries.get("movements"):
                     movements_count = len(movement_summaries.get("movements", []))
-                    logger.info(f"📊 Herd {herd_number}: Successfully aggregated {movements_count} movement summaries")
+                    logger.info(
+                        f"📊 Herd {herd_number}: Successfully aggregated {movements_count} movement summaries"
+                    )
 
                     # Log sample movement for debugging
                     if movements_count > 0:
@@ -182,13 +210,23 @@ def load_animal_movements(
 
             # Log memory/processing statistics
             if hasattr(response, "Response") and response.Response:
-                resp = response.Response[0] if isinstance(response.Response, list) else response.Response
+                resp = (
+                    response.Response[0]
+                    if isinstance(response.Response, list)
+                    else response.Response
+                )
                 animals = getattr(resp, "Enkeltdyrsoplysninger", [])
-                individual_record_count = animals if isinstance(animals, int) else len(animals) if animals else 0
+                individual_record_count = (
+                    animals if isinstance(animals, int) else len(animals) if animals else 0
+                )
                 summary_record_count = len(movement_summaries.get("movements", []))
 
                 if individual_record_count > 0:
-                    reduction_ratio = (individual_record_count - summary_record_count) / individual_record_count * 100
+                    reduction_ratio = (
+                        (individual_record_count - summary_record_count)
+                        / individual_record_count
+                        * 100
+                    )
                     logger.info(
                         f"📉 Herd {herd_number}: Reduced {individual_record_count} individual animal records to "
                         f"{summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
@@ -200,34 +238,44 @@ def load_animal_movements(
                     f"✅ Herd {herd_number}: Processed {len(movement_summaries['movements'])} movement summaries"
                 )
                 return movement_summaries
-            else:
-                # Return minimal record indicating we processed this herd
-                logger.info(f"📭 Herd {herd_number}: No movements found, returning empty result")
-                return {"reporting_herd_number": herd_number, "movements": [], "no_movements_found": True}
+            # Return minimal record indicating we processed this herd
+            logger.info(f"📭 Herd {herd_number}: No movements found, returning empty result")
+            return {
+                "reporting_herd_number": herd_number,
+                "movements": [],
+                "no_movements_found": True,
+            }
 
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"🌐❌ Connection error for herd {herd_number} (attempt {attempt + 1}): {e}")
+            logger.error(
+                f"🌐❌ Connection error for herd {herd_number} (attempt {attempt + 1}): {e}"
+            )
             if attempt < max_retries:
                 continue
-            else:
-                logger.error(f"❌ Max retries exceeded for herd {herd_number} due to connection error")
-                return None
+            logger.error(
+                f"❌ Max retries exceeded for herd {herd_number} due to connection error"
+            )
+            return None
 
         except Fault as soap_fault:
-            logger.error(f"🧼❌ SOAP fault for herd {herd_number} (attempt {attempt + 1}): {soap_fault}")
+            logger.error(
+                f"🧼❌ SOAP fault for herd {herd_number} (attempt {attempt + 1}): {soap_fault}"
+            )
             if attempt < max_retries:
                 continue
-            else:
-                logger.error(f"❌ Max retries exceeded for herd {herd_number} due to SOAP fault: {soap_fault}")
-                return None
+            logger.error(
+                f"❌ Max retries exceeded for herd {herd_number} due to SOAP fault: {soap_fault}"
+            )
+            return None
 
         except Exception as e:
-            logger.error(f"❌ Error fetching animal movements for herd {herd_number} (attempt {attempt + 1}): {e}")
+            logger.error(
+                f"❌ Error fetching animal movements for herd {herd_number} (attempt {attempt + 1}): {e}"
+            )
             if attempt < max_retries:
                 continue
-            else:
-                logger.error(f"❌ Max retries exceeded for herd {herd_number} due to error: {e}")
-                return None
+            logger.error(f"❌ Max retries exceeded for herd {herd_number} due to error: {e}")
+            return None
 
     logger.error(f"❌ All retry attempts failed for herd {herd_number}")
     return None
@@ -237,10 +285,10 @@ def load_cattle_movement_summaries(
     chr_dyr_client,
     username: str,
     herd_number: int,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    discovery_results: Optional[Dict] = None,
-) -> Optional[Dict]:
+    start_date: date | None = None,
+    end_date: date | None = None,
+    discovery_results: dict | None = None,
+) -> dict | None:
     """
     Fetches cattle movement data using chunked processing for high-volume herds.
 
@@ -263,7 +311,9 @@ def load_cattle_movement_summaries(
     elif end_date is None:
         end_date = date.today()
 
-    logger.info(f"🎯 Fetching cattle movement summaries for herd {herd_number} from {start_date} to {end_date}")
+    logger.info(
+        f"🎯 Fetching cattle movement summaries for herd {herd_number} from {start_date} to {end_date}"
+    )
 
     # Get optimal date ranges (handles chunking for high-volume herds with inline discovery)
     logger.debug(f"📅 Calculating optimal date ranges for herd {herd_number}...")
@@ -271,7 +321,9 @@ def load_cattle_movement_summaries(
     logger.info(f"📊 Herd {herd_number}: Will process {len(date_ranges)} date chunks")
 
     if len(date_ranges) > 1:
-        logger.info(f"🔄 Processing herd {herd_number} in {len(date_ranges)} chunks due to high volume")
+        logger.info(
+            f"🔄 Processing herd {herd_number} in {len(date_ranges)} chunks due to high volume"
+        )
         for i, (chunk_start, chunk_end) in enumerate(date_ranges):
             logger.debug(f"  Chunk {i + 1}: {chunk_start} to {chunk_end}")
 
@@ -289,14 +341,18 @@ def load_cattle_movement_summaries(
             )
 
             try:
-                result = load_animal_movements(chr_dyr_client, username, herd_number, chunk_start, chunk_end)
+                result = load_animal_movements(
+                    chr_dyr_client, username, herd_number, chunk_start, chunk_end
+                )
 
                 if result and result.get("movements"):
                     successful_chunks += 1
                     chunk_movements = result.get("movements", [])
                     total_movements += len(chunk_movements)
                     all_movements.extend(chunk_movements)  # Collect movements
-                    logger.info(f"✅ Chunk {chunk_idx + 1} completed: {len(chunk_movements)} movements")
+                    logger.info(
+                        f"✅ Chunk {chunk_idx + 1} completed: {len(chunk_movements)} movements"
+                    )
 
                     # Add movements to consolidated table
                     logger.debug(
@@ -306,8 +362,12 @@ def load_cattle_movement_summaries(
                     try:
                         from bronze.load_chr_dyr import add_to_consolidated_table
 
-                        add_to_consolidated_table({"reporting_herd_number": herd_number, "movements": chunk_movements})
-                        logger.debug(f"✅ Successfully added chunk {chunk_idx + 1} movements to consolidated table")
+                        add_to_consolidated_table(
+                            {"reporting_herd_number": herd_number, "movements": chunk_movements}
+                        )
+                        logger.debug(
+                            f"✅ Successfully added chunk {chunk_idx + 1} movements to consolidated table"
+                        )
                     except Exception as consolidation_error:
                         logger.error(
                             f"❌ Failed to add chunk {chunk_idx + 1} to consolidated table: {consolidation_error}"
@@ -316,7 +376,9 @@ def load_cattle_movement_summaries(
                 else:
                     failed_chunks += 1
                     if result and result.get("skipped_reason"):
-                        logger.warning(f"⚠️ Chunk {chunk_idx + 1} skipped: {result.get('skipped_reason')}")
+                        logger.warning(
+                            f"⚠️ Chunk {chunk_idx + 1} skipped: {result.get('skipped_reason')}"
+                        )
                     elif result and result.get("no_movements_found"):
                         logger.info(f"📭 Chunk {chunk_idx + 1} processed but no movements found")
                         successful_chunks += 1  # Count as successful even if no movements
@@ -328,7 +390,9 @@ def load_cattle_movement_summaries(
                 # Check if this looks like a volume-related issue (timeout, memory, large response)
                 volume_keywords = ["timeout", "memory", "too large", "connection", "soap fault"]
                 if any(keyword in error_str for keyword in volume_keywords):
-                    logger.warning(f"⚠️ Herd {herd_number} chunk {chunk_idx + 1} failed with volume-related error: {e}")
+                    logger.warning(
+                        f"⚠️ Herd {herd_number} chunk {chunk_idx + 1} failed with volume-related error: {e}"
+                    )
 
                     # If this is the first chunk and it's a full date range, auto-configure for chunking
                     if len(date_ranges) == 1 and chunk_idx == 0:
@@ -347,20 +411,31 @@ def load_cattle_movement_summaries(
                             else:
                                 chunk_days = 7  # Weekly chunks for smaller ranges
 
-                            add_high_volume_herd(herd_number, max_days=chunk_days, volume_estimate=None)
+                            add_high_volume_herd(
+                                herd_number, max_days=chunk_days, volume_estimate=None
+                            )
 
                             # Retry with chunked processing
-                            logger.info(f"🔄 Retrying herd {herd_number} with {chunk_days}-day chunking...")
+                            logger.info(
+                                f"🔄 Retrying herd {herd_number} with {chunk_days}-day chunking..."
+                            )
                             try:
                                 return load_cattle_movement_summaries(
-                                    chr_dyr_client, username, herd_number, start_date, end_date, discovery_results
+                                    chr_dyr_client,
+                                    username,
+                                    herd_number,
+                                    start_date,
+                                    end_date,
+                                    discovery_results,
                                 )
                             except Exception as retry_error:
                                 logger.error(
                                     f"❌ Retry with chunking also failed for herd {herd_number}: {retry_error}"
                                 )
 
-                logger.error(f"❌ Error processing chunk {chunk_idx + 1} for herd {herd_number}: {e}")
+                logger.error(
+                    f"❌ Error processing chunk {chunk_idx + 1} for herd {herd_number}: {e}"
+                )
                 failed_chunks += 1
                 continue
 
@@ -380,20 +455,21 @@ def load_cattle_movement_summaries(
                 "failed_chunks": failed_chunks,
                 "total_chunks": len(date_ranges),
             }
-            logger.info(f"✅ Herd {herd_number}: Successfully processed with {total_movements} movements")
+            logger.info(
+                f"✅ Herd {herd_number}: Successfully processed with {total_movements} movements"
+            )
             return result
-        else:
-            result = {
-                "reporting_herd_number": herd_number,
-                "processed_successfully": False,
-                "movement_count": 0,
-                "successful_chunks": 0,
-                "failed_chunks": failed_chunks,
-                "total_chunks": len(date_ranges),
-                "error": "All chunks failed",
-            }
-            logger.error(f"❌ Herd {herd_number}: All chunks failed")
-            return result
+        result = {
+            "reporting_herd_number": herd_number,
+            "processed_successfully": False,
+            "movement_count": 0,
+            "successful_chunks": 0,
+            "failed_chunks": failed_chunks,
+            "total_chunks": len(date_ranges),
+            "error": "All chunks failed",
+        }
+        logger.error(f"❌ Herd {herd_number}: All chunks failed")
+        return result
 
     except Exception as e:
         logger.error(f"❌ Error processing herd {herd_number}: {e}")

@@ -10,7 +10,7 @@ Output table: landbrugstoette_eu_betalinger
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -75,7 +75,7 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
         self.conn.execute("SET s3_region = 'europe-west1'")
 
     @timed
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, str] | None:
         """Execute EU CAP payments gold processing."""
         self.log.info("Starting Landbrugsstøtte EU Gold processing")
 
@@ -105,7 +105,7 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
             self.log.error(f"Error in Landbrugsstøtte EU Gold processing: {e}")
             raise
 
-    async def _load_silver_data(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def _load_silver_data(self, silver_data: dict[str, Any] | None = None) -> None:
         """Load silver støtteoplysninger data."""
         self.log.info("Loading silver støtteoplysninger data")
 
@@ -213,7 +213,7 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
         count = self.conn.execute("SELECT COUNT(*) FROM landbrugstoette_cvr_summary").fetchone()[0]
         self.log.info(f"Created CVR summary: {count:,} CVR-year combinations")
 
-    async def _validate_data(self) -> Dict[str, Any]:
+    async def _validate_data(self) -> dict[str, Any]:
         """Validate gold data using ratios and cross-checks."""
         self.log.info("Validating gold data")
 
@@ -279,7 +279,7 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
 
         return validation
 
-    async def _save_gold_data(self) -> Dict[str, str]:
+    async def _save_gold_data(self) -> dict[str, str]:
         """Save gold tables to GCS."""
         self.log.info("Saving gold data to GCS")
 

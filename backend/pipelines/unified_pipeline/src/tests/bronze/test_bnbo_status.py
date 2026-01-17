@@ -1,9 +1,14 @@
+"""
+Tests for the BNBOStatusBronze class.
+
+This module tests the bronze layer data ingestion for BNBO status data,
+updated to work with the refactored DuckDB-based implementation.
+"""
+
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import pytest
-from pandas import Timestamp
 from tenacity import stop_after_attempt
 
 from unified_pipeline.bronze.bnbo_status import BNBOStatusBronze, BNBOStatusBronzeConfig
@@ -57,7 +62,7 @@ def test_get_params(bnbo_status_bronze: BNBOStatusBronze) -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_chunck_success(bnbo_status_bronze: BNBOStatusBronze) -> None:
-    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="1" numberReturned="1"><wfs:member></wfs:member></wfs:FeatureCollection>'  # noqa: E501
+    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="1" numberReturned="1"><wfs:member></wfs:member></wfs:FeatureCollection>'
 
     mock_response = AsyncMock()
     mock_response.status = 200
@@ -153,19 +158,19 @@ async def test_fetch_raw_data_multiple_batches(
     # Define responses for each chunk
     chunk_responses = [
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",  # noqa: E501
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",
             "start_index": 0,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",  # noqa: E501
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",
             "start_index": 2,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",  # noqa: E501
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",
             "start_index": 4,
             "total_features": 5,
             "returned_features": 1,
@@ -179,7 +184,7 @@ async def test_fetch_raw_data_multiple_batches(
         session.get(
             bnbo_status_bronze_small_batch.config.url,
             params=bnbo_status_bronze_small_batch._get_params(start_index),
-        )  # noqa: E501
+        )
         # Return the appropriate mock response
         for resp in chunk_responses:
             if resp["start_index"] == start_index:
@@ -253,7 +258,7 @@ async def test_fetch_raw_data_with_one_batch_and_exception(
 @pytest.mark.asyncio
 async def test_run_success(bnbo_status_bronze: BNBOStatusBronze) -> None:
     bnbo_status_bronze._fetch_raw_data = AsyncMock(return_value=["<xml_payload>"])  # type: ignore[method-assign]
-    bnbo_status_bronze._save_data = AsyncMock()  # type: ignore[method-assign]
+    bnbo_status_bronze._save_data = MagicMock()  # type: ignore[method-assign]
 
     await bnbo_status_bronze.run()
 
@@ -269,16 +274,48 @@ async def test_run_no_data(bnbo_status_bronze: BNBOStatusBronze) -> None:
 
 
 def test_create_dataframe(bnbo_status_bronze: BNBOStatusBronze) -> None:
-    """Test the create_dataframe method that converts raw data to a DataFrame with metadata."""
+    """Test the create_dataframe method that creates a DuckDB table with metadata.
+
+    The refactored create_dataframe method now returns a table name (string)
+    instead of a pandas DataFrame. The data is stored in DuckDB.
+    """
     raw_data = ["<xml>data1</xml>", "<xml>data2</xml>", "<xml>data3</xml>"]
 
-    result_df = bnbo_status_bronze.create_dataframe(raw_data)
+    result_table_name = bnbo_status_bronze.create_dataframe(raw_data)
 
-    assert isinstance(result_df, pd.DataFrame)
-    assert set(result_df.columns) == {"payload", "created_at", "source", "updated_at"}
-    assert len(result_df) == 3
-    assert result_df["payload"].tolist() == raw_data
-    assert all(result_df["source"] == bnbo_status_bronze.config.name)
+    # Verify that the method returns a string (table name)
+    assert isinstance(result_table_name, str)
+    assert result_table_name == "final_dataframe"
 
-    assert all(isinstance(ts, Timestamp) for ts in result_df["created_at"])
-    assert all(isinstance(ts, Timestamp) for ts in result_df["updated_at"])
+    # Verify the table exists and has correct structure by querying it
+    columns_result = bnbo_status_bronze.conn.execute(f"DESCRIBE {result_table_name}").fetchall()
+    column_names = {row[0] for row in columns_result}
+    assert column_names == {"payload", "created_at", "source", "updated_at"}
+
+    # Verify the row count
+    row_count = bnbo_status_bronze.conn.execute(
+        f"SELECT COUNT(*) FROM {result_table_name}"
+    ).fetchone()[0]
+    assert row_count == 3
+
+    # Verify the payload data
+    payloads = bnbo_status_bronze.conn.execute(
+        f"SELECT payload FROM {result_table_name} ORDER BY payload"
+    ).fetchall()
+    payload_values = [row[0] for row in payloads]
+    assert sorted(payload_values) == sorted(raw_data)
+
+    # Verify the source column values
+    sources = bnbo_status_bronze.conn.execute(
+        f"SELECT DISTINCT source FROM {result_table_name}"
+    ).fetchall()
+    assert len(sources) == 1
+    assert sources[0][0] == bnbo_status_bronze.config.name
+
+    # Verify timestamps are not null
+    timestamps = bnbo_status_bronze.conn.execute(
+        f"SELECT created_at, updated_at FROM {result_table_name}"
+    ).fetchall()
+    for created_at, updated_at in timestamps:
+        assert created_at is not None
+        assert updated_at is not None

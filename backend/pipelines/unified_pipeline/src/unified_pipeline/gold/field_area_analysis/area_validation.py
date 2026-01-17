@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from unified_pipeline.util.log_util import Logger
 
@@ -20,13 +20,13 @@ class AreaValidationResult:
     field_count_before: int
     field_count_after: int
     validation_message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 class FieldAreaValidator:
     """Validates that field areas are preserved across pipeline stages."""
 
-    def __init__(self, conn, log: Optional[Logger] = None, tolerance_pct: float = 1.0):
+    def __init__(self, conn, log: Logger | None = None, tolerance_pct: float = 1.0):
         """
         Initialize the area validator.
 
@@ -135,7 +135,7 @@ class FieldAreaValidator:
             return result
 
         except Exception as e:
-            error_message = f"❌ Area validation ERROR for {stage_name}: {str(e)}"
+            error_message = f"❌ Area validation ERROR for {stage_name}: {e!s}"
             self.log.error(error_message)
 
             return AreaValidationResult(
@@ -151,7 +151,7 @@ class FieldAreaValidator:
                 details={"error": str(e), "stage_name": stage_name},
             )
 
-    def _get_table_area_stats(self, table_name: str, field_area_column: str) -> Dict[str, Any]:
+    def _get_table_area_stats(self, table_name: str, field_area_column: str) -> dict[str, Any]:
         """Get area statistics from a table."""
 
         # Check if table exists
@@ -241,7 +241,7 @@ class FieldAreaValidator:
             "avg_area": stats[2],
             "min_area": stats[3],
             "max_area": stats[4],
-            "unique_fields": stats[5] if not has_fragments else stats[5],
+            "unique_fields": stats[5],
         }
 
     def validate_stage_with_input_reference(
@@ -338,7 +338,7 @@ class FieldAreaValidator:
             return result
 
         except Exception as e:
-            error_message = f"❌ Area validation ERROR for {stage_name}: {str(e)}"
+            error_message = f"❌ Area validation ERROR for {stage_name}: {e!s}"
             self.log.error(error_message)
 
             return AreaValidationResult(
@@ -355,7 +355,7 @@ class FieldAreaValidator:
             )
 
     def validate_area_hierarchy(
-        self, table_name: str, stage_name: str, hierarchy_validations: List[Tuple[str, str, str]]
+        self, table_name: str, stage_name: str, hierarchy_validations: list[tuple[str, str, str]]
     ) -> AreaValidationResult:
         """
         Validate area hierarchy constraints: child areas must be ≤ parent areas.
@@ -453,7 +453,7 @@ class FieldAreaValidator:
             return result
 
         except Exception as e:
-            error_message = f"❌ Area hierarchy validation ERROR for {stage_name}: {str(e)}"
+            error_message = f"❌ Area hierarchy validation ERROR for {stage_name}: {e!s}"
             self.log.error(error_message)
 
             return AreaValidationResult(
@@ -474,7 +474,7 @@ class FieldAreaValidator:
         detail_table: str,
         aggregate_table: str,
         stage_name: str,
-        group_columns: List[str],
+        group_columns: list[str],
         detail_area_column: str,
         aggregate_area_column: str,
     ) -> AreaValidationResult:
@@ -583,9 +583,7 @@ class FieldAreaValidator:
             return result
 
         except Exception as e:
-            error_message = (
-                f"❌ Fragment sum consistency validation ERROR for {stage_name}: {str(e)}"
-            )
+            error_message = f"❌ Fragment sum consistency validation ERROR for {stage_name}: {e!s}"
             self.log.error(error_message)
 
             return AreaValidationResult(
@@ -603,7 +601,7 @@ class FieldAreaValidator:
 
     def run_comprehensive_stage_validation(
         self, table_name: str, stage_name: str, validation_type: str = "wetland"
-    ) -> Dict[str, AreaValidationResult]:
+    ) -> dict[str, AreaValidationResult]:
         """
         Run comprehensive validation suite for a stage.
 

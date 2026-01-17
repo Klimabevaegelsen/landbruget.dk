@@ -6,8 +6,8 @@ from .processor import SilverProcessor
 from .storage import SilverStorageManager
 
 __all__ = [
-    "SilverProcessor",
-    "SilverStorageManager",
     "DuckDBProcessor",
     "ParquetManager",
+    "SilverProcessor",
+    "SilverStorageManager",
 ]

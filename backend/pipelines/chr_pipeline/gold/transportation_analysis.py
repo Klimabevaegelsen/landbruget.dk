@@ -2,13 +2,12 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
 
 import duckdb
 
 # Try to import GCS utilities
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
     from unified_pipeline.util.migration_helpers import migrate_save_data_pattern
 
     GCS_AVAILABLE = True
@@ -29,7 +28,7 @@ def setup_database(conn: duckdb.DuckDBPyConnection) -> None:
         logger.warning(f"⚠️ Could not load spatial extension: {e}")
 
 
-def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
+def load_transportation_data_sources(gcs_access) -> dict[str, bool]:
     """
     Load all transportation data sources dynamically using GCS patterns.
     Uses unified pipeline pattern: shared DuckDB connection with GCSDataAccess.
@@ -52,13 +51,31 @@ def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
         # Svineflytning (domestic pig movements)
         ("svineflytning", "silver/svineflytning/*/movements*.parquet"),
         # International animal movements (cattle traces)
-        ("intl_cattle_traces_cl", "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_cl*.parquet"),
-        ("intl_cattle_traces_nt", "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_nt*.parquet"),
-        ("intl_combined_traces_2024_2025", "silver/animal international movements/*/Dyr_udfoersel_2024_2025*.parquet"),
+        (
+            "intl_cattle_traces_cl",
+            "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_cl*.parquet",
+        ),
+        (
+            "intl_cattle_traces_nt",
+            "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_nt*.parquet",
+        ),
+        (
+            "intl_combined_traces_2024_2025",
+            "silver/animal international movements/*/Dyr_udfoersel_2024_2025*.parquet",
+        ),
         # International pig movements
-        ("intl_pig_cl", "silver/pig international movements/*/Grise_udfoersel_2017_2024_cl*.parquet"),
-        ("intl_pig_nt", "silver/pig international movements/*/Grise_udfoersel_2017_2024_nt*.parquet"),
-        ("intl_pig_2024_2025", "silver/pig international movements/*/Dyr_udfoersel_2024_2025*.parquet"),
+        (
+            "intl_pig_cl",
+            "silver/pig international movements/*/Grise_udfoersel_2017_2024_cl*.parquet",
+        ),
+        (
+            "intl_pig_nt",
+            "silver/pig international movements/*/Grise_udfoersel_2017_2024_nt*.parquet",
+        ),
+        (
+            "intl_pig_2024_2025",
+            "silver/pig international movements/*/Dyr_udfoersel_2024_2025*.parquet",
+        ),
     ]
 
     for table_name, pattern in data_source_patterns:
@@ -83,7 +100,9 @@ def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
                 loaded_tables[table_name] = True
 
                 # Log row count using shared connection
-                count = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                count = gcs_access.duckdb_conn.execute(
+                    f"SELECT COUNT(*) FROM {table_name}"
+                ).fetchone()[0]
                 logger.info(f"   ✅ {table_name}: {count:,} records")
             else:
                 logger.warning(f"⚠️ No files found for {table_name} with pattern: {pattern}")
@@ -1049,7 +1068,9 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
     cattle_matches = conn.execute(
         "SELECT COUNT(*) FROM certificate_matched_movements WHERE source_dataset = 'chr_cattle'"
     ).fetchone()[0]
-    intl_chr_cattle = conn.execute("SELECT COUNT(*) FROM chr_dyr_movements WHERE is_international = true").fetchone()[0]
+    intl_chr_cattle = conn.execute(
+        "SELECT COUNT(*) FROM chr_dyr_movements WHERE is_international = true"
+    ).fetchone()[0]
     total_chr_cattle = conn.execute("SELECT COUNT(*) FROM chr_dyr_movements").fetchone()[0]
     total_cattle_traces = conn.execute("SELECT COUNT(*) FROM unified_cattle_traces").fetchone()[0]
 
@@ -1058,7 +1079,9 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
     logger.info(f"   📊 Total CHR cattle movements: {total_chr_cattle:,}")
     logger.info(f"   📊 Cattle traces available: {total_cattle_traces:,}")
     if intl_chr_cattle > 0:
-        logger.info(f"   📈 International CHR → Traces matching rate: {(cattle_matches / intl_chr_cattle * 100):.1f}%")
+        logger.info(
+            f"   📈 International CHR → Traces matching rate: {(cattle_matches / intl_chr_cattle * 100):.1f}%"
+        )
 
 
 def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
@@ -1225,7 +1248,9 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
     logger.info("=" * 60)
 
     # Overall statistics
-    total_movements = conn.execute("SELECT COUNT(*) FROM unified_transportation_dataset").fetchone()[0]
+    total_movements = conn.execute(
+        "SELECT COUNT(*) FROM unified_transportation_dataset"
+    ).fetchone()[0]
     total_animals = conn.execute(
         "SELECT SUM(total_animals) FROM unified_transportation_dataset WHERE total_animals IS NOT NULL"
     ).fetchone()[0]
@@ -1270,7 +1295,9 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
 
     for species_code, species_name, count, animals in species_codes:
         animals_str = f"{animals:,}" if animals else "N/A"
-        logger.info(f"  {species_name} (code {species_code}): {count:,} movements, {animals_str} animals")
+        logger.info(
+            f"  {species_name} (code {species_code}): {count:,} movements, {animals_str} animals"
+        )
 
     # Destination type distribution
     logger.info("\n🏭 Top Destination Types:")
@@ -1318,9 +1345,15 @@ def create_transportation_analysis(gcs_access) -> bool:
 
         # Check if CHR_dyr movements are available - required for transportation analysis
         if not loaded_tables.get("chr_dyr_movements", False):
-            logger.warning("⚠️ CHR_dyr movement summaries not available - skipping transportation analysis")
-            logger.info("   Transportation analysis requires CHR_dyr data with international movement flags")
-            logger.info("   Consider running CHR pipeline with animal_movements step to collect CHR_dyr data")
+            logger.warning(
+                "⚠️ CHR_dyr movement summaries not available - skipping transportation analysis"
+            )
+            logger.info(
+                "   Transportation analysis requires CHR_dyr data with international movement flags"
+            )
+            logger.info(
+                "   Consider running CHR pipeline with animal_movements step to collect CHR_dyr data"
+            )
             return True  # Return success but skip analysis
 
         # Execute pipeline steps
@@ -1337,7 +1370,9 @@ def create_transportation_analysis(gcs_access) -> bool:
         return False
 
 
-def process_transportation_analysis(export_timestamp: str, gold_dir: Optional[Path] = None, gcs_access=None) -> bool:
+def process_transportation_analysis(
+    export_timestamp: str, gold_dir: Path | None = None, gcs_access=None
+) -> bool:
     """
     Main function to process transportation analysis for gold layer.
 
@@ -1384,7 +1419,9 @@ def process_transportation_analysis(export_timestamp: str, gold_dir: Optional[Pa
             # Check if unified_transportation_dataset table exists before trying to export
             try:
                 table_exists = (
-                    gcs_access.duckdb_conn.execute("SELECT 1 FROM unified_transportation_dataset LIMIT 1").fetchone()
+                    gcs_access.duckdb_conn.execute(
+                        "SELECT 1 FROM unified_transportation_dataset LIMIT 1"
+                    ).fetchone()
                     is not None
                 )
             except Exception:

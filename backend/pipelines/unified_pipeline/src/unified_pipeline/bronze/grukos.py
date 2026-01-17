@@ -16,7 +16,7 @@ and async processing for robustness.
 """
 
 from asyncio import Semaphore
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
@@ -58,15 +58,15 @@ class GrukosBronzeConfig(BaseJobConfig):
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )
-    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
+    headers: ClassVar[dict[str, str]] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
     request_semaphore: Semaphore = Semaphore(max_concurrent)
-    layers: list[str] = [
+    layers: ClassVar[list[str]] = [
         "grukos:indsatsomraader",  # Indsatsområder (action areas for groundwater protection)
     ]
-    url_mapping: dict[str, str] = {
+    url_mapping: ClassVar[dict[str, str]] = {
         "grukos:indsatsomraader": "https://wfs2-miljoegis.mim.dk/grukos/wfs",
     }
-    service_types: dict[str, str] = {}  # All layers use default WFS service type
+    service_types: ClassVar[dict[str, str]] = {}  # All layers use default WFS service type
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -101,7 +101,7 @@ class GrukosBronze(BaseSource[GrukosBronzeConfig], BronzeJobInterface):
         self.log.info("✅ GrukosBronze: Using unified GCS access and DuckDB connection")
 
     @timed(name="Fetching WFS data")  # type: ignore
-    async def fetch_wfs_data(self, layer: str, url: str) -> Optional[str]:
+    async def fetch_wfs_data(self, layer: str, url: str) -> str | None:
         """
         Fetch data from a WFS service for a specific layer.
 
@@ -125,27 +125,26 @@ class GrukosBronze(BaseSource[GrukosBronzeConfig], BronzeJobInterface):
 
             self.log.info(f"Fetching WFS data for layer {layer} from {url}")
 
-            async with self.config.request_semaphore:
-                async with aiohttp.ClientSession(
+            async with (
+                self.config.request_semaphore,
+                aiohttp.ClientSession(
                     timeout=self.config.request_timeout_config,
                     headers=self.config.headers,
-                ) as session:
-                    async with session.get(url, params=params) as response:
-                        if response.status == 200:
-                            content = await response.text()
-                            self.log.info(
-                                f"Successfully fetched {len(content)} bytes for layer {layer}"
-                            )
-                            return content
-                        else:
-                            self.log.error(f"Failed to fetch layer {layer}: HTTP {response.status}")
-                            return None
+                ) as session,
+                session.get(url, params=params) as response,
+            ):
+                if response.status == 200:
+                    content = await response.text()
+                    self.log.info(f"Successfully fetched {len(content)} bytes for layer {layer}")
+                    return content
+                self.log.error(f"Failed to fetch layer {layer}: HTTP {response.status}")
+                return None
 
         except Exception as e:
             self.log.error(f"Error fetching WFS data for layer {layer}: {e}")
             return None
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Run the Grukos bronze layer processing.
 

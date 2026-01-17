@@ -8,11 +8,11 @@ from .pdf_transformer import PDFTransformer
 from .work_permits_transformer import WorkPermitsTransformer
 
 __all__ = [
+    "AdvancedPDFTransformer",
     "BaseTransformer",
-    "TransformResult",
     "CSVTransformer",
     "ExcelTransformer",
     "PDFTransformer",
-    "AdvancedPDFTransformer",
+    "TransformResult",
     "WorkPermitsTransformer",
 ]

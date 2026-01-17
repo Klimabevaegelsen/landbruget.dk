@@ -15,13 +15,19 @@ validates geometries, and stores the processed data in GCS.
 """
 
 import xml.etree.ElementTree as ET
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 # ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
 # ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 from unified_pipeline.util.timing import AsyncTimer, timed
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+USE_UTM_PROCESSING = True
 
 
 class BNBOStatusSilverConfig(BaseJobConfig):
@@ -44,7 +50,7 @@ class BNBOStatusSilverConfig(BaseJobConfig):
     dataset: str = "bnbo_status"
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
-    status_mapping: dict[str, str] = {
+    status_mapping: ClassVar[dict[str, str]] = {
         "Frivillig aftale tilbudt (UDGÅET)": "Action Required",
         "Gennemgået, indsats nødvendig": "Action Required",
         "Ikke gennemgået (default værdi)": "Action Required",
@@ -85,7 +91,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         # No need to create another instance or setup DuckDB again
         self.log.info("✅ BNBOStatusSilver: Using unified GCS access and DuckDB connection")
 
-    def get_first_namespace(self, root: ET.Element) -> Optional[str]:
+    def get_first_namespace(self, root: ET.Element) -> str | None:
         """
         Extract the namespace from an XML root element.
 
@@ -108,7 +114,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 return elem.tag.split("}")[0].strip("{")
         return None
 
-    def clean_value(self, value: Any) -> Optional[str]:
+    def clean_value(self, value: Any) -> str | None:
         """
         Clean and standardize string values from XML.
 
@@ -132,7 +138,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         value = value.strip()
         return value if value else None
 
-    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[dict[str, Any]]:
+    def _parse_geometry(self, geom_elem: ET.Element) -> dict[str, Any] | None:
         """
         Parse GML geometry into WKT format using pure coordinate-based approach.
 
@@ -175,7 +181,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                         polygon_wkt = f"POLYGON(({', '.join(coord_pairs)}))"
                         polygon_wkts.append(polygon_wkt)
                 except Exception as e:
-                    self.log.error(f"Failed to parse coordinates: {str(e)}")
+                    self.log.error(f"Failed to parse coordinates: {e!s}")
                     continue
 
             if not polygon_wkts:
@@ -217,10 +223,10 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             return {"wkt": final_wkt, "area_ha": area_ha}
 
         except Exception as e:
-            self.log.error(f"Error parsing geometry: {str(e)}")
+            self.log.error(f"Error parsing geometry: {e!s}")
             return None
 
-    def _parse_feature(self, feature: ET.Element) -> Optional[dict[str, Any]]:
+    def _parse_feature(self, feature: ET.Element) -> dict[str, Any] | None:
         """
         Parse a single XML feature into a dictionary of attributes.
 
@@ -241,7 +247,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         try:
             namespace = feature.tag.split("}")[0].strip("{")
 
-            geom_elem = feature.find("{%s}Shape" % namespace)
+            geom_elem = feature.find(f"{{{namespace}}}Shape")
             if geom_elem is None:
                 self.log.warning("No geometry found in feature")
                 return None
@@ -270,11 +276,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             return data
 
         except Exception as e:
-            self.log.error(f"Error parsing feature: {str(e)}", exc_info=True)
+            self.log.error(f"Error parsing feature: {e!s}", exc_info=True)
             return None
 
     @timed(name="Processing bronze data")  # type: ignore
-    def _process_xml_data(self, raw_data) -> Optional[str]:
+    def _process_xml_data(self, raw_data) -> str | None:
         """
         Process XML data from the bronze layer using DuckDB-spatial.
 
@@ -323,7 +329,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         for index, row_tuple in enumerate(raw_df):
             try:
                 # Convert tuple to dict using column names
-                row = dict(zip(columns, row_tuple))
+                row = dict(zip(columns, row_tuple, strict=False))
                 # Parse the XML data
                 xml_data = row["payload"]
                 root = ET.fromstring(xml_data)
@@ -341,7 +347,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                             features.append(parsed)
 
             except Exception as e:
-                self.log.error(f"Error processing row {index}: {str(e)}", exc_info=True)
+                self.log.error(f"Error processing row {index}: {e!s}", exc_info=True)
                 raise e
 
         self.log.info(f"Parsed {len(features):,} features from XML data")
@@ -392,10 +398,16 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             WHERE geometry IS NOT NULL
         """)
 
-        # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
-        validate_and_transform_geometries_duckdb(
-            self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
-        )
+        # ✅ COORDINATE FIX: Apply unified geometry validation
+        # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
+        if USE_UTM_PROCESSING:
+            validate_and_normalize_to_utm(
+                self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
+            )
+        else:
+            validate_and_transform_geometries_duckdb(
+                self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
+            )
 
         # ✅ UPDATE: Replace original geometry column with transformed WKT
         self.conn.execute(f"""
@@ -530,7 +542,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             return dissolved_table_name
 
         except Exception as e:
-            self.log.error(f"Error creating dissolved geometries: {str(e)}", exc_info=True)
+            self.log.error(f"Error creating dissolved geometries: {e!s}", exc_info=True)
             # Create empty table on error
             empty_table_name = "bnbo_dissolved_empty"
             self.conn.execute(f"""
@@ -543,7 +555,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             """)
             return empty_table_name
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Any | None = None) -> None:
         """
         Run the complete BNBO status silver layer processing job.
 

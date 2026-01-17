@@ -41,34 +41,70 @@ python -c "import geopandas, supabase; print('Environment OK')"
 - Use SQL instead of DataFrame operations
 - Only use Pandas for final small result sets or when GeoPandas is required
 
+## CRS Strategy
+
+**Process in EPSG:25832, transform to EPSG:4326 only at final Supabase upload.**
+
+| EPSG | Name | Use |
+|------|------|-----|
+| 25832 | UTM 32N | **Processing** (Bronze/Silver/Gold) |
+| 4326 | WGS84 | **Final storage** (Supabase only) |
+
+This eliminates unnecessary transforms:
+- ❌ Old: Source(25832) → Silver(4326) → Gold(25832 for calc) → Supabase(4326) = 2-3 transforms
+- ✅ New: Source(25832) → Process(25832) → Supabase(4326) = 1 transform
+
 ## Medallion Architecture
 
 ### Bronze Layer (Raw Data)
 - **Purpose**: Preserve data exactly as received
 - **Location**: `gs://landbruget-data/bronze/<source>/<date>/`
+- **CRS**: Keep native (usually EPSG:25832 from Danish WFS sources)
 - **Rules**:
-  - Never modify raw data
-  - Add metadata: `_fetch_timestamp`, `_source`
+  - Never modify raw data or geometry
+  - Add metadata: `_fetch_timestamp`, `_source`, `_source_crs`
   - Use Parquet format
   - Immutable - never overwrite
 
+```python
+# Track source CRS in metadata
+_source_crs = detect_crs_from_response(wfs_capabilities)  # e.g., "EPSG:25832"
+```
+
 ### Silver Layer (Cleaned Data)
 - **Purpose**: Clean, validate, standardize
+- **CRS**: Keep EPSG:25832 (no transformation yet!)
 - **Transformations**:
   - Type coercion (dates, numbers)
   - CVR formatting: 8 digits, zero-padded
   - CHR formatting: 6 digits
-  - CRS conversion to EPSG:4326
+  - Transform non-25832 sources (DAGI, H3) to EPSG:25832 here
   - Deduplication
   - Null handling
 
+```python
+# Only transform sources that aren't already EPSG:25832
+if source_crs != "EPSG:25832":
+    ST_Transform(geometry, source_crs, 'EPSG:25832')
+```
+
 ### Gold Layer (Analysis-Ready)
 - **Purpose**: Enriched, joined datasets
+- **CRS**: Keep EPSG:25832 for processing (area/buffer/distance work natively!)
 - **Operations**:
   - Join multiple sources on CVR/CHR/BFE
-  - Calculate derived metrics
+  - Calculate derived metrics (meters work directly!)
   - Aggregate by company/farm
-  - Upload to Supabase
+  - Transform to EPSG:4326 **only** at final Supabase upload
+
+```python
+# Area/buffer/distance work directly in EPSG:25832 - no transforms needed!
+ST_Area(geometry) / 10000  # hectares (geometry already in meters)
+ST_Buffer(geometry, 1000)  # 1km buffer (meters work directly)
+
+# Transform ONCE at final Supabase upload
+ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')
+```
 
 ## Data Quality Validation
 
@@ -95,9 +131,30 @@ def validate_chr(chr_num: str) -> bool:
 ```python
 import geopandas as gpd
 
-# Danish data comes in EPSG:25832 (UTM zone 32N)
-# Convert to EPSG:4326 (WGS84) for storage
-gdf = gdf.to_crs('EPSG:4326')
+# Danish data comes in EPSG:25832 (UTM zone 32N) - keep it there!
+# Only convert to EPSG:4326 at final Supabase upload
+gdf_for_supabase = gdf.to_crs('EPSG:4326')
+```
+
+### Buffer/Distance in DuckDB
+
+**With EPSG:25832, buffer/distance work natively in meters!**
+
+```sql
+-- EPSG:25832 data - buffer works directly in meters ✓
+ST_Buffer(geometry, 1000)  -- 1km buffer
+
+-- Area calculation works directly in square meters
+ST_Area(geometry) / 10000  -- hectares
+```
+
+**If working with EPSG:4326 data (avoid when possible):**
+```python
+from common.crs_utils import sql_buffer_meters, sql_intersects_with_buffer_meters
+
+# These helpers transform to UTM internally
+buffer_sql = sql_buffer_meters("geometry", 100)  # 100 meters
+intersect_sql = sql_intersects_with_buffer_meters("a.geom", "b.geom", 1000)  # 1km
 ```
 
 ## GCS Operations
@@ -283,10 +340,9 @@ result = duckdb.query("""
 ## Quality Checklist
 
 Before marking pipeline work complete:
-- [ ] Bronze data preserved unchanged
-- [ ] Silver transformations logged
-- [ ] Gold data uploaded to Supabase
+- [ ] Bronze data preserved unchanged (native CRS, usually EPSG:25832)
+- [ ] Silver data cleaned and validated (EPSG:25832)
+- [ ] Gold data uploaded to Supabase (transformed to EPSG:4326 at upload)
 - [ ] CVR/CHR/BFE formats validated
-- [ ] Geospatial CRS is EPSG:4326
 - [ ] No duplicate records
 - [ ] Tests pass: `pytest tests/`

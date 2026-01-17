@@ -1,15 +1,21 @@
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 
 logger = logging.getLogger(__name__)
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+USE_UTM_PROCESSING = True
 
 
 class CadastralSilverConfig(BaseJobConfig):
@@ -287,7 +293,7 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             self.log.info(f"Source table {source_table_name} contains {row_count:,} rows")
         except Exception as e:
             self.log.error(f"Failed to access source table {source_table_name}: {e}")
-            raise ValueError(f"Source table {source_table_name} is not accessible")
+            raise ValueError(f"Source table {source_table_name} is not accessible") from e
 
         if row_count == 0:
             raise ValueError(f"Source table {source_table_name} is empty")
@@ -498,7 +504,7 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             # Return original table name as fallback
             return table_name
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Run the complete Cadastral silver layer processing job.
 
@@ -565,22 +571,32 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         if skip_validation:
             self.log.info("Skipping geometry validation (CADASTRAL_SKIP_VALIDATION=true)")
             # Just do coordinate transformation without validation
+            # always_xy := true ensures GeoJSON-standard (lon, lat) coordinate order
             self.log.info("Applying coordinate transformation from UTM to WGS84...")
             self.conn.execute(f"""
                 UPDATE {processed_table} SET
-                    geometry = ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')
+                    geometry = ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)
                 WHERE geometry IS NOT NULL
             """)
         else:
-            # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
-            # This converts UTM coordinates to WGS84 to match agricultural fields
+            # ✅ COORDINATE FIX: Apply unified geometry validation
+            # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
             self.log.info("Applying geometry validation and coordinate transformation...")
-            validate_and_transform_geometries_duckdb(
-                self.conn,
-                processed_table,
-                self.config.dataset,
-                geometry_column="geometry",
-            )
+            if USE_UTM_PROCESSING:
+                validate_and_normalize_to_utm(
+                    self.conn,
+                    processed_table,
+                    self.config.dataset,
+                    geometry_column="geometry",
+                )
+            else:
+                # Legacy: Transform to WGS84 in silver layer
+                validate_and_transform_geometries_duckdb(
+                    self.conn,
+                    processed_table,
+                    self.config.dataset,
+                    geometry_column="geometry",
+                )
 
         # Create dissolved version (skip in bronze/silver to save time, move to gold if needed)
         create_dissolved = os.getenv("CADASTRAL_CREATE_DISSOLVED", "false").lower() == "true"

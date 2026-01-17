@@ -43,12 +43,12 @@ ComprehensiveGeoValidator = _get_geo_validator()
 def _get_optimized_gcs_access() -> type | None:
     """Get optimized GCS access with robust import handling."""
     try:
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         logging.info("✅ Successfully imported optimized GCSDataAccess for BBR buildings")
         return GCSDataAccess
     except ImportError as e:
-        logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logging.warning(f"⚠️ Could not import optimized GCSDataAccess from common.gcs: {e}")
         return None
 
 

@@ -3,26 +3,40 @@ Unit tests for data_transformer.py
 
 Tests the transformation logic from Danish GCS schema to English calculator schema.
 Uses actual GCS data structure patterns discovered during exploration.
+
+Updated to use DuckDB relations instead of pandas DataFrames after refactoring.
 """
 
-import pytest
-import pandas as pd
 import sys
 from pathlib import Path
+
+import duckdb
+import pandas as pd
+import pytest
 
 # Add climate to path
 climate_path = Path(__file__).parent
 if str(climate_path) not in sys.path:
     sys.path.insert(0, str(climate_path))
 
+
+# Global connection for tests to avoid connection being closed prematurely
+_test_conn = duckdb.connect()
+
+
+def df_to_duckdb_relation(df: pd.DataFrame) -> duckdb.DuckDBPyRelation:
+    """Convert pandas DataFrame to DuckDB relation for testing."""
+    return _test_conn.from_df(df)
+
+
 from data_transformer import (  # noqa: E402
-    GreenAccountsTransformer,
-    GKEATransformer,
+    FertilizerSummary,
+    FieldSummary,
     FVMTransformer,
+    GKEATransformer,
+    GreenAccountsTransformer,
     IntegratedFarmTransformer,
     LivestockSummary,
-    FieldSummary,
-    FertilizerSummary,
 )
 
 
@@ -42,8 +56,9 @@ class TestGreenAccountsTransformer:
                 "c_2005": ["Løsdrift", "Løsdrift", "Stald"],  # Housing type
             }
         )
+        rel = df_to_duckdb_relation(df)
 
-        result = GreenAccountsTransformer.transform(df)
+        result = GreenAccountsTransformer.transform(rel)
 
         assert "cattle" in result
         cattle = result["cattle"]
@@ -67,8 +82,9 @@ class TestGreenAccountsTransformer:
                 "c_2016": [5000.0, 18000.0],
             }
         )
+        rel = df_to_duckdb_relation(df)
 
-        result = GreenAccountsTransformer.transform(df)
+        result = GreenAccountsTransformer.transform(rel)
 
         assert "pigs" in result
         pigs = result["pigs"]
@@ -90,8 +106,9 @@ class TestGreenAccountsTransformer:
                 "c_2016": [9600.0, 600.0, 2000.0, 1000.0],
             }
         )
+        rel = df_to_duckdb_relation(df)
 
-        result = GreenAccountsTransformer.transform(df)
+        result = GreenAccountsTransformer.transform(rel)
 
         assert len(result) == 3  # cattle, pigs, poultry
         assert "cattle" in result
@@ -104,19 +121,20 @@ class TestGreenAccountsTransformer:
 
     def test_transform_empty_dataframe(self):
         """Test handling of empty DataFrame."""
-        df = pd.DataFrame()
-        result = GreenAccountsTransformer.transform(df)
+        # Pass None for empty data (DuckDB relation cannot be created from empty DataFrame easily)
+        result = GreenAccountsTransformer.transform(None)
         assert result == {}
 
     def test_transform_missing_columns(self):
         """Test handling of missing required columns."""
         df = pd.DataFrame({"cvr_number": ["12345678"], "some_other_col": ["value"]})
+        rel = df_to_duckdb_relation(df)
 
-        result = GreenAccountsTransformer.transform(df)
+        result = GreenAccountsTransformer.transform(rel)
         assert result == {}
 
     def test_get_species_breakdown(self):
-        """Test conversion to readable DataFrame."""
+        """Test conversion to readable list of dicts."""
         livestock = {
             "cattle": LivestockSummary(
                 species="cattle",
@@ -126,13 +144,13 @@ class TestGreenAccountsTransformer:
             )
         }
 
-        df = GreenAccountsTransformer.get_species_breakdown(livestock)
+        result = GreenAccountsTransformer.get_species_breakdown(livestock)
 
-        assert len(df) == 2
-        assert "species" in df.columns
-        assert "subtype" in df.columns
-        assert "count" in df.columns
-        assert df["count"].sum() == 100
+        assert len(result) == 2
+        assert all("species" in d for d in result)
+        assert all("subtype" in d for d in result)
+        assert all("count" in d for d in result)
+        assert sum(d["count"] for d in result) == 100
 
 
 class TestGKEATransformer:
@@ -149,8 +167,9 @@ class TestGKEATransformer:
                 "year": [2024, 2024, 2024],
             }
         )
+        rel = df_to_duckdb_relation(df)
 
-        result = GKEATransformer.transform(df)
+        result = GKEATransformer.transform(rel)
 
         assert isinstance(result, FertilizerSummary)
         assert result.total_n_kg == 5300.0  # 1500 + 2000 + 1800
@@ -167,8 +186,9 @@ class TestGKEATransformer:
                 "faktisk_areal_ha": [12.5, 10.0],
             }
         )
+        rel = df_to_duckdb_relation(df)
 
-        result = GKEATransformer.transform(df)
+        result = GKEATransformer.transform(rel)
 
         assert result is not None
         assert result.total_n_kg == 1500.0
@@ -176,18 +196,20 @@ class TestGKEATransformer:
 
     def test_transform_empty_dataframe(self):
         """Test handling of empty DataFrame."""
-        df = pd.DataFrame()
-        result = GKEATransformer.transform(df)
+        # Pass None for empty data
+        result = GKEATransformer.transform(None)
         assert result is None
 
     def test_calculate_n2o_emissions(self):
         """Test N2O emission calculation from fertilizer."""
-        fert = FertilizerSummary(total_n_kg=10000.0, total_area_ha=100.0, avg_n_kg_per_ha=100.0, field_count=10)
+        fert = FertilizerSummary(
+            total_n_kg=10000.0, total_area_ha=100.0, avg_n_kg_per_ha=100.0, field_count=10
+        )
 
         co2e = GKEATransformer.calculate_n2o_emissions(fert)
 
-        # Formula: 10000 * 0.01 * (44/28) * 298
-        expected = 10000.0 * 0.01 * (44 / 28) * 298
+        # Formula: 10000 * 0.01 * (44/28) * 273 (IPCC AR6, 2021 GWP value)
+        expected = 10000.0 * 0.01 * (44 / 28) * 273
         assert co2e == pytest.approx(expected, rel=0.01)
 
     def test_calculate_n2o_emissions_none(self):
@@ -209,8 +231,9 @@ class TestFVMTransformer:
                 "areal_ha": [15.5, 18.2, 12.0, 8.5],
             }
         )
+        rel = df_to_duckdb_relation(df)
 
-        result = FVMTransformer.transform(df)
+        result = FVMTransformer.transform(rel)
 
         assert len(result) == 3  # 3 unique crop types
         assert all(isinstance(fs, FieldSummary) for fs in result)
@@ -235,8 +258,9 @@ class TestFVMTransformer:
                 "areal_ha": [10.0, 15.0, 8.0],
             }
         )
+        rel = df_to_duckdb_relation(df)
 
-        result = FVMTransformer.transform(df)
+        result = FVMTransformer.transform(rel)
 
         crop_types = {fs.crop_type for fs in result}
         assert "maize" in crop_types
@@ -245,8 +269,8 @@ class TestFVMTransformer:
 
     def test_transform_empty_dataframe(self):
         """Test handling of empty DataFrame."""
-        df = pd.DataFrame()
-        result = FVMTransformer.transform(df)
+        # Pass None for empty data
+        result = FVMTransformer.transform(None)
         assert result == []
 
     def test_get_total_area(self):
@@ -261,18 +285,18 @@ class TestFVMTransformer:
         assert total == pytest.approx(53.7, rel=0.01)
 
     def test_get_crop_breakdown(self):
-        """Test conversion to DataFrame."""
+        """Test conversion to list of dicts."""
         fields = [
             FieldSummary(crop_type="wheat", total_area_ha=25.0, field_count=2),
             FieldSummary(crop_type="barley", total_area_ha=18.5, field_count=1),
         ]
 
-        df = FVMTransformer.get_crop_breakdown(fields)
+        result = FVMTransformer.get_crop_breakdown(fields)
 
-        assert len(df) == 2
-        assert "crop_type" in df.columns
-        assert "total_area_ha" in df.columns
-        assert df["total_area_ha"].sum() == pytest.approx(43.5, rel=0.01)
+        assert len(result) == 2
+        assert all("crop_type" in d for d in result)
+        assert all("total_area_ha" in d for d in result)
+        assert sum(d["total_area_ha"] for d in result) == pytest.approx(43.5, rel=0.01)
 
 
 class TestIntegratedFarmTransformer:
@@ -290,6 +314,7 @@ class TestIntegratedFarmTransformer:
                 "c_2016": [12000.0, 800.0],
             }
         )
+        livestock_rel = df_to_duckdb_relation(livestock_df)
 
         # Mock field data
         field_df = pd.DataFrame(
@@ -300,6 +325,7 @@ class TestIntegratedFarmTransformer:
                 "areal_ha": [25.0, 15.0],
             }
         )
+        field_rel = df_to_duckdb_relation(field_df)
 
         # Mock fertilizer data
         fertilizer_df = pd.DataFrame(
@@ -309,8 +335,9 @@ class TestIntegratedFarmTransformer:
                 "faktisk_areal_ha": [25.0, 15.0],
             }
         )
+        fertilizer_rel = df_to_duckdb_relation(fertilizer_df)
 
-        result = IntegratedFarmTransformer.transform_all(livestock_df, field_df, fertilizer_df)
+        result = IntegratedFarmTransformer.transform_all(livestock_rel, field_rel, fertilizer_rel)
 
         assert "livestock" in result
         assert "fields" in result
@@ -336,8 +363,9 @@ class TestIntegratedFarmTransformer:
                 "c_2016": [12000.0],
             }
         )
+        livestock_rel = df_to_duckdb_relation(livestock_df)
 
-        result = IntegratedFarmTransformer.transform_all(livestock_df, None, None)
+        result = IntegratedFarmTransformer.transform_all(livestock_rel, None, None)
 
         assert result["metadata"]["has_livestock"] is True
         assert result["metadata"]["has_fields"] is False
@@ -364,12 +392,19 @@ class TestIntegratedFarmTransformer:
                 "c_2016": [12000.0],
             }
         )
+        livestock_rel = df_to_duckdb_relation(livestock_df)
 
         field_df = pd.DataFrame(
-            {"cvr": ["12345678"], "bfe_nummer": ["BFE001"], "afgroede": ["Vinterhvede"], "areal_ha": [25.0]}
+            {
+                "cvr": ["12345678"],
+                "bfe_nummer": ["BFE001"],
+                "afgroede": ["Vinterhvede"],
+                "areal_ha": [25.0],
+            }
         )
+        field_rel = df_to_duckdb_relation(field_df)
 
-        integrated = IntegratedFarmTransformer.transform_all(livestock_df, field_df, None)
+        integrated = IntegratedFarmTransformer.transform_all(livestock_rel, field_rel, None)
 
         # Convert to FarmData
         farm_data = IntegratedFarmTransformer.to_farm_data_object(integrated)
@@ -404,7 +439,9 @@ class TestDataStructures:
 
     def test_field_summary_to_dict(self):
         """Test FieldSummary serialization."""
-        summary = FieldSummary(crop_type="wheat", total_area_ha=25.5, field_count=2, avg_yield_kg_ha=7500.0)
+        summary = FieldSummary(
+            crop_type="wheat", total_area_ha=25.5, field_count=2, avg_yield_kg_ha=7500.0
+        )
 
         result = summary.to_dict()
 
@@ -414,7 +451,9 @@ class TestDataStructures:
 
     def test_fertilizer_summary_to_dict(self):
         """Test FertilizerSummary serialization."""
-        summary = FertilizerSummary(total_n_kg=5000.0, total_area_ha=50.0, avg_n_kg_per_ha=100.0, field_count=5)
+        summary = FertilizerSummary(
+            total_n_kg=5000.0, total_area_ha=50.0, avg_n_kg_per_ha=100.0, field_count=5
+        )
 
         result = summary.to_dict()
 

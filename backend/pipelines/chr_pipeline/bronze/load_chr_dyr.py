@@ -6,16 +6,16 @@ The functionality has been separated into focused modules for better maintainabi
 
 import logging
 from datetime import date, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 
 from .animal_movements import load_animal_movements, load_cattle_movement_summaries
 from .auth import create_chr_dyr_client, get_fvm_credentials
 
-# Import unified pipeline GCS access
+# Import GCS access from common module
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -33,9 +33,9 @@ def load_animal_movements_task(
     chr_dyr_client,
     username: str,
     herd_number: int,
-    start_date: Optional[date],
-    end_date: Optional[date],
-) -> Optional[Any]:
+    start_date: date | None,
+    end_date: date | None,
+) -> Any | None:
     """
     Wrapper function for parallel processing of animal movement loading.
 
@@ -126,7 +126,8 @@ def add_to_consolidated_table(movement_data):
                     movement.get("movement_type"),
                     movement.get("animal_count", 0),
                     json.dumps(
-                        [str(r) for r in movement.get("movement_reasons", []) if r is not None], ensure_ascii=False
+                        [str(r) for r in movement.get("movement_reasons", []) if r is not None],
+                        ensure_ascii=False,
                     ),
                     json.dumps(movement.get("cattle_type_breakdown", {}), ensure_ascii=False),
                     json.dumps(movement.get("nation_codes_from", []), ensure_ascii=False),
@@ -135,7 +136,9 @@ def add_to_consolidated_table(movement_data):
                 ],
             )
 
-        logger.debug(f"Added {len(movements)} movements from herd {reporting_herd} to consolidated table")
+        logger.debug(
+            f"Added {len(movements)} movements from herd {reporting_herd} to consolidated table"
+        )
 
     except Exception as e:
         logger.error(f"Failed to add data to consolidated table: {e}")
@@ -150,7 +153,9 @@ def finalize_consolidated_processing():
 
     try:
         # Get record count
-        count_result = _duckdb_conn.execute("SELECT COUNT(*) FROM consolidated_movements").fetchone()
+        count_result = _duckdb_conn.execute(
+            "SELECT COUNT(*) FROM consolidated_movements"
+        ).fetchone()
         record_count = count_result[0] if count_result else 0
 
         if record_count == 0:
@@ -213,7 +218,11 @@ def main():
         # and date ranges from the main pipeline
         test_herd = 12345  # Example herd number
         result = load_cattle_movement_summaries(
-            chr_dyr_client, username, test_herd, start_date=date.today() - timedelta(days=30), end_date=date.today()
+            chr_dyr_client,
+            username,
+            test_herd,
+            start_date=date.today() - timedelta(days=30),
+            end_date=date.today(),
         )
 
         if result:

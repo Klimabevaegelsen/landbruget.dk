@@ -8,7 +8,7 @@ PERFORMANCE IMPACT: Reduces Stage 1 complexity from 3.9B to 300M combinations (1
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 from .base import PreFilteringStageBase
 
@@ -65,7 +65,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
                 )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
-                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
+                    self.log.info(f"   Raw WKT {i + 1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
                     if wkt and "POINT(" in wkt:
                         coords_str = wkt.replace("POINT(", "").replace(")", "")
@@ -75,17 +75,17 @@ class PropertiesPreFilter(PreFilteringStageBase):
                                 first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
                                 coord_pairs.append((first_val, second_val))
                                 self.log.info(
-                                    f"   Property {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    f"   Property {i + 1}: POINT({first_val:.6f} {second_val:.6f})"
                                 )
                             else:
                                 self.log.warning(
-                                    f"   Property {i+1}: Invalid coordinate format: {coords_str}"
+                                    f"   Property {i + 1}: Invalid coordinate format: {coords_str}"
                                 )
                         except Exception as parse_e:
-                            self.log.warning(f"   Property {i+1}: Parse error: {parse_e}")
+                            self.log.warning(f"   Property {i + 1}: Parse error: {parse_e}")
                             continue
                     else:
-                        self.log.warning(f"   Property {i+1}: Not a POINT geometry: {wkt}")
+                        self.log.warning(f"   Property {i + 1}: Not a POINT geometry: {wkt}")
 
                 if coord_pairs:
                     self.log.info(
@@ -164,7 +164,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
 
         self.log.info(f"✅ Dataset validation complete: {properties_count:,} valid properties")
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Pre-filter properties using chunked processing to manage memory.
 
@@ -291,7 +291,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
             ),
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save output data - already handled in _execute_stage_processing for Stage 0."""
         # Stage 0 classes handle export directly in _execute_stage_processing
         # to use custom output paths and naming conventions

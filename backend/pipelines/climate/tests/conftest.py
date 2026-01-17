@@ -2,14 +2,15 @@
 Pytest configuration and fixtures for compliance testing.
 """
 
-import pytest
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import pytest
 
 
 @pytest.fixture(scope="session")
-def reference_values() -> Dict[str, Any]:
+def reference_values() -> dict[str, Any]:
     """
     Load reference values for comparison.
 
@@ -24,7 +25,7 @@ def reference_values() -> Dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def test_cases() -> Dict[str, Any]:
+def test_cases() -> dict[str, Any]:
     """
     Load test cases with expected inputs/outputs.
 
@@ -39,7 +40,7 @@ def test_cases() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def gwp_ar6() -> Dict[str, float]:
+def gwp_ar6() -> dict[str, float]:
     """
     IPCC AR6 (2021) Global Warming Potentials (100-year).
 
@@ -47,14 +48,14 @@ def gwp_ar6() -> Dict[str, float]:
     deviation from AR4 values.
     """
     return {
-        "N2O": 273.0,           # IPCC AR6 (vs AR4: 298, AR5: 265)
-        "CH4_biogenic": 27.0,   # Non-fossil CH4 (vs AR4: 25, AR5: 28)
-        "CH4_fossil": 30.0,     # Fossil CH4 (vs AR4: 25, AR5: 28)
+        "N2O": 273.0,  # IPCC AR6 (vs AR4: 298, AR5: 265)
+        "CH4_biogenic": 27.0,  # Non-fossil CH4 (vs AR4: 25, AR5: 28)
+        "CH4_fossil": 30.0,  # Fossil CH4 (vs AR4: 25, AR5: 28)
     }
 
 
 @pytest.fixture
-def gwp_ar4() -> Dict[str, float]:
+def gwp_ar4() -> dict[str, float]:
     """
     IPCC AR4 Global Warming Potentials (100-year).
 
@@ -69,18 +70,8 @@ def gwp_ar4() -> Dict[str, float]:
 
 def pytest_configure(config):
     """Add custom markers for test categorization."""
-    config.addinivalue_line(
-        "markers", "compliance: mark test as compliance verification test"
-    )
-    config.addinivalue_line(
-        "markers", "critical: mark test as critical for reference parity"
-    )
-    config.addinivalue_line(
-        "markers", "field: mark test as field emission formula test"
-    )
-    config.addinivalue_line(
-        "markers", "cattle: mark test as cattle emission formula test"
-    )
-    config.addinivalue_line(
-        "markers", "energy: mark test as energy emission formula test"
-    )
+    config.addinivalue_line("markers", "compliance: mark test as compliance verification test")
+    config.addinivalue_line("markers", "critical: mark test as critical for reference parity")
+    config.addinivalue_line("markers", "field: mark test as field emission formula test")
+    config.addinivalue_line("markers", "cattle: mark test as cattle emission formula test")
+    config.addinivalue_line("markers", "energy: mark test as energy emission formula test")

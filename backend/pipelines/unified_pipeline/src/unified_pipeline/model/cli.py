@@ -8,7 +8,6 @@ validating and managing CLI configuration.
 """
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -175,17 +174,17 @@ class CliConfig(BaseModel):
     env: Env = Env.prod
     source: Source
     stage: Stage
-    fvm_layer_type: Optional[FVMLayerType] = None
-    fvm_year: Optional[int] = None
-    pesticide_year: Optional[int] = None
+    fvm_layer_type: FVMLayerType | None = None
+    fvm_year: int | None = None
+    pesticide_year: int | None = None
     # CVR enrichment specific parameters
-    test_limit: Optional[int] = None
+    test_limit: int | None = None
     parse_financial_xml: bool = True
     max_financial_documents: int = 10
 
     # Batch processing parameters
-    batch_number: Optional[int] = None
-    total_batches: Optional[int] = None
+    batch_number: int | None = None
+    total_batches: int | None = None
 
     # General year parameter for matrix jobs
-    target_year: Optional[int] = None
+    target_year: int | None = None

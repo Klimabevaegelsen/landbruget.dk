@@ -15,12 +15,11 @@ Source Attribution:
 - Methodology: Danish GHG inventory aligned with IPCC guidelines
 """
 
-from typing import Dict, Optional
-from pathlib import Path
 import json
+from pathlib import Path
 
 
-def load_nh3_factors() -> Dict[str, Dict]:
+def load_nh3_factors() -> dict[str, dict]:
     """
     Load NH3 emission factors for synthetic fertilizer application.
 
@@ -31,9 +30,8 @@ def load_nh3_factors() -> Dict[str, Dict]:
     base_path = Path(__file__).parent.parent.parent / "reference_values"
 
     with open(base_path / "nh3_factors_field_application.json") as f:
-        data = json.load(f)
+        return json.load(f)
 
-    return data
 
 
 # Load constants once at module import
@@ -45,8 +43,8 @@ NH3_N_TO_NH3_CONVERSION = NH3_FACTORS_DATA["conversion"]["nh3_n_to_nh3"]
 
 def calculate_nh3_field_fertilizer(
     n_applied_kg: float,
-    fertilizer_type: Optional[str] = None,
-) -> Dict[str, float]:
+    fertilizer_type: str | None = None,
+) -> dict[str, float]:
     """
     Calculate NH3 emissions from synthetic fertilizer application to fields.
 
@@ -134,8 +132,8 @@ def calculate_nh3_field_fertilizer(
 def calculate_nh3_field_per_ha(
     n_kg_per_ha: float,
     area_ha: float,
-    fertilizer_type: Optional[str] = None,
-) -> Dict[str, float]:
+    fertilizer_type: str | None = None,
+) -> dict[str, float]:
     """
     Calculate NH3 emissions from synthetic fertilizer per hectare basis.
 
@@ -185,7 +183,7 @@ def calculate_nh3_field_per_ha(
     return result
 
 
-def get_available_fertilizer_types() -> Dict[str, str]:
+def get_available_fertilizer_types() -> dict[str, str]:
     """
     Get dictionary of available fertilizer types and their descriptions.
 
@@ -197,10 +195,7 @@ def get_available_fertilizer_types() -> Dict[str, str]:
         >>> print(types['calcium_ammonium_nitrat'])
         Calcium ammonium nitrate (most common fertilizer in Denmark)
     """
-    return {
-        key: data["description"]
-        for key, data in NH3_FERTILIZER_TYPES.items()
-    }
+    return {key: data["description"] for key, data in NH3_FERTILIZER_TYPES.items()}
 
 
 if __name__ == "__main__":

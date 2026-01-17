@@ -9,7 +9,7 @@ for parallel execution.
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -56,7 +56,7 @@ class AddressGeocodingConfig(BaseJobConfig):
         default=1000, description="Maximum number of addresses to process per batch"
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
@@ -104,7 +104,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         self.log.info("   • Geocoding cache: ENABLED")
 
     @timed(name="Address geocoding processing")
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> str:
         """
         Run the address geocoding process.
 
@@ -152,7 +152,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             raise
 
     @timed(name="Extracting addresses from data")
-    def _extract_addresses_from_data(self) -> Dict[str, Any]:
+    def _extract_addresses_from_data(self) -> dict[str, Any]:
         """
         Load company and P-number data and extract all addresses.
 
@@ -435,7 +435,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         return extraction_result
 
-    def _should_geocode_address(self, addr: Dict[str, Any]) -> bool:
+    def _should_geocode_address(self, addr: dict[str, Any]) -> bool:
         """
         Determine if an address should be geocoded.
 
@@ -454,13 +454,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             return False
 
         # Skip if already geocoded
-        if addr.get("dawa_enriched") or addr.get("datavask_enriched"):
-            return False
-
-        return True
+        return not (addr.get("dawa_enriched") or addr.get("datavask_enriched"))
 
     def _should_geocode_address_with_fallback(
-        self, addr: Dict[str, Any], company_has_current_addresses: bool
+        self, addr: dict[str, Any], company_has_current_addresses: bool
     ) -> bool:
         """
         Determine if an address should be geocoded, considering fallback to historical addresses
@@ -488,25 +485,21 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         if self.config.geocode_current_only:
             if addr.get("is_current", True):
                 return True  # Always geocode current addresses
-            elif not company_has_current_addresses:
-                return (
-                    True  # Geocode historical addresses ONLY if company has zero current addresses
-                )
-            else:
-                # Skip historical addresses when company has current addresses
-                # (preserve existing behavior)
-                return False
+            # Geocode historical addresses ONLY if company has zero current addresses
+            # Skip historical addresses when company has current addresses
+            # (preserve existing behavior)
+            return not company_has_current_addresses
 
         return True
 
     def _create_address_record(
         self,
-        addr: Dict[str, Any],
+        addr: dict[str, Any],
         source_type: str,
         cvr_number: int,
         entity_name: str,
-        p_number: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        p_number: int | None = None,
+    ) -> dict[str, Any]:
         """
         Create a standardized address record for geocoding.
 
@@ -556,7 +549,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         }
 
     @timed(name="Geocoding addresses")
-    async def _geocode_addresses(self, address_extraction: Dict[str, Any]) -> Dict[str, Any]:
+    async def _geocode_addresses(self, address_extraction: dict[str, Any]) -> dict[str, Any]:
         """
         Geocode addresses using DAWA API with Datavask fallback.
 
@@ -690,8 +683,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
     @timed(name="Processing geocoded data")
     def _process_geocoded_data(
-        self, geocoding_results: Dict[str, Any], address_extraction: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, geocoding_results: dict[str, Any], address_extraction: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Process and structure geocoded addresses data.
 
@@ -738,7 +731,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         return processed_data
 
     @timed(name="Creating addresses table")
-    def _create_addresses_table(self, processed_data: Dict[str, Any]) -> str:
+    def _create_addresses_table(self, processed_data: dict[str, Any]) -> str:
         """
         Create comprehensive addresses table with UUIDs and proper normalization.
 
@@ -915,7 +908,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         return table_name
 
-    def _update_company_table_with_geocoding(self, processed_data: Dict[str, Any]) -> None:
+    def _update_company_table_with_geocoding(self, processed_data: dict[str, Any]) -> None:
         """
         Update company table with primary address geocoding information.
         """
@@ -928,7 +921,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
             _find_latest_file_with_pattern,
         )
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         gcs_access = GCSDataAccess()
         company_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/*/data.parquet"
@@ -1135,9 +1128,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     select_clauses.append(f"c.{col}")
 
             # Add any new geocoding fields that don't exist in existing table
-            for field in geocoding_fields:
-                if field not in existing_columns:
-                    select_clauses.append(f"g.{field}")
+            select_clauses.extend(
+                f"g.{field}" for field in geocoding_fields if field not in existing_columns
+            )
 
             # Remove the rn field filtering since we've already applied primary address selection
             select_clause = ",\n                    ".join(select_clauses)
@@ -1201,7 +1194,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Re-raise the exception to fail the pipeline rather than silently continue
             raise Exception(f"Company table geocoding update failed: {e}") from e
 
-    def _update_pnumber_table_with_geocoding(self, processed_data: Dict[str, Any]) -> None:
+    def _update_pnumber_table_with_geocoding(self, processed_data: dict[str, Any]) -> None:
         """
         Update pnumber table with address geocoding information.
         """
@@ -1214,7 +1207,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
             _find_latest_file_with_pattern,
         )
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         gcs_access = GCSDataAccess()
         pnumber_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
@@ -1335,7 +1328,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         except Exception as e:
             self.log.error(f"Failed to update pnumber table with geocoding: {e}")
 
-    def _save_summary_data(self, summary: Dict[str, Any]) -> None:
+    def _save_summary_data(self, summary: dict[str, Any]) -> None:
         """Save processing summary data."""
         # No batching - single summary file
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/address_summary.json"

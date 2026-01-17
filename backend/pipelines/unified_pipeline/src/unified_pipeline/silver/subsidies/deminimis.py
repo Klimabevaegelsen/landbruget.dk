@@ -25,7 +25,7 @@ Output schema:
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import ConfigDict, Field
@@ -78,7 +78,7 @@ class DeminimisSilver(BaseSource[DeminimisSilverConfig], SilverJobInterface):
         self.log = Logger.get_logger()
 
     @timed
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """Process de minimis bronze data to silver."""
         self.log.info("Starting de minimis silver processing")
 
@@ -100,7 +100,7 @@ class DeminimisSilver(BaseSource[DeminimisSilverConfig], SilverJobInterface):
             self.log.error(f"Error processing de minimis: {e}")
             raise
 
-    async def _load_bronze_data(self, bronze_data: Optional[Any] = None) -> None:
+    async def _load_bronze_data(self, bronze_data: Any | None = None) -> None:
         """Load bronze data from GCS or memory."""
         if bronze_data is not None:
             self.log.info("Using in-memory bronze data")
@@ -202,7 +202,7 @@ class DeminimisSilver(BaseSource[DeminimisSilverConfig], SilverJobInterface):
                     return col
         raise ValueError(f"Could not find column from candidates: {candidates}")
 
-    async def _validate_and_summarize(self) -> Dict[str, Any]:
+    async def _validate_and_summarize(self) -> dict[str, Any]:
         """Validate and summarize de minimis data."""
         self.log.info("Validating de minimis silver data")
 

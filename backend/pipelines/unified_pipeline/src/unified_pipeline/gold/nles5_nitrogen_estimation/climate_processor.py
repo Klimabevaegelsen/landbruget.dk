@@ -9,7 +9,12 @@ This module handles all climate data processing operations including:
 """
 
 import math
-from typing import List
+import sys
+from pathlib import Path
+
+# Add common module to path for CRS utilities
+sys.path.insert(0, str(Path(__file__).resolve().parents[6]))
+from common.crs_utils import DANISH_UTM, WGS84  # noqa: E402
 
 from unified_pipeline.util.timing import timed
 
@@ -56,10 +61,10 @@ class NLES5ClimateProcessor:
                 # If bbox_geometry exists, analyze it for variation
                 if has_bbox_geometry:
                     bbox_stats = self.conn.execute("""
-                        SELECT 
+                        SELECT
                             COUNT(*) as total_records,
                             COUNT(CASE WHEN bbox_geometry IS NOT NULL THEN 1 END) as with_bbox,
-                            COUNT(CASE WHEN centroid_geometry IS NOT NULL THEN 1 END) 
+                            COUNT(CASE WHEN centroid_geometry IS NOT NULL THEN 1 END)
                                 as with_centroid,
                             COUNT(DISTINCT bbox_geometry) as unique_bbox_geoms,
                             COUNT(DISTINCT centroid_geometry) as unique_centroid_geoms
@@ -69,7 +74,7 @@ class NLES5ClimateProcessor:
                     # DIAGNOSTIC: Check raw parameter value distribution to detect
                     # if problem is in source data
                     param_value_dist = self.conn.execute("""
-                        SELECT 
+                        SELECT
                             parameter_id,
                             COUNT(*) as total_records,
                             COUNT(DISTINCT avg_value) as unique_values,
@@ -176,13 +181,13 @@ class NLES5ClimateProcessor:
 
                 # Analyze coordinate ranges to determine transformation approach
                 coord_analysis = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         MIN(ST_X(ST_GeomFromGeoJSON(centroid_geometry))) as min_x,
                         MAX(ST_X(ST_GeomFromGeoJSON(centroid_geometry))) as max_x,
                         MIN(ST_Y(ST_GeomFromGeoJSON(centroid_geometry))) as min_y,
                         MAX(ST_Y(ST_GeomFromGeoJSON(centroid_geometry))) as max_y,
                         COUNT(*) as total_points
-                    FROM dmi_data 
+                    FROM dmi_data
                     WHERE centroid_geometry IS NOT NULL
                     LIMIT 1
                 """).fetchone()
@@ -238,9 +243,9 @@ class NLES5ClimateProcessor:
                         -- Based on debug analysis: coordinates are normalized grid indices
                         -- X range: [0.0004925007, 0.0005203204]
                         -- Y range: [4.5113287175, 4.5113925120]
-                        CASE 
+                        CASE
                             WHEN ST_GeomFromGeoJSON(centroid_geometry) IS NOT NULL THEN
-                                CASE 
+                                CASE
                                     -- Check if coords are in normalized grid index range (DMI)
                                     -- Debug shows: X[0.000493-0.000520], Y[4.511329-4.511393]
                                     WHEN ST_X(ST_GeomFromGeoJSON(centroid_geometry)) < 1.0
@@ -386,7 +391,7 @@ class NLES5ClimateProcessor:
             # effectiveness
             if count > 0:
                 coord_validation = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_points,
                         COUNT(CASE WHEN geometry IS NOT NULL THEN 1 END) as with_geometry,
                         MIN(ST_X(geometry)) as min_x, MAX(ST_X(geometry)) as max_x,
@@ -412,7 +417,7 @@ class NLES5ClimateProcessor:
 
                 # DEBUG LOGGING: Comprehensive percolation value statistics
                 percolation_stats = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_records,
                         COUNT(CASE WHEN total_percolation > 0 THEN 1 END) as positive_percolation,
                         MIN(total_percolation) as min_total,
@@ -422,22 +427,22 @@ class NLES5ClimateProcessor:
                         PERCENTILE_CONT(0.5) WITHIN GROUP (
                             ORDER BY total_percolation
                         ) as median_total,
-                        
+
                         MIN(perco_apr_aug_current) as min_apr_aug,
                         MAX(perco_apr_aug_current) as max_apr_aug,
                         AVG(perco_apr_aug_current) as avg_apr_aug,
                         STDDEV(perco_apr_aug_current) as stddev_apr_aug,
-                        
+
                         MIN(perco_sep_mar_current) as min_sep_mar,
                         MAX(perco_sep_mar_current) as max_sep_mar,
                         AVG(perco_sep_mar_current) as avg_sep_mar,
                         STDDEV(perco_sep_mar_current) as stddev_sep_mar,
-                        
+
                         MIN(perco_sep_mar_previous) as min_sep_mar_prev,
                         MAX(perco_sep_mar_previous) as max_sep_mar_prev,
                         AVG(perco_sep_mar_previous) as avg_sep_mar_prev,
                         STDDEV(perco_sep_mar_previous) as stddev_sep_mar_prev,
-                        
+
                         -- Spatial variation analysis
                         COUNT(DISTINCT centroid_geometry) as unique_climate_points,
                         COUNT(DISTINCT geometry) as unique_processed_points,
@@ -448,7 +453,7 @@ class NLES5ClimateProcessor:
 
                 # Additional debug: Check for potential causes of no variation
                 no_variation_check = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         'total_percolation' as metric,
                         COUNT(*) as total_values,
                         COUNT(DISTINCT total_percolation) as unique_values,
@@ -461,9 +466,9 @@ class NLES5ClimateProcessor:
                         END as variation_status
                     FROM climate_percolation
                     WHERE total_percolation IS NOT NULL
-                    
+
                     UNION ALL
-                    
+
                     SELECT
                         'spatial_points' as metric,
                         COUNT(*) as total_values,
@@ -582,11 +587,11 @@ class NLES5ClimateProcessor:
                         # DIAGNOSTIC: Check which coordinate transformation path was taken
                         coord_path_analysis = self.conn.execute("""
                             WITH raw_coords AS (
-                                SELECT 
+                                SELECT
                                     centroid_geometry,
                                     ST_X(ST_GeomFromGeoJSON(centroid_geometry)) as raw_x,
                                     ST_Y(ST_GeomFromGeoJSON(centroid_geometry)) as raw_y
-                                FROM dmi_data 
+                                FROM dmi_data
                                 WHERE centroid_geometry IS NOT NULL
                                 LIMIT 100
                             )
@@ -613,7 +618,7 @@ class NLES5ClimateProcessor:
 
                         # DIAGNOSTIC: Sample the actual transformed coordinates to see patterns
                         sample_transformations = self.conn.execute("""
-                            SELECT 
+                            SELECT
                                 centroid_geometry,
                                 ST_X(ST_GeomFromGeoJSON(centroid_geometry)) as raw_x,
                                 ST_Y(ST_GeomFromGeoJSON(centroid_geometry)) as raw_y,
@@ -655,11 +660,10 @@ class NLES5ClimateProcessor:
                                     f"{coord_path_analysis[1]}/100 coordinates"
                                 )
                                 self.log.info(
-                                    f"   WGS84 range: " f"{coord_path_analysis[2]}/100 coordinates"
+                                    f"   WGS84 range: {coord_path_analysis[2]}/100 coordinates"
                                 )
                                 self.log.info(
-                                    f"   EPSG:25832 range: "
-                                    f"{coord_path_analysis[3]}/100 coordinates"
+                                    f"   EPSG:25832 range: {coord_path_analysis[3]}/100 coordinates"
                                 )
 
                                 # If most coordinates fall into normalized range,
@@ -703,7 +707,7 @@ class NLES5ClimateProcessor:
 
                                 # Show the actual coordinate distribution
                                 coord_distribution = self.conn.execute("""
-                                    SELECT 
+                                    SELECT
                                         ST_X(geometry) as x_coord,
                                         ST_Y(geometry) as y_coord,
                                         COUNT(*) as point_count
@@ -749,7 +753,7 @@ class NLES5ClimateProcessor:
 
                 # Log climate value statistics
                 climate_stats = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         AVG(avg_precipitation) as avg_precip,
                         AVG(avg_evaporation) as avg_evap,
                         AVG(total_percolation) as avg_percolation,
@@ -866,7 +870,7 @@ class NLES5ClimateProcessor:
             raise ValueError(
                 f"Failed to process DMI climate data: {e}. Real climate data with "
                 f"valid parameters and geometries is required - no fallbacks allowed."
-            )
+            ) from e
 
     @timed(name="Creating climate data tessellation")
     def _create_climate_tessellation(self) -> str:
@@ -926,7 +930,7 @@ class NLES5ClimateProcessor:
 
             # DIAGNOSTIC: Check tessellation spatial distribution
             tess_spatial_check = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_tessellation_cells,
                     COUNT(DISTINCT ST_X(climate_point)) as unique_x_coords,
                     COUNT(DISTINCT ST_Y(climate_point)) as unique_y_coords,
@@ -953,14 +957,14 @@ class NLES5ClimateProcessor:
                 # Check if tessellation has collapsed to single location
                 if tess_spatial_check[1] <= 1 or tess_spatial_check[2] <= 1:
                     self.log.error(
-                        "🚨 TESSELLATION PROBLEM: Tessellation collapsed to " "single location!"
+                        "🚨 TESSELLATION PROBLEM: Tessellation collapsed to single location!"
                     )
                     self.log.error("   All climate tessellation cells have same coordinates")
                     self.log.error("   This will cause all fields to get same climate data")
 
                     # Show sample tessellation data
                     sample_tess = self.conn.execute("""
-                        SELECT 
+                        SELECT
                             ST_X(climate_point) as x_coord,
                             ST_Y(climate_point) as y_coord,
                             total_percolation,
@@ -998,7 +1002,7 @@ class NLES5ClimateProcessor:
             return "climate_tessellation"
 
         except Exception as e:
-            raise ValueError(f"Failed to create climate tessellation: {e}")
+            raise ValueError(f"Failed to create climate tessellation: {e}") from e
 
     @timed(name="Spatial join fields with climate tessellation")
     def _spatial_join_fields_climate_tessellation(self) -> str:
@@ -1026,7 +1030,7 @@ class NLES5ClimateProcessor:
             # Perform the spatial join
             self.conn.execute("""
                 CREATE OR REPLACE TABLE fields_climate_tessellation AS
-                SELECT 
+                SELECT
                     f.*,
                     t.year as climate_year,
                     t.climate_point,
@@ -1054,7 +1058,7 @@ class NLES5ClimateProcessor:
             # DIAGNOSTIC: Check if all fields got same climate data
             if joined_count > 0:
                 field_climate_diagnostic = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_joined_fields,
                         COUNT(DISTINCT total_percolation) as unique_percolation_in_join,
                         COUNT(DISTINCT ST_X(climate_point)) as unique_climate_x,
@@ -1069,13 +1073,13 @@ class NLES5ClimateProcessor:
                     self.log.info("🔍 FIELD-CLIMATE JOIN DIAGNOSTIC:")
                     self.log.info(f"   Total joined fields: {field_climate_diagnostic[0]:,}")
                     self.log.info(
-                        f"   Unique percolation values in join: " f"{field_climate_diagnostic[1]:,}"
+                        f"   Unique percolation values in join: {field_climate_diagnostic[1]:,}"
                     )
                     self.log.info(
-                        f"   Unique climate X coordinates: " f"{field_climate_diagnostic[2]:,}"
+                        f"   Unique climate X coordinates: {field_climate_diagnostic[2]:,}"
                     )
                     self.log.info(
-                        f"   Unique climate Y coordinates: " f"{field_climate_diagnostic[3]:,}"
+                        f"   Unique climate Y coordinates: {field_climate_diagnostic[3]:,}"
                     )
                     self.log.info(f"   Unique climate years: {field_climate_diagnostic[4]:,}")
                     self.log.info(
@@ -1086,7 +1090,7 @@ class NLES5ClimateProcessor:
                     # Check if spatial join collapsed to single climate point
                     if field_climate_diagnostic[1] <= 1:
                         self.log.error(
-                            "🚨 SPATIAL JOIN PROBLEM: " "All fields got same percolation value!"
+                            "🚨 SPATIAL JOIN PROBLEM: All fields got same percolation value!"
                         )
                         self.log.error(
                             f"   Only {field_climate_diagnostic[1]} unique "
@@ -1095,8 +1099,7 @@ class NLES5ClimateProcessor:
 
                     if field_climate_diagnostic[2] <= 1 or field_climate_diagnostic[3] <= 1:
                         self.log.error(
-                            "🚨 SPATIAL JOIN PROBLEM: "
-                            "All fields assigned to same climate location!"
+                            "🚨 SPATIAL JOIN PROBLEM: All fields assigned to same climate location!"
                         )
                         self.log.error(
                             f"   Climate coordinates: "
@@ -1106,15 +1109,15 @@ class NLES5ClimateProcessor:
 
                         # Show which climate point all fields are getting
                         dominant_climate = self.conn.execute("""
-                            SELECT 
+                            SELECT
                                 ST_X(climate_point) as x_coord,
                                 ST_Y(climate_point) as y_coord,
                                 total_percolation,
                                 climate_year,
                                 COUNT(*) as field_count
                             FROM fields_climate_tessellation
-                            GROUP BY 
-                                ST_X(climate_point), ST_Y(climate_point), 
+                            GROUP BY
+                                ST_X(climate_point), ST_Y(climate_point),
                                 total_percolation, climate_year
                             ORDER BY field_count DESC
                             LIMIT 5
@@ -1138,10 +1141,10 @@ class NLES5ClimateProcessor:
                 """).fetchone()
 
                 tess_extent = self.conn.execute("""
-                    SELECT 
-                        MIN(ST_XMin(tessellation_polygon)), 
+                    SELECT
+                        MIN(ST_XMin(tessellation_polygon)),
                         MAX(ST_XMax(tessellation_polygon)),
-                        MIN(ST_YMin(tessellation_polygon)), 
+                        MIN(ST_YMin(tessellation_polygon)),
                         MAX(ST_YMax(tessellation_polygon))
                     FROM climate_tessellation
                 """).fetchone()
@@ -1152,7 +1155,7 @@ class NLES5ClimateProcessor:
             return "fields_climate_tessellation"
 
         except Exception as e:
-            raise ValueError(f"Failed to join fields with climate tessellation: {e}")
+            raise ValueError(f"Failed to join fields with climate tessellation: {e}") from e
 
     @timed(name="Year-by-year climate-field joining")
     def _join_climate_fields_by_year(self) -> str:
@@ -1164,9 +1167,9 @@ class NLES5ClimateProcessor:
 
             # Get available years from climate data
             years = self.conn.execute("""
-                SELECT DISTINCT year 
-                FROM climate_percolation 
-                WHERE year IS NOT NULL 
+                SELECT DISTINCT year
+                FROM climate_percolation
+                WHERE year IS NOT NULL
                 ORDER BY year
             """).fetchall()
 
@@ -1185,7 +1188,7 @@ class NLES5ClimateProcessor:
                 # Replace CROSS JOIN with spatial join
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {table_name} AS
-                    SELECT 
+                    SELECT
                         f.*,
                         c.year as climate_year,
                         c.geometry as climate_point,
@@ -1197,11 +1200,12 @@ class NLES5ClimateProcessor:
                         c.avg_precipitation,
                         c.avg_evaporation,
                         c.sufficient_climate_data,
-                        ST_Distance(ST_Centroid(f.geom), c.geometry) 
+                        ST_Distance(ST_Centroid(f.geom), c.geometry)
                             as distance_to_climate
                     FROM agricultural_fields_spatial f
                     JOIN climate_percolation c ON ST_Intersects(
-                        ST_Centroid(f.geom), ST_Buffer(c.geometry, 50000)
+                        ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
+                        ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), 50000)
                     )
                     WHERE c.year = {year}
                 """)
@@ -1239,9 +1243,9 @@ class NLES5ClimateProcessor:
             return "fields_climate_yearly"
 
         except Exception as e:
-            raise ValueError(f"Failed to join climate fields by year: {e}")
+            raise ValueError(f"Failed to join climate fields by year: {e}") from e
 
-    def _load_climate_data_for_years(self, years: List[int]) -> str:
+    def _load_climate_data_for_years(self, years: list[int]) -> str:
         """
         Load climate data for specific years.
         This method delegates to the data loader.
@@ -1259,18 +1263,18 @@ class NLES5ClimateProcessor:
 
             # Check if climate data exists for this year
             climate_count = self.conn.execute(f"""
-                SELECT COUNT(*) 
-                FROM {climate_table} 
+                SELECT COUNT(*)
+                FROM {climate_table}
                 WHERE year = {year}
             """).fetchone()[0]
 
             # DIAGNOSTIC: Check spatial variation of climate data for this year
             climate_variation = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total_climate_records,
                     COUNT(DISTINCT ST_X(geometry)) as unique_x_coords,
                     COUNT(DISTINCT ST_Y(geometry)) as unique_y_coords,
-                    COUNT(DISTINCT total_percolation) 
+                    COUNT(DISTINCT total_percolation)
                         as unique_percolation_values,
                     MIN(total_percolation) as min_perco,
                     MAX(total_percolation) as max_perco
@@ -1296,10 +1300,10 @@ class NLES5ClimateProcessor:
                         f"location for year {year}!"
                     )
                     self.log.error(
-                        "   This explains why all fields get identical " "percolation values"
+                        "   This explains why all fields get identical percolation values"
                     )
                     self.log.error(
-                        "   Problem is in climate data loading/filtering " "for specific years"
+                        "   Problem is in climate data loading/filtering for specific years"
                     )
                 elif climate_variation[3] <= 1:
                     self.log.error(
@@ -1307,8 +1311,7 @@ class NLES5ClimateProcessor:
                         f"percolation value for year {year}!"
                     )
                     self.log.error(
-                        f"   Value: {climate_variation[4]:.1f}mm "
-                        f"(constant across all locations)"
+                        f"   Value: {climate_variation[4]:.1f}mm (constant across all locations)"
                     )
 
             if climate_count == 0:
@@ -1343,9 +1346,12 @@ class NLES5ClimateProcessor:
                      WHERE year = {year} AND ST_IsValid(geometry)) as climate_valid_geom,
                     -- Test spatial intersection with small sample
                     (SELECT COUNT(*) FROM (
-                        SELECT 1 FROM agricultural_fields_spatial f, climate_percolation c  
+                        SELECT 1 FROM agricultural_fields_spatial f, climate_percolation c
                         WHERE f.year = {year} AND c.year = {year}
-                        AND ST_Intersects(ST_Centroid(f.geom), ST_Buffer(c.geometry, 15000))
+                        AND ST_Intersects(
+                            ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
+                            ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), 15000)
+                        )
                         LIMIT 5
                     )) as sample_intersections
             """).fetchone()
@@ -1358,24 +1364,24 @@ class NLES5ClimateProcessor:
 
             # CRITICAL DIAGNOSTIC: Check geographic distribution of fields vs climate grid
             field_distribution = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     MIN(ST_X(ST_Centroid(geom))) as field_min_x,
                     MAX(ST_X(ST_Centroid(geom))) as field_max_x,
                     MIN(ST_Y(ST_Centroid(geom))) as field_min_y,
                     MAX(ST_Y(ST_Centroid(geom))) as field_max_y,
                     COUNT(*) as total_fields
-                FROM agricultural_fields_spatial 
+                FROM agricultural_fields_spatial
                 WHERE year = {year} AND geom IS NOT NULL
             """).fetchone()
 
             climate_distribution = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     MIN(ST_X(geometry)) as climate_min_x,
                     MAX(ST_X(geometry)) as climate_max_x,
                     MIN(ST_Y(geometry)) as climate_min_y,
                     MAX(ST_Y(geometry)) as climate_max_y,
                     COUNT(*) as total_climate_points
-                FROM climate_percolation 
+                FROM climate_percolation
                 WHERE year = {year} AND geometry IS NOT NULL
             """).fetchone()
 
@@ -1506,7 +1512,8 @@ class NLES5ClimateProcessor:
                         SELECT 1 FROM agricultural_fields_spatial f, climate_percolation c
                         WHERE f.year = {year} AND c.year = {year}
                         AND ST_Intersects(
-                            ST_Centroid(f.geom), ST_Buffer(c.geometry, {buffer_size})
+                            ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
+                            ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), {buffer_size})
                         )
                         LIMIT 1
                         )
@@ -1526,7 +1533,7 @@ class NLES5ClimateProcessor:
 
             # Get field count for this year
             field_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM agricultural_fields_spatial 
+                SELECT COUNT(*) FROM agricultural_fields_spatial
                 WHERE year = {year}
             """).fetchone()[0]
 
@@ -1549,7 +1556,7 @@ class NLES5ClimateProcessor:
                     area_ha DOUBLE,
                     crop_name VARCHAR,
                     m_code VARCHAR,
-                    -- Available field metadata 
+                    -- Available field metadata
                     layer_type VARCHAR,
                     GB BOOLEAN,
                     -- Climate data columns
@@ -1584,7 +1591,7 @@ class NLES5ClimateProcessor:
             # Step 1: Create tracking table with all fields (no climate data yet)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {result_table}_tracking AS
-                SELECT 
+                SELECT
                     field_id, field_uuid, cvr_number, year, geom,
                     COALESCE(area_ha, 0.0) as area_ha,
                     COALESCE(crop_name, 'unknown') as crop_name,
@@ -1611,7 +1618,7 @@ class NLES5ClimateProcessor:
 
             # Step 2: Get list of climate points with WKT format for easier handling
             climate_points = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     ST_AsText(geometry) as geom_wkt,
                     year,
                     perco_apr_aug_current, perco_sep_mar_current,
@@ -1650,7 +1657,7 @@ class NLES5ClimateProcessor:
                 self.conn.execute(
                     f"""
                     UPDATE {result_table}_tracking
-                    SET 
+                    SET
                         climate_year = ?,
                         climate_point = ST_GeomFromText(?),
                         perco_apr_aug_current = ?,
@@ -1704,7 +1711,7 @@ class NLES5ClimateProcessor:
 
             # Track how many fields used each assignment method
             assignment_stats = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     climate_assignment_method,
                     COUNT(*) as count,
                     AVG(distance_to_climate) as avg_distance,
@@ -1726,7 +1733,7 @@ class NLES5ClimateProcessor:
 
             # Check for fields that didn't get climate data (should be zero with fallback)
             null_climate_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {result_table} 
+                SELECT COUNT(*) FROM {result_table}
                 WHERE climate_point IS NULL OR total_percolation IS NULL
             """).fetchone()[0]
 
@@ -1742,7 +1749,7 @@ class NLES5ClimateProcessor:
 
                 # Get statistics on these unmatched fields
                 edge_stats = self.conn.execute(f"""
-                    SELECT 
+                    SELECT
                         MIN(ST_X(ST_Centroid(geom))) as min_x,
                         MAX(ST_X(ST_Centroid(geom))) as max_x,
                         MIN(ST_Y(ST_Centroid(geom))) as min_y,
@@ -1766,7 +1773,7 @@ class NLES5ClimateProcessor:
 
             # ENHANCED DIAGNOSTIC: Comprehensive spatial distribution analysis
             distribution_analysis = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(DISTINCT ST_X(climate_point)) as unique_climate_x,
                     COUNT(DISTINCT ST_Y(climate_point)) as unique_climate_y,
                     COUNT(DISTINCT total_percolation) as unique_assigned_percolation,
@@ -1787,17 +1794,17 @@ class NLES5ClimateProcessor:
             # Climate point usage distribution
             usage_distribution = self.conn.execute(f"""
                 WITH point_usage AS (
-                    SELECT 
+                    SELECT
                         ST_X(climate_point) as climate_x,
                         ST_Y(climate_point) as climate_y,
                         total_percolation,
                         COUNT(*) as fields_per_point
                     FROM {result_table}
                     WHERE total_percolation IS NOT NULL
-                    GROUP BY 
+                    GROUP BY
                         ST_X(climate_point), ST_Y(climate_point), total_percolation
                 )
-                SELECT 
+                SELECT
                     COUNT(*) as total_climate_points_used,
                     MIN(fields_per_point) as min_fields_per_point,
                     MAX(fields_per_point) as max_fields_per_point,
@@ -1849,19 +1856,19 @@ class NLES5ClimateProcessor:
                 if distribution_analysis[0] <= 1 and distribution_analysis[1] <= 1:
                     self.log.error("🚨 ROOT CAUSE: ALL FIELDS ASSIGNED TO SINGLE CLIMATE POINT!")
                     self.log.error(
-                        f"   Despite {climate_variation[0]} available points, " f"only 1 point used"
+                        f"   Despite {climate_variation[0]} available points, only 1 point used"
                     )
 
                     # Identify which specific climate point is being used
                     single_point_info = self.conn.execute(f"""
-                        SELECT DISTINCT 
+                        SELECT DISTINCT
                             ST_X(climate_point) as climate_x,
                             ST_Y(climate_point) as climate_y,
                             total_percolation,
                             COUNT(*) as fields_assigned
                         FROM {result_table}
-                        GROUP BY 
-                            ST_X(climate_point), ST_Y(climate_point), 
+                        GROUP BY
+                            ST_X(climate_point), ST_Y(climate_point),
                             total_percolation
                     """).fetchone()
 
@@ -1870,19 +1877,17 @@ class NLES5ClimateProcessor:
                         f"({single_point_info[0]:.3f}, {single_point_info[1]:.3f})"
                     )
                     self.log.error(f"   📊 Percolation value: {single_point_info[2]:.1f}mm")
-                    self.log.error(
-                        f"   🔢 Fields assigned to this point: " f"{single_point_info[3]:,}"
-                    )
+                    self.log.error(f"   🔢 Fields assigned to this point: {single_point_info[3]:,}")
                     self.log.error(
                         "   🔧 FIX: Check if fields are geographically clustered "
                         "or increase buffer size"
                     )
                 elif distribution_analysis[2] <= 1:
                     self.log.error(
-                        "🚨 ROOT CAUSE: ALL ASSIGNED CLIMATE POINTS " "HAVE IDENTICAL PERCOLATION!"
+                        "🚨 ROOT CAUSE: ALL ASSIGNED CLIMATE POINTS HAVE IDENTICAL PERCOLATION!"
                     )
                     self.log.error(
-                        "   Spatial distribution works but variation lost " "in climate data"
+                        "   Spatial distribution works but variation lost in climate data"
                     )
                     self.log.error("   🔧 FIX: Check climate data temporal/spatial aggregation")
                 elif (
@@ -1893,10 +1898,10 @@ class NLES5ClimateProcessor:
                         "Most fields assigned to few climate points!"
                     )
                     self.log.error(
-                        f"   Max {usage_distribution[2]} fields per point " f"(>80% of total)"
+                        f"   Max {usage_distribution[2]} fields per point (>80% of total)"
                     )
                     self.log.error(
-                        "   🔧 FIX: Reduce buffer size from 5km " "or improve spatial distribution"
+                        "   🔧 FIX: Reduce buffer size from 5km or improve spatial distribution"
                     )
                 elif distribution_analysis[8] < 50:  # Low standard deviation
                     self.log.warning(
@@ -1986,13 +1991,13 @@ class NLES5ClimateProcessor:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {result_table} AS
                 WITH nearest_climate AS (
-                    SELECT 
+                    SELECT
                         f.field_id,
                         f.geom,
                         f.crop_code,
                         f.area_ha,
                         c.*,
-                        ST_Distance(ST_Centroid(f.geom), c.geometry) 
+                        ST_Distance(ST_Centroid(f.geom), c.geometry)
                             as distance_to_climate,
                         ROW_NUMBER() OVER (
                             PARTITION BY f.field_id
@@ -2000,11 +2005,12 @@ class NLES5ClimateProcessor:
                         ) as climate_rank
                     FROM agricultural_fields_spatial f
                     JOIN {climate_table} c ON ST_Intersects(
-                        ST_Centroid(f.geom), ST_Buffer(c.geometry, 50000)
+                        ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
+                        ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), 50000)
                     )
                     WHERE c.year = {target_year}
                 )
-                SELECT 
+                SELECT
                     field_id,
                     geom,
                     crop_code,
@@ -2032,4 +2038,6 @@ class NLES5ClimateProcessor:
             return result_table
 
         except Exception as e:
-            raise ValueError(f"Failed to join climate fields for target year {target_year}: {e}")
+            raise ValueError(
+                f"Failed to join climate fields for target year {target_year}: {e}"
+            ) from e

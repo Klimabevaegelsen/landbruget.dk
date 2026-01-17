@@ -9,13 +9,19 @@ The module contains:
 - DMISilverConfig: Configuration class for the DMI silver transformation
 - DMISilver: Implementation class for transforming DMI monthly data using DuckDB
 
-The data transformation includes geospatial processing, CRS transformation,
+The data transformation includes geospatial processing, conditional CRS transformation,
 and statistical aggregation for multiple climate parameters on monthly timescales.
+
+CRS Strategy:
+- Source data arrives in EPSG:25832 (Danish UTM) from DMI
+- Processing maintains EPSG:25832 throughout (no transformation needed)
+- Final transformation to EPSG:4326 occurs only at Supabase upload stage
+- This eliminates unnecessary CRS transforms and keeps data in meters for analysis
 """
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import timed
@@ -39,8 +45,9 @@ class DMISilverConfig(BaseJobConfig):
 
     dataset: str = "dmi"
     bucket: str = "landbrugsdata-raw-data"
-    parameters: list[str] = ["pot_evaporation_makkink", "acc_precip"]
-    target_crs: str = "EPSG:4326"  # Required target CRS
+    parameters: ClassVar[list[str]] = ["pot_evaporation_makkink", "acc_precip"]
+    # CRS Strategy: Keep EPSG:25832 throughout processing, transform to 4326 only at Supabase upload
+    target_crs: str = "EPSG:25832"  # Keep in Danish UTM for processing (no transformation needed)
     source_crs: str = "EPSG:25832"  # DMI's native CRS
 
 
@@ -83,8 +90,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             raise
 
     async def _find_latest_bronze_data(
-        self, parameter_id: str, bronze_data: Optional[Dict] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, parameter_id: str, bronze_data: dict | None = None
+    ) -> dict[str, Any] | None:
         """
         Find and load the most recent bronze data for a parameter.
 
@@ -138,7 +145,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             return None
 
     @timed(name="Transforming DMI climate data")
-    def _transform_climate_data(self, raw_data: Dict, parameter_id: str) -> Optional[Any]:
+    def _transform_climate_data(self, raw_data: dict, parameter_id: str) -> Any | None:
         """
         Transform raw monthly climate data into processed statistics using DuckDB-spatial.
 
@@ -216,19 +223,40 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 WHERE value IS NOT NULL AND geometry IS NOT NULL
             """)
 
-            # Transform CRS using DuckDB's spatial functions
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE transformed_data AS
-                SELECT
-                    value,
-                    parameter_id,
-                    valid_time,
-                    created,
-                    ST_Transform(
-                        geometry, '{self.config.source_crs}', '{self.config.target_crs}'
-                    ) as geometry
-                FROM extracted_data
-            """)
+            # Transform CRS using DuckDB's spatial functions (skip if source == target)
+            if self.config.source_crs == self.config.target_crs:
+                # No transformation needed - source and target CRS are the same
+                self.log.debug(
+                    f"Skipping CRS transform: source and target are both {self.config.source_crs}"
+                )
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE transformed_data AS
+                    SELECT
+                        value,
+                        parameter_id,
+                        valid_time,
+                        created,
+                        geometry
+                    FROM extracted_data
+                """)
+            else:
+                # Apply CRS transformation
+                self.log.debug(
+                    f"Transforming CRS from {self.config.source_crs} to {self.config.target_crs}"
+                )
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE transformed_data AS
+                    SELECT
+                        value,
+                        parameter_id,
+                        valid_time,
+                        created,
+                        ST_Transform(
+                            geometry, '{self.config.source_crs}', '{self.config.target_crs}',
+                            always_xy := true
+                        ) as geometry
+                    FROM extracted_data
+                """)
 
             # Process data using DuckDB and calculate statistics
             self.conn.execute("""
@@ -288,7 +316,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             self.log.error(f"Error transforming monthly data for parameter {parameter_id}: {e}")
             return None
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Run silver processing for DMI monthly data.
 

@@ -20,14 +20,9 @@ import dotenv
 from loguru import logger
 
 # Import pipeline metadata system for data tracing
-try:
-    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-    PIPELINE_METADATA_AVAILABLE = True
-except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
-    PipelineMetadataManager = None
-    PIPELINE_METADATA_AVAILABLE = False
+PIPELINE_METADATA_AVAILABLE = True
 
 # Load environment variables
 # Only load .env file if it exists (for local development)
@@ -193,9 +188,8 @@ async def run_pipeline(
         if all_success:
             logger.info("✅ All analyses completed successfully!")
             return True
-        else:
-            logger.error("❌ Some analyses failed!")
-            return False
+        logger.error("❌ Some analyses failed!")
+        return False
 
     except Exception as e:
         logger.error(f"❌ Pipeline failed with error: {e}")

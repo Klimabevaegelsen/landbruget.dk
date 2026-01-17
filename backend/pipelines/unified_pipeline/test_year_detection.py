@@ -8,9 +8,10 @@ import sys
 # Add src directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
+from common.gcs import GCSDataAccess
+
 from unified_pipeline.gold.pmtiles_generator.config import PMTilesGeneratorConfig
 from unified_pipeline.gold.pmtiles_generator.year_detector import DataSourceYearDetector
-from unified_pipeline.util.gcs_access import GCSDataAccess
 
 # Configure logging
 logging.basicConfig(

@@ -2,7 +2,7 @@
 
 import logging
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any
 
 from .utils import parse_date
 
@@ -10,7 +10,7 @@ from .utils import parse_date
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.data_processing")
 
 
-def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
+def aggregate_cattle_movements(response: Any, reporting_herd: int) -> dict:
     """
     Aggregate individual cattle records into herd-level movement summaries.
 
@@ -49,7 +49,9 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
 
         # Handle case where API returns count instead of detailed records
         if isinstance(animals, int):
-            logger.info(f"Herd {reporting_herd}: API returned count only ({animals}), no detailed records available")
+            logger.info(
+                f"Herd {reporting_herd}: API returned count only ({animals}), no detailed records available"
+            )
             return {
                 "reporting_herd_number": reporting_herd,
                 "movements": [],
@@ -68,13 +70,17 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             logger.info(f"Herd {reporting_herd}: No animals found")
             animals = []
         elif not hasattr(animals, "__iter__") or isinstance(animals, (str, bytes)):
-            logger.warning(f"Herd {reporting_herd}: Invalid animals data type ({type(animals)}) - using empty list")
+            logger.warning(
+                f"Herd {reporting_herd}: Invalid animals data type ({type(animals)}) - using empty list"
+            )
             animals = []
 
         try:
             animals_count = len(animals) if animals else 0
         except TypeError:
-            logger.error(f"Herd {reporting_herd}: Cannot get length of animals data - using empty list")
+            logger.error(
+                f"Herd {reporting_herd}: Cannot get length of animals data - using empty list"
+            )
             animals = []
             animals_count = 0
 
@@ -136,10 +142,14 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     try:
                         animals = list(animals)
                     except (TypeError, ValueError) as e:
-                        logger.error(f"Herd {reporting_herd}: Failed to convert animals to list: {e}")
+                        logger.error(
+                            f"Herd {reporting_herd}: Failed to convert animals to list: {e}"
+                        )
                         animals = []
                 else:
-                    logger.warning(f"Herd {reporting_herd}: Animals is not iterable - using empty list")
+                    logger.warning(
+                        f"Herd {reporting_herd}: Animals is not iterable - using empty list"
+                    )
                     animals = []
 
             for i, animal in enumerate(animals):
@@ -187,8 +197,12 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                             if nation_code_to:
                                 movement_groups[key]["nation_codes_to"].add(nation_code_to)
 
-                            movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
-                            movement_summaries["summary_stats"]["counterparty_herds"].add(source_herd)
+                            movement_summaries["summary_stats"]["unique_movement_dates"].add(
+                                movement_date
+                            )
+                            movement_summaries["summary_stats"]["counterparty_herds"].add(
+                                source_herd
+                            )
 
                     # Process outgoing movements
                     if exit_date and dest_herd and dest_herd != reporting_herd:
@@ -211,15 +225,21 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                                 movement_groups[key]["nation_codes_to"].add(nation_code_to)
 
                             # Clean and validate the exit reason before adding
-                            clean_reason = str(exit_reason).strip() if exit_reason is not None else None
+                            clean_reason = (
+                                str(exit_reason).strip() if exit_reason is not None else None
+                            )
                             if clean_reason:
                                 movement_groups[key]["movement_reasons"].append(clean_reason)
 
-                            movement_summaries["summary_stats"]["unique_movement_dates"].add(movement_date)
+                            movement_summaries["summary_stats"]["unique_movement_dates"].add(
+                                movement_date
+                            )
                             movement_summaries["summary_stats"]["counterparty_herds"].add(dest_herd)
 
                 except Exception as e:
-                    logger.debug(f"Error processing individual animal {getattr(animal, 'CkrNr', 'unknown')}: {e}")
+                    logger.debug(
+                        f"Error processing individual animal {getattr(animal, 'CkrNr', 'unknown')}: {e}"
+                    )
                     continue
 
         except TypeError as e:
@@ -237,7 +257,11 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             }
 
         # Convert grouped movements to list format
-        for (movement_date, counterparty_herd, movement_type), group_data in movement_groups.items():
+        for (
+            movement_date,
+            counterparty_herd,
+            movement_type,
+        ), group_data in movement_groups.items():
             reasons = [r for r in group_data["movement_reasons"] if r]
             unique_reasons = list(set(reasons)) if reasons else []
 
@@ -252,8 +276,12 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "movement_reasons": unique_reasons,
                 "primary_reason": unique_reasons[0] if unique_reasons else None,
                 "cattle_type_breakdown": dict(group_data["cattle_type_breakdown"]),
-                "nation_codes_from": list(group_data["nation_codes_from"]),  # Convert set to list for JSON
-                "nation_codes_to": list(group_data["nation_codes_to"]),  # Convert set to list for JSON
+                "nation_codes_from": list(
+                    group_data["nation_codes_from"]
+                ),  # Convert set to list for JSON
+                "nation_codes_to": list(
+                    group_data["nation_codes_to"]
+                ),  # Convert set to list for JSON
                 "is_international": bool(
                     group_data["nation_codes_from"] or group_data["nation_codes_to"]
                 ),  # Flag for easy filtering
@@ -268,12 +296,12 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             movement_summaries["summary_stats"]["date_range"]["end"] = max(dates)
 
         # Keep both sets and counts for compatibility
-        movement_summaries["summary_stats"]["unique_movement_dates_set"] = movement_summaries["summary_stats"][
-            "unique_movement_dates"
-        ]
-        movement_summaries["summary_stats"]["counterparty_herds_set"] = movement_summaries["summary_stats"][
-            "counterparty_herds"
-        ]
+        movement_summaries["summary_stats"]["unique_movement_dates_set"] = movement_summaries[
+            "summary_stats"
+        ]["unique_movement_dates"]
+        movement_summaries["summary_stats"]["counterparty_herds_set"] = movement_summaries[
+            "summary_stats"
+        ]["counterparty_herds"]
 
         # Convert to counts for final output
         movement_summaries["summary_stats"]["unique_movement_dates"] = len(dates)

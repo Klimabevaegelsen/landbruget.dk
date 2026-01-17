@@ -5,7 +5,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 from google.cloud import storage
@@ -29,22 +29,22 @@ load_dotenv()
 
 
 # Try to import optimized GCS access with fallback
-def _get_optimized_gcs_access() -> Optional[Any]:
+def _get_optimized_gcs_access() -> Any | None:
     """
     Get optimized GCS access with robust import handling.
 
     Returns GCSDataAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when unified_pipeline is properly installed
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        # Primary import path - should work when common.gcs is properly installed
+        from common.gcs import GCSDataAccess
 
         logging.info("✅ Successfully imported optimized GCSDataAccess")
         return GCSDataAccess
     except ImportError as e:
         logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
         logging.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
+            "⚠️ Falling back to basic storage - ensure common.gcs is installed for optimal performance"
         )
         return None
 
@@ -102,11 +102,13 @@ class GCSStorage:
                 full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
 
                 # Stream file directly without loading into memory
-                with open(local_path, "rb") as file_obj:
-                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
-                        import shutil
+                import shutil
 
-                        shutil.copyfileobj(file_obj, gcs_file)
+                with (
+                    open(local_path, "rb") as file_obj,
+                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                ):
+                    shutil.copyfileobj(file_obj, gcs_file)
 
                 logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
 
@@ -121,7 +123,7 @@ class GCSStorage:
 
                         if local_path.endswith(".csv"):
                             try:
-                                with open(local_path, "r") as f:
+                                with open(local_path) as f:
                                     record_count = max(0, len(f.readlines()) - 1)  # Subtract header
                             except Exception:
                                 pass
@@ -133,7 +135,9 @@ class GCSStorage:
                         )
 
                         # Upload metadata using existing method
-                        metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
+                        metadata_content = json.dumps(
+                            metadata.model_dump(mode="json"), indent=2, default=str
+                        )
                         metadata_gcs_path = full_gcs_path.replace(".csv", "_metadata.json")
 
                         with self.gcs_access.fs.open(metadata_gcs_path, "w") as f:
@@ -144,47 +148,52 @@ class GCSStorage:
                         logging.warning(f"⚠️  Failed to create metadata: {e}")
 
                 return True
-            else:
-                # Fallback to old method if optimized access failed
-                client = storage.Client()
-                bucket = client.bucket(self.bucket_name)
-                blob = bucket.blob(gcs_path)
-                blob.upload_from_filename(local_path)
-                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+            # Fallback to old method if optimized access failed
+            client = storage.Client()
+            bucket = client.bucket(self.bucket_name)
+            blob = bucket.blob(gcs_path)
+            blob.upload_from_filename(local_path)
+            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
 
-                # Create and upload metadata using fallback method
-                if METADATA_AVAILABLE:
-                    try:
-                        metadata_manager = MetadataManager()
+            # Create and upload metadata using fallback method
+            if METADATA_AVAILABLE:
+                try:
+                    metadata_manager = MetadataManager()
 
-                        # Get file info
-                        record_count = None
-                        file_size = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+                    # Get file info
+                    record_count = None
+                    file_size = os.path.getsize(local_path) if os.path.exists(local_path) else 0
 
-                        if local_path.endswith(".csv"):
-                            try:
-                                with open(local_path, "r") as f:
-                                    record_count = max(0, len(f.readlines()) - 1)  # Subtract header
-                            except Exception:
-                                pass
+                    if local_path.endswith(".csv"):
+                        try:
+                            with open(local_path) as f:
+                                record_count = max(0, len(f.readlines()) - 1)  # Subtract header
+                        except Exception:
+                            pass
 
-                        metadata = metadata_manager.create_metadata(
-                            source_key="arbejdstilsynet_inspections",
-                            record_count=record_count,
-                            file_size_bytes=file_size,
-                        )
+                    metadata = metadata_manager.create_metadata(
+                        source_key="arbejdstilsynet_inspections",
+                        record_count=record_count,
+                        file_size_bytes=file_size,
+                    )
 
-                        # Upload metadata using fallback method
-                        metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
-                        metadata_gcs_path = gcs_path.replace(".csv", "_metadata.json")
-                        metadata_blob = bucket.blob(metadata_gcs_path)
-                        metadata_blob.upload_from_string(metadata_content, content_type="application/json")
+                    # Upload metadata using fallback method
+                    metadata_content = json.dumps(
+                        metadata.model_dump(mode="json"), indent=2, default=str
+                    )
+                    metadata_gcs_path = gcs_path.replace(".csv", "_metadata.json")
+                    metadata_blob = bucket.blob(metadata_gcs_path)
+                    metadata_blob.upload_from_string(
+                        metadata_content, content_type="application/json"
+                    )
 
-                        logging.info(f"✅ Uploaded metadata to gs://{self.bucket_name}/{metadata_gcs_path} (fallback)")
-                    except Exception as e:
-                        logging.warning(f"⚠️  Failed to create metadata (fallback): {e}")
+                    logging.info(
+                        f"✅ Uploaded metadata to gs://{self.bucket_name}/{metadata_gcs_path} (fallback)"
+                    )
+                except Exception as e:
+                    logging.warning(f"⚠️  Failed to create metadata (fallback): {e}")
 
-                return True
+            return True
 
         except Exception as e:
             logging.error(f"Failed to upload to GCS: {e}")
@@ -218,12 +227,14 @@ class BronzePipeline:
                 "SOURCE_CSV_URL for pipeline %s is not set. Please set it in the .env file.",
                 self.pipeline_name,
             )
-            raise ValueError("SOURCE_CSV_URL for %s is missing." % self.pipeline_name)
+            raise ValueError(f"SOURCE_CSV_URL for {self.pipeline_name} is missing.")
 
         # Initialize GCS storage if bucket is provided
         self.gcs = None
         if self.gcs_bucket:
-            self.gcs = GCSStorage(bucket_name=self.gcs_bucket, prefix=f"bronze/{self.pipeline_name}")
+            self.gcs = GCSStorage(
+                bucket_name=self.gcs_bucket, prefix=f"bronze/{self.pipeline_name}"
+            )
             logging.info(f"GCS storage initialized with bucket: {self.gcs_bucket}")
 
     async def fetch_data_with_playwright(self, filters_to_apply=None) -> list[tuple[str, bytes]]:
@@ -248,7 +259,9 @@ class BronzePipeline:
                 ]
             browser_options = {"args": browser_args, "headless": False}
             browser = await playwright.chromium.launch(**browser_options)
-            context = await browser.new_context(accept_downloads=True, viewport={"width": 1920, "height": 1080})
+            context = await browser.new_context(
+                accept_downloads=True, viewport={"width": 1920, "height": 1080}
+            )
             page = await context.new_page()
 
             page.on("crash", lambda: logging.error("Browser page crashed"))
@@ -316,7 +329,9 @@ class BronzePipeline:
                             await asyncio.sleep(0.2)
                             await page.keyboard.press("Backspace")
                             await page.keyboard.type(search_term, delay=100)
-                            await powerbi_frame.locator("span:text-is('%s')" % filter_name).click(timeout=5000)
+                            await powerbi_frame.locator(f"span:text-is('{filter_name}')").click(
+                                timeout=5000
+                            )
                             break
                         except Exception as e:
                             logging.error(
@@ -335,11 +350,13 @@ class BronzePipeline:
                             await powerbi_frame.locator('//*[@id="0"]').click(timeout=3000)
                         except Exception:
                             try:
-                                await powerbi_frame.locator("span:text-is('Export data')").click(timeout=3000)
-                            except Exception:
-                                await powerbi_frame.locator("span:text-matches('Export', 'i')").first.click(
+                                await powerbi_frame.locator("span:text-is('Export data')").click(
                                     timeout=3000
                                 )
+                            except Exception:
+                                await powerbi_frame.locator(
+                                    "span:text-matches('Export', 'i')"
+                                ).first.click(timeout=3000)
 
                         await page.wait_for_timeout(1000)
 
@@ -350,21 +367,31 @@ class BronzePipeline:
                                 "//button"
                             ).click(timeout=5000)
                         except Exception:
-                            await powerbi_frame.locator("mat-dialog-content pbi-dropdown button").click(timeout=5000)
+                            await powerbi_frame.locator(
+                                "mat-dialog-content pbi-dropdown button"
+                            ).click(timeout=5000)
 
                         await page.wait_for_timeout(500)
                         try:
-                            await powerbi_frame.locator("div.pbi-dropdown-item:has-text('CSV')").click(timeout=5000)
+                            await powerbi_frame.locator(
+                                "div.pbi-dropdown-item:has-text('CSV')"
+                            ).click(timeout=5000)
                         except Exception:
-                            await powerbi_frame.locator("pbi-dropdown-item").nth(1).click(timeout=5000)
+                            await (
+                                powerbi_frame.locator("pbi-dropdown-item")
+                                .nth(1)
+                                .click(timeout=5000)
+                            )
 
                         async with page.expect_download(timeout=30000) as download_info:
                             try:
-                                await powerbi_frame.locator("mat-dialog-actions button:has-text('Export')").click(
-                                    timeout=5000
-                                )
+                                await powerbi_frame.locator(
+                                    "mat-dialog-actions button:has-text('Export')"
+                                ).click(timeout=5000)
                             except Exception:
-                                await powerbi_frame.locator("mat-dialog-actions button").first.click(timeout=5000)
+                                await powerbi_frame.locator(
+                                    "mat-dialog-actions button"
+                                ).first.click(timeout=5000)
 
                         download = await download_info.value
                         # Save download to a temp file and return bytes
@@ -389,7 +416,9 @@ class BronzePipeline:
 
         return results
 
-    def save_raw_data(self, data: bytes, filter_name: str = None) -> tuple[Path | None, str | None]:
+    def save_raw_data(
+        self, data: bytes, filter_name: str | None = None
+    ) -> tuple[Path | None, str | None]:
         """Saves raw data to a timestamped directory in the bronze layer."""
         timestamp_str = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         storage_dir = self.bronze_data_dir / timestamp_str
@@ -397,7 +426,7 @@ class BronzePipeline:
             storage_dir.mkdir(parents=True, exist_ok=True)
             if filter_name:
                 safe_filter_name = filter_name.replace(" ", "_").replace(",", "").replace("/", "_")
-                data_file_path = storage_dir / ("data_%s.csv" % safe_filter_name)
+                data_file_path = storage_dir / (f"data_{safe_filter_name}.csv")
             else:
                 data_file_path = storage_dir / "data.csv"
             with open(data_file_path, "wb") as f:
@@ -419,7 +448,7 @@ class BronzePipeline:
 
         record_count = 0
         try:
-            with open(data_file_path, "r", encoding="utf-8") as f:
+            with open(data_file_path, encoding="utf-8") as f:
                 lines = f.readlines()
             if lines:
                 record_count = max(0, len(lines) - 1)
@@ -446,12 +475,14 @@ class BronzePipeline:
 
         metadata = {
             "source_url": self.source_url,
-            "fetch_timestamp_utc_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "fetch_timestamp_utc_iso": datetime.datetime.now(datetime.UTC).isoformat(),
             "fetch_timestamp_dirname": fetch_timestamp_dir_name,
             "description": description,
             "pipeline_name": self.pipeline_name,
             "layer": "bronze",
-            "file_format": data_file_path.suffix[1:].lower() if data_file_path.suffix else "unknown",
+            "file_format": data_file_path.suffix[1:].lower()
+            if data_file_path.suffix
+            else "unknown",
             "data_filename": data_file_path.name,
             # Fix: always use relative path from pipeline_root_dir, not /data
             "relative_data_file_path": str(data_file_path.relative_to(self.pipeline_root_dir)),
@@ -462,7 +493,7 @@ class BronzePipeline:
         metadata_list = []
         if metadata_file_path.exists():
             try:
-                with open(metadata_file_path, "r", encoding="utf-8") as f:
+                with open(metadata_file_path, encoding="utf-8") as f:
                     metadata_list = json.load(f)
                     if not isinstance(metadata_list, list):
                         logging.warning(
@@ -505,7 +536,9 @@ class BronzePipeline:
             {"name": "Slagterier", "search_term": "Slagter"},
         ]
         results = await self.fetch_data_with_playwright(filters)
-        logging.info(f"Bronze pipeline: fetch_data_with_playwright returned {len(results)} results.")
+        logging.info(
+            f"Bronze pipeline: fetch_data_with_playwright returned {len(results)} results."
+        )
         if results:
             for i, (name, data_sample) in enumerate(results):
                 logging.info(f"Result {i}: filter_name='{name}', data_len={len(data_sample)}")
@@ -544,9 +577,7 @@ class BronzePipeline:
 
         # ✅ MIGRATION: Use DuckDB UNION to merge CSV files instead of pandas concat
         # Create UNION query for all CSV files
-        union_parts = []
-        for csv_file in csv_files:
-            union_parts.append(f"SELECT * FROM read_csv_auto('{csv_file}')")
+        union_parts = [f"SELECT * FROM read_csv_auto('{csv_file}')" for csv_file in csv_files]
 
         union_query = " UNION ALL ".join(union_parts)
         merged_df = conn.execute(union_query).df()
@@ -589,9 +620,7 @@ def main(log_level: str = "INFO", gcs_bucket: str | None = None) -> None:
     # load_dotenv()
 
     pipeline_name = "arbejdstilsynet_inspections"
-    source_url = (
-        "https://publicdata.at.dk/reports/powerbi/Data%20på%20nettet/Tilsynsindblikket?rs:embed=true"  # Hardcoded URL
-    )
+    source_url = "https://publicdata.at.dk/reports/powerbi/Data%20på%20nettet/Tilsynsindblikket?rs:embed=true"  # Hardcoded URL
 
     pipeline = BronzePipeline(
         pipeline_name=pipeline_name,
@@ -610,7 +639,9 @@ def main(log_level: str = "INFO", gcs_bucket: str | None = None) -> None:
             f"Bronze pipeline ({pipeline_name}) failed with an unexpected error: {e}",
             exc_info=True,
         )
-        raise RuntimeError(f"Bronze pipeline ({pipeline_name}) encountered an unexpected error: {e}") from e
+        raise RuntimeError(
+            f"Bronze pipeline ({pipeline_name}) encountered an unexpected error: {e}"
+        ) from e
 
 
 if __name__ == "__main__":

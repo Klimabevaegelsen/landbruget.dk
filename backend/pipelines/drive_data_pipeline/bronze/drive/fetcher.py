@@ -81,7 +81,7 @@ class GoogleDriveFetcher:
                             f"ID {folder_id} might not be a folder, but continuing anyway"
                         )
                 except Exception as e:
-                    logger.warning(f"Could not get folder metadata for {folder_id}: {str(e)}")
+                    logger.warning(f"Could not get folder metadata for {folder_id}: {e!s}")
                     # Create a minimal folder metadata for public access
                     folder_metadata = {
                         "id": folder_id,
@@ -143,7 +143,7 @@ class GoogleDriveFetcher:
             return folder
 
         except Exception as e:
-            error_msg = f"Failed to list contents of folder {folder_id}: {str(e)}"
+            error_msg = f"Failed to list contents of folder {folder_id}: {e!s}"
             logger.error(error_msg)
             raise GoogleDriveAPIError(error_msg) from e
 
@@ -169,7 +169,7 @@ class GoogleDriveFetcher:
             fields = "id, name, mimeType, parents, modifiedTime, size, webViewLink"
             return self.drive_service.files().get(fileId=file_id, fields=fields).execute()
         except Exception as e:
-            error_msg = f"Failed to get metadata for file {file_id}: {str(e)}"
+            error_msg = f"Failed to get metadata for file {file_id}: {e!s}"
             logger.error(error_msg)
             raise GoogleDriveAPIError(error_msg) from e
 
@@ -228,15 +228,15 @@ class GoogleDriveFetcher:
             return content, metadata
 
         except ssl.SSLError as e:
-            error_msg = f"SSL error downloading file {file_id}: {str(e)}"
+            error_msg = f"SSL error downloading file {file_id}: {e!s}"
             logger.error(error_msg)
             raise FileDownloadError(error_msg) from e
         except (TimeoutError, ConnectionError) as e:
-            error_msg = f"Connection error downloading file {file_id}: {str(e)}"
+            error_msg = f"Connection error downloading file {file_id}: {e!s}"
             logger.error(error_msg)
             raise FileDownloadError(error_msg) from e
         except Exception as e:
-            error_msg = f"Failed to download file {file_id}: {str(e)}"
+            error_msg = f"Failed to download file {file_id}: {e!s}"
             logger.error(error_msg)
             raise FileDownloadError(error_msg) from e
 
@@ -266,7 +266,7 @@ class GoogleDriveFetcher:
             return content
 
         except Exception as e:
-            error_msg = f"Failed to download file {file_id}: {str(e)}"
+            error_msg = f"Failed to download file {file_id}: {e!s}"
             logger.error(error_msg)
             raise FileDownloadError(error_msg) from e
 
@@ -299,7 +299,7 @@ class GoogleDriveFetcher:
                 except Exception as chunk_error:
                     logger.warning(
                         f"Error downloading chunk {chunk_count} for file {file_id}: "
-                        f"{str(chunk_error)}"
+                        f"{chunk_error!s}"
                     )
                     raise
 
@@ -316,6 +316,6 @@ class GoogleDriveFetcher:
             return content
 
         except Exception as e:
-            error_msg = f"Failed to download file {file_id}: {str(e)}"
+            error_msg = f"Failed to download file {file_id}: {e!s}"
             logger.error(error_msg)
             raise FileDownloadError(error_msg) from e

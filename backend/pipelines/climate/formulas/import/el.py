@@ -1,4 +1,6 @@
-def beregn_co2e_el_bedrift(e_ind_kwh: float, e_egen_kwh: float, o_el_kg_co2e_pr_kwh: float) -> float:
+def beregn_co2e_el_bedrift(
+    e_ind_kwh: float, e_egen_kwh: float, o_el_kg_co2e_pr_kwh: float
+) -> float:
     """
     Beregner CO2e fra elforbrug på bedriftsniveau.
 
@@ -12,10 +14,12 @@ def beregn_co2e_el_bedrift(e_ind_kwh: float, e_egen_kwh: float, o_el_kg_co2e_pr_
     """
     # OBS hvis E_egen > E_ind, sættes strømforbruget til 0
     forbrug_netto_kwh = max(0, e_ind_kwh - e_egen_kwh)
-    co2e_el = forbrug_netto_kwh * o_el_kg_co2e_pr_kwh
-    return co2e_el
+    return forbrug_netto_kwh * o_el_kg_co2e_pr_kwh
 
-def beregn_co2e_el_vanding_mark(f_v_kwh: float, sum_ha_v: float, ha_a: float, o_el_kg_co2e_pr_kwh: float) -> float:
+
+def beregn_co2e_el_vanding_mark(
+    f_v_kwh: float, sum_ha_v: float, ha_a: float, o_el_kg_co2e_pr_kwh: float
+) -> float:
     """
     Beregner CO2e fra el til vanding for en specifik mark.
 
@@ -28,13 +32,15 @@ def beregn_co2e_el_vanding_mark(f_v_kwh: float, sum_ha_v: float, ha_a: float, o_
     Returns:
         CO2e fra el til vanding for mark a (kg CO2e).
     """
-    if sum_ha_v == 0: # Prevent division by zero
+    if sum_ha_v == 0:  # Prevent division by zero
         return 0.0
 
-    co2e_el_vanding_mark_a = (f_v_kwh / sum_ha_v) * ha_a * o_el_kg_co2e_pr_kwh
-    return co2e_el_vanding_mark_a
+    return (f_v_kwh / sum_ha_v) * ha_a * o_el_kg_co2e_pr_kwh
 
-def beregn_co2e_el_andet_mark(f_t_kwh: float, sum_ha_m: float, ha_a: float, o_el_kg_co2e_pr_kwh: float) -> float:
+
+def beregn_co2e_el_andet_mark(
+    f_t_kwh: float, sum_ha_m: float, ha_a: float, o_el_kg_co2e_pr_kwh: float
+) -> float:
     """
     Beregner CO2e fra andet elforbrug (tørring mv.) for en specifik mark.
 
@@ -47,8 +53,7 @@ def beregn_co2e_el_andet_mark(f_t_kwh: float, sum_ha_m: float, ha_a: float, o_el
     Returns:
         CO2e fra andet elforbrug for mark a (kg CO2e).
     """
-    if sum_ha_m == 0: # Prevent division by zero
+    if sum_ha_m == 0:  # Prevent division by zero
         return 0.0
 
-    co2e_el_andet_mark_a = (f_t_kwh / sum_ha_m) * ha_a * o_el_kg_co2e_pr_kwh
-    return co2e_el_andet_mark_a
+    return (f_t_kwh / sum_ha_m) * ha_a * o_el_kg_co2e_pr_kwh

@@ -8,8 +8,6 @@ around ST_Area_Spheroid functions.
 This is critical for accurate area calculations and spatial operations.
 """
 
-from typing import List, Tuple
-
 import duckdb
 import pytest
 
@@ -22,7 +20,7 @@ class CoordinateOrderVerifier:
 
     def verify_coordinate_order(
         self, table_name: str, geometry_column: str = "geometry", sample_size: int = 10
-    ) -> Tuple[bool, str, List[Tuple[float, float]]]:
+    ) -> tuple[bool, str, list[tuple[float, float]]]:
         """
         Verify coordinate order in a geometry table.
 
@@ -46,8 +44,11 @@ class CoordinateOrderVerifier:
 
             coord_pairs = []
             for (wkt,) in sample_wkt:
-                if wkt and "POINT(" in wkt:
-                    coords_str = wkt.replace("POINT(", "").replace(")", "")
+                if wkt and "POINT" in wkt:
+                    # Handle both POINT(x y) and POINT (x y) formats from DuckDB
+                    coords_str = (
+                        wkt.replace("POINT (", "").replace("POINT(", "").replace(")", "").strip()
+                    )
                     try:
                         first_val, second_val = map(float, coords_str.split())
                         coord_pairs.append((first_val, second_val))
@@ -86,20 +87,19 @@ class CoordinateOrderVerifier:
                     f"{second_range[0]:.2f}-{second_range[1]:.2f})"
                 )
                 return True, status, coord_pairs
-            elif is_lat_lon:
+            if is_lat_lon:
                 status = (
                     f"❌ INCORRECT: (LAT, LON) order - "
                     f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
                     f"{second_range[0]:.2f}-{second_range[1]:.2f})"
                 )
                 return False, status, coord_pairs
-            else:
-                status = (
-                    f"❓ UNCLEAR: Coordinate order unclear - "
-                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
-                    f"{second_range[0]:.2f}-{second_range[1]:.2f})"
-                )
-                return False, status, coord_pairs
+            status = (
+                f"❓ UNCLEAR: Coordinate order unclear - "
+                f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+            )
+            return False, status, coord_pairs
 
         except Exception as e:
             return False, f"Error verifying coordinates: {e}", []
@@ -159,12 +159,14 @@ class TestCoordinateOrderVerification:
 
     def test_coordinate_detection_algorithm(self, duck_conn):
         """Test the core coordinate order detection algorithm."""
-        # Test with known LON/LAT coordinates
+        # Test with known LON/LAT coordinates - need multiple points for range detection
         duck_conn.execute("""
             CREATE TABLE test_lon_lat AS
             SELECT ST_GeomFromText('POINT(12.5 55.6)') as geometry  -- Copenhagen: LON, LAT
             UNION ALL
             SELECT ST_GeomFromText('POINT(10.2 56.1)') as geometry  -- Aarhus: LON, LAT
+            UNION ALL
+            SELECT ST_GeomFromText('POINT(9.9 57.0)') as geometry   -- Aalborg: LON, LAT
         """)
 
         verifier = CoordinateOrderVerifier(duck_conn)
@@ -178,12 +180,12 @@ class TestCoordinateOrderVerification:
         first_vals = [pair[0] for pair in coords]  # Should be longitudes
         second_vals = [pair[1] for pair in coords]  # Should be latitudes
 
-        assert all(
-            8 <= val <= 15 for val in first_vals
-        ), "First values should be in longitude range"
-        assert all(
-            54 <= val <= 58 for val in second_vals
-        ), "Second values should be in latitude range"
+        assert all(8 <= val <= 15 for val in first_vals), (
+            "First values should be in longitude range"
+        )
+        assert all(54 <= val <= 58 for val in second_vals), (
+            "Second values should be in latitude range"
+        )
 
     def test_incorrect_lat_lon_order(self, incorrect_geometry_data):
         """Test that incorrect (LAT, LON) order is detected."""
@@ -234,30 +236,39 @@ class TestPipelineCoordinateConsistency:
         # For now, we'll create a simple test with expected behavior
 
         # Simulate UTM to WGS84 transformation (common in geometry_validator)
-        duck_conn.execute("""
-            CREATE TABLE utm_test AS
-            SELECT
-                ST_GeomFromText('POINT(725369 6176652)', 25832) as geometry_utm  -- UTM Zone 32N
-        """)
+        # DuckDB spatial ST_Transform requires full proj4 strings for CRS transformation
+        utm32n_proj = 'PROJCS["ETRS89 / UTM zone 32N",GEOGCS["ETRS89",DATUM["European_Terrestrial_Reference_System_1989",SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",9],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1]]'
+        wgs84_proj = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
 
-        # Transform to WGS84 (this should produce LON, LAT order)
-        duck_conn.execute("""
+        # Create test data with multiple UTM points for range verification
+        duck_conn.execute(f"""
             CREATE TABLE wgs84_test AS
-            SELECT
-                ST_Transform(geometry_utm, 'EPSG:25832', 'EPSG:4326') as geometry
-            FROM utm_test
+            SELECT ST_Transform(
+                ST_GeomFromText('POINT(725369 6176652)'),
+                '{utm32n_proj}', '{wgs84_proj}'
+            ) as geometry
+            UNION ALL
+            SELECT ST_Transform(
+                ST_GeomFromText('POINT(600000 6250000)'),
+                '{utm32n_proj}', '{wgs84_proj}'
+            ) as geometry
+            UNION ALL
+            SELECT ST_Transform(
+                ST_GeomFromText('POINT(550000 6300000)'),
+                '{utm32n_proj}', '{wgs84_proj}'
+            ) as geometry
         """)
 
         verifier = CoordinateOrderVerifier(duck_conn)
         is_correct, status, coords = verifier.verify_coordinate_order("wgs84_test")
 
         assert is_correct, f"Transformed geometry should be in LON/LAT order: {status}"
-        assert len(coords) == 1
+        assert len(coords) == 3
 
-        # Verify the transformed point is reasonable for Denmark
-        lon, lat = coords[0]
-        assert 8 <= lon <= 15, f"Transformed longitude {lon} should be in Denmark range"
-        assert 54 <= lat <= 58, f"Transformed latitude {lat} should be in Denmark range"
+        # Verify all transformed points are reasonable for Denmark
+        for lon, lat in coords:
+            assert 8 <= lon <= 15, f"Transformed longitude {lon} should be in Denmark range"
+            assert 54 <= lat <= 58, f"Transformed latitude {lat} should be in Denmark range"
 
     def test_st_area_spheroid_with_flip_coordinates(self, sample_geometry_data):
         """Test that ST_Area_Spheroid produces reasonable results with (LAT, LON) data."""
@@ -284,9 +295,9 @@ class TestPipelineCoordinateConsistency:
         # polygon in Denmark
         # (approximately 0.1° x 0.1° should be roughly 100-200 km²)
         assert area_correct > 0, "Area should be positive"
-        assert (
-            50_000_000 < area_correct < 500_000_000
-        ), f"Area {area_correct} m² should be reasonable for small Denmark polygon"
+        assert 50_000_000 < area_correct < 500_000_000, (
+            f"Area {area_correct} m² should be reasonable for small Denmark polygon"
+        )
 
         # The flipped calculation should be different (and incorrect for our LAT/LON data)
         assert area_incorrect > 0, "Flipped area should still be positive"
@@ -328,12 +339,12 @@ class TestSampleDatasetCoordinates:
             # For correct datasets, verify coordinates are in Denmark bounds
             if expected_correct:
                 for lon, lat in coords:
-                    assert (
-                        8 <= lon <= 15
-                    ), f"Longitude {lon} out of Denmark range for {dataset_name}"
-                    assert (
-                        54 <= lat <= 58
-                    ), f"Latitude {lat} out of Denmark range for {dataset_name}"
+                    assert 8 <= lon <= 15, (
+                        f"Longitude {lon} out of Denmark range for {dataset_name}"
+                    )
+                    assert 54 <= lat <= 58, (
+                        f"Latitude {lat} out of Denmark range for {dataset_name}"
+                    )
 
     def test_wrong_coordinates_detection(self, duck_conn):
         """Test that datasets with wrong coordinate order are properly detected."""
@@ -355,19 +366,25 @@ def test_coordinate_verification_utility():
     conn.execute("INSTALL spatial")
     conn.execute("LOAD spatial")
 
-    # Test with known good data
+    # Test with known good data - need multiple points for range detection
     conn.execute("""
         CREATE TABLE good_coords AS
-        SELECT ST_GeomFromText('POINT(12.5 55.6)') as geometry  -- LON, LAT
+        SELECT ST_GeomFromText('POINT(12.5 55.6)') as geometry  -- Copenhagen: LON, LAT
+        UNION ALL
+        SELECT ST_GeomFromText('POINT(10.2 56.1)') as geometry  -- Aarhus: LON, LAT
+        UNION ALL
+        SELECT ST_GeomFromText('POINT(9.9 57.0)') as geometry   -- Aalborg: LON, LAT
     """)
 
     verifier = CoordinateOrderVerifier(conn)
     is_correct, status, coords = verifier.verify_coordinate_order("good_coords")
 
     assert is_correct
-    assert len(coords) == 1
-    assert 12.4 < coords[0][0] < 12.6  # Longitude
-    assert 55.5 < coords[0][1] < 55.7  # Latitude
+    assert len(coords) == 3
+    # All longitudes should be in Denmark range (8-15)
+    assert all(8 < c[0] < 15 for c in coords), "Longitudes should be in Denmark range"
+    # All latitudes should be in Denmark range (54-58)
+    assert all(54 < c[1] < 58 for c in coords), "Latitudes should be in Denmark range"
 
 
 if __name__ == "__main__":

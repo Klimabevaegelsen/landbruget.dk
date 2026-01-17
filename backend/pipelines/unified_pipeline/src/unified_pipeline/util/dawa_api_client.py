@@ -9,7 +9,7 @@ DAWA API documentation: https://api.dataforsyningen.dk/
 """
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -40,7 +40,7 @@ class DAWAAPIClient:
         wait=wait_exponential(multiplier=1, min=2, max=8),
         stop=stop_after_attempt(3),
     )
-    def _make_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _make_request(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Make a request to DAWA API with retry logic.
 
@@ -71,7 +71,7 @@ class DAWAAPIClient:
             self.log.error(f"DAWA API request error: {e}")
             raise
 
-    def geocode_address_by_id(self, adresse_id: str) -> Optional[Dict[str, Any]]:
+    def geocode_address_by_id(self, adresse_id: str) -> dict[str, Any] | None:
         """
         Geocode an address using its DAWA address ID.
 
@@ -133,8 +133,8 @@ class DAWAAPIClient:
             return None
 
     def geocode_addresses_batch(
-        self, address_ids: List[str], max_concurrent: int = 5
-    ) -> Dict[str, Optional[Dict[str, Any]]]:
+        self, address_ids: list[str], max_concurrent: int = 5
+    ) -> dict[str, dict[str, Any] | None]:
         """
         Geocode multiple addresses by ID.
 
@@ -162,7 +162,7 @@ class DAWAAPIClient:
 
         return results
 
-    def search_address(self, query: str, limit: int = 1) -> List[Dict[str, Any]]:
+    def search_address(self, query: str, limit: int = 1) -> list[dict[str, Any]]:
         """
         Search for addresses by text query.
 
@@ -236,7 +236,7 @@ class DAWAAPIClient:
         """
         return f"POINT({longitude} {latitude})"
 
-    def create_geometry_geojson(self, latitude: float, longitude: float) -> Dict[str, Any]:
+    def create_geometry_geojson(self, latitude: float, longitude: float) -> dict[str, Any]:
         """
         Create a GeoJSON Point geometry from coordinates.
 
@@ -249,7 +249,7 @@ class DAWAAPIClient:
         """
         return {"type": "Point", "coordinates": [longitude, latitude]}
 
-    def geocode_with_datavask(self, address_text: str) -> Optional[Dict[str, Any]]:
+    def geocode_with_datavask(self, address_text: str) -> dict[str, Any] | None:
         """
         Geocode an address using the Datavask API as fallback.
 

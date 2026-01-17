@@ -13,7 +13,7 @@ Features:
 - Performance metrics and cache hit rate tracking
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from unified_pipeline.util.dawa_api_client import DAWAAPIClient
 from unified_pipeline.util.geocoding_cache import GeocodingCache
@@ -51,7 +51,7 @@ class CachedDAWAAPIClient:
 
         self.log.info("Cached DAWA API client initialized")
 
-    def geocode_address_by_id(self, adresse_id: str) -> Optional[Dict[str, Any]]:
+    def geocode_address_by_id(self, adresse_id: str) -> dict[str, Any] | None:
         """
         Geocode an address using its DAWA address ID with caching.
 
@@ -91,7 +91,7 @@ class CachedDAWAAPIClient:
             self.log.warning(f"DAWA API call failed for ID {adresse_id}: {e}")
             return None
 
-    def geocode_with_datavask(self, address: str) -> Optional[Dict[str, Any]]:
+    def geocode_with_datavask(self, address: str) -> dict[str, Any] | None:
         """
         Geocode an address using Datavask API with caching.
 
@@ -135,11 +135,11 @@ class CachedDAWAAPIClient:
         """Create WKT geometry from coordinates (delegated to DAWA client)."""
         return self.dawa_client.create_geometry_wkt(latitude, longitude)
 
-    def create_geometry_geojson(self, latitude: float, longitude: float) -> Dict[str, Any]:
+    def create_geometry_geojson(self, latitude: float, longitude: float) -> dict[str, Any]:
         """Create GeoJSON geometry from coordinates (delegated to DAWA client)."""
         return self.dawa_client.create_geometry_geojson(latitude, longitude)
 
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """
         Get performance statistics including cache hit rates.
 

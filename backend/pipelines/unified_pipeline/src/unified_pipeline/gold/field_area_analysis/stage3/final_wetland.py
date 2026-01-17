@@ -16,7 +16,7 @@ Architectural Benefits:
 - Creates clean input for Stage 4 calculations
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
@@ -84,7 +84,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             "water_wetland_count": water_wetland_count,
         }
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Simplified Stage 3B: Create property-level wetland geometries using existing Stage 2B data.
 
@@ -172,7 +172,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
             "unique_properties": unique_properties,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save both geometric intersection tables to GCS."""
         # Save property × wetland intersections
         self._save_stage_output("property_wetland_intersections", "property_wetland_intersections")

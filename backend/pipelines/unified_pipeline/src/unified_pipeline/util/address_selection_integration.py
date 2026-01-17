@@ -5,7 +5,7 @@ This module provides a drop-in replacement for the current primary address
 selection logic in the CVR API client.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .enhanced_address_selection import (
     AddressSelectionConfig,
@@ -15,11 +15,11 @@ from .enhanced_address_selection import (
 
 
 def select_primary_address_enhanced(
-    addresses: List[Dict[str, Any]],
+    addresses: list[dict[str, Any]],
     strategy: str = "hybrid",
     prefer_current_only: bool = True,
     require_geocoding: bool = True,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Enhanced primary address selection for CVR companies.
 
@@ -59,8 +59,8 @@ def select_primary_address_enhanced(
 
 
 def get_primary_address_geometry_enhanced(
-    addresses: List[Dict[str, Any]], strategy: str = "hybrid"
-) -> Optional[Dict[str, Any]]:
+    addresses: list[dict[str, Any]], strategy: str = "hybrid"
+) -> dict[str, Any] | None:
     """
     Get primary address geometry using enhanced selection logic.
 
@@ -92,7 +92,7 @@ def get_primary_address_geometry_enhanced(
     }
 
 
-def analyze_address_selection_for_company(company_data: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_address_selection_for_company(company_data: dict[str, Any]) -> dict[str, Any]:
     """
     Analyze address selection options for a company.
 
@@ -141,7 +141,7 @@ SELECTION_CONFIGS = {
 }
 
 
-def get_recommended_strategy_for_company(addresses: List[Dict[str, Any]]) -> str:
+def get_recommended_strategy_for_company(addresses: list[dict[str, Any]]) -> str:
     """
     Recommend the best selection strategy based on company's address profile.
 
@@ -170,12 +170,12 @@ def get_recommended_strategy_for_company(addresses: List[Dict[str, Any]]) -> str
         return "hybrid"
 
     # If addresses have varying quality, prioritize quality
-    qualities = set(addr.get("coordinate_quality") for addr in geocoded_addresses)
+    qualities = {addr.get("coordinate_quality") for addr in geocoded_addresses}
     if len(qualities) > 1 and "A" in qualities:
         return "best_quality"
 
     # If mixed address types, use business priority
-    address_types = set(addr.get("address_type") for addr in addresses)
+    address_types = {addr.get("address_type") for addr in addresses}
     if len(address_types) > 1:
         return "business_priority"
 

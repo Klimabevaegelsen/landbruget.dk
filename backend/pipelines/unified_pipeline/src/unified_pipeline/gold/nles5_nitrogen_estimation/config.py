@@ -7,7 +7,7 @@ defined here to ensure consistency across all processing modules.
 """
 
 import os
-from typing import Dict, List, Optional
+from typing import ClassVar
 
 from pydantic import ConfigDict
 
@@ -45,7 +45,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Note: farm_data_gcs_path is no longer used - the pipeline now dynamically discovers
     # the latest timestamped directory for each year (e.g., silver/gr {year}/YYYYMMDD_HHMMSS/)
     enable_farm_data_integration: bool = True  # Enable farm data integration for enhanced accuracy
-    farm_data_years: Optional[List[int]] = [
+    farm_data_years: ClassVar[list[int]] = [
         2018,
         2019,
         2020,
@@ -63,9 +63,11 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # ULTIMATE MEMORY OPTIMIZATION - TARGET-YEAR-BY-TARGET-YEAR PROCESSING
     enable_spatial_indexing: bool = True  # Enable spatial indexes for performance
     use_chunked_processing: bool = True  # Enable chunking to handle large datasets
-    use_target_year_processing: bool = True  # ULTIMATE: Process one target year at a time with 3-year windows
+    use_target_year_processing: bool = (
+        True  # ULTIMATE: Process one target year at a time with 3-year windows
+    )
     max_memory_usage_gb: int = 8  # Increased from 2GB - spatial joins need more memory
-    
+
     # Enhanced chunked processing settings for memory management - REDUCED FOR DISK SPACE
     # Can be overridden by environment variables for fine-tuning
     tessellation_batch_size: int = int(
@@ -93,13 +95,13 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # in GCS (fvm_marker_2023)
     # TEMPORAL EXTENSION: Added 2023 support based on confirmed GCS data
     # availability
-    target_years: Optional[List[int]] = [2021, 2022, 2023]
+    target_years: ClassVar[list[int]] = [2021, 2022, 2023]
 
     # MEMORY OPTIMIZATION: Limits target calculation years (auto-discovery with memory management)
     # NLES5 requires 3-year windows: current + previous + year before previous
     # Pipeline automatically calculates minimum data years needed for each target year
     # Can be overridden by setting the MAX_YEARS_TO_PROCESS environment variable.
-    max_years_to_process: Optional[int] = (
+    max_years_to_process: int | None = (
         int(os.getenv("MAX_YEARS_TO_PROCESS")) if os.getenv("MAX_YEARS_TO_PROCESS") else 5
     )  # Limit target years to reduce dataset size
 
@@ -126,7 +128,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     min_climate_observations: int = 30  # minimum for reliable climate data
 
     # Model coefficient uncertainties (standard errors from original NLES5 calibration)
-    coefficient_uncertainties: Dict[str, float] = {
+    coefficient_uncertainties: ClassVar[dict[str, float]] = {
         "Bt": 0.202200,  # βNT: Total N in top 25cm soil layer (SE from DCA Rapport 163 Table 3.2)
         # βCS: Mineral N application in spring (SE from DCA Rapport 163 Table 3.2)
         "Bcs": 0.007000,
@@ -151,7 +153,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
 
     # NLES5 Model Parameters from DCA Rapport 163, Table 3.3
     # Main crop effects (lambda_ma)
-    crop_parameters: Dict[str, float] = {
+    crop_parameters: ClassVar[dict[str, float]] = {
         "M1": 0.0,  # Winter cereal (reference)
         "M2": -6.744,  # Spring cereal
         "M3": -7.279,  # Grain-legume mixtures
@@ -168,7 +170,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     }
 
     # Winter vegetation cover effects (lambda_wa)
-    winter_veg_parameters: Dict[str, float] = {
+    winter_veg_parameters: ClassVar[dict[str, float]] = {
         "W1": 0.0,  # Winter cereal (reference)
         "W2": -2.055,  # Bare soil
         "W3": -0.456,  # Autumn cultivation
@@ -180,7 +182,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     }
 
     # Previous main crop effects (eta_mp)
-    prev_crop_parameters: Dict[str, float] = {
+    prev_crop_parameters: ClassVar[dict[str, float]] = {
         "MP1": 0.0,  # Winter cereal (reference)
         "MP2": 2.847,  # Other crops than winter cereals and grass or grass-clover
         "MP3": 0.664,  # Grass or grass-clover
@@ -188,7 +190,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     }
 
     # Previous winter vegetation cover effects (eta_wp)
-    prev_winter_veg_parameters: Dict[str, float] = {
+    prev_winter_veg_parameters: ClassVar[dict[str, float]] = {
         "WP1": 0.0,  # Winter cereal (reference)
         "WP2": 9.704,  # Bare soil
         "WP3": 10.601,  # Grass-clover
@@ -202,13 +204,13 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     }
 
     # Theta (θ) factors for winter vegetation classes
-    theta_factors: Dict[str, float] = {
+    theta_factors: ClassVar[dict[str, float]] = {
         "WC1": 1.0,  # Large N uptake in autumn
         "WC2": 1.205144,  # Low or moderate N uptake in autumn
     }
 
     # NLES5 nitrogen coefficients
-    nitrogen_coefficients: Dict[str, float] = {
+    nitrogen_coefficients: ClassVar[dict[str, float]] = {
         "Bt": 0.456793,
         "Bcs": 0.049570,
         "Bca": 0.157044,
@@ -223,7 +225,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # From SAS lines 145-147:
     # Sand: (1-exp(-0.001194*per1_nles5-0.00111*per2_nles5)) * exp(-0.00086*per_p_nles5)
     # Clay: (1-exp(-0.00080*per1_nles5-0.00075*per2_nles5)) * exp(-0.00064*per_p_nles5)
-    soil_parameters: Dict[str, Dict[str, float]] = {
+    soil_parameters: ClassVar[dict[str, dict[str, float]]] = {
         "sand": {
             "per1_coef": -0.001194,  # SAS: -0.001194 (Sep-Nov coefficient)
             "per2_coef": -0.00111,  # SAS: -0.00111 (Dec-Feb + Mar-Aug current coefficient)

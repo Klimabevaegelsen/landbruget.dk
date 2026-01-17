@@ -16,10 +16,14 @@ Transformations:
 - Structure data for calculator compatibility
 """
 
-from typing import Dict, List, Optional, Any
-import pandas as pd
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from farm_data import FarmData
+
+import duckdb
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +88,8 @@ class LivestockSummary:
     species: str  # 'cattle', 'pigs', 'poultry', etc.
     total_count: int
     total_n_production_kg: float
-    subtypes: Dict[str, int] = field(default_factory=dict)  # e.g., {'dairy_cows': 120}
-    housing_systems: Dict[str, int] = field(default_factory=dict)  # e.g., {'loose_housing': 100}
+    subtypes: dict[str, int] = field(default_factory=dict)  # e.g., {'dairy_cows': 120}
+    housing_systems: dict[str, int] = field(default_factory=dict)  # e.g., {'loose_housing': 100}
     production_system: str = "conventional"  # 'conventional' or 'organic'
 
     def to_dict(self) -> dict:
@@ -109,8 +113,8 @@ class FieldSummary:
     crop_type: str
     total_area_ha: float
     field_count: int
-    crop_code: Optional[int] = None  # FVM crop code for emission parameter lookup
-    avg_yield_kg_ha: Optional[float] = None
+    crop_code: int | None = None  # FVM crop code for emission parameter lookup
+    avg_yield_kg_ha: float | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -161,40 +165,52 @@ class GreenAccountsTransformer:
     """
 
     @staticmethod
-    def transform(df: pd.DataFrame) -> Dict[str, LivestockSummary]:
+    def transform(rel: duckdb.DuckDBPyRelation | None) -> dict[str, LivestockSummary]:
         """
-        Transform Green Accounts DataFrame to structured livestock summaries.
+        Transform Green Accounts DuckDB relation to structured livestock summaries.
 
         Args:
-            df: Raw Green Accounts DataFrame with Danish column names
+            rel: DuckDB relation with Green Accounts data and Danish column names
 
         Returns:
             Dictionary mapping species (English) to LivestockSummary objects
             Example: {'cattle': LivestockSummary(...), 'pigs': LivestockSummary(...)}
 
         Example:
-            >>> gr_df = loader.load_livestock(cvr="31373077", year=2023)
-            >>> livestock = GreenAccountsTransformer.transform(gr_df)
+            >>> gr_rel = loader.load_livestock(cvr="31373077", year=2023)
+            >>> livestock = GreenAccountsTransformer.transform(gr_rel)
             >>> print(livestock['cattle'].total_count)
             120
             >>> print(livestock['cattle'].subtypes)
             {'dairy_cows': 100, 'heifers': 20}
         """
-        if df is None or df.empty:
-            logger.warning("Empty livestock DataFrame provided")
+        if rel is None:
+            logger.warning("Empty livestock relation provided")
             return {}
+
+        # Get column names
+        columns = rel.columns
 
         # Validate required columns
         required_cols = ["c_2001", "c_2006"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
+        missing_cols = [col for col in required_cols if col not in columns]
         if missing_cols:
             logger.error(f"Missing required columns: {missing_cols}")
             return {}
 
+        # Check if relation has any rows
+        row_count = rel.count("*").fetchone()[0]
+        if row_count == 0:
+            logger.warning("Empty livestock relation provided")
+            return {}
+
         results = {}
 
-        # Group by species (c_2001)
-        for species_danish, group in df.groupby("c_2001"):
+        # Get distinct species from the data
+        species_query = rel.select("DISTINCT c_2001 as species").fetchall()
+        species_list = [row[0] for row in species_query if row[0] is not None]
+
+        for species_danish in species_list:
             # Map Danish species name to English
             species_english = SPECIES_MAPPING.get(str(species_danish), "unknown")
 
@@ -202,42 +218,70 @@ class GreenAccountsTransformer:
                 logger.warning(f"Unknown species: {species_danish}")
                 continue
 
-            # Extract animal counts (c_2006)
-            # NOTE: c_2006 may be string with concatenated values - convert to numeric first
-            total_count = int(pd.to_numeric(group["c_2006"], errors="coerce").fillna(0).sum())
+            # Filter for this species and calculate totals
+            # Escape single quotes in species name
+            species_escaped = str(species_danish).replace("'", "''")
+            species_rel = rel.filter(f"c_2001 = '{species_escaped}'")
 
-            # Extract N production (c_2016) if available
-            # NOTE: c_2016 may be string with concatenated values - convert to numeric first
-            if "c_2016" in group.columns:
-                total_n = float(pd.to_numeric(group["c_2016"], errors="coerce").fillna(0).sum())
-            else:
-                total_n = 0.0
+            # Calculate total count (c_2006) - handle potential string values
+            total_count_result = species_rel.aggregate(
+                "COALESCE(SUM(TRY_CAST(c_2006 AS DOUBLE)), 0) as total"
+            ).fetchone()
+            total_count = int(total_count_result[0]) if total_count_result[0] else 0
+
+            # Calculate total N production (c_2016) if available
+            total_n = 0.0
+            if "c_2016" in columns:
+                total_n_result = species_rel.aggregate(
+                    "COALESCE(SUM(TRY_CAST(c_2016 AS DOUBLE)), 0) as total"
+                ).fetchone()
+                total_n = float(total_n_result[0]) if total_n_result[0] else 0.0
 
             # Build subtypes dict from c_2004 (type detail)
             subtypes = {}
-            if "c_2004" in group.columns:
-                for subtype_danish, subgroup in group.groupby("c_2004"):
+            if "c_2004" in columns:
+                subtypes_query = species_rel.aggregate(
+                    "c_2004, COALESCE(SUM(TRY_CAST(c_2006 AS DOUBLE)), 0) as count"
+                ).fetchall()
+
+                for row in subtypes_query:
+                    subtype_danish = row[0]
+                    count = int(row[1]) if row[1] else 0
+
+                    if subtype_danish is None:
+                        continue
+
                     # Map based on species
                     if species_english == "cattle":
-                        subtype_english = CATTLE_SUBTYPE_MAPPING.get(str(subtype_danish), str(subtype_danish).lower())
+                        subtype_english = CATTLE_SUBTYPE_MAPPING.get(
+                            str(subtype_danish), str(subtype_danish).lower()
+                        )
                     elif species_english == "pigs":
-                        subtype_english = PIG_SUBTYPE_MAPPING.get(str(subtype_danish), str(subtype_danish).lower())
+                        subtype_english = PIG_SUBTYPE_MAPPING.get(
+                            str(subtype_danish), str(subtype_danish).lower()
+                        )
                     elif species_english == "poultry":
-                        subtype_english = POULTRY_SUBTYPE_MAPPING.get(str(subtype_danish), str(subtype_danish).lower())
+                        subtype_english = POULTRY_SUBTYPE_MAPPING.get(
+                            str(subtype_danish), str(subtype_danish).lower()
+                        )
                     else:
                         subtype_english = str(subtype_danish).lower()
 
-                    # Convert to numeric to handle concatenated string values
-                    subtypes[subtype_english] = int(pd.to_numeric(subgroup["c_2006"], errors="coerce").fillna(0).sum())
+                    subtypes[subtype_english] = count
 
             # Build housing systems dict from c_2005 (housing type)
             housing_systems = {}
-            if "c_2005" in group.columns:
-                for housing_danish, housing_group in group.groupby("c_2005"):
-                    # Store housing system counts (convert to numeric to handle string concatenation)
-                    housing_systems[str(housing_danish)] = int(
-                        pd.to_numeric(housing_group["c_2006"], errors="coerce").fillna(0).sum()
-                    )
+            if "c_2005" in columns:
+                housing_query = species_rel.aggregate(
+                    "c_2005, COALESCE(SUM(TRY_CAST(c_2006 AS DOUBLE)), 0) as count"
+                ).fetchall()
+
+                for row in housing_query:
+                    housing_danish = row[0]
+                    count = int(row[1]) if row[1] else 0
+
+                    if housing_danish is not None:
+                        housing_systems[str(housing_danish)] = count
 
             # Create summary object
             results[species_english] = LivestockSummary(
@@ -252,15 +296,15 @@ class GreenAccountsTransformer:
         return results
 
     @staticmethod
-    def get_species_breakdown(livestock_summaries: Dict[str, LivestockSummary]) -> pd.DataFrame:
+    def get_species_breakdown(livestock_summaries: dict[str, LivestockSummary]) -> list[dict]:
         """
-        Convert livestock summaries to a readable DataFrame.
+        Convert livestock summaries to a list of dictionaries (for DuckDB/parquet).
 
         Args:
             livestock_summaries: Output from transform()
 
         Returns:
-            DataFrame with columns: species, subtype, count, n_production_kg
+            List of dicts with keys: species, subtype, count, n_production_kg
         """
         rows = []
 
@@ -271,13 +315,14 @@ class GreenAccountsTransformer:
                         "species": species,
                         "subtype": subtype,
                         "count": count,
-                        "n_production_kg": summary.total_n_production_kg * (count / summary.total_count)
+                        "n_production_kg": summary.total_n_production_kg
+                        * (count / summary.total_count)
                         if summary.total_count > 0
                         else 0,
                     }
                 )
 
-        return pd.DataFrame(rows)
+        return rows
 
 
 class GKEATransformer:
@@ -295,44 +340,56 @@ class GKEATransformer:
     """
 
     @staticmethod
-    def transform(df: pd.DataFrame) -> Optional[FertilizerSummary]:
+    def transform(rel: duckdb.DuckDBPyRelation | None) -> FertilizerSummary | None:
         """
-        Transform GKEA DataFrame to structured fertilizer summary.
+        Transform GKEA DuckDB relation to structured fertilizer summary.
 
         Args:
-            df: Raw GKEA DataFrame with fertilizer application data
+            rel: DuckDB relation with fertilizer application data
 
         Returns:
             FertilizerSummary object with aggregated fertilizer metrics
 
         Example:
-            >>> gkea_df = loader.load_fertilizer(cvr="31373077", year=2024)
-            >>> fert = GKEATransformer.transform(gkea_df)
+            >>> gkea_rel = loader.load_fertilizer(cvr="31373077", year=2024)
+            >>> fert = GKEATransformer.transform(gkea_rel)
             >>> print(fert.total_n_kg)
             12500.5
             >>> print(fert.avg_n_kg_per_ha)
             125.0
         """
-        if df is None or df.empty:
-            logger.warning("Empty fertilizer DataFrame provided")
+        if rel is None:
+            logger.warning("Empty fertilizer relation provided")
             return None
+
+        # Get column names
+        columns = rel.columns
 
         # Validate required columns
         required_cols = ["total_n_kvote", "faktisk_areal_ha"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
+        missing_cols = [col for col in required_cols if col not in columns]
         if missing_cols:
             logger.error(f"Missing required columns: {missing_cols}")
             return None
 
-        # Handle missing or invalid data
-        df_clean = df.copy()
-        df_clean["total_n_kvote"] = pd.to_numeric(df_clean["total_n_kvote"], errors="coerce").fillna(0)
-        df_clean["faktisk_areal_ha"] = pd.to_numeric(df_clean["faktisk_areal_ha"], errors="coerce").fillna(0)
+        # Check if relation has any rows
+        row_count = rel.count("*").fetchone()[0]
+        if row_count == 0:
+            logger.warning("Empty fertilizer relation provided")
+            return None
 
-        # Calculate aggregates
-        total_n = float(df_clean["total_n_kvote"].sum())
-        total_area = float(df_clean["faktisk_areal_ha"].sum())
-        field_count = len(df_clean)
+        # Calculate aggregates using DuckDB SQL
+        agg_result = rel.aggregate(
+            """
+            COALESCE(SUM(TRY_CAST(total_n_kvote AS DOUBLE)), 0) as total_n,
+            COALESCE(SUM(TRY_CAST(faktisk_areal_ha AS DOUBLE)), 0) as total_area,
+            COUNT(*) as field_count
+            """
+        ).fetchone()
+
+        total_n = float(agg_result[0]) if agg_result[0] else 0.0
+        total_area = float(agg_result[1]) if agg_result[1] else 0.0
+        field_count = int(agg_result[2]) if agg_result[2] else 0
 
         # Calculate average N per hectare
         avg_n_per_ha = total_n / total_area if total_area > 0 else 0.0
@@ -395,7 +452,7 @@ class FVMTransformer:
     """
 
     # Common Danish crop names to English
-    CROP_MAPPING = {
+    CROP_MAPPING: ClassVar[dict[str, str]] = {
         "Vinterhvede": "winter_wheat",
         "Vårhvede": "spring_wheat",
         "Varhvede": "spring_wheat",
@@ -424,104 +481,120 @@ class FVMTransformer:
     }
 
     @staticmethod
-    def transform(df: pd.DataFrame) -> List[FieldSummary]:
+    def transform(rel: duckdb.DuckDBPyRelation | None) -> list[FieldSummary]:
         """
-        Transform FVM DataFrame to structured field summaries.
+        Transform FVM DuckDB relation to structured field summaries.
 
         Args:
-            df: Raw FVM DataFrame with field boundary data
+            rel: DuckDB relation with field boundary data
 
         Returns:
             List of FieldSummary objects, one per crop type
 
         Example:
-            >>> fvm_df = loader.load_fields(cvr="31373077", year=2024)
-            >>> fields = FVMTransformer.transform(fvm_df)
+            >>> fvm_rel = loader.load_fields(cvr="31373077", year=2024)
+            >>> fields = FVMTransformer.transform(fvm_rel)
             >>> for field in fields:
             ...     print(f"{field.crop_type}: {field.total_area_ha:.1f} ha")
             winter_wheat: 45.2 ha
             grass: 28.5 ha
         """
-        if df is None or df.empty:
-            logger.warning("Empty field DataFrame provided")
+        if rel is None:
+            logger.warning("Empty field relation provided")
             return []
 
-        # Validate required columns
-        # FVM data may use different column names depending on version
+        # Get column names
+        columns = rel.columns
+
+        # Check for area column variants
         area_col = None
         crop_col = None
 
-        # Check for area column variants
-        if "areal_ha" in df.columns:
+        if "areal_ha" in columns:
             area_col = "areal_ha"
-        elif "area_ha" in df.columns:
+        elif "area_ha" in columns:
             area_col = "area_ha"
-        elif "areal" in df.columns:
+        elif "areal" in columns:
             area_col = "areal"
 
         # Check for crop column variants
-        if "afgroede" in df.columns:
+        if "afgroede" in columns:
             crop_col = "afgroede"
-        elif "crop_name" in df.columns:
+        elif "crop_name" in columns:
             crop_col = "crop_name"
-        elif "afgroedekode" in df.columns:
+        elif "afgroedekode" in columns:
             crop_col = "afgroedekode"
 
         # Check for crop_code column (FVM uses Afgkode -> crop_code mapping)
         crop_code_col = None
-        if "crop_code" in df.columns:
+        if "crop_code" in columns:
             crop_code_col = "crop_code"
-        elif "afgkode" in df.columns:
+        elif "afgkode" in columns:
             crop_code_col = "afgkode"
-        elif "afgroede_kode" in df.columns:
+        elif "afgroede_kode" in columns:
             crop_code_col = "afgroede_kode"
 
         if not area_col or not crop_col:
-            logger.error(f"Missing required columns. Available: {df.columns.tolist()}")
+            logger.error(f"Missing required columns. Available: {columns}")
             logger.error(
-                f"Looking for area column (areal_ha/area_ha/areal) and crop column (afgroede/crop_name/afgroedekode)"
+                "Looking for area column (areal_ha/area_ha/areal) and crop column (afgroede/crop_name/afgroedekode)"
             )
             return []
 
-        # Handle missing or invalid data
-        df_clean = df.copy()
-        df_clean[area_col] = pd.to_numeric(df_clean[area_col], errors="coerce").fillna(0)
-
-        # Convert crop_code to numeric if present
-        if crop_code_col:
-            df_clean[crop_code_col] = pd.to_numeric(df_clean[crop_code_col], errors="coerce")
+        # Check if relation has any rows
+        row_count = rel.count("*").fetchone()[0]
+        if row_count == 0:
+            logger.warning("Empty field relation provided")
+            return []
 
         results = []
 
         # Group by crop_code if available (more reliable), otherwise by crop name
         group_col = crop_code_col if crop_code_col else crop_col
 
-        for group_value, group in df_clean.groupby(group_col):
-            # Map Danish crop name to English
+        # Execute aggregation using the relation
+        agg_result = rel.aggregate(
+            f"""
+            {group_col} as group_value,
+            COALESCE(SUM(TRY_CAST({area_col} AS DOUBLE)), 0) as total_area,
+            COUNT(*) as field_count
+            """
+        ).fetchall()
+
+        # Also get crop names for each group if grouping by code
+        if crop_code_col and group_col == crop_code_col:
+            # Get distinct crop names per code
+            crop_names_query = rel.select(f"DISTINCT {crop_code_col}, {crop_col}").fetchall()
+            crop_names_map = {row[0]: row[1] for row in crop_names_query if row[0] is not None}
+        else:
+            crop_names_map = {}
+
+        for row in agg_result:
+            group_value = row[0]
+            total_area = float(row[1]) if row[1] else 0.0
+            field_count = int(row[2]) if row[2] else 0
+
+            if group_value is None:
+                continue
+
+            # Get crop Danish name
             if crop_code_col and group_col == crop_code_col:
-                # Get crop name from group (may have duplicates, take first non-null)
-                crop_names = group[crop_col].dropna().unique()
-                crop_danish = crop_names[0] if len(crop_names) > 0 else str(group_value)
-                crop_code = int(group_value) if pd.notna(group_value) else None
+                crop_danish = crop_names_map.get(group_value, str(group_value))
+                crop_code = int(group_value) if group_value is not None else None
             else:
                 crop_danish = group_value
-                # Try to get crop_code from group if column exists
-                if crop_code_col:
-                    codes = group[crop_code_col].dropna().unique()
-                    crop_code = int(codes[0]) if len(codes) > 0 and pd.notna(codes[0]) else None
-                else:
-                    crop_code = None
+                crop_code = None
 
-            crop_english = FVMTransformer.CROP_MAPPING.get(str(crop_danish), str(crop_danish).lower().replace(" ", "_"))
-
-            total_area = float(group[area_col].sum())
-            field_count = len(group)
+            # Map Danish crop name to English
+            crop_english = FVMTransformer.CROP_MAPPING.get(
+                str(crop_danish), str(crop_danish).lower().replace(" ", "_")
+            )
 
             summary = FieldSummary(
                 crop_type=crop_english,
                 total_area_ha=total_area,
                 field_count=field_count,
-                crop_code=crop_code
+                crop_code=crop_code,
             )
 
             results.append(summary)
@@ -530,7 +603,7 @@ class FVMTransformer:
         return results
 
     @staticmethod
-    def get_total_area(field_summaries: List[FieldSummary]) -> float:
+    def get_total_area(field_summaries: list[FieldSummary]) -> float:
         """
         Calculate total field area across all crops.
 
@@ -543,18 +616,17 @@ class FVMTransformer:
         return sum(fs.total_area_ha for fs in field_summaries)
 
     @staticmethod
-    def get_crop_breakdown(field_summaries: List[FieldSummary]) -> pd.DataFrame:
+    def get_crop_breakdown(field_summaries: list[FieldSummary]) -> list[dict]:
         """
-        Convert field summaries to a readable DataFrame.
+        Convert field summaries to a list of dictionaries (for DuckDB/parquet).
 
         Args:
             field_summaries: Output from transform()
 
         Returns:
-            DataFrame with columns: crop_type, total_area_ha, field_count
+            List of dicts with crop breakdown data
         """
-        rows = [fs.to_dict() for fs in field_summaries]
-        return pd.DataFrame(rows)
+        return [fs.to_dict() for fs in field_summaries]
 
 
 class IntegratedFarmTransformer:
@@ -567,18 +639,18 @@ class IntegratedFarmTransformer:
 
     @staticmethod
     def transform_all(
-        livestock_df: Optional[pd.DataFrame],
-        field_df: Optional[pd.DataFrame],
-        fertilizer_df: Optional[pd.DataFrame],
-        organic_status: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        livestock_rel: duckdb.DuckDBPyRelation | None,
+        field_rel: duckdb.DuckDBPyRelation | None,
+        fertilizer_rel: duckdb.DuckDBPyRelation | None,
+        organic_status: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Transform all farm data sources into integrated structure.
 
         Args:
-            livestock_df: Raw Green Accounts livestock data
-            field_df: Raw FVM field data
-            fertilizer_df: Raw GKEA fertilizer data
+            livestock_rel: DuckDB relation with Green Accounts livestock data
+            field_rel: DuckDB relation with FVM field data
+            fertilizer_rel: DuckDB relation with GKEA fertilizer data
             organic_status: Optional dict with organic certification status from load_organic_certification()
 
         Returns:
@@ -609,21 +681,15 @@ class IntegratedFarmTransformer:
             {'has_organic_fields': True, 'is_organic_livestock': True}
         """
         # Transform each data source
-        livestock = (
-            GreenAccountsTransformer.transform(livestock_df)
-            if livestock_df is not None and not livestock_df.empty
-            else {}
-        )
+        livestock = GreenAccountsTransformer.transform(livestock_rel) if livestock_rel else {}
 
-        fields = FVMTransformer.transform(field_df) if field_df is not None and not field_df.empty else []
+        fields = FVMTransformer.transform(field_rel) if field_rel else []
 
-        fertilizer = (
-            GKEATransformer.transform(fertilizer_df) if fertilizer_df is not None and not fertilizer_df.empty else None
-        )
+        fertilizer = GKEATransformer.transform(fertilizer_rel) if fertilizer_rel else None
 
         # Apply organic status to livestock if detected
-        if organic_status and organic_status.get('is_organic_livestock', False):
-            logger.info(f"Applying organic production system to livestock")
+        if organic_status and organic_status.get("is_organic_livestock", False):
+            logger.info("Applying organic production system to livestock")
             for species, summary in livestock.items():
                 summary.production_system = "organic"
                 logger.debug(f"  {species}: production_system = organic")
@@ -638,10 +704,9 @@ class IntegratedFarmTransformer:
             "total_area_ha": total_area,
             "livestock_species": list(livestock.keys()),
             "crop_types": [f.crop_type for f in fields],
-            "organic_status": organic_status if organic_status else {
-                'has_organic_fields': False,
-                'is_organic_livestock': False
-            }
+            "organic_status": organic_status
+            if organic_status
+            else {"has_organic_fields": False, "is_organic_livestock": False},
         }
 
         result = {
@@ -655,7 +720,7 @@ class IntegratedFarmTransformer:
         return result
 
     @staticmethod
-    def to_farm_data_object(integrated_data: Dict[str, Any]) -> "FarmData":
+    def to_farm_data_object(integrated_data: dict[str, Any]) -> "FarmData":
         """
         Convert integrated data structure to FarmData object for calculator.
 
@@ -721,16 +786,16 @@ if __name__ == "__main__":
     print(f"Data Transformation Example: CVR {cvr}, Year {year}")
     print(f"{'=' * 60}\n")
 
-    # Load raw data
+    # Load raw data (returns DuckDB relations)
     print("1. Loading raw data from GCS...")
-    livestock_df = loader.load_livestock(cvr=cvr, year=year)
-    field_df = loader.load_fields(cvr=cvr, year=2024)  # Use 2024 for fields
-    fertilizer_df = loader.load_fertilizer(cvr=cvr, year=2024)
+    livestock_rel = loader.load_livestock(cvr=cvr, year=year)
+    field_rel = loader.load_fields(cvr=cvr, year=2024)  # Use 2024 for fields
+    fertilizer_rel = loader.load_fertilizer(cvr=cvr, year=2024)
 
     # Transform livestock data
     print("\n2. Transforming livestock data...")
-    if not livestock_df.empty:
-        livestock = GreenAccountsTransformer.transform(livestock_df)
+    if livestock_rel is not None:
+        livestock = GreenAccountsTransformer.transform(livestock_rel)
         for species, summary in livestock.items():
             print(f"\n{species.upper()}:")
             print(f"  Total Count: {summary.total_count}")
@@ -739,8 +804,8 @@ if __name__ == "__main__":
 
     # Transform field data
     print("\n3. Transforming field data...")
-    if not field_df.empty:
-        fields = FVMTransformer.transform(field_df)
+    if field_rel is not None:
+        fields = FVMTransformer.transform(field_rel)
         print(f"\nTotal Area: {FVMTransformer.get_total_area(fields):.1f} ha")
         print(f"Crop Types: {len(fields)}")
         for field in fields[:5]:  # Show first 5
@@ -748,8 +813,8 @@ if __name__ == "__main__":
 
     # Transform fertilizer data
     print("\n4. Transforming fertilizer data...")
-    if not fertilizer_df.empty:
-        fertilizer = GKEATransformer.transform(fertilizer_df)
+    if fertilizer_rel is not None:
+        fertilizer = GKEATransformer.transform(fertilizer_rel)
         if fertilizer:
             print(f"\nTotal N Applied: {fertilizer.total_n_kg:.1f} kg")
             print(f"Total Area: {fertilizer.total_area_ha:.1f} ha")
@@ -762,8 +827,8 @@ if __name__ == "__main__":
 
     # Integrated transformation
     print("\n5. Integrated transformation...")
-    integrated = IntegratedFarmTransformer.transform_all(livestock_df, field_df, fertilizer_df)
-    print(f"\nFarm Metadata:")
+    integrated = IntegratedFarmTransformer.transform_all(livestock_rel, field_rel, fertilizer_rel)
+    print("\nFarm Metadata:")
     for key, value in integrated["metadata"].items():
         print(f"  {key}: {value}")
 

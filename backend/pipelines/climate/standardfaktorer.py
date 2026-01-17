@@ -13,9 +13,8 @@ used as defaults when actual farm data is unavailable.
 """
 
 import json
-from pathlib import Path
-from typing import Dict, Optional, Tuple
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -30,6 +29,7 @@ class StandardFaktor:
         source: Source reference with page number
         data_quality: Quality indicator ("standard" for standardfaktorer)
     """
+
     fe_value: float
     system_type: str
     description: str
@@ -45,7 +45,7 @@ class StandardfaktorerLookup:
     lookup methods for different animal types and production systems.
     """
 
-    def __init__(self, reference_file: Optional[str] = None):
+    def __init__(self, reference_file: str | None = None):
         """
         Initialize the standardfaktorer lookup.
 
@@ -57,7 +57,7 @@ class StandardfaktorerLookup:
             module_dir = Path(__file__).parent
             reference_file = module_dir / "reference_values" / "standardfaktorer_dyr.json"
 
-        with open(reference_file, 'r', encoding='utf-8') as f:
+        with open(reference_file, encoding="utf-8") as f:
             self.data = json.load(f)
 
         self.source_info = {
@@ -65,14 +65,12 @@ class StandardfaktorerLookup:
             "source": self.data.get("source"),
             "page": self.data.get("source_page"),
             "date": self.data.get("source_date"),
-            "organization": self.data.get("source_organization")
+            "organization": self.data.get("source_organization"),
         }
 
     def get_pig_standardfaktor(
-        self,
-        pig_type: str,
-        production_system: str = "conventional"
-    ) -> Tuple[Optional[StandardFaktor], Dict[str, any]]:
+        self, pig_type: str, production_system: str = "conventional"
+    ) -> tuple[StandardFaktor | None, dict[str, any]]:
         """
         Get standardfaktor for a specific pig type and production system.
 
@@ -110,7 +108,7 @@ class StandardfaktorerLookup:
                 system_type=pig_data["system_type"],
                 description=pig_data["description"],
                 source=pig_data["source"],
-                data_quality="standard"
+                data_quality="standard",
             )
 
             # Build metadata
@@ -120,7 +118,7 @@ class StandardfaktorerLookup:
                 "source_page": self.source_info["page"],
                 "system_type": pig_data["system_type"],
                 "data_quality": "standard",
-                "note": "Using Danish standardfaktor (national average)"
+                "note": "Using Danish standardfaktor (national average)",
             }
 
             # Add additional parameters if present
@@ -134,15 +132,12 @@ class StandardfaktorerLookup:
         except KeyError as e:
             return None, {
                 "error": f"Standardfaktor not found for {pig_type} / {production_system}",
-                "exception": str(e)
+                "exception": str(e),
             }
 
     def get_cattle_standardfaktor(
-        self,
-        cattle_type: str,
-        breed: str = "heavy_breed",
-        production_system: str = "conventional"
-    ) -> Tuple[Optional[StandardFaktor], Dict[str, any]]:
+        self, cattle_type: str, breed: str = "heavy_breed", production_system: str = "conventional"
+    ) -> tuple[StandardFaktor | None, dict[str, any]]:
         """
         Get standardfaktor for a specific cattle type, breed, and production system.
 
@@ -183,7 +178,7 @@ class StandardfaktorerLookup:
                 system_type=cattle_data["system_type"],
                 description=cattle_data["description"],
                 source=cattle_data["source"],
-                data_quality=cattle_data.get("data_quality", "standard")
+                data_quality=cattle_data.get("data_quality", "standard"),
             )
 
             metadata = {
@@ -191,7 +186,7 @@ class StandardfaktorerLookup:
                 "source_document": self.source_info["source"],
                 "system_type": cattle_data["system_type"],
                 "data_quality": cattle_data.get("data_quality", "standard"),
-                "unit": "kg TS/day"
+                "unit": "kg TS/day",
             }
 
             # Add milk production if available
@@ -200,21 +195,21 @@ class StandardfaktorerLookup:
 
             # Add warning if estimated
             if cattle_data.get("data_quality") == "estimated":
-                metadata["warning"] = "Using estimated value - awaiting Tables 2a-2f extraction from KB_21_5397_AP2"
+                metadata["warning"] = (
+                    "Using estimated value - awaiting Tables 2a-2f extraction from KB_21_5397_AP2"
+                )
 
             return faktor, metadata
 
         except KeyError as e:
             return None, {
                 "error": f"Standardfaktor not found for {cattle_type} / {breed} / {production_system}",
-                "exception": str(e)
+                "exception": str(e),
             }
 
     def get_feed_energy_conversion(
-        self,
-        animal_category: str,
-        animal_type: str
-    ) -> Tuple[Optional[float], Dict[str, any]]:
+        self, animal_category: str, animal_type: str
+    ) -> tuple[float | None, dict[str, any]]:
         """
         Get MJ per FE conversion factor for a specific animal type.
 
@@ -238,7 +233,7 @@ class StandardfaktorerLookup:
             metadata = {
                 "source": conversion_data["source"],
                 "description": conversion_data["description"],
-                "data_quality": "standard"
+                "data_quality": "standard",
             }
 
             return mj_per_fe, metadata
@@ -246,7 +241,7 @@ class StandardfaktorerLookup:
         except KeyError as e:
             return None, {
                 "error": f"Feed energy conversion not found for {animal_category} / {animal_type}",
-                "exception": str(e)
+                "exception": str(e),
             }
 
     def list_available_pig_types(self) -> list:
@@ -267,7 +262,7 @@ class StandardfaktorerLookup:
         """
         return list(self.data["data"]["kvæg"].keys())
 
-    def get_source_info(self) -> Dict[str, str]:
+    def get_source_info(self) -> dict[str, str]:
         """
         Get information about the standardfaktorer source document.
 
@@ -280,6 +275,7 @@ class StandardfaktorerLookup:
 # Convenience functions for direct access
 
 _lookup = None
+
 
 def get_lookup() -> StandardfaktorerLookup:
     """
@@ -294,7 +290,9 @@ def get_lookup() -> StandardfaktorerLookup:
     return _lookup
 
 
-def lookup_pig_fe(pig_type: str, production_system: str = "conventional") -> Tuple[Optional[float], Dict]:
+def lookup_pig_fe(
+    pig_type: str, production_system: str = "conventional"
+) -> tuple[float | None, dict]:
     """
     Convenience function to lookup pig FE value.
 
@@ -317,8 +315,9 @@ def lookup_pig_fe(pig_type: str, production_system: str = "conventional") -> Tup
     return None, metadata
 
 
-def lookup_cattle_ts(cattle_type: str, breed: str = "heavy_breed",
-                      production_system: str = "conventional") -> Tuple[Optional[float], Dict]:
+def lookup_cattle_ts(
+    cattle_type: str, breed: str = "heavy_breed", production_system: str = "conventional"
+) -> tuple[float | None, dict]:
     """
     Convenience function to lookup cattle TS (dry matter) per day.
 

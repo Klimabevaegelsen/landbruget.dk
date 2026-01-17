@@ -1,4 +1,6 @@
-def beregn_co2e_hjemmeavlet_slagtekyllinger(t_total: float, a_x: float, i_x: float, co2e_x: float) -> float:
+def beregn_co2e_hjemmeavlet_slagtekyllinger(
+    t_total: float, a_x: float, i_x: float, co2e_x: float
+) -> float:
     """
     Beregner CO2e fra hjemmeavlet hel hvede/råvarer til slagtekyllinger.
 
@@ -17,10 +19,12 @@ def beregn_co2e_hjemmeavlet_slagtekyllinger(t_total: float, a_x: float, i_x: flo
     # However, the description says "Andelen af indkøbt hel hvede/råvarer i foderet (resterende antages som værende hjemmeavlet)"
     # This suggests i_x is the proportion *of that specific component* that is purchased.
     # The formula given is T_total * A_X * (100% - I_X) * CO2e_X. If I_X is % purchased, then (1-I_X) is % homegrown.
-    co2e_hjemme = t_total * a_x * (1.0 - i_x) * co2e_x
-    return co2e_hjemme
+    return t_total * a_x * (1.0 - i_x) * co2e_x
 
-def beregn_co2e_hjemmeavlet_hoener(m_korn: float, i_korn: float, co2e_korn: float, a_hoene: float) -> float:
+
+def beregn_co2e_hjemmeavlet_hoener(
+    m_korn: float, i_korn: float, co2e_korn: float, a_hoene: float
+) -> float:
     """
     Beregner CO2e fra hjemmeavlet korn til høner.
 
@@ -33,5 +37,4 @@ def beregn_co2e_hjemmeavlet_hoener(m_korn: float, i_korn: float, co2e_korn: floa
     Returns:
         CO2e fra hjemmeavlet foder (kg CO2e).
     """
-    co2e_hjemme = ((m_korn - i_korn) * co2e_korn) / a_hoene
-    return co2e_hjemme
+    return ((m_korn - i_korn) * co2e_korn) / a_hoene

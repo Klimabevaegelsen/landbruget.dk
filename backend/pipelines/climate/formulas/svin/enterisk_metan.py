@@ -6,9 +6,8 @@ Based on:
 - Table 4 & 5: Danish standard values for pig feed energy
 """
 
-from typing import Dict, Optional
-from pathlib import Path
 import json
+from pathlib import Path
 
 # GWP for CH4 (IPCC AR6, 100-year)
 # Note: AR4 uses 25, but we use AR6 (27) for biogenic CH4
@@ -16,14 +15,20 @@ import json
 GWP_CH4 = 27
 
 
-def load_reference_values() -> tuple[Dict, Dict]:
+def load_reference_values() -> tuple[dict, dict]:
     """Load reference values from JSON tables."""
     base_path = Path(__file__).parent.parent.parent / "reference_values"
 
-    with open(base_path / "tabel_4_standardværdierne_for_fe_pr_dyretype_svineproduktion_-_fordøjelse_side_27-28.json") as f:
+    with open(
+        base_path
+        / "tabel_4_standardværdierne_for_fe_pr_dyretype_svineproduktion_-_fordøjelse_side_27-28.json"
+    ) as f:
         table_4 = json.load(f)
 
-    with open(base_path / "tabel_5_yderligere_input_til_beregning_af_udledningen_af_metan_fra_svins_fordøjelse_side_28.json") as f:
+    with open(
+        base_path
+        / "tabel_5_yderligere_input_til_beregning_af_udledningen_af_metan_fra_svins_fordøjelse_side_28.json"
+    ) as f:
         table_5 = json.load(f)
 
     # Parse Table 4 - FE per animal type
@@ -71,8 +76,8 @@ def calculate_ch4_enteric_svin(
     dyretype: str,
     antal_dyr: float,
     is_organic: bool = False,
-    weight_gain_kg: Optional[float] = None
-) -> Dict[str, float]:
+    weight_gain_kg: float | None = None,
+) -> dict[str, float]:
     """
     Calculate CH4 emissions from pig enteric fermentation (IPCC Tier 1).
 
@@ -142,7 +147,9 @@ def calculate_ch4_enteric_svin(
         mj_per_fe = MJ_PER_FE["slagtesvin"]
 
     else:
-        raise ValueError(f"Unknown pig type: {dyretype}. Must be one of: søer, smågrise, slagtesvin, frats")
+        raise ValueError(
+            f"Unknown pig type: {dyretype}. Must be one of: søer, smågrise, slagtesvin, frats"
+        )
 
     # Calculate gross energy intake (MJ/year)
     gross_energy_mj = antal_dyr * fe_per_animal * mj_per_fe
@@ -162,7 +169,9 @@ def calculate_ch4_enteric_svin(
     }
 
 
-def calculate_all_pig_types(livestock_data: Dict[str, int], is_organic: bool = False) -> Dict[str, Dict[str, float]]:
+def calculate_all_pig_types(
+    livestock_data: dict[str, int], is_organic: bool = False
+) -> dict[str, dict[str, float]]:
     """
     Calculate enteric CH4 for all pig types in a farm.
 
@@ -209,17 +218,17 @@ if __name__ == "__main__":
 
     # Test 1: Conventional sows
     result = calculate_ch4_enteric_svin("søer", 200, is_organic=False)
-    print(f"200 conventional sows:")
+    print("200 conventional sows:")
     print(f"  CH4: {result['ch4_kg']:.2f} kg/year")
     print(f"  CO2e: {result['co2e_kg']:.2f} kg/year")
-    print(f"  Per sow: {result['co2e_kg']/200:.2f} kg CO2e/year\n")
+    print(f"  Per sow: {result['co2e_kg'] / 200:.2f} kg CO2e/year\n")
 
     # Test 2: Conventional finishers
     result = calculate_ch4_enteric_svin("slagtesvin", 1000, is_organic=False)
-    print(f"1000 conventional finishers:")
+    print("1000 conventional finishers:")
     print(f"  CH4: {result['ch4_kg']:.2f} kg/year")
     print(f"  CO2e: {result['co2e_kg']:.2f} kg/year")
-    print(f"  Per pig: {result['co2e_kg']/1000:.2f} kg CO2e/year\n")
+    print(f"  Per pig: {result['co2e_kg'] / 1000:.2f} kg CO2e/year\n")
 
     # Test 3: Full farm
     farm_data = {
@@ -231,4 +240,4 @@ if __name__ == "__main__":
     print("Full farm (200 sows, 500 weaners, 1500 finishers):")
     print(f"  Total CH4: {results['total']['ch4_kg']:.2f} kg/year")
     print(f"  Total CO2e: {results['total']['co2e_kg']:.2f} kg/year")
-    print(f"  Per animal: {results['total']['co2e_kg']/(200+500+1500):.2f} kg CO2e/year")
+    print(f"  Per animal: {results['total']['co2e_kg'] / (200 + 500 + 1500):.2f} kg CO2e/year")

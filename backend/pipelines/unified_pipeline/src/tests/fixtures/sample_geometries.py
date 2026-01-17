@@ -5,8 +5,6 @@ This module provides realistic sample data that mimics the structure
 of actual pipeline datasets without requiring access to production data.
 """
 
-from typing import Dict
-
 import duckdb
 
 
@@ -20,7 +18,7 @@ def create_sample_fvm_marker_data(conn: duckdb.DuckDBPyConnection) -> None:
             'BLOCK001' as block_id,
             ST_GeomFromText(
                 'POLYGON((12.0 55.0, 12.1 55.0, 12.1 55.1, 12.0 55.1, 12.0 55.0))'
-            ) as geom,
+            ) as geometry,
             2024 as year
         UNION ALL
         SELECT
@@ -29,7 +27,7 @@ def create_sample_fvm_marker_data(conn: duckdb.DuckDBPyConnection) -> None:
             'BLOCK002' as block_id,
             ST_GeomFromText(
                 'POLYGON((10.5 56.2, 10.6 56.2, 10.6 56.3, 10.5 56.3, 10.5 56.2))'
-            ) as geom,
+            ) as geometry,
             2024 as year
         UNION ALL
         SELECT
@@ -38,7 +36,7 @@ def create_sample_fvm_marker_data(conn: duckdb.DuckDBPyConnection) -> None:
             'BLOCK003' as block_id,
             ST_GeomFromText(
                 'POLYGON((11.8 55.8, 11.9 55.8, 11.9 55.9, 11.8 55.9, 11.8 55.8))'
-            ) as geom,
+            ) as geometry,
             2024 as year
     """)
 
@@ -167,7 +165,7 @@ def create_wrong_coordinate_samples(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 # Utility function to create all sample datasets
-def setup_all_sample_datasets(conn: duckdb.DuckDBPyConnection) -> Dict[str, str]:
+def setup_all_sample_datasets(conn: duckdb.DuckDBPyConnection) -> dict[str, str]:
     """
     Create all sample datasets for testing.
 
@@ -198,7 +196,7 @@ def setup_all_sample_datasets(conn: duckdb.DuckDBPyConnection) -> Dict[str, str]
     }
 
 
-def get_expected_coordinate_orders() -> Dict[str, bool]:
+def get_expected_coordinate_orders() -> dict[str, bool]:
     """
     Return expected coordinate order results for sample datasets.
 

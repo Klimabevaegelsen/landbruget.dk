@@ -1,8 +1,9 @@
 """Module for loading CHR Besætning data (Herds) - Bronze Layer."""
 
+import contextlib
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from zeep import Client
 from zeep.exceptions import Fault
@@ -23,7 +24,9 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_besaetnin
 # --- Generic SOAP Fetcher ---
 
 
-def fetch_raw_soap_response(client: Client, operation_name: str, request_structure: Dict) -> Optional[Any]:
+def fetch_raw_soap_response(
+    client: Client, operation_name: str, request_structure: dict
+) -> Any | None:
     """Fetch raw response from a SOAP endpoint using Zeep."""
     # Note: Consider moving this to a shared utility module later
     try:
@@ -48,8 +51,8 @@ def load_herd_list(
     username: str,
     species_code: int,
     usage_code: int,
-    start_herd_number: Optional[int] = None,
-) -> Tuple[List[int], bool, Optional[int]]:
+    start_herd_number: int | None = None,
+) -> tuple[list[int], bool, int | None]:
     """
     Fetches a list of herd numbers for a given species and usage code,
     handling pagination.
@@ -79,7 +82,9 @@ def load_herd_list(
     # --- Construct the request structure precisely according to WSDL/XSD ---
     try:
         # 1. Get the factory for the innermost request parameters type
-        request_params_factory = besaetning_client.get_type("ns0:CHR_besaetningListBesaetningerMedBrugsartRequestType")
+        request_params_factory = besaetning_client.get_type(
+            "ns0:CHR_besaetningListBesaetningerMedBrugsartRequestType"
+        )
         request_params = request_params_factory(
             DyreArtKode=species_code, BrugsArtKode=usage_code, FraBesNr=start_herd_number
         )
@@ -163,7 +168,9 @@ def load_herd_list(
         else:
             logger.warning("Response attribute not found in the SOAP response object.")
 
-        logger.info(f"Found {len(herd_list)} herds. Has More: {has_more}. Last Herd: {last_herd_in_batch}")
+        logger.info(
+            f"Found {len(herd_list)} herds. Has More: {has_more}. Last Herd: {last_herd_in_batch}"
+        )
         # Return herd_list, has_more (bool), and last_herd_in_batch (int or None)
         return herd_list, has_more, last_herd_in_batch
         # --- End Parsing Logic ---
@@ -178,7 +185,9 @@ def load_herd_list(
         return [], False, None
 
 
-def load_herd_details(client: Client, username: str, herd_number: int, species_code: int) -> Optional[Any]:
+def load_herd_details(
+    client: Client, username: str, herd_number: int, species_code: int
+) -> Any | None:
     """Load detailed information for a specific herd using 'hentStamoplysninger'."""
     logger.info(f"Fetching details for Herd: {herd_number}, Species: {species_code}...")
 
@@ -209,19 +218,22 @@ def load_herd_details(client: Client, username: str, herd_number: int, species_c
         operation_name = "hentStamoplysninger"  # Confirmed operation name
 
         # Pass the payload dictionary as the argument
-        response = client.service.hentStamoplysninger(CHR_besaetningHentStamoplysningerRequest=payload_content)
+        response = client.service.hentStamoplysninger(
+            CHR_besaetningHentStamoplysningerRequest=payload_content
+        )
 
         if not response:
-            logger.warning(f"No response received for {operation_name} (Herd: {herd_number}, Species: {species_code})")
-            return None  # Return None if no response
-        else:
-            # Save the raw response using the updated function call signature
-            save_raw_data(
-                raw_response=response,  # Pass the raw Zeep object
-                data_type="besaetning_details",
-                identifier=f"{herd_number}_{species_code}",
+            logger.warning(
+                f"No response received for {operation_name} (Herd: {herd_number}, Species: {species_code})"
             )
-            return response  # Return the raw Zeep response object
+            return None  # Return None if no response
+        # Save the raw response using the updated function call signature
+        save_raw_data(
+            raw_response=response,  # Pass the raw Zeep object
+            data_type="besaetning_details",
+            identifier=f"{herd_number}_{species_code}",
+        )
+        return response  # Return the raw Zeep response object
 
     except Fault as f:
         logger.error(f"Fault occurred in load_herd_details: {f}", exc_info=True)
@@ -238,7 +250,9 @@ if __name__ == "__main__":
 
     # Parameters for testing hentStamoplysninger
     TEST_SPECIES_CODE = 15  # Example: Pigs
-    TEST_HERD_NUMBER = 5392  # Replace with a real, stable herd number known to exist for the species/usage
+    TEST_HERD_NUMBER = (
+        5392  # Replace with a real, stable herd number known to exist for the species/usage
+    )
 
     try:
         username, password, certificate, private_key = get_fvm_credentials()
@@ -248,7 +262,9 @@ if __name__ == "__main__":
         logger.info(
             f"\n--- Testing load_herd_details ONLY (Herd: {TEST_HERD_NUMBER}, Species: {TEST_SPECIES_CODE}) ---"
         )
-        herd_details_raw = load_herd_details(besaetning_client, username, TEST_HERD_NUMBER, TEST_SPECIES_CODE)
+        herd_details_raw = load_herd_details(
+            besaetning_client, username, TEST_HERD_NUMBER, TEST_SPECIES_CODE
+        )
 
         if herd_details_raw:
             logger.info(
@@ -265,19 +281,23 @@ if __name__ == "__main__":
                     besaetning_info = response_body[0].get("Besaetning", None)
                     if besaetning_info:
                         ejendom_list = besaetning_info.get("Ejendom", [])
-                        if ejendom_list and isinstance(ejendom_list, list) and len(ejendom_list) > 0:
+                        if (
+                            ejendom_list
+                            and isinstance(ejendom_list, list)
+                            and len(ejendom_list) > 0
+                        ):
                             chr_number_str = ejendom_list[0].get("CHRNummer")
                             if chr_number_str:
-                                try:
+                                with contextlib.suppress(ValueError, TypeError):
                                     chr_number = int(chr_number_str)
-                                except (ValueError, TypeError):
-                                    pass
                 logger.info(f"Attempted CHR extraction from test response: {chr_number}")
 
             except Exception as ser_err:
                 logger.error(f"Could not serialize/inspect test response: {ser_err}")
         else:
-            logger.warning(f"load_herd_details returned None or empty for test herd {TEST_HERD_NUMBER}.")
+            logger.warning(
+                f"load_herd_details returned None or empty for test herd {TEST_HERD_NUMBER}."
+            )
         # --- End hentStamoplysninger ONLY test ---
 
         # --- Commented out listBesaetningerMedBrugsart test ---

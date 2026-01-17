@@ -9,7 +9,7 @@ if "load_json_data" not in globals():
         base_path = Path(__file__).resolve().parent.parent.parent / "reference_values"
         full_path = base_path / file_path
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             print(f"Error: JSON file not found at {full_path}")
@@ -26,7 +26,11 @@ if "EF_N2O_GENERAL" not in globals():
             "tabel_19_ammoniak-emissionerne_fra_udbringning_af_organisk_gødning_side_75-76.json"
         )
         ef_n2o_general_val = 0.01  # Default
-        if tabel_19_data and isinstance(tabel_19_data.get("data"), list) and len(tabel_19_data["data"]) > 0:
+        if (
+            tabel_19_data
+            and isinstance(tabel_19_data.get("data"), list)
+            and len(tabel_19_data["data"]) > 0
+        ):
             ef_n2o_general_val = tabel_19_data["data"][0].get("EF_N2O", 0.01)
         EF_N2O_GENERAL = float(ef_n2o_general_val)
         if EF_N2O_GENERAL == 0.0:
@@ -36,7 +40,9 @@ if "EF_N2O_GENERAL" not in globals():
         EF_N2O_GENERAL = 0.01  # Fallback
 
 
-def beregn_nh3_lager_fjerkrae(l_nh3: float, lambda_fjer: float, d: float, f_fast_laag_reduktion: float = 1.0) -> float:
+def beregn_nh3_lager_fjerkrae(
+    l_nh3: float, lambda_fjer: float, d: float, f_fast_laag_reduktion: float = 1.0
+) -> float:
     """
     Beregner ammoniak (NH3) udledning fra lageret for fjerkræ.
 
@@ -53,8 +59,7 @@ def beregn_nh3_lager_fjerkrae(l_nh3: float, lambda_fjer: float, d: float, f_fast
     Returns:
         NH3 udledning fra lager (kg NH3).
     """
-    nh3_lager = (l_nh3 / lambda_fjer) * d * f_fast_laag_reduktion
-    return nh3_lager
+    return (l_nh3 / lambda_fjer) * d * f_fast_laag_reduktion
 
 
 def beregn_co2e_nh3_lager_fjerkrae(nh3_lager: float, theta_n2o_co2: float) -> float:
@@ -69,11 +74,10 @@ def beregn_co2e_nh3_lager_fjerkrae(nh3_lager: float, theta_n2o_co2: float) -> fl
     Returns:
         CO2e fra NH3 lager (kg CO2e).
     """
-    co2e_nh3 = nh3_lager * (44.0 / 28.0) * EF_N2O_GENERAL * theta_n2o_co2
-    return co2e_nh3
+    return nh3_lager * (44.0 / 28.0) * EF_N2O_GENERAL * theta_n2o_co2
 
 
-def beregn_n2o_lager_fjerkrae(l_n2o_kg_N_potential: float, lambda_fjer: float, d: float) -> float:
+def beregn_n2o_lager_fjerkrae(l_n2o_kg_N_potential: float, lambda_fjer: float, d: float) -> float:  # noqa: N803
     """
     Beregner lattergas (N2O) udledning fra lageret for fjerkræ, som kg N.
 
@@ -85,8 +89,7 @@ def beregn_n2o_lager_fjerkrae(l_n2o_kg_N_potential: float, lambda_fjer: float, d
     Returns:
         N2O udledning fra lager (kg N der bliver til N2O).
     """
-    n2o_lager_kg_n = (l_n2o_kg_N_potential / lambda_fjer) * d
-    return n2o_lager_kg_n
+    return (l_n2o_kg_N_potential / lambda_fjer) * d
 
 
 def beregn_co2e_n2o_lager_fjerkrae(n2o_lager_kg_n: float, theta_n2o_co2: float) -> float:
@@ -105,8 +108,7 @@ def beregn_co2e_n2o_lager_fjerkrae(n2o_lager_kg_n: float, theta_n2o_co2: float) 
     # N2O = 44.013 g/mol, N = 14.0067 g/mol. For N2 in N2O, it's 2*N = 28.0134
     # Faktor = 44.013 / 28.0134 approx 44/28
     kg_n2o = n2o_lager_kg_n * (44.0 / 28.0)
-    co2e_n2o = kg_n2o * theta_n2o_co2
-    return co2e_n2o
+    return kg_n2o * theta_n2o_co2
 
 
 def beregn_ch4_lager_fjerkrae(l_ch4: float, lambda_fjer: float, d: float) -> float:
@@ -121,8 +123,7 @@ def beregn_ch4_lager_fjerkrae(l_ch4: float, lambda_fjer: float, d: float) -> flo
     Returns:
         CH4 udledning fra lager (kg CH4).
     """
-    ch4_lager = (l_ch4 / lambda_fjer) * d
-    return ch4_lager
+    return (l_ch4 / lambda_fjer) * d
 
 
 def beregn_co2e_ch4_lager_fjerkrae(ch4_lager: float, theta_ch4_co2: float) -> float:
@@ -136,5 +137,4 @@ def beregn_co2e_ch4_lager_fjerkrae(ch4_lager: float, theta_ch4_co2: float) -> fl
     Returns:
         CO2e fra CH4 lager (kg CO2e).
     """
-    co2e_ch4 = ch4_lager * theta_ch4_co2
-    return co2e_ch4
+    return ch4_lager * theta_ch4_co2

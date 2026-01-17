@@ -165,9 +165,9 @@ class SchemaAdapter(DuckDBProcessor):
             # Special handling for different types
             if target_type == DataType.DATE:
                 return f"TRY_CAST({expr} AS DATE)"
-            elif target_type == DataType.TIMESTAMP:
+            if target_type == DataType.TIMESTAMP:
                 return f"TRY_CAST({expr} AS TIMESTAMP)"
-            elif target_type == DataType.BOOLEAN:
+            if target_type == DataType.BOOLEAN:
                 # Handle various boolean representations
                 return f"""
                     CASE
@@ -178,8 +178,7 @@ class SchemaAdapter(DuckDBProcessor):
                         ELSE TRY_CAST({expr} AS BOOLEAN)
                     END
                 """
-            else:
-                return f"TRY_CAST({expr} AS {duckdb_type})"
+            return f"TRY_CAST({expr} AS {duckdb_type})"
 
         return expr
 
@@ -198,14 +197,13 @@ class SchemaAdapter(DuckDBProcessor):
 
         if data_type in [DataType.STRING, DataType.GEOMETRY]:
             return f"'{default_value}'"
-        elif data_type == DataType.DATE:
+        if data_type == DataType.DATE:
             return f"DATE '{default_value}'"
-        elif data_type == DataType.TIMESTAMP:
+        if data_type == DataType.TIMESTAMP:
             return f"TIMESTAMP '{default_value}'"
-        elif data_type == DataType.BOOLEAN:
+        if data_type == DataType.BOOLEAN:
             return "true" if default_value else "false"
-        else:
-            return str(default_value)
+        return str(default_value)
 
     def validate_data_against_schema(
         self, table_name_or_data: any, table_schema: TableSchema
@@ -273,7 +271,7 @@ class SchemaAdapter(DuckDBProcessor):
                         )
 
                 except Exception as e:
-                    column_errors.append(f"Type validation error: {str(e)}")
+                    column_errors.append(f"Type validation error: {e!s}")
 
                 # Check for null values if column is required
                 if not col_schema.nullable:
@@ -289,13 +287,13 @@ class SchemaAdapter(DuckDBProcessor):
                             )
 
                     except Exception as e:
-                        column_errors.append(f"Null check error: {str(e)}")
+                        column_errors.append(f"Null check error: {e!s}")
 
                 if column_errors:
                     validation_errors[col_name] = column_errors
 
         except Exception as e:
-            validation_errors["_general"] = [f"Schema validation failed: {str(e)}"]
+            validation_errors["_general"] = [f"Schema validation failed: {e!s}"]
 
         return validation_errors
 

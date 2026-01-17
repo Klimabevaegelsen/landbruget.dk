@@ -17,7 +17,7 @@ The processing creates a comprehensive mapping between:
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import Field
 
@@ -50,7 +50,7 @@ class DSTZoneMappingConfig(BaseJobConfig):
         description="Target coordinate reference system - WGS84 for consistency",
     )
 
-    dst_mappings: Dict[str, Dict[str, Any]] = Field(
+    dst_mappings: dict[str, dict[str, Any]] = Field(
         default={
             "Hele landet": {
                 "landsdele_codes": [
@@ -107,7 +107,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
         super().__init__(config)
         self.data_conn = None  # Track which connection has the DAGI data
 
-    def _load_dagi_data(self, bronze_data: Optional[Dict[str, Any]] = None) -> None:
+    def _load_dagi_data(self, bronze_data: dict[str, Any] | None = None) -> None:
         """Load DAGI data and set the connection to use for all operations."""
         """
         Load DAGI data into DuckDB tables.
@@ -143,7 +143,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                         raw_json = bronze_data[layer]
                         data = json.loads(raw_json)
 
-                        if "features" in data and data["features"]:
+                        if data.get("features"):
                             # Convert GeoJSON features to table data
                             features_data = []
                             for feature in data["features"]:
@@ -178,9 +178,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                             # Create standardized table with spatial geometry
                             # - use layer-specific column mapping
-                            if layer == "kommuner":
-                                code_column = "kode"
-                            elif layer == "regioner":
+                            if layer == "kommuner" or layer == "regioner":
                                 code_column = "kode"
                             elif layer == "landsdele":
                                 code_column = "nuts3"  # landsdele uses nuts3 as the primary code
@@ -451,7 +449,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             self.log.error(f"Error loading DAGI data: {e}")
             raise
 
-    def _geojson_to_wkt(self, geometry: Dict) -> str:
+    def _geojson_to_wkt(self, geometry: dict) -> str:
         """Convert GeoJSON geometry to WKT format using DuckDB."""
         try:
             # Use DuckDB to convert GeoJSON to WKT
@@ -473,16 +471,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             conn = self.conn
 
             # Create DST mappings table
-            dst_mappings_data = []
-            for dst_region, mapping in self.config.dst_mappings.items():
-                for landsdel_code in mapping["landsdele_codes"]:
-                    dst_mappings_data.append(
-                        {
-                            "dst_region": dst_region,
-                            "landsdel_code": landsdel_code,
-                            "description": mapping["description"],
-                        }
-                    )
+            dst_mappings_data = [
+                {
+                    "dst_region": dst_region,
+                    "landsdel_code": landsdel_code,
+                    "description": mapping["description"],
+                }
+                for dst_region, mapping in self.config.dst_mappings.items()
+                for landsdel_code in mapping["landsdele_codes"]
+            ]
 
             # ✅ FIXED: Use pure DuckDB table creation instead of registration
             if dst_mappings_data:
@@ -586,7 +583,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             self.log.error(f"Error creating reference table: {e}")
             raise
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """
         Run the DST zone mapping processing using DuckDB.
 

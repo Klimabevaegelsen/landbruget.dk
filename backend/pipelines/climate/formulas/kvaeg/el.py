@@ -10,5 +10,4 @@ def beregn_co2e_el_kvaeg(n_ko: float, e_ko: float, o_el: float) -> float:
     Returns:
         CO2e fra el (kg CO2e).
     """
-    co2e_el = n_ko * e_ko * o_el
-    return co2e_el
+    return n_ko * e_ko * o_el

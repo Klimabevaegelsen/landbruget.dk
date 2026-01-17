@@ -55,7 +55,7 @@ def duckdb_conn():
     try:
         conn.execute("INSTALL spatial")
         conn.execute("LOAD spatial")
-    except Exception:  # noqa: S110
+    except Exception:
         # Skip if spatial extension not available in test environment
         pass
     yield conn
@@ -152,16 +152,16 @@ class TestPMTilesDataLoader:
         loader = PMTilesDataLoader(test_config, mock_gcs_access, duckdb_conn)
 
         # Mock individual loading methods
-        with patch.object(loader, "_load_fvm_marker_data", return_value="fvm_marker_2021"):
-            with patch.object(
+        with (
+            patch.object(loader, "_load_fvm_marker_data", return_value="fvm_marker_2021"),
+            patch.object(
                 loader, "_load_field_environmental_analysis", return_value="field_env_2021"
-            ):
-                with patch.object(loader, "_load_field_production", return_value="field_prod_2021"):
-                    with patch.object(
-                        loader, "_integrate_field_data", return_value="integrated_2021"
-                    ):
-                        result = await loader.load_and_integrate_field_data(2021)
-                        assert result == "integrated_2021"
+            ),
+            patch.object(loader, "_load_field_production", return_value="field_prod_2021"),
+            patch.object(loader, "_integrate_field_data", return_value="integrated_2021"),
+        ):
+            result = await loader.load_and_integrate_field_data(2021)
+            assert result == "integrated_2021"
 
 
 class TestFieldAnalysisPMTilesGenerator:
@@ -249,18 +249,20 @@ class TestCloudflareR2Uploader:
             "pmtiles/bnbo_areas.pmtiles": "/tmp/bnbo_areas.pmtiles",
         }
 
-        with patch.object(uploader, "list_existing_pmtiles", return_value=existing_files):
-            with patch.object(uploader, "delete_pmtiles", return_value=True) as mock_delete:
-                cleanup_results = await uploader.cleanup_old_pmtiles(current_files, keep_versions=2)
+        with (
+            patch.object(uploader, "list_existing_pmtiles", return_value=existing_files),
+            patch.object(uploader, "delete_pmtiles", return_value=True) as mock_delete,
+        ):
+            cleanup_results = await uploader.cleanup_old_pmtiles(current_files, keep_versions=2)
 
-                # Should delete old field analysis files (keeping 2 most recent: 2022, 2021)
-                # Should delete old environmental file
-                # Verify deletions would happen for old files
-                # (keeping 2 most recent field analysis files: 2022, 2021)
-                # (replacing environmental files completely)
+            # Should delete old field analysis files (keeping 2 most recent: 2022, 2021)
+            # Should delete old environmental file
+            # Verify deletions would happen for old files
+            # (keeping 2 most recent field analysis files: 2022, 2021)
+            # (replacing environmental files completely)
 
-                assert len(cleanup_results) >= 2
-                assert mock_delete.call_count >= 2
+            assert len(cleanup_results) >= 2
+            assert mock_delete.call_count >= 2
 
     @pytest.mark.asyncio
     async def test_upload_with_cleanup(self, test_config):
@@ -269,25 +271,25 @@ class TestCloudflareR2Uploader:
 
         files = {"pmtiles/field_analysis_2023.pmtiles": "/tmp/field_analysis_2023.pmtiles"}
 
-        with patch.object(uploader, "upload_multiple_pmtiles") as mock_upload:
-            with patch.object(uploader, "cleanup_old_pmtiles") as mock_cleanup:
-                # Mock successful upload
-                mock_upload.return_value = {
-                    "pmtiles/field_analysis_2023.pmtiles": "https://example.com/field_analysis_2023.pmtiles"
-                }
-                mock_cleanup.return_value = {"pmtiles/field_analysis_2020.pmtiles": True}
+        with (
+            patch.object(uploader, "upload_multiple_pmtiles") as mock_upload,
+            patch.object(uploader, "cleanup_old_pmtiles") as mock_cleanup,
+        ):
+            # Mock successful upload
+            mock_upload.return_value = {
+                "pmtiles/field_analysis_2023.pmtiles": "https://example.com/field_analysis_2023.pmtiles"
+            }
+            mock_cleanup.return_value = {"pmtiles/field_analysis_2020.pmtiles": True}
 
-                results = await uploader.upload_with_cleanup(
-                    files, cleanup_old=True, keep_versions=3
-                )
+            results = await uploader.upload_with_cleanup(files, cleanup_old=True, keep_versions=3)
 
-                # Should have called upload and cleanup
-                mock_upload.assert_called_once_with(files)
-                mock_cleanup.assert_called_once()
+            # Should have called upload and cleanup
+            mock_upload.assert_called_once_with(files)
+            mock_cleanup.assert_called_once()
 
-                # Should have cleanup results
-                assert "_cleanup_results" in results
-                assert results["_cleanup_results"] == {"pmtiles/field_analysis_2020.pmtiles": True}
+            # Should have cleanup results
+            assert "_cleanup_results" in results
+            assert results["_cleanup_results"] == {"pmtiles/field_analysis_2020.pmtiles": True}
 
     @pytest.mark.asyncio
     async def test_setup_rclone_config(self, test_config):
@@ -301,17 +303,16 @@ class TestCloudflareR2Uploader:
             "R2_ENDPOINT": "https://test.r2.cloudflarestorage.com",
         }
 
-        with patch.dict(os.environ, env_vars):
-            with patch("subprocess.run") as mock_run:
-                # Mock rclone version check
-                mock_run.side_effect = [
-                    Mock(returncode=0, stdout="rclone v1.60.0"),  # version check
-                    Mock(returncode=0, stdout=""),  # listremotes
-                    Mock(returncode=0, stdout=""),  # config create
-                ]
+        with patch.dict(os.environ, env_vars), patch("subprocess.run") as mock_run:
+            # Mock rclone version check
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="rclone v1.60.0"),  # version check
+                Mock(returncode=0, stdout=""),  # listremotes
+                Mock(returncode=0, stdout=""),  # config create
+            ]
 
-                result = await uploader.setup_rclone_config()
-                assert result is True
+            result = await uploader.setup_rclone_config()
+            assert result is True
 
 
 class TestPMTilesGeneratorPipeline:
@@ -340,16 +341,18 @@ class TestPMTilesGeneratorPipeline:
         pipeline = PMTilesGeneratorPipeline(test_config)
 
         # Mock setup and field generator
-        with patch.object(pipeline, "setup"):
-            with patch.object(pipeline, "field_generator") as mock_generator:
-                mock_generator.generate_field_analysis_pmtiles.return_value = "/tmp/test.pmtiles"
+        with (
+            patch.object(pipeline, "setup"),
+            patch.object(pipeline, "field_generator") as mock_generator,
+            patch.object(pipeline, "_should_upload", return_value=False),
+        ):
+            mock_generator.generate_field_analysis_pmtiles.return_value = "/tmp/test.pmtiles"
 
-                with patch.object(pipeline, "_should_upload", return_value=False):
-                    result = await pipeline.generate_year_specific(2021)
+            result = await pipeline.generate_year_specific(2021)
 
-                    assert result["year"] == 2021
-                    assert result["success"] is True
-                    assert result["field_analysis_pmtiles"] == "/tmp/test.pmtiles"
+            assert result["year"] == 2021
+            assert result["success"] is True
+            assert result["field_analysis_pmtiles"] == "/tmp/test.pmtiles"
 
     def test_should_upload_with_credentials(self, test_config):
         """Test upload decision with credentials."""

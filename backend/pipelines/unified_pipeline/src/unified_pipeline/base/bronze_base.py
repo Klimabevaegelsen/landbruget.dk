@@ -1,7 +1,6 @@
 """Base class for bronze layer processing."""
 
 from pathlib import Path
-from typing import Union
 
 from .duckdb_processor import DuckDBProcessor
 
@@ -12,7 +11,7 @@ class BronzeBase(DuckDBProcessor):
     def __init__(self, dataset_name: str, db_path: str = ":memory:"):
         super().__init__(db_path, dataset_name)
 
-    def ingest_data(self, input_path: Union[str, Path], **kwargs) -> str:
+    def ingest_data(self, input_path: str | Path, **kwargs) -> str:
         """
         Ingest raw data into bronze layer.
 

@@ -3,7 +3,7 @@
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import duckdb
 
@@ -91,7 +91,7 @@ class DuckDBProcessor:
             raise
 
     def create_table_from_parquet(
-        self, parquet_path: Union[str, Path], table_name: Optional[str] = None
+        self, parquet_path: str | Path, table_name: str | None = None
     ) -> str:
         """Create a table from parquet file."""
         if table_name is None:
@@ -104,7 +104,7 @@ class DuckDBProcessor:
         return table_name
 
     def create_table_from_csv(
-        self, csv_path: Union[str, Path], table_name: Optional[str] = None
+        self, csv_path: str | Path, table_name: str | None = None
     ) -> str:
         """Create a table from CSV file."""
         if table_name is None:
@@ -117,7 +117,7 @@ class DuckDBProcessor:
         return table_name
 
     def create_spatial_table(
-        self, geospatial_path: Union[str, Path], table_name: Optional[str] = None
+        self, geospatial_path: str | Path, table_name: str | None = None
     ) -> str:
         """Create a table from geospatial file."""
         if table_name is None:
@@ -129,19 +129,19 @@ class DuckDBProcessor:
         """)
         return table_name
 
-    def save_table_to_parquet(self, table_name: str, output_path: Union[str, Path]):
+    def save_table_to_parquet(self, table_name: str, output_path: str | Path):
         """Save table to parquet file."""
         self.conn.execute(f"""
             COPY {table_name} TO '{output_path}' (FORMAT PARQUET)
         """)
 
-    def save_table_to_csv(self, table_name: str, output_path: Union[str, Path]):
+    def save_table_to_csv(self, table_name: str, output_path: str | Path):
         """Save table to CSV file."""
         self.conn.execute(f"""
             COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)
         """)
 
-    def create_table_from_gcs_parquet(self, gcs_path: str, table_name: Optional[str] = None) -> str:
+    def create_table_from_gcs_parquet(self, gcs_path: str, table_name: str | None = None) -> str:
         """
         Create a table directly from GCS parquet file using native DuckDB access.
 
@@ -187,7 +187,7 @@ class DuckDBProcessor:
         """)
 
     def query_gcs_parquet(
-        self, gcs_path: str, query: str = "SELECT *", table_name: Optional[str] = None
+        self, gcs_path: str, query: str = "SELECT *", table_name: str | None = None
     ) -> str:
         """
         Query GCS parquet file directly and create a table.
@@ -210,11 +210,11 @@ class DuckDBProcessor:
         """)
         return table_name
 
-    def get_table_info(self, table_name: str) -> List[Dict[str, Any]]:
+    def get_table_info(self, table_name: str) -> list[dict[str, Any]]:
         """Get information about a table."""
         return self.conn.execute(f"DESCRIBE {table_name}").fetchall()
 
-    def execute_query(self, query: str) -> List[Any]:
+    def execute_query(self, query: str) -> list[Any]:
         """Execute a query and return results."""
         return self.conn.execute(query).fetchall()
 

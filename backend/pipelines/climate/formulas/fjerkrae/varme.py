@@ -1,9 +1,16 @@
-def beregn_co2e_varme_fjerkrae(v_o_liter: float, theta_o_kg_pr_l: float,
-                               v_n_n3: float, theta_n_kg_pr_n3: float,
-                               v_h_ton: float, theta_h_kg_pr_ton: float,
-                               v_tp_ton: float, theta_tp_kg_pr_ton: float,
-                               v_tf_ton: float, theta_tf_kg_pr_ton: float,
-                               a_fjer: float) -> float:
+def beregn_co2e_varme_fjerkrae(
+    v_o_liter: float,
+    theta_o_kg_pr_l: float,
+    v_n_n3: float,
+    theta_n_kg_pr_n3: float,
+    v_h_ton: float,
+    theta_h_kg_pr_ton: float,
+    v_tp_ton: float,
+    theta_tp_kg_pr_ton: float,
+    v_tf_ton: float,
+    theta_tf_kg_pr_ton: float,
+    a_fjer: float,
+) -> float:
     """
     Beregner CO2e fra varme til fjerkræ.
 
@@ -23,7 +30,7 @@ def beregn_co2e_varme_fjerkrae(v_o_liter: float, theta_o_kg_pr_l: float,
     Returns:
         CO2e fra varme (kg CO2e pr fjerkræ).
     """
-    if a_fjer == 0: # Prevent division by zero
+    if a_fjer == 0:  # Prevent division by zero
         return 0.0
 
     co2e_olie = v_o_liter * theta_o_kg_pr_l
@@ -34,5 +41,4 @@ def beregn_co2e_varme_fjerkrae(v_o_liter: float, theta_o_kg_pr_l: float,
 
     total_co2e = co2e_olie + co2e_naturgas + co2e_halm + co2e_traepiller + co2e_traeflis
 
-    co2e_varme_pr_fjer = total_co2e / a_fjer
-    return co2e_varme_pr_fjer
+    return total_co2e / a_fjer

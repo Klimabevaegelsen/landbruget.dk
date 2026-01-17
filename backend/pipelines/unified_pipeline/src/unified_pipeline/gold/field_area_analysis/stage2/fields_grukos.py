@@ -15,7 +15,7 @@ Architectural Benefits:
 - Creates clean geometric pipeline for Stage 3/4 consumption
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
@@ -84,7 +84,7 @@ class FieldsGrukosCoverage(FieldAnalysisStageBase):
             "grukos_count": grukos_count,
         }
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Stage 2C: Create field × grukos intersection geometries.
 
@@ -138,7 +138,7 @@ class FieldsGrukosCoverage(FieldAnalysisStageBase):
             "unique_fields_with_grukos": unique_fields_with_grukos,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save field × grukos intersection table to GCS."""
         self._save_stage_output("field_grukos_intersections", "field_grukos_intersections")
 

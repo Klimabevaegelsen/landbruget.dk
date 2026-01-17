@@ -31,14 +31,9 @@ from config import Settings, get_settings
 from utils.logger import setup_logger
 
 # Import pipeline metadata system for data tracing
-try:
-    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-    PIPELINE_METADATA_AVAILABLE = True
-except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
-    PipelineMetadataManager = None
-    PIPELINE_METADATA_AVAILABLE = False
+PIPELINE_METADATA_AVAILABLE = True
 
 try:
     import psutil
@@ -49,7 +44,7 @@ except ImportError:
 
 # Add this import for GCS operations
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -334,13 +329,12 @@ def perform_uuid_join_optimized(
                             conn.execute(f"DROP VIEW IF EXISTS {object_name}")
                 except Exception:
                     # Fallback: try both drop commands
-                    try:
+                    import contextlib
+
+                    with contextlib.suppress(Exception):
                         conn.execute(f"DROP TABLE IF EXISTS {object_name}")
-                    except Exception:
-                        try:
-                            conn.execute(f"DROP VIEW IF EXISTS {object_name}")
-                        except Exception:
-                            pass  # If both fail, just continue
+                    with contextlib.suppress(Exception):
+                        conn.execute(f"DROP VIEW IF EXISTS {object_name}")
 
             # Final cleanup
             robust_drop("joined_results")
@@ -363,13 +357,12 @@ def perform_uuid_join_optimized(
                 "optimization_used": "DuckDB UUID join with optional INSPIRE attributes",
                 "includes_inspire_attributes": "inspire_current_use" in column_names,
             }
-        else:
-            print("❌ No matching buildings found")
-            return {
-                "success": False,
-                "joined_buildings_count": 0,
-                "error": "No matching buildings found",
-            }
+        print("❌ No matching buildings found")
+        return {
+            "success": False,
+            "joined_buildings_count": 0,
+            "error": "No matching buildings found",
+        }
 
     finally:
         conn.close()
@@ -700,13 +693,12 @@ def perform_chunked_spatial_join(
                     "ST_Dump + minimum area filtering + spatial functions (fallback)"
                 ),
             }
-        else:
-            print("❌ No matching buildings found in any chunk")
-            return {
-                "success": False,
-                "joined_buildings_count": 0,
-                "error": "No matching buildings found",
-            }
+        print("❌ No matching buildings found in any chunk")
+        return {
+            "success": False,
+            "joined_buildings_count": 0,
+            "error": "No matching buildings found",
+        }
 
     finally:
         conn.close()
@@ -976,6 +968,7 @@ def run_bronze_layer_bulk(
             "geodanmark_path": geodanmark_path,
             "metadata": {},
         }
+    return None
 
 
 def _upload_bronze_data_to_gcs(
@@ -1092,7 +1085,7 @@ def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[l
         return [], None
 
 
-def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str = None) -> str:
+def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None = None) -> str:
     """Load GeoDanmark data from GCS and return local path."""
     if not GCS_AVAILABLE:
         logger.error("❌ GCS not available - cannot load GeoDanmark data")
@@ -1152,11 +1145,10 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str = None
         logger.info(f"📥 Downloading GeoDanmark data from {geodanmark_gcs_path}...")
 
         # Download using fsspec
-        with gcs_access.fs.open(geodanmark_gcs_path, "rb") as src:
-            with open(local_path, "wb") as dst:
-                import shutil
+        import shutil
 
-                shutil.copyfileobj(src, dst)
+        with gcs_access.fs.open(geodanmark_gcs_path, "rb") as src, open(local_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
         # Verify download
         if not os.path.exists(local_path):
@@ -1433,11 +1425,10 @@ def _upload_silver_data_to_gcs(
 
                 gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{target_name}"
 
-                with open(file_path, "rb") as src:
-                    with gcs_access.fs.open(gcs_path, "wb") as dst:
-                        import shutil
+                import shutil
 
-                        shutil.copyfileobj(src, dst)
+                with open(file_path, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
 
                 logger.info(f"✅ Uploaded {file_path.name} -> {target_name} to {gcs_path}")
 
@@ -1449,11 +1440,10 @@ def _upload_silver_data_to_gcs(
 
             gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
 
-            with open(file_path, "rb") as src:
-                with gcs_access.fs.open(gcs_path, "wb") as dst:
-                    import shutil
+            import shutil
 
-                    shutil.copyfileobj(src, dst)
+            with open(file_path, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
             logger.info(f"✅ Uploaded {file_path.name} to {gcs_path}")
 

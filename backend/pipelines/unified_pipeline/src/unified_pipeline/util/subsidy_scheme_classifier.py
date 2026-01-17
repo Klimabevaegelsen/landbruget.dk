@@ -19,7 +19,6 @@ Scheme Code Format:
 - DEMINIMIS: De minimis aid
 """
 
-from typing import Optional, Tuple
 
 # EU CAP Scheme mapping from støtteoplysninger "Scheme" column
 # Maps English scheme names to standardized Danish codes
@@ -106,7 +105,7 @@ OFFICIAL_PAYMENT_RATES = {
 }
 
 
-def classify_eu_scheme(scheme_name: str) -> Tuple[Optional[str], Optional[str]]:
+def classify_eu_scheme(scheme_name: str) -> tuple[str | None, str | None]:
     """
     Classify an EU scheme name to standardized code.
 
@@ -138,7 +137,7 @@ def classify_eu_scheme(scheme_name: str) -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def classify_fvm_tilsagn(tilsagnstype: str) -> Tuple[Optional[str], Optional[str]]:
+def classify_fvm_tilsagn(tilsagnstype: str) -> tuple[str | None, str | None]:
     """
     Classify an FVM commitment type code.
 
@@ -164,7 +163,7 @@ def classify_fvm_tilsagn(tilsagnstype: str) -> Tuple[Optional[str], Optional[str
     return None, None
 
 
-def classify_deminimis(ordning: str) -> Tuple[Optional[str], Optional[str]]:
+def classify_deminimis(ordning: str) -> tuple[str | None, str | None]:
     """
     Classify a de minimis scheme code.
 
@@ -184,7 +183,7 @@ def classify_deminimis(ordning: str) -> Tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def get_expected_rate(ordning_kode: str, use_derived: bool = True) -> Optional[float]:
+def get_expected_rate(ordning_kode: str, use_derived: bool = True) -> float | None:
     """
     Get the expected payment rate for a scheme.
 
@@ -239,7 +238,7 @@ def is_summary_row(scheme_name: str) -> bool:
     return any(indicator in scheme_lower for indicator in summary_indicators)
 
 
-def get_pillar(ordning_kode: str) -> Optional[int]:
+def get_pillar(ordning_kode: str) -> int | None:
     """
     Get the CAP pillar for a scheme (1 = EAGF, 2 = EAFRD).
 

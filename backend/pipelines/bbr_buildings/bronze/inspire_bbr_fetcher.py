@@ -55,7 +55,7 @@ class InspireBBRFetcher:
         output_dir: Path,
         sample_size: int | None = None,
         return_data: bool = False,
-        pipeline_start_time: datetime = None,
+        pipeline_start_time: datetime | None = None,
     ) -> dict | None:
         """
         Fetch INSPIRE BBR data and enrich with GraphQL API.
@@ -149,7 +149,7 @@ class InspireBBRFetcher:
         output_dir: Path,
         building_queue: Queue[tuple[list[str], list[dict[str, Any]]]],
         sample_size: int | None = None,
-        pipeline_start_time: datetime = None,
+        pipeline_start_time: datetime | None = None,
     ) -> dict | None:
         """
         Fetch INSPIRE BBR data and stream building IDs to queue as they are processed.
@@ -317,21 +317,21 @@ class InspireBBRFetcher:
 
             result = conn.execute(query).fetchall()
 
-            for row in result:
-                all_buildings.append(
-                    {
-                        "building_uuid": row[0],
-                        "external_ref": row[1],
-                        "current_use": row[2],
-                        "building_nature": row[3],
-                        "construction_year": row[4],
-                        "floor_area": row[5],
-                        "floors": row[6],
-                        "dwellings": row[7],
-                        "address": row[8],
-                        "category_group": row[9],
-                    }
-                )
+            all_buildings.extend(
+                {
+                    "building_uuid": row[0],
+                    "external_ref": row[1],
+                    "current_use": row[2],
+                    "building_nature": row[3],
+                    "construction_year": row[4],
+                    "floor_area": row[5],
+                    "floors": row[6],
+                    "dwellings": row[7],
+                    "address": row[8],
+                    "category_group": row[9],
+                }
+                for row in result
+            )
 
             self.logger.info(f"Extracted {len(result)} {category_group} buildings")
 
@@ -368,22 +368,21 @@ class InspireBBRFetcher:
 
         result = conn.execute(query).fetchall()
 
-        buildings = []
-        for row in result:
-            buildings.append(
-                {
-                    "building_uuid": row[0],
-                    "external_ref": row[1],
-                    "current_use": row[2],
-                    "building_nature": row[3],
-                    "construction_year": row[4],
-                    "floor_area": row[5],
-                    "floors": row[6],
-                    "dwellings": row[7],
-                    "address": row[8],
-                    "category_group": row[9],
-                }
-            )
+        buildings = [
+            {
+                "building_uuid": row[0],
+                "external_ref": row[1],
+                "current_use": row[2],
+                "building_nature": row[3],
+                "construction_year": row[4],
+                "floor_area": row[5],
+                "floors": row[6],
+                "dwellings": row[7],
+                "address": row[8],
+                "category_group": row[9],
+            }
+            for row in result
+        ]
 
         self.logger.info(f"Extracted {len(buildings)} total buildings")
 
@@ -1091,17 +1090,15 @@ class InspireBBRFetcher:
                         chunk_uuids = building_uuids[i : i + chunk_size]
 
                         # Create basic attributes for residential buildings
-                        chunk_attributes = []
-                        for uuid in chunk_uuids:
-                            chunk_attributes.append(
-                                {
-                                    "building_uuid": uuid,
-                                    "category": "residential",
-                                    "bbr_usage_code": None,  # Residential doesn't
-                                    # need detailed codes
-                                    "detailed_usage": None,
-                                }
-                            )
+                        chunk_attributes = [
+                            {
+                                "building_uuid": uuid,
+                                "category": "residential",
+                                "bbr_usage_code": None,  # Residential doesn't need detailed codes
+                                "detailed_usage": None,
+                            }
+                            for uuid in chunk_uuids
+                        ]
 
                         # Put chunk in queue for geometry fetching
                         building_queue.put((chunk_uuids, chunk_attributes))

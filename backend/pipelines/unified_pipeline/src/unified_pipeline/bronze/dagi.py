@@ -15,14 +15,13 @@ error handling and retry logic for robustness.
 
 import asyncio
 from asyncio import Semaphore
-from typing import Dict, Optional
 
 import aiohttp
 from pydantic import Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -53,7 +52,7 @@ class DAGIBronzeConfig(BaseJobConfig):
         default="https://api.dataforsyningen.dk", description="Base URL for the DAWA API"
     )
 
-    endpoints: Dict[str, str] = Field(
+    endpoints: dict[str, str] = Field(
         default={
             "kommuner": "kommuner",
             "regioner": "regioner",
@@ -95,7 +94,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
     )
     async def _fetch_layer_data(
         self, session: aiohttp.ClientSession, layer_name: str, endpoint: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Fetch data for a specific DAGI layer from the DAWA API.
 
@@ -126,14 +125,14 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
             except aiohttp.ClientError as e:
                 self.log.error(f"HTTP error fetching {layer_name}: {e}")
                 raise
-            except asyncio.TimeoutError as e:
+            except TimeoutError as e:
                 self.log.error(f"Timeout error fetching {layer_name}: {e}")
                 raise
             except Exception as e:
                 self.log.error(f"Unexpected error fetching {layer_name}: {e}")
                 raise
 
-    async def _fetch_all_layers(self) -> Dict[str, str]:
+    async def _fetch_all_layers(self) -> dict[str, str]:
         """
         Fetch data for all configured DAGI layers concurrently.
 
@@ -165,7 +164,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
 
             return results
 
-    async def run(self) -> Optional[Dict[str, str]]:
+    async def run(self) -> dict[str, str] | None:
         """
         Run the DAGI data source processing pipeline.
 

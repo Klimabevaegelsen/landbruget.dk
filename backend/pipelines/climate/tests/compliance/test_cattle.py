@@ -4,9 +4,10 @@ Compliance Tests - Cattle Emissions
 Tests that Python cattle emission formulas match reference implementation.
 """
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -24,24 +25,26 @@ class TestCattleDigestionCompliance:
     """
 
     @staticmethod
-    def csharp_heavy_breed_ch4(year_animals: float, feed_intake: float, fatty_acids: float, ndf: float) -> dict:
+    def csharp_heavy_breed_ch4(
+        year_animals: float, feed_intake: float, fatty_acids: float, ndf: float
+    ) -> dict:
         """Replicate C# FormulaDigestionDairyCows for heavy breed."""
-        year_animal_ch4 = (1.230 * feed_intake - 0.145 * fatty_acids + 0.012 * ndf) / 55.65 * 335 + 0.304 * 30
+        year_animal_ch4 = (
+            1.230 * feed_intake - 0.145 * fatty_acids + 0.012 * ndf
+        ) / 55.65 * 335 + 0.304 * 30
         ch4_total = year_animals * year_animal_ch4
-        return {
-            "ch4_per_animal": round(year_animal_ch4, 2),
-            "ch4_total": round(ch4_total, 2)
-        }
+        return {"ch4_per_animal": round(year_animal_ch4, 2), "ch4_total": round(ch4_total, 2)}
 
     @staticmethod
-    def csharp_jersey_breed_ch4(year_animals: float, feed_intake: float, fatty_acids: float, ndf: float) -> dict:
+    def csharp_jersey_breed_ch4(
+        year_animals: float, feed_intake: float, fatty_acids: float, ndf: float
+    ) -> dict:
         """Replicate C# FormulaDigestionDairyCows for Jersey breed."""
-        year_animal_ch4 = (1.230 * feed_intake - 0.145 * fatty_acids + 0.012 * ndf) / 55.65 * 335 + 0.207 * 30
+        year_animal_ch4 = (
+            1.230 * feed_intake - 0.145 * fatty_acids + 0.012 * ndf
+        ) / 55.65 * 335 + 0.207 * 30
         ch4_total = year_animals * year_animal_ch4
-        return {
-            "ch4_per_animal": round(year_animal_ch4, 2),
-            "ch4_total": round(ch4_total, 2)
-        }
+        return {"ch4_per_animal": round(year_animal_ch4, 2), "ch4_total": round(ch4_total, 2)}
 
     @pytest.mark.compliance
     @pytest.mark.critical
@@ -60,8 +63,9 @@ class TestCattleDigestionCompliance:
 
         # Verify per-animal CH4
         expected_ch4_per_animal = test_case["expected_outputs"]["ch4_per_animal_kg"]
-        assert abs(csharp_result["ch4_per_animal"] - expected_ch4_per_animal) < 0.1, \
+        assert abs(csharp_result["ch4_per_animal"] - expected_ch4_per_animal) < 0.1, (
             f"Per-animal CH4 mismatch: expected {expected_ch4_per_animal}, got {csharp_result['ch4_per_animal']}"
+        )
 
         # Verify total CH4
         expected_ch4_total = test_case["expected_outputs"]["ch4_total_kg"]
@@ -102,10 +106,13 @@ class TestCattleDigestionCompliance:
         jersey_ch4_per_animal = jersey_case["expected_outputs"]["ch4_per_animal_kg"]
 
         # Jersey should have lower emissions (0.207 vs 0.304 dry period factor)
-        assert jersey_ch4_per_animal < heavy_ch4_per_animal, \
+        assert jersey_ch4_per_animal < heavy_ch4_per_animal, (
             "Jersey breed should have lower CH4 emissions than heavy breed"
+        )
 
-        difference_pct = ((heavy_ch4_per_animal - jersey_ch4_per_animal) / heavy_ch4_per_animal) * 100
+        difference_pct = (
+            (heavy_ch4_per_animal - jersey_ch4_per_animal) / heavy_ch4_per_animal
+        ) * 100
         print(f"\n  Heavy breed: {heavy_ch4_per_animal:.2f} kg CH4/animal/year")
         print(f"  Jersey breed: {jersey_ch4_per_animal:.2f} kg CH4/animal/year")
         print(f"  Difference: {difference_pct:.1f}%")
@@ -122,8 +129,9 @@ class TestCattleDigestionCompliance:
         # AR6 uses 27 for biogenic CH4 (livestock), not 30 (fossil)
         calculated_co2e = ch4_total * gwp_ar6["CH4_biogenic"]
 
-        assert abs(calculated_co2e - expected_co2e_ar6) < 100, \
+        assert abs(calculated_co2e - expected_co2e_ar6) < 100, (
             f"AR6 biogenic CH4 conversion mismatch: expected {expected_co2e_ar6}, got {calculated_co2e}"
+        )
 
         # Document difference from AR4
         expected_co2e_ar4 = test_case["expected_outputs"]["co2e_kg_gwp_ar4"]
@@ -153,8 +161,9 @@ class TestPigDigestionCompliance:
 
         from formulas.svin import enterisk_metan
 
-        assert enterisk_metan.GWP_CH4 == gwp_ar6["CH4_biogenic"], \
+        assert gwp_ar6["CH4_biogenic"] == enterisk_metan.GWP_CH4, (
             f"Pig CH4 GWP should be {gwp_ar6['CH4_biogenic']} (AR6 biogenic)"
+        )
 
 
 class TestManureEmissionsCompliance:

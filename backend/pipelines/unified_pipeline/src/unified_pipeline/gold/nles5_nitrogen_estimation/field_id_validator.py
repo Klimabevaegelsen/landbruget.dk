@@ -13,7 +13,7 @@ Key features:
 """
 
 import uuid
-from typing import Any, Dict, Set
+from typing import Any
 
 from unified_pipeline.util.timing import timed
 
@@ -38,17 +38,17 @@ class FieldIDValidator:
         self.conn = processor.conn
 
         # Track field UUIDs throughout the pipeline
-        self.field_uuids_before_processing: Set[str] = set()
-        self.field_uuids_after_processing: Set[str] = set()
+        self.field_uuids_before_processing: set[str] = set()
+        self.field_uuids_after_processing: set[str] = set()
 
         # Also track field_ids for completeness
-        self.field_ids_before_processing: Set[str] = set()
-        self.field_ids_after_processing: Set[str] = set()
+        self.field_ids_before_processing: set[str] = set()
+        self.field_ids_after_processing: set[str] = set()
 
-        self.validation_results: Dict[str, Any] = {}
+        self.validation_results: dict[str, Any] = {}
 
     @timed(name="Validating field ID format")
-    def validate_field_id_format(self, field_id: str) -> Dict[str, Any]:
+    def validate_field_id_format(self, field_id: str) -> dict[str, Any]:
         """
         Validate that a field ID follows expected FVM field ID formats.
 
@@ -113,11 +113,10 @@ class FieldIDValidator:
                         "Field ID uses FVM number-dash-number format (valid)"
                     )
                     return validation_result
-                else:
-                    validation_result["format_type"] = "invalid_dash_format"
-                    validation_result["issues"].append(
-                        "Dash-separated field ID contains non-numeric parts"
-                    )
+                validation_result["format_type"] = "invalid_dash_format"
+                validation_result["issues"].append(
+                    "Dash-separated field ID contains non-numeric parts"
+                )
             else:
                 validation_result["format_type"] = "invalid_dash_format"
                 validation_result["issues"].append("Multiple dashes in field ID not supported")
@@ -163,7 +162,7 @@ class FieldIDValidator:
         return validation_result
 
     @timed(name="Validating field UUID format")
-    def validate_field_uuid_format(self, field_uuid: str) -> Dict[str, Any]:
+    def validate_field_uuid_format(self, field_uuid: str) -> dict[str, Any]:
         """
         Validate that a field UUID follows proper UUID format.
 
@@ -240,7 +239,7 @@ class FieldIDValidator:
         return validation_result
 
     @timed(name="Collecting field IDs and UUIDs before processing")
-    def collect_field_ids_before_processing(self) -> Set[str]:
+    def collect_field_ids_before_processing(self) -> set[str]:
         """
         Collect all field IDs and field UUIDs from the input data before processing begins.
 
@@ -272,8 +271,8 @@ class FieldIDValidator:
 
                             # Check what columns are available
                             columns_result = self.conn.execute(f"""
-                                SELECT column_name 
-                                FROM information_schema.columns 
+                                SELECT column_name
+                                FROM information_schema.columns
                                 WHERE table_name = '{table_name}'
                                 AND column_name IN ('field_id', 'field_uuid')
                             """).fetchall()
@@ -286,8 +285,8 @@ class FieldIDValidator:
                             # Get field IDs if available
                             if "field_id" in available_columns:
                                 field_id_results = self.conn.execute(f"""
-                                    SELECT DISTINCT field_id 
-                                    FROM {table_name} 
+                                    SELECT DISTINCT field_id
+                                    FROM {table_name}
                                     WHERE field_id IS NOT NULL
                                 """).fetchall()
 
@@ -303,8 +302,8 @@ class FieldIDValidator:
                             # Get field UUIDs if available (this is what we really want to validate)
                             if "field_uuid" in available_columns:
                                 field_uuid_results = self.conn.execute(f"""
-                                    SELECT DISTINCT field_uuid 
-                                    FROM {table_name} 
+                                    SELECT DISTINCT field_uuid
+                                    FROM {table_name}
                                     WHERE field_uuid IS NOT NULL
                                 """).fetchall()
 
@@ -381,7 +380,7 @@ class FieldIDValidator:
             return set()
 
     @timed(name="Collecting field IDs and UUIDs after processing")
-    def collect_field_ids_after_processing(self) -> Set[str]:
+    def collect_field_ids_after_processing(self) -> set[str]:
         """
         Collect all field IDs and field UUIDs from the output data after processing completes.
 
@@ -410,8 +409,8 @@ class FieldIDValidator:
 
                         # Check what columns are available
                         columns_result = self.conn.execute(f"""
-                            SELECT column_name 
-                            FROM information_schema.columns 
+                            SELECT column_name
+                            FROM information_schema.columns
                             WHERE table_name = '{table_name}'
                             AND column_name IN ('field_id', 'field_uuid')
                         """).fetchall()
@@ -422,8 +421,8 @@ class FieldIDValidator:
                         # Get field IDs if available
                         if "field_id" in available_columns:
                             field_id_results = self.conn.execute(f"""
-                                SELECT DISTINCT field_id 
-                                FROM {table_name} 
+                                SELECT DISTINCT field_id
+                                FROM {table_name}
                                 WHERE field_id IS NOT NULL
                             """).fetchall()
 
@@ -437,8 +436,8 @@ class FieldIDValidator:
                         # Get field UUIDs if available (this is what we really want to validate)
                         if "field_uuid" in available_columns:
                             field_uuid_results = self.conn.execute(f"""
-                                SELECT DISTINCT field_uuid 
-                                FROM {table_name} 
+                                SELECT DISTINCT field_uuid
+                                FROM {table_name}
                                 WHERE field_uuid IS NOT NULL
                             """).fetchall()
 
@@ -512,7 +511,7 @@ class FieldIDValidator:
             return set()
 
     @timed(name="Validating field ID and UUID consistency")
-    def validate_field_id_consistency(self) -> Dict[str, Any]:
+    def validate_field_id_consistency(self) -> dict[str, Any]:
         """
         Validate that field IDs and UUIDs are consistent before and after processing.
 
@@ -720,7 +719,7 @@ class FieldIDValidator:
     @timed(name="Validating field formats in dataset")
     def validate_field_id_formats_in_dataset(
         self, table_name: str, sample_size: int = 100
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Validate field ID and UUID formats in a specific dataset.
 
@@ -768,8 +767,8 @@ class FieldIDValidator:
             # Check what columns are available
             try:
                 columns_result = self.conn.execute(f"""
-                    SELECT column_name 
-                    FROM information_schema.columns 
+                    SELECT column_name
+                    FROM information_schema.columns
                     WHERE table_name = '{table_name}'
                     AND column_name IN ('field_id', 'field_uuid')
                 """).fetchall()
@@ -784,15 +783,15 @@ class FieldIDValidator:
             if "field_id" in available_columns:
                 try:
                     validation_result["records_with_field_id"] = self.conn.execute(f"""
-                        SELECT COUNT(*) 
-                        FROM {table_name} 
+                        SELECT COUNT(*)
+                        FROM {table_name}
                         WHERE field_id IS NOT NULL AND field_id != ''
                     """).fetchone()[0]
 
                     # Sample field IDs for validation
                     sample_field_ids = self.conn.execute(f"""
-                        SELECT DISTINCT field_id 
-                        FROM {table_name} 
+                        SELECT DISTINCT field_id
+                        FROM {table_name}
                         WHERE field_id IS NOT NULL AND field_id != ''
                         ORDER BY RANDOM()
                         LIMIT {sample_size}
@@ -823,15 +822,15 @@ class FieldIDValidator:
             if "field_uuid" in available_columns:
                 try:
                     validation_result["records_with_field_uuid"] = self.conn.execute(f"""
-                        SELECT COUNT(*) 
-                        FROM {table_name} 
+                        SELECT COUNT(*)
+                        FROM {table_name}
                         WHERE field_uuid IS NOT NULL AND field_uuid != ''
                     """).fetchone()[0]
 
                     # Sample field UUIDs for validation
                     sample_field_uuids = self.conn.execute(f"""
-                        SELECT DISTINCT field_uuid 
-                        FROM {table_name} 
+                        SELECT DISTINCT field_uuid
+                        FROM {table_name}
                         WHERE field_uuid IS NOT NULL AND field_uuid != ''
                         ORDER BY RANDOM()
                         LIMIT {sample_size}
@@ -963,7 +962,7 @@ class FieldIDValidator:
             return {"error": str(e)}
 
     @timed(name="Comprehensive field ID validation")
-    def run_comprehensive_validation(self) -> Dict[str, Any]:
+    def run_comprehensive_validation(self) -> dict[str, Any]:
         """
         Run comprehensive field ID validation for the entire pipeline.
 
@@ -1043,9 +1042,7 @@ class FieldIDValidator:
             format_scores = []
             uuid_presence_scores = []
 
-            for table_name, format_validation in comprehensive_results[
-                "format_validations"
-            ].items():
+            for format_validation in comprehensive_results["format_validations"].values():
                 if "error" not in format_validation:
                     # Prioritize field_uuid validation over field_id validation
                     uuid_total = format_validation.get(
@@ -1226,7 +1223,7 @@ Field Identifier Validation Summary:
 
         return summary.strip()
 
-    def validate_field_uuid_presence(self, table_name: str) -> Dict[str, Any]:
+    def validate_field_uuid_presence(self, table_name: str) -> dict[str, Any]:
         """
         Validate that field_uuid column is present and properly populated in a table.
 
@@ -1262,8 +1259,8 @@ Field Identifier Validation Summary:
             # Check if field_uuid column exists
             try:
                 columns_result = self.conn.execute(f"""
-                    SELECT column_name 
-                    FROM information_schema.columns 
+                    SELECT column_name
+                    FROM information_schema.columns
                     WHERE table_name = '{table_name}' AND column_name = 'field_uuid'
                 """).fetchall()
 
@@ -1285,8 +1282,8 @@ Field Identifier Validation Summary:
             # Check field_uuid population
             try:
                 validation_result["records_with_field_uuid"] = self.conn.execute(f"""
-                    SELECT COUNT(*) 
-                    FROM {table_name} 
+                    SELECT COUNT(*)
+                    FROM {table_name}
                     WHERE field_uuid IS NOT NULL AND field_uuid != ''
                 """).fetchone()[0]
 
@@ -1298,8 +1295,8 @@ Field Identifier Validation Summary:
 
                 # Get sample field UUIDs
                 sample_uuids = self.conn.execute(f"""
-                    SELECT field_uuid 
-                    FROM {table_name} 
+                    SELECT field_uuid
+                    FROM {table_name}
                     WHERE field_uuid IS NOT NULL AND field_uuid != ''
                     ORDER BY RANDOM()
                     LIMIT 5

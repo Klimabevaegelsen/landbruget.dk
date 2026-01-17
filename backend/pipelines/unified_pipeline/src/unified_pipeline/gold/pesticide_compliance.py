@@ -52,7 +52,7 @@ that detected 668 clear violations, ensuring regulatory accuracy.
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import duckdb
 import requests
@@ -61,7 +61,7 @@ from requests.auth import HTTPBasicAuth
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.gold.pesticide_unit_sanitization import PesticideUnitSanitizer
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
@@ -71,7 +71,7 @@ logger = logging.getLogger(__name__)
 class PlanteITAPI:
     """Client for Plante IT Pesticide Service API for dosage compliance checking."""
 
-    def __init__(self, username: str = None, password: str = None):
+    def __init__(self, username: str | None = None, password: str | None = None):
         self.base_url = "https://pesticideservice.dlbr.dk/api"
         self.project_id = "landbrugsdata-1"
 
@@ -89,11 +89,11 @@ class PlanteITAPI:
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth(self.username, self.password)
 
-    def _get_credential(self, env_var: str, secret_name: str) -> Optional[str]:
+    def _get_credential(self, env_var: str, secret_name: str) -> str | None:
         """Get credential from environment variable."""
         return os.getenv(env_var)
 
-    def get_products_for_crop(self, crop_id: int) -> List[Dict]:
+    def get_products_for_crop(self, crop_id: int) -> list[dict]:
         """Get all pesticide products approved for a specific crop."""
         try:
             response = self.session.get(f"{self.base_url}/Products?CropId={crop_id}", timeout=30)
@@ -104,7 +104,7 @@ class PlanteITAPI:
                     f"Authentication failed for Plante IT API. "
                     f"Please check credentials. Status: {response.status_code}"
                 )
-            elif response.status_code == 403:
+            if response.status_code == 403:
                 raise ValueError(
                     f"Access forbidden for Plante IT API. "
                     f"Please check permissions. Status: {response.status_code}"
@@ -129,7 +129,7 @@ class PlanteITAPI:
             logger.error(f"Error fetching products for crop {crop_id}: {e}")
             return []
 
-    def get_product_detail(self, product_id: int, crop_id: int) -> Optional[Dict]:
+    def get_product_detail(self, product_id: int, crop_id: int) -> dict | None:
         """Get detailed information for a specific product on a specific crop."""
         try:
             response = self.session.get(
@@ -142,7 +142,7 @@ class PlanteITAPI:
                     f"Authentication failed for Plante IT API. "
                     f"Please check credentials. Status: {response.status_code}"
                 )
-            elif response.status_code == 403:
+            if response.status_code == 403:
                 raise ValueError(
                     f"Access forbidden for Plante IT API. "
                     f"Please check permissions. Status: {response.status_code}"
@@ -185,7 +185,7 @@ class PesticideComplianceGoldConfig(BaseJobConfig):
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Agricultural year to analyze (e.g., 2023 = Aug 2023 - Jul 2024 season)
-    pesticide_year: Optional[int] = Field(
+    pesticide_year: int | None = Field(
         default=None,
         description=(
             "Agricultural year to analyze (e.g., 2023). If None, analyzes all available years."
@@ -301,7 +301,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         }
 
     @timed
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Main execution method for pesticide compliance analysis.
 
@@ -487,8 +487,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     f"Pesticide disaggregation data not found for agricultural year "
                     f"{target_agricultural_year}"
                 )
-            else:
-                raise Exception("Pesticide disaggregation data not found in gold layer")
+            raise Exception("Pesticide disaggregation data not found in gold layer")
 
         # Sort by timestamp to get the most recent file for the target year
         files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
@@ -1005,7 +1004,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             self.logger.warning("⚠️ No dosage limits found from API")
 
     def _assess_dosage_compliance(
-        self, our_dosage: float, our_unit: str, api_max: Optional[float], api_unit: str
+        self, our_dosage: float, our_unit: str, api_max: float | None, api_unit: str
     ) -> str:
         """Assess dosage compliance status."""
         if api_max is None:
@@ -1016,14 +1015,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         if our_dosage <= api_max:
             return "COMPLIANT"
-        elif our_dosage <= api_max * 2.0:  # Up to 2x
+        if our_dosage <= api_max * 2.0:  # Up to 2x
             return "MODERATE_EXCESS"
-        else:
-            return "MAJOR_EXCESS"
+        return "MAJOR_EXCESS"
 
     def _calculate_dosage_ratio(
-        self, our_dosage: float, our_unit: str, api_max: Optional[float], api_unit: str
-    ) -> Optional[float]:
+        self, our_dosage: float, our_unit: str, api_max: float | None, api_unit: str
+    ) -> float | None:
         """Calculate ratio of our dosage to API maximum."""
         if api_max is None or our_unit.lower() != api_unit.lower():
             return None
@@ -1049,7 +1047,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             # Column doesn't exist
             return False
 
-    def _get_years_to_analyze(self) -> List[str]:
+    def _get_years_to_analyze(self) -> list[str]:
         """Determine which agricultural years to analyze based on available pesticide data."""
         if self.config.pesticide_year is not None:
             # Matrix job mode: analyze specific year
@@ -1068,30 +1066,25 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             if year_exists:
                 self.logger.info(f"✅ Found pesticide data for {target_year}")
                 return [target_year]
-            else:
-                self.logger.warning(f"❌ No pesticide data found for {target_year}")
-                return []
-        else:
-            # Single job mode: analyze all available years (mainly for testing/development)
-            self.logger.info("📊 Single job mode: discovering all available years")
-            available_years = self.conn.execute(
-                "SELECT DISTINCT agricultural_year FROM pesticide_applications "
-                "WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
-            ).fetchall()
+            self.logger.warning(f"❌ No pesticide data found for {target_year}")
+            return []
+        # Single job mode: analyze all available years (mainly for testing/development)
+        self.logger.info("📊 Single job mode: discovering all available years")
+        available_years = self.conn.execute(
+            "SELECT DISTINCT agricultural_year FROM pesticide_applications "
+            "WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
+        ).fetchall()
 
-            available_years_list = [year[0] for year in available_years]
-            self.logger.info(
-                f"📅 Agricultural years found in pesticide data: {available_years_list}"
-            )
+        available_years_list = [year[0] for year in available_years]
+        self.logger.info(f"📅 Agricultural years found in pesticide data: {available_years_list}")
 
-            if available_years_list:
-                self.logger.info(f"✅ Will analyze all available years: {available_years_list}")
-                return available_years_list
-            else:
-                self.logger.warning("❌ No agricultural years found in pesticide data")
-                return []
+        if available_years_list:
+            self.logger.info(f"✅ Will analyze all available years: {available_years_list}")
+            return available_years_list
+        self.logger.warning("❌ No agricultural years found in pesticide data")
+        return []
 
-    async def _analyze_agricultural_year(self, ag_year: str) -> Dict[str, Any]:
+    async def _analyze_agricultural_year(self, ag_year: str) -> dict[str, Any]:
         """
         Analyze violations for a specific agricultural year.
 
@@ -1314,8 +1307,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         return results
 
     def _generate_summary_statistics(
-        self, all_results: Dict, total_issues: int, total_companies: int
-    ) -> Dict[str, Any]:
+        self, all_results: dict, total_issues: int, total_companies: int
+    ) -> dict[str, Any]:
         """Generate comprehensive summary statistics."""
 
         # Calculate totals across all years
@@ -1324,19 +1317,19 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         )
 
         total_fields_affected = len(
-            set(
+            {
                 issue["field_uuid"]
                 for year_data in all_results.values()
                 for issue in year_data.get("issues_data", [])
-            )
+            }
         )
 
         total_products = len(
-            set(
+            {
                 issue["pesticide_registration_number"]
                 for year_data in all_results.values()
                 for issue in year_data.get("issues_data", [])
-            )
+            }
         )
 
         # Get overall companies with issues
@@ -1398,7 +1391,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             },
         }
 
-    async def _save_results(self, all_results: Dict, summary_stats: Dict) -> None:
+    async def _save_results(self, all_results: dict, summary_stats: dict) -> None:
         """Save analysis results to GCS."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_path = f"gold/{self.config.dataset}/{timestamp}"
@@ -1502,7 +1495,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             f.write(report_content)
 
         # Clean up temporary tables after all exports are complete
-        for ag_year, year_results in all_results.items():
+        for year_results in all_results.values():
             if year_results.get("compliance_table_name"):
                 compliance_table_name = year_results["compliance_table_name"]
                 self.conn.execute(f"DROP TABLE IF EXISTS {compliance_table_name}")
@@ -1510,7 +1503,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         self.logger.info(f"✅ Results saved to GCS: {base_path}")
 
-    def _generate_markdown_report(self, summary: Dict, all_results: Dict) -> str:
+    def _generate_markdown_report(self, summary: dict, all_results: dict) -> str:
         """Generate human-readable markdown compliance report."""
 
         report = f"""# Pesticide Regulatory Compliance Analysis Report

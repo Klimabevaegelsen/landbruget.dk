@@ -83,7 +83,7 @@ def test_get_params(wetlands_bronze: WetlandsBronze) -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_chunck_success(wetlands_bronze: WetlandsBronze) -> None:
-    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="1" numberReturned="1"><wfs:member></wfs:member></wfs:FeatureCollection>'  # noqa: E501
+    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="1" numberReturned="1"><wfs:member></wfs:member></wfs:FeatureCollection>'
 
     mock_response = AsyncMock()
     mock_response.status = 200
@@ -194,7 +194,7 @@ async def test_fetch_raw_data_error(
         Exception("Test error"),
     ]
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         await wetlands_bronze._fetch_raw_data()
 
 
@@ -235,7 +235,7 @@ async def test_run_exception(
     mock_fetch_raw_data.side_effect = Exception("Test error")
     wetlands_bronze._save_raw_data = MagicMock()
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         await wetlands_bronze.run()
 
     mock_fetch_raw_data.assert_called_once()

@@ -18,7 +18,7 @@ Output schema:
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import ConfigDict, Field
@@ -69,7 +69,7 @@ class SlagtepraemieSilver(BaseSource[SlagtepraemieSilverConfig], SilverJobInterf
         self.log = Logger.get_logger()
 
     @timed
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """Process slaughter premium bronze data to silver."""
         self.log.info("Starting slagtepræmie silver processing")
 
@@ -91,7 +91,7 @@ class SlagtepraemieSilver(BaseSource[SlagtepraemieSilverConfig], SilverJobInterf
             self.log.error(f"Error processing slagtepræmie: {e}")
             raise
 
-    async def _load_bronze_data(self, bronze_data: Optional[Any] = None) -> None:
+    async def _load_bronze_data(self, bronze_data: Any | None = None) -> None:
         """Load bronze data from GCS or memory."""
         if bronze_data is not None:
             self.log.info("Using in-memory bronze data")
@@ -184,7 +184,7 @@ class SlagtepraemieSilver(BaseSource[SlagtepraemieSilverConfig], SilverJobInterf
                     return col
         raise ValueError(f"Could not find column from candidates: {candidates}")
 
-    async def _validate_and_summarize(self) -> Dict[str, Any]:
+    async def _validate_and_summarize(self) -> dict[str, Any]:
         """Validate and summarize slaughter premium data."""
         self.log.info("Validating slagtepræmie silver data")
 

@@ -8,7 +8,7 @@ This module tests the output writer functionality including:
 - Report listing
 """
 
-from climate_calculator import EmissionReport, EmissionCategory
+from climate_calculator import EmissionCategory, EmissionReport
 from output_writer import ClimateOutputWriter
 
 
@@ -65,55 +65,55 @@ class TestClimateOutputWriter:
         assert writer.bucket is not None
         assert writer.gcs is not None
 
-    def test_reports_to_dataframe(self):
-        """Test conversion of EmissionReport to DataFrame."""
+    def test_reports_to_records(self):
+        """Test conversion of EmissionReport to list of dicts."""
         writer = ClimateOutputWriter()
         report = create_mock_report()
-        df = writer._reports_to_dataframe([report])
+        records = writer._reports_to_records([report])
 
-        # Check DataFrame structure
-        assert len(df) == 1
-        assert "cvr" in df.columns
-        assert "year" in df.columns
-        assert "total_co2e_kg" in df.columns
-        assert "data_completeness" in df.columns
+        # Check records structure
+        assert len(records) == 1
+        assert "cvr" in records[0]
+        assert "year" in records[0]
+        assert "total_co2e_kg" in records[0]
+        assert "data_completeness" in records[0]
 
         # Check CVR format (8 digits with leading zeros)
-        assert df.iloc[0]["cvr"] == "12345678"
-        assert len(df.iloc[0]["cvr"]) == 8
+        assert records[0]["cvr"] == "12345678"
+        assert len(records[0]["cvr"]) == 8
 
         # Check values
-        assert df.iloc[0]["year"] == 2024
-        assert df.iloc[0]["total_co2e_kg"] == 150000.0
-        assert df.iloc[0]["data_completeness"] == 0.85
+        assert records[0]["year"] == 2024
+        assert records[0]["total_co2e_kg"] == 150000.0
+        assert records[0]["data_completeness"] == 0.85
 
-    def test_reports_to_dataframe_cvr_padding(self):
+    def test_reports_to_records_cvr_padding(self):
         """Test CVR number padding to 8 digits."""
         writer = ClimateOutputWriter()
         report = create_mock_report(cvr="1234567")  # 7 digits
-        df = writer._reports_to_dataframe([report])
+        records = writer._reports_to_records([report])
 
         # Should be padded to 8 digits
-        assert df.iloc[0]["cvr"] == "01234567"
-        assert len(df.iloc[0]["cvr"]) == 8
+        assert records[0]["cvr"] == "01234567"
+        assert len(records[0]["cvr"]) == 8
 
-    def test_categories_to_dataframe(self):
-        """Test conversion of EmissionCategory to DataFrame."""
+    def test_categories_to_records(self):
+        """Test conversion of EmissionCategory to list of dicts."""
         writer = ClimateOutputWriter()
         report = create_mock_report()
-        df = writer._categories_to_dataframe([report])
+        records = writer._categories_to_records([report])
 
-        # Check DataFrame structure
-        assert len(df) == 2  # 2 categories (cattle, fields)
-        assert "cvr" in df.columns
-        assert "year" in df.columns
-        assert "category_name" in df.columns
-        assert "co2e_kg" in df.columns
-        assert "data_quality" in df.columns
-        assert "sub_sources" in df.columns
+        # Check records structure
+        assert len(records) == 2  # 2 categories (cattle, fields)
+        assert all("cvr" in r for r in records)
+        assert all("year" in r for r in records)
+        assert all("category_name" in r for r in records)
+        assert all("co2e_kg" in r for r in records)
+        assert all("data_quality" in r for r in records)
+        assert all("sub_sources" in r for r in records)
 
         # Check category data
-        cattle_row = df[df["category_name"] == "cattle"].iloc[0]
+        cattle_row = next(r for r in records if r["category_name"] == "cattle")
         assert cattle_row["co2e_kg"] == 80000.0
         assert cattle_row["data_quality"] == "complete"
         assert "enteric_methane" in cattle_row["sub_sources"]
@@ -175,9 +175,9 @@ class TestClimateOutputWriter:
             create_mock_report(cvr="12345678", year=2024),
         ]
 
-        df = writer._reports_to_dataframe(reports)
-        assert len(df) == 2
-        assert set(df["year"].values) == {2023, 2024}
+        records = writer._reports_to_records(reports)
+        assert len(records) == 2
+        assert set(r["year"] for r in records) == {2023, 2024}
 
         # Check metadata year range
         metadata = writer._build_metadata(reports, "20240101_120000")
@@ -230,13 +230,13 @@ if __name__ == "__main__":
     report = create_mock_report()
     print(f"✅ Created mock report: CVR {report.cvr}, {report.total_co2e_kg:,.0f} kg CO2e")
 
-    # Test 3: DataFrame conversion
-    print("\n3. Testing DataFrame conversion...")
-    emissions_df = writer._reports_to_dataframe([report])
-    print(f"✅ Emissions DataFrame: {len(emissions_df)} rows, {len(emissions_df.columns)} columns")
+    # Test 3: Records conversion
+    print("\n3. Testing records conversion...")
+    emissions_records = writer._reports_to_records([report])
+    print(f"✅ Emissions records: {len(emissions_records)} records")
 
-    categories_df = writer._categories_to_dataframe([report])
-    print(f"✅ Categories DataFrame: {len(categories_df)} rows, {len(categories_df.columns)} columns")
+    categories_records = writer._categories_to_records([report])
+    print(f"✅ Categories records: {len(categories_records)} records")
 
     # Test 4: Metadata generation
     print("\n4. Testing metadata generation...")
@@ -250,8 +250,8 @@ if __name__ == "__main__":
         create_mock_report(cvr="12345678", year=2024),
         create_mock_report(cvr="87654321", year=2024),
     ]
-    multi_df = writer._reports_to_dataframe(reports)
-    print(f"✅ Multiple reports DataFrame: {len(multi_df)} rows")
+    multi_records = writer._reports_to_records(reports)
+    print(f"✅ Multiple reports records: {len(multi_records)} records")
 
     print("\n" + "=" * 50)
     print("✅ All basic tests passed!")

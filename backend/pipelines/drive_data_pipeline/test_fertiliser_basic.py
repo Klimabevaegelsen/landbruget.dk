@@ -40,10 +40,7 @@ def test_file_structure() -> bool:
         "_process_goedningsregnskaber",
     ]
 
-    missing_elements = []
-    for element in required_elements:
-        if element not in content:
-            missing_elements.append(element)
+    missing_elements = [element for element in required_elements if element not in content]
 
     if missing_elements:
         print(f"❌ Missing required elements: {missing_elements}")
@@ -72,10 +69,7 @@ def test_processor_integration() -> bool:
         '"Fertiliser": FertiliserTransformer()',
     ]
 
-    missing_changes = []
-    for change in required_changes:
-        if change not in content:
-            missing_changes.append(change)
+    missing_changes = [change for change in required_changes if change not in content]
 
     if missing_changes:
         print(f"❌ Missing processor changes: {missing_changes}")

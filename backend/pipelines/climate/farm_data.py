@@ -1,22 +1,23 @@
-from typing import Dict
 from dataclasses import dataclass, field
+
 
 @dataclass
 class FarmData:
     """
     Stores and provides access to farm-specific data used in emission calculations.
     """
+
     # Animal data
-    animal_counts: Dict[str, int] = field(default_factory=dict)
-    animal_inputs: Dict[tuple[str, str], float] = field(default_factory=dict)
+    animal_counts: dict[str, int] = field(default_factory=dict)
+    animal_inputs: dict[tuple[str, str], float] = field(default_factory=dict)
 
     # Field/crop data
-    field_areas: Dict[str, float] = field(default_factory=dict)  # ha
-    crop_yields: Dict[str, float] = field(default_factory=dict)  # kg/ha
-    fertilizer_applications: Dict[str, float] = field(default_factory=dict)  # kg N/ha
+    field_areas: dict[str, float] = field(default_factory=dict)  # ha
+    crop_yields: dict[str, float] = field(default_factory=dict)  # kg/ha
+    fertilizer_applications: dict[str, float] = field(default_factory=dict)  # kg N/ha
 
     # Energy use data
-    energy_use: Dict[str, float] = field(default_factory=dict)  # MJ or liters
+    energy_use: dict[str, float] = field(default_factory=dict)  # MJ or liters
 
     def get_animal_count(self, animal_type: str) -> int:
         """
@@ -101,12 +102,12 @@ class FarmData:
         Returns:
             bool: True if the farm has data in this category
         """
-        if category == 'cattle':
-            return any('cow' in k or 'opdraet' in k for k in self.animal_counts.keys())
-        elif category == 'pigs':
-            return any('svin' in k for k in self.animal_counts.keys())
-        elif category == 'crops':
+        if category == "cattle":
+            return any("cow" in k or "opdraet" in k for k in self.animal_counts)
+        if category == "pigs":
+            return any("svin" in k for k in self.animal_counts)
+        if category == "crops":
             return len(self.field_areas) > 0
-        elif category == 'energy':
+        if category == "energy":
             return len(self.energy_use) > 0
         return False

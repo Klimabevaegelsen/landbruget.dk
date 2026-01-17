@@ -118,7 +118,7 @@ class BaseTransformer(abc.ABC):
                         ).df()
                         temp_conn.close()
                         return df
-                    elif result.metadata and "output_paths" in result.metadata:
+                    if result.metadata and "output_paths" in result.metadata:
                         # Multiple output files - return them as separate files, don't combine
                         output_paths = result.metadata["output_paths"]
                         if output_paths:
@@ -145,12 +145,11 @@ class BaseTransformer(abc.ABC):
 
                     logger.error("Transform succeeded but no output files found")
                     return None
-                else:
-                    logger.error(f"Transform failed: {result.error}")
-                    return None
+                logger.error(f"Transform failed: {result.error}")
+                return None
 
         except Exception as e:
-            logger.error(f"Failed to transform content for {filename}: {str(e)}")
+            logger.error(f"Failed to transform content for {filename}: {e!s}")
             return None
         finally:
             # Clean up temporary file
@@ -213,11 +212,10 @@ class BaseTransformer(abc.ABC):
         """
         # This is a placeholder - actual implementation will depend on
         # whether we're using DuckDB, Ibis, or another library
-        schema = {}
+        return {}
 
         # Example implementation if using Ibis
         # for col in df.columns:
         #     dtype = str(df[col].type())
         #     schema[col] = dtype
 
-        return schema

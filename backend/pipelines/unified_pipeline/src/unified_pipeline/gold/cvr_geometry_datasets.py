@@ -8,8 +8,9 @@ This module implements Phase 1 of the CVR geometry linking system:
 This follows the analysis in docs/analysis/cvr_geometry_datasets_analysis.md
 """
 
+import contextlib
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import Field
 
@@ -51,7 +52,7 @@ class CVRGeometryDatasetsConfig(BaseJobConfig):
     )
 
     # Testing configuration
-    test_limit: Optional[int] = Field(
+    test_limit: int | None = Field(
         default=1000, description="Limit records for testing (None = no limit)"
     )
 
@@ -64,7 +65,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
         # Note: Not using GCSDataAccess for now since we're working with local files
         # self.gcs_access = GCSDataAccess()
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> bool:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> bool:
         """
         Run the CVR geometry datasets processing.
 
@@ -116,7 +117,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
             self.log.error(f"❌ CVR Geometry Datasets processing failed: {e}")
             raise
 
-    async def _process_cvr_address_points(self) -> Dict[str, Any]:
+    async def _process_cvr_address_points(self) -> dict[str, Any]:
         """
         Process CVR address points from enrichment data.
 
@@ -178,7 +179,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
             "unique_cvrs": df["cvr_number"].nunique() if "cvr_number" in df.columns else 0,
         }
 
-    async def _process_chr_property_points(self) -> Dict[str, Any]:
+    async def _process_chr_property_points(self) -> dict[str, Any]:
         """
         Process CHR property points linked to CVR numbers.
 
@@ -195,7 +196,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
                 p.chr_number,
                 p.geo_coord_x_source,
                 p.geo_coord_y_source,
-                ST_Transform(p.geometry, 'EPSG:25832', 'EPSG:4326') as geometry_wgs84,
+                ST_Transform(p.geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true) as geometry_wgs84,
                 p.address,
                 p.postal_code,
                 p.city,
@@ -236,7 +237,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
             "unique_cvrs": df["owner_cvr"].nunique() if "owner_cvr" in df.columns else 0,
         }
 
-    async def _process_cvr_property_polygons(self) -> Dict[str, Any]:
+    async def _process_cvr_property_polygons(self) -> dict[str, Any]:
         """
         Process CVR property polygons from Property Cadastral Merged dataset.
 
@@ -301,7 +302,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
             "unique_cvrs": df["cvr_number"].nunique() if "cvr_number" in df.columns else 0,
         }
 
-    async def _process_cvr_building_polygons(self) -> Dict[str, Any]:
+    async def _process_cvr_building_polygons(self) -> dict[str, Any]:
         """
         Process CVR building polygons from BBR Buildings dataset.
 
@@ -322,7 +323,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
             "unique_cvrs": 0,
         }
 
-    async def _save_results(self, results: Dict[str, Any]) -> None:
+    async def _save_results(self, results: dict[str, Any]) -> None:
         """Save processing results to GCS."""
 
         timestamp = self.date_pattern
@@ -400,10 +401,8 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
         for col in df_copy.columns:
             if df_copy[col].dtype == "object":
                 # Check if column contains UUIDs and convert to string
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     df_copy[col] = df_copy[col].astype(str)
-                except (ValueError, TypeError):
-                    pass
 
         # Save as parquet
         df_copy.to_parquet(local_file)

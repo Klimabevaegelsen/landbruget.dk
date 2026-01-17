@@ -9,5 +9,4 @@ def beregn_udsatte_hoener(a_hoennike: float, d_procent: float) -> float:
     Returns:
         Antallet af udsatte høner.
     """
-    a = a_hoennike - (d_procent * a_hoennike)
-    return a
+    return a_hoennike - (d_procent * a_hoennike)

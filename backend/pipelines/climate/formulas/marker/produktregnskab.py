@@ -6,11 +6,11 @@ af alle marker, hvor en bestemt afgrøde dyrkes, for at beregne et gennemsnitlig
 produktaftryk pr. hektar for den pågældende afgrøde.
 """
 
-from typing import List, Dict, Any
+from typing import Any
 
 # Define a type alias for a field data structure for clarity
 # Each field would have its area and CO2e contributions from various sources.
-FieldData = Dict[str, Any]
+FieldData = dict[str, Any]
 
 # Define a type alias for CO2e calculation functions from other modules
 # These would typically be imported from their respective .py files
@@ -19,7 +19,7 @@ FieldData = Dict[str, Any]
 
 
 def calculate_produktaftryk_afgroede_kg_co2e_pr_ha(
-    fields_data: List[FieldData],
+    fields_data: list[FieldData],
     target_afgroede_navn: str,
     # Functions from other modules would be passed or imported here
     # e.g.: kalkning_func: CO2eCalcFunction,
@@ -54,14 +54,14 @@ def calculate_produktaftryk_afgroede_kg_co2e_pr_ha(
     total_areal_for_target_afgroede = 0.0
 
     for field in fields_data:
-        if field.get('afgroede_navn') == target_afgroede_navn:
-            areal_ha = field.get('areal_ha', 0.0)
-            if areal_ha <= 0: # Skip fields with no or invalid area
+        if field.get("afgroede_navn") == target_afgroede_navn:
+            areal_ha = field.get("areal_ha", 0.0)
+            if areal_ha <= 0:  # Skip fields with no or invalid area
                 continue
 
             # Sum CO2e from all sources for this field
             # This assumes 'co2e_sources' dictionary is provided with pre-calculated values
-            field_total_co2e = sum(field.get('co2e_sources', {}).values())
+            field_total_co2e = sum(field.get("co2e_sources", {}).values())
 
             # --- Illustrative alternative: Calculating CO2e on the fly ---
             # field_total_co2e = 0
@@ -78,81 +78,78 @@ def calculate_produktaftryk_afgroede_kg_co2e_pr_ha(
     if total_areal_for_target_afgroede == 0:
         return 0.0  # Undgå division med nul
 
-    produktaftryk = total_co2e_for_target_afgroede / total_areal_for_target_afgroede
-    return produktaftryk
+    return total_co2e_for_target_afgroede / total_areal_for_target_afgroede
 
 
 # Testcases
 if __name__ == "__main__":
     # Eksempel data for marker (simulerer data der ville komme fra en database/anden kilde)
     # CO2e values are illustrative totals for each field from relevant sources.
-    sample_fields_data: List[FieldData] = [
+    sample_fields_data: list[FieldData] = [
         {
-            'mark_id': 1,
-            'afgroede_navn': "Vårbyg",
-            'areal_ha': 40.0,
-            'co2e_sources': {
-                'goedning': 40 * 150.0,    # 150 kg CO2e/ha from goedning
-                'kalkning': 40 * 10.0,     # 10 kg CO2e/ha from kalkning
-                'afgroederester': 40 * 50.0, # 50 kg CO2e/ha from afgroederester
-                'nitratudvaskning': 40 * 20.0, # etc.
-                'organogene_jorde': 0.0, # Assume no organogene jorde for this field
+            "mark_id": 1,
+            "afgroede_navn": "Vårbyg",
+            "areal_ha": 40.0,
+            "co2e_sources": {
+                "goedning": 40 * 150.0,  # 150 kg CO2e/ha from goedning
+                "kalkning": 40 * 10.0,  # 10 kg CO2e/ha from kalkning
+                "afgroederester": 40 * 50.0,  # 50 kg CO2e/ha from afgroederester
+                "nitratudvaskning": 40 * 20.0,  # etc.
+                "organogene_jorde": 0.0,  # Assume no organogene jorde for this field
                 # 'import_goedning': 40 * 5.0, # Illustrative import emission
                 # 'import_diesel': 40 * 15.0,  # Illustrative import emission
-            }
+            },
         },
         {
-            'mark_id': 2,
-            'afgroede_navn': "Vårbyg",
-            'areal_ha': 180.0,
-            'co2e_sources': {
-                'goedning': 180 * 160.0,
-                'kalkning': 180 * 12.0,
-                'afgroederester': 180 * 55.0,
-                'nitratudvaskning': 180 * 22.0,
-                'organogene_jorde': 180 * 30.0, # This field has organogene jorde
-            }
+            "mark_id": 2,
+            "afgroede_navn": "Vårbyg",
+            "areal_ha": 180.0,
+            "co2e_sources": {
+                "goedning": 180 * 160.0,
+                "kalkning": 180 * 12.0,
+                "afgroederester": 180 * 55.0,
+                "nitratudvaskning": 180 * 22.0,
+                "organogene_jorde": 180 * 30.0,  # This field has organogene jorde
+            },
         },
         {
-            'mark_id': 3,
-            'afgroede_navn': "Vårbyg",
-            'areal_ha': 80.0,
-            'co2e_sources': {
-                'goedning': 80 * 140.0,
-                'kalkning': 80 * 9.0,
-                'afgroederester': 80 * 45.0,
-                'nitratudvaskning': 80 * 18.0,
-            }
+            "mark_id": 3,
+            "afgroede_navn": "Vårbyg",
+            "areal_ha": 80.0,
+            "co2e_sources": {
+                "goedning": 80 * 140.0,
+                "kalkning": 80 * 9.0,
+                "afgroederester": 80 * 45.0,
+                "nitratudvaskning": 80 * 18.0,
+            },
         },
         {
-            'mark_id': 4,
-            'afgroede_navn': "Vinterhvede",
-            'areal_ha': 100.0,
-            'co2e_sources': {
-                'goedning': 100 * 200.0,
-                'kalkning': 100 * 15.0,
-                'afgroederester': 100 * 60.0,
-                'nitratudvaskning': 100 * 25.0,
-            }
+            "mark_id": 4,
+            "afgroede_navn": "Vinterhvede",
+            "areal_ha": 100.0,
+            "co2e_sources": {
+                "goedning": 100 * 200.0,
+                "kalkning": 100 * 15.0,
+                "afgroederester": 100 * 60.0,
+                "nitratudvaskning": 100 * 25.0,
+            },
         },
         {
-            'mark_id': 5,
-            'afgroede_navn': "Rajgræs",
-            'areal_ha': 0.0, # Invalid area, should be skipped
-            'co2e_sources': {'goedning': 500.0}
+            "mark_id": 5,
+            "afgroede_navn": "Rajgræs",
+            "areal_ha": 0.0,  # Invalid area, should be skipped
+            "co2e_sources": {"goedning": 500.0},
         },
-         {
-            'mark_id': 6,
-            'afgroede_navn': "Vårbyg", # Field with no co2e sources listed
-            'areal_ha': 20.0,
-            'co2e_sources': {}
+        {
+            "mark_id": 6,
+            "afgroede_navn": "Vårbyg",  # Field with no co2e sources listed
+            "areal_ha": 20.0,
+            "co2e_sources": {},
         },
     ]
 
     # Beregn produktaftryk for Vårbyg
-    pa_vaarbyg = calculate_produktaftryk_afgroede_kg_co2e_pr_ha(
-        sample_fields_data, "Vårbyg"
-    )
+    pa_vaarbyg = calculate_produktaftryk_afgroede_kg_co2e_pr_ha(sample_fields_data, "Vårbyg")
     print(f"Produktaftryk for Vårbyg: {pa_vaarbyg:.2f} kg CO2e/ha")
 
     # Beregn produktaftryk for Vinterhvede
@@ -162,9 +159,7 @@ if __name__ == "__main__":
     print(f"Produktaftryk for Vinterhvede: {pa_vinterhvede:.2f} kg CO2e/ha")
 
     # Beregn produktaftryk for en afgrøde der ikke findes
-    pa_ukendt = calculate_produktaftryk_afgroede_kg_co2e_pr_ha(
-        sample_fields_data, "Majs"
-    )
+    pa_ukendt = calculate_produktaftryk_afgroede_kg_co2e_pr_ha(sample_fields_data, "Majs")
     print(f"Produktaftryk for Majs: {pa_ukendt:.2f} kg CO2e/ha")
 
     # Eksempel på forventet beregning for Vårbyg:

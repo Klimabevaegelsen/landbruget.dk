@@ -4,9 +4,9 @@ from typing import Any, Never
 
 # Import the optimized GCS access layer
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 except ImportError:
-    # Fallback for when unified_pipeline is not available
+    # Fallback for when common.gcs is not available
     GCSDataAccess = None
 
 # DuckDB is required - no fallback

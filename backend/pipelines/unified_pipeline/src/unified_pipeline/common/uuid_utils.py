@@ -9,7 +9,6 @@ import hashlib
 import logging
 import os
 import uuid
-from typing import Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +41,14 @@ class LandbrugsdataUUID:
                 cls._namespace = uuid.UUID(namespace_str)
                 logger.info("UUID namespace loaded from environment")
             except ValueError as e:
-                raise ValueError(f"Invalid UUID namespace in LANDBRUGSDATA_UUID_NAMESPACE: {e}")
+                raise ValueError(
+                    f"Invalid UUID namespace in LANDBRUGSDATA_UUID_NAMESPACE: {e}"
+                ) from e
 
         return cls._namespace
 
     @classmethod
-    def company_uuid(cls, cvr_number: Union[str, int]) -> Optional[str]:
+    def company_uuid(cls, cvr_number: str | int) -> str | None:
         """
         Generate deterministic company UUID from CVR number.
 
@@ -77,11 +78,10 @@ class LandbrugsdataUUID:
         md5_hash = hashlib.md5(input_str.encode()).hexdigest()
 
         # Format as UUID5 (version 5, variant 10)
-        uuid_str = (
+        return (
             f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
             f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
         )
-        return uuid_str
 
     @classmethod
     def field_uuid(cls, geometry_wkb: bytes) -> str:
@@ -105,14 +105,13 @@ class LandbrugsdataUUID:
         md5_hash = hashlib.md5(input_str.encode()).hexdigest()
 
         # Format as UUID5 (version 5, variant 10)
-        uuid_str = (
+        return (
             f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
             f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
         )
-        return uuid_str
 
     @classmethod
-    def pnumber_uuid(cls, p_number: Union[str, int]) -> Optional[str]:
+    def pnumber_uuid(cls, p_number: str | int) -> str | None:
         """
         Generate deterministic P-number UUID.
 
@@ -136,11 +135,10 @@ class LandbrugsdataUUID:
         md5_hash = hashlib.md5(input_str.encode()).hexdigest()
 
         # Format as UUID5 (version 5, variant 10)
-        uuid_str = (
+        return (
             f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
             f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
         )
-        return uuid_str
 
     @classmethod
     def generate_deterministic_uuid(cls, entity_type: str, identifier: str) -> str:
@@ -163,14 +161,13 @@ class LandbrugsdataUUID:
         md5_hash = hashlib.md5(input_str.encode()).hexdigest()
 
         # Format as UUID5 (version 5, variant 10)
-        uuid_str = (
+        return (
             f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
             f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
         )
-        return uuid_str
 
     @classmethod
-    def chr_uuid(cls, chr_number: Union[str, int]) -> Optional[str]:
+    def chr_uuid(cls, chr_number: str | int) -> str | None:
         """
         Generate deterministic CHR UUID.
 
@@ -198,11 +195,10 @@ class LandbrugsdataUUID:
         md5_hash = hashlib.md5(input_str.encode()).hexdigest()
 
         # Format as UUID5 (version 5, variant 10)
-        uuid_str = (
+        return (
             f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
             f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
         )
-        return uuid_str
 
     @classmethod
     def setup_duckdb_functions(cls, conn) -> None:

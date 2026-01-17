@@ -90,7 +90,9 @@ def monitor_disk_usage():
         tmp_total_gb = tmp_usage.total / (1024 * 1024 * 1024)
         tmp_used_percent = (tmp_usage.used / tmp_usage.total) * 100
 
-        logger.info(f"/tmp disk usage: {tmp_used_percent:.1f}% used, {tmp_free_gb:.1f}GB free of {tmp_total_gb:.1f}GB")
+        logger.info(
+            f"/tmp disk usage: {tmp_used_percent:.1f}% used, {tmp_free_gb:.1f}GB free of {tmp_total_gb:.1f}GB"
+        )
 
         if tmp_used_percent > 90:
             logger.warning(f"/tmp disk usage is high: {tmp_used_percent:.1f}%")
@@ -122,7 +124,7 @@ def main():
     monitor_disk_usage()
 
     # Perform cleanup
-    cleaned_files, total_size = cleanup_temp_files()
+    cleaned_files, _total_size = cleanup_temp_files()
 
     # Monitor disk usage after cleanup
     if cleaned_files > 0:

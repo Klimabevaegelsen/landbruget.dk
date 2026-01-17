@@ -6,16 +6,17 @@ Based on:
 - Lifecycle emissions from feed production and transport
 """
 
-from typing import Dict, Optional
-from pathlib import Path
 import json
+from pathlib import Path
 
 
-def load_reference_values() -> Dict[str, Dict[str, float]]:
+def load_reference_values() -> dict[str, dict[str, float]]:
     """Load feed emission factors from Table 6."""
     base_path = Path(__file__).parent.parent.parent / "reference_values"
 
-    with open(base_path / "tabel_6_databehov_ved_beregning_af_indkøbt_foder_svineproduktion_side_30.json") as f:
+    with open(
+        base_path / "tabel_6_databehov_ved_beregning_af_indkøbt_foder_svineproduktion_side_30.json"
+    ) as f:
         table_6 = json.load(f)
 
     # Parse Table 6 - Feed emission factors
@@ -38,8 +39,8 @@ def calculate_feed_emissions_svin(
     dyretype: str,
     antal_dyr: float,
     fe_per_animal: float,
-    feed_composition: Optional[Dict[str, float]] = None,
-) -> Dict[str, float]:
+    feed_composition: dict[str, float] | None = None,
+) -> dict[str, float]:
     """
     Calculate emissions from purchased pig feed.
 
@@ -101,7 +102,9 @@ def calculate_feed_emissions_svin(
             "korn": 0.25,  # 25% grain
         }
     else:
-        raise ValueError(f"Unknown pig type: {dyretype}. Must be one of: søer, smågrise, slagtesvin")
+        raise ValueError(
+            f"Unknown pig type: {dyretype}. Must be one of: søer, smågrise, slagtesvin"
+        )
 
     # Use custom composition if provided, otherwise use defaults
     feed_mix = feed_composition or default_feeds
@@ -122,7 +125,9 @@ def calculate_feed_emissions_svin(
         feed_key = feed_type.lower()
 
         if feed_key not in FEED_FACTORS:
-            raise ValueError(f"Unknown feed type: {feed_type}. Available: {list(FEED_FACTORS.keys())}")
+            raise ValueError(
+                f"Unknown feed type: {feed_type}. Available: {list(FEED_FACTORS.keys())}"
+            )
 
         ef_per_fe = FEED_FACTORS[feed_key]["kg_co2e_per_fe"]
 
@@ -148,8 +153,8 @@ def calculate_feed_emissions_svin(
 
 
 def calculate_all_pig_feed(
-    livestock_data: Dict[str, Dict[str, float]],
-) -> Dict[str, Dict]:
+    livestock_data: dict[str, dict[str, float]],
+) -> dict[str, dict]:
     """
     Calculate feed emissions for all pig types in a farm.
 
@@ -195,18 +200,18 @@ if __name__ == "__main__":
 
     # Test 1: Conventional sows (1492 FE/year)
     result = calculate_feed_emissions_svin("søer", 200, 1492)
-    print(f"200 conventional sows (1492 FE/year each):")
+    print("200 conventional sows (1492 FE/year each):")
     print(f"  Total feed: {result['total_fe']:.0f} FE")
     print(f"  Feed emissions: {result['co2e_kg']:.2f} kg CO2e/year")
     print(f"  Per sow: {result['co2e_per_animal']:.2f} kg CO2e/year")
-    print(f"  Breakdown:")
-    for feed_type, data in result['feed_breakdown'].items():
-        print(f"    - {feed_type}: {data['co2e_kg']:.2f} kg CO2e ({data['share']*100:.0f}%)")
+    print("  Breakdown:")
+    for feed_type, data in result["feed_breakdown"].items():
+        print(f"    - {feed_type}: {data['co2e_kg']:.2f} kg CO2e ({data['share'] * 100:.0f}%)")
     print()
 
     # Test 2: Conventional finishers (82 kg gain × 2.77 FE/kg = 227 FE)
     result = calculate_feed_emissions_svin("slagtesvin", 1000, 227)
-    print(f"1000 conventional finishers (227 FE/year each):")
+    print("1000 conventional finishers (227 FE/year each):")
     print(f"  Total feed: {result['total_fe']:.0f} FE")
     print(f"  Feed emissions: {result['co2e_kg']:.2f} kg CO2e/year")
     print(f"  Per pig: {result['co2e_per_animal']:.2f} kg CO2e/year")
@@ -222,4 +227,4 @@ if __name__ == "__main__":
     print("Full farm (200 sows, 500 weaners, 1500 finishers):")
     print(f"  Total feed emissions: {results['total']['co2e_kg']:.2f} kg CO2e/year")
     total_animals = 200 + 500 + 1500
-    print(f"  Per animal: {results['total']['co2e_kg']/total_animals:.2f} kg CO2e/year")
+    print(f"  Per animal: {results['total']['co2e_kg'] / total_animals:.2f} kg CO2e/year")

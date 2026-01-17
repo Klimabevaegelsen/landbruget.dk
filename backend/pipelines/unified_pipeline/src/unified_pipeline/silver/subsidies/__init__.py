@@ -12,10 +12,10 @@ from .slagtepraemie import SlagtepraemieSilver, SlagtepraemieSilverConfig
 from .stoetteoplysninger import StoetteoplysningerSilver, StoetteoplysningerSilverConfig
 
 __all__ = [
-    "StoetteoplysningerSilver",
-    "StoetteoplysningerSilverConfig",
     "DeminimisSilver",
     "DeminimisSilverConfig",
     "SlagtepraemieSilver",
     "SlagtepraemieSilverConfig",
+    "StoetteoplysningerSilver",
+    "StoetteoplysningerSilverConfig",
 ]

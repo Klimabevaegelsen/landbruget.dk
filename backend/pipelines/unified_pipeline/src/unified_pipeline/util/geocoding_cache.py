@@ -16,11 +16,11 @@ Cache Strategy:
 import hashlib
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 import duckdb
 
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 
 
@@ -165,9 +165,7 @@ class GeocodingCache:
         normalized = re.sub(r"[,.]", "", normalized)
 
         # Normalize Danish characters
-        normalized = normalized.replace("æ", "ae").replace("ø", "oe").replace("å", "aa")
-
-        return normalized
+        return normalized.replace("æ", "ae").replace("ø", "oe").replace("å", "aa")
 
     def _create_address_hash(self, address: str) -> str:
         """
@@ -182,7 +180,7 @@ class GeocodingCache:
         normalized = self._normalize_address(address)
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
-    def lookup_by_dawa_id(self, adresse_id: str) -> Optional[Dict[str, Any]]:
+    def lookup_by_dawa_id(self, adresse_id: str) -> dict[str, Any] | None:
         """
         Look up geocoding results by DAWA address ID.
 
@@ -228,7 +226,7 @@ class GeocodingCache:
             self.log.warning(f"Error looking up DAWA ID {adresse_id}: {e}")
             return None
 
-    def lookup_by_address_text(self, address: str) -> Optional[Dict[str, Any]]:
+    def lookup_by_address_text(self, address: str) -> dict[str, Any] | None:
         """
         Look up geocoding results by address text.
 
@@ -277,7 +275,7 @@ class GeocodingCache:
             self.log.warning(f"Error looking up address text {address}: {e}")
             return None
 
-    def store_dawa_result(self, adresse_id: str, geocoding_result: Dict[str, Any]) -> None:
+    def store_dawa_result(self, adresse_id: str, geocoding_result: dict[str, Any]) -> None:
         """
         Store DAWA geocoding result in cache.
 
@@ -314,7 +312,7 @@ class GeocodingCache:
             self.log.warning(f"Error storing DAWA result for {adresse_id}: {e}")
 
     def store_address_text_result(
-        self, address: str, geocoding_result: Dict[str, Any], api_source: str = "datavask"
+        self, address: str, geocoding_result: dict[str, Any], api_source: str = "datavask"
     ) -> None:
         """
         Store address text geocoding result in cache.
@@ -359,7 +357,7 @@ class GeocodingCache:
         except Exception as e:
             self.log.warning(f"Error storing address text result for {address}: {e}")
 
-    def get_cache_stats(self) -> Dict[str, int]:
+    def get_cache_stats(self) -> dict[str, int]:
         """
         Get cache statistics.
 

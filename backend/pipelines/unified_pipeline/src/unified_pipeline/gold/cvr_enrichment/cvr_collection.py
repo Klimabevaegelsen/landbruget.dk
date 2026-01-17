@@ -7,7 +7,7 @@ deduplicates them, validates formats, and prepares them for the enrichment proce
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -44,7 +44,7 @@ class CVRCollectionConfig(BaseJobConfig):
         default=True, description="Whether to save invalid CVR numbers for analysis"
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
@@ -93,7 +93,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         self.log.info(f"   • Test limit: {self.config.shared_config.test_limit or 'none'}")
 
     @timed(name="CVR collection processing")
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> str:
         """
         Run the CVR collection process.
 
@@ -148,7 +148,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
             raise
 
     @timed(name="Collecting CVR numbers")
-    def _collect_cvr_numbers(self) -> Dict[str, Any]:
+    def _collect_cvr_numbers(self) -> dict[str, Any]:
         """
         Collect CVR numbers from all pipeline CVR collections.
 
@@ -174,7 +174,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         return collection_data
 
     @timed(name="Validating CVR numbers")
-    def _validate_cvr_numbers(self, collection_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_cvr_numbers(self, collection_data: dict[str, Any]) -> dict[str, Any]:
         """
         Validate and filter CVR numbers.
 
@@ -207,7 +207,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         # Apply test limit if configured
         if self.config.shared_config.test_limit:
             original_count = len(valid_cvrs)
-            valid_cvrs = set(sorted(list(valid_cvrs))[: self.config.shared_config.test_limit])
+            valid_cvrs = set(sorted(valid_cvrs)[: self.config.shared_config.test_limit])
             self.log.info(
                 f"🧪 Test mode: Limited CVR list from {original_count} to {len(valid_cvrs)} entries"
             )
@@ -236,7 +236,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         return validated_data
 
     @timed(name="Creating processing batches")
-    def _create_processing_batches(self, validated_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_processing_batches(self, validated_data: dict[str, Any]) -> dict[str, Any]:
         """
         Create batches for parallel processing.
 
@@ -279,7 +279,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         return batch_data
 
     @timed(name="Saving collection data")
-    def _save_collection_data(self, batch_data: Dict[str, Any]) -> str:
+    def _save_collection_data(self, batch_data: dict[str, Any]) -> str:
         """
         Save collection data to GCS.
 
@@ -309,7 +309,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
         # Convert valid CVR numbers to list for DuckDB
-        valid_cvrs_list = sorted(list(batch_data["valid_cvr_numbers"]))
+        valid_cvrs_list = sorted(batch_data["valid_cvr_numbers"])
 
         if valid_cvrs_list:
             self.conn.execute(
@@ -365,7 +365,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
 
         return table_name
 
-    def _save_batch_details(self, batch_data: Dict[str, Any]) -> None:
+    def _save_batch_details(self, batch_data: dict[str, Any]) -> None:
         """Save detailed batch information for subsequent steps."""
         batch_details_path = f"gold/{self.config.dataset}/{self.date_pattern}/batch_details.json"
 
@@ -392,7 +392,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
 
         self.log.info(f"Saved {len(invalid_cvrs)} invalid CVR numbers to {invalid_cvrs_path}")
 
-    def _save_pipeline_sources(self, pipeline_sources: Dict[str, list]) -> None:
+    def _save_pipeline_sources(self, pipeline_sources: dict[str, list]) -> None:
         """Save pipeline sources mapping."""
         sources_path = f"gold/{self.config.dataset}/{self.date_pattern}/pipeline_sources.json"
 
@@ -430,7 +430,4 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
             return False
 
         # CVR numbers shouldn't start with 0
-        if cvr_clean.startswith("0"):
-            return False
-
-        return True
+        return not cvr_clean.startswith("0")

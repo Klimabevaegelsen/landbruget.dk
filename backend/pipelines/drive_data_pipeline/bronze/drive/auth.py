@@ -61,8 +61,6 @@ def get_drive_service(credentials_path: Path | None = None, use_public_access: b
         if use_public_access:
             logger.warning(f"Authentication failed, attempting public access: {e}")
             # Try building service without credentials for public access
-            service = build("drive", "v3")
-            return service
-        else:
-            logger.error(f"Failed to authenticate with Google Drive API: {e}")
-            raise
+            return build("drive", "v3")
+        logger.error(f"Failed to authenticate with Google Drive API: {e}")
+        raise

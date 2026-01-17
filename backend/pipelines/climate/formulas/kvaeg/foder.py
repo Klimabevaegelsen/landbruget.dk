@@ -12,12 +12,11 @@ Source Attribution:
 - Standard feed intake: standardfaktorer_dyr.json (Tables 2a-2f when available)
 """
 
-from typing import Dict, Optional
-from pathlib import Path
 import json
+from pathlib import Path
 
 
-def load_reference_values() -> Dict[str, Dict[str, float]]:
+def load_reference_values() -> dict[str, dict[str, float]]:
     """
     Load feed emission factors from Table 3.
 
@@ -27,7 +26,10 @@ def load_reference_values() -> Dict[str, Dict[str, float]]:
     """
     base_path = Path(__file__).parent.parent.parent / "reference_values"
 
-    with open(base_path / "tabel_3_indkøbte_fodermidler_har_følgende_klimaværdi_udtryk_i_g_co2_ækv_per_kg_tørstof_side_24-25.json") as f:
+    with open(
+        base_path
+        / "tabel_3_indkøbte_fodermidler_har_følgende_klimaværdi_udtryk_i_g_co2_ækv_per_kg_tørstof_side_24-25.json"
+    ) as f:
         table_3 = json.load(f)
 
     # Parse Table 3 - Feed emission factors
@@ -54,8 +56,8 @@ def calculate_feed_emissions_kvaeg(
     antal_dyr: float,
     ts_per_day: float,
     days_per_year: float = 365,
-    feed_composition: Optional[Dict[str, float]] = None,
-) -> Dict[str, float]:
+    feed_composition: dict[str, float] | None = None,
+) -> dict[str, float]:
     """
     Calculate emissions from purchased cattle feed.
 
@@ -132,7 +134,9 @@ def calculate_feed_emissions_kvaeg(
             "andet_grovfoder_(roer,_helsæd_mv)": 0.05,  # 5% other roughage
         }
     else:
-        raise ValueError(f"Unknown cattle type: {cattle_type}. Must be one of: malkekøer, kvier, tyre_stude")
+        raise ValueError(
+            f"Unknown cattle type: {cattle_type}. Must be one of: malkekøer, kvier, tyre_stude"
+        )
 
     # Use custom composition if provided, otherwise use defaults
     feed_mix = feed_composition or default_feeds
@@ -153,7 +157,9 @@ def calculate_feed_emissions_kvaeg(
         feed_key = feed_type.lower().replace(" ", "_").replace("-", "_").replace("/", "_")
 
         if feed_key not in FEED_FACTORS:
-            raise ValueError(f"Unknown feed type: {feed_type}. Available: {list(FEED_FACTORS.keys())}")
+            raise ValueError(
+                f"Unknown feed type: {feed_type}. Available: {list(FEED_FACTORS.keys())}"
+            )
 
         ef_g_per_kg_ts = FEED_FACTORS[feed_key]["g_co2e_per_kg_ts"]
 
@@ -180,8 +186,8 @@ def calculate_feed_emissions_kvaeg(
 
 
 def calculate_all_cattle_feed(
-    livestock_data: Dict[str, Dict[str, float]],
-) -> Dict[str, Dict]:
+    livestock_data: dict[str, dict[str, float]],
+) -> dict[str, dict]:
     """
     Calculate feed emissions for all cattle types in a farm.
 
@@ -213,9 +219,7 @@ def calculate_all_cattle_feed(
         days_per_year = data.get("days_per_year", 365)
 
         if count > 0:
-            result = calculate_feed_emissions_kvaeg(
-                cattle_type, count, ts_per_day, days_per_year
-            )
+            result = calculate_feed_emissions_kvaeg(cattle_type, count, ts_per_day, days_per_year)
             results[cattle_type] = result
             total_co2e += result["co2e_kg"]
 
@@ -234,18 +238,18 @@ if __name__ == "__main__":
 
     # Test 1: Dairy cows (23.5 kg TS/day)
     result = calculate_feed_emissions_kvaeg("malkekøer", 100, 23.5)
-    print(f"100 dairy cows (23.5 kg TS/day each):")
+    print("100 dairy cows (23.5 kg TS/day each):")
     print(f"  Total dry matter: {result['total_ts']:.0f} kg TS/year")
     print(f"  Feed emissions: {result['co2e_kg']:.2f} kg CO2e/year")
     print(f"  Per cow: {result['co2e_per_animal']:.2f} kg CO2e/year")
-    print(f"  Breakdown:")
-    for feed_type, data in result['feed_breakdown'].items():
-        print(f"    - {feed_type}: {data['co2e_kg']:.2f} kg CO2e ({data['share']*100:.0f}%)")
+    print("  Breakdown:")
+    for feed_type, data in result["feed_breakdown"].items():
+        print(f"    - {feed_type}: {data['co2e_kg']:.2f} kg CO2e ({data['share'] * 100:.0f}%)")
     print()
 
     # Test 2: Heifers (7.5 kg TS/day)
     result = calculate_feed_emissions_kvaeg("kvier", 50, 7.5)
-    print(f"50 heifers (7.5 kg TS/day each):")
+    print("50 heifers (7.5 kg TS/day each):")
     print(f"  Total dry matter: {result['total_ts']:.0f} kg TS/year")
     print(f"  Feed emissions: {result['co2e_kg']:.2f} kg CO2e/year")
     print(f"  Per heifer: {result['co2e_per_animal']:.2f} kg CO2e/year")
@@ -261,7 +265,7 @@ if __name__ == "__main__":
     print("Full farm (100 dairy cows, 50 heifers, 30 bulls):")
     print(f"  Total feed emissions: {results['total']['co2e_kg']:.2f} kg CO2e/year")
     total_animals = 100 + 50 + 30
-    print(f"  Per animal: {results['total']['co2e_kg']/total_animals:.2f} kg CO2e/year")
+    print(f"  Per animal: {results['total']['co2e_kg'] / total_animals:.2f} kg CO2e/year")
     print()
 
     # Show impact on total cattle emissions

@@ -9,7 +9,10 @@ import time
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
+from tqdm.auto import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from bronze.auth import (
     create_besaetning_client,
@@ -39,8 +42,6 @@ from silver import config
 
 # Import silver processing orchestrator
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
-from tqdm.auto import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 # Import incremental processing utilities
 try:
@@ -55,19 +56,14 @@ except ImportError:
     INCREMENTAL_PROCESSING_AVAILABLE = False
 
 # Import pipeline metadata system for data tracing
-try:
-    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-    PIPELINE_METADATA_AVAILABLE = True
-except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
-    PipelineMetadataManager = None
-    PIPELINE_METADATA_AVAILABLE = False
+PIPELINE_METADATA_AVAILABLE = True
 
 logger = logging.getLogger(__name__)
 
 
-def calculate_date_range(processing_mode: str) -> Tuple[Optional[str], Optional[str]]:
+def calculate_date_range(processing_mode: str) -> tuple[str | None, str | None]:
     """
     Calculate start and end dates based on processing mode.
 
@@ -88,14 +84,14 @@ def calculate_date_range(processing_mode: str) -> Tuple[Optional[str], Optional[
         logger.info(f"Incremental mode: processing last 3 months ({start_date} to {end_date})")
         return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
 
-    elif processing_mode == "full":
+    if processing_mode == "full":
         # Full backfill (as per CHR plan: 2021-2025)
         start_date = "2021-01-01"
         end_date = today.strftime("%Y-%m-%d")
         logger.info(f"Full mode: processing complete range ({start_date} to {end_date})")
         return start_date, end_date
 
-    elif processing_mode == "backfill":
+    if processing_mode == "backfill":
         # For backfill, don't override dates - let manual override handle it
         logger.info("Backfill mode: using manual date override or pipeline defaults")
         return None, None
@@ -103,7 +99,7 @@ def calculate_date_range(processing_mode: str) -> Tuple[Optional[str], Optional[
     return None, None
 
 
-def determine_processing_mode(bronze_timestamp: str) -> Tuple[str, Optional[str]]:
+def determine_processing_mode(bronze_timestamp: str) -> tuple[str, str | None]:
     """
     Simple processing mode determination - defaults to 3 months, manual override available.
 
@@ -141,7 +137,9 @@ def setup_logging(log_level: str):
         root.removeHandler(handler)
 
     # Set up root logger at WARNING by default with a format that works well with tqdm
-    logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     # Configure our pipeline loggers
     pipeline_logger = logging.getLogger("backend.pipelines.chr_pipeline")
@@ -157,7 +155,7 @@ def setup_logging(log_level: str):
     logging.getLogger("google").setLevel(logging.WARNING)
 
 
-def get_client(context: Dict[str, Any], client_name: str):
+def get_client(context: dict[str, Any], client_name: str):
     """Get a CHR client lazily, creating it only when needed."""
     if client_name not in context["clients"]:
         logging.info(f"Creating {client_name} client lazily")
@@ -190,7 +188,7 @@ def get_default_dates() -> tuple[date, date]:
     return start_date, end_date
 
 
-def generate_monthly_date_ranges(start_date: date, end_date: date) -> List[tuple[date, date]]:
+def generate_monthly_date_ranges(start_date: date, end_date: date) -> list[tuple[date, date]]:
     """
     Generate monthly date ranges for VetStat API calls.
     VetStat API can only handle one month at a time.
@@ -231,7 +229,9 @@ def generate_monthly_date_ranges(start_date: date, end_date: date) -> List[tuple
     return monthly_ranges
 
 
-def create_chr_groups(chr_to_species: Dict[int, set], num_groups: int = 4) -> Dict[int, Dict[int, set]]:
+def create_chr_groups(
+    chr_to_species: dict[int, set], num_groups: int = 4
+) -> dict[int, dict[int, set]]:
     """
     Divide CHR numbers into balanced groups for parallel processing.
 
@@ -261,12 +261,16 @@ def create_chr_groups(chr_to_species: Dict[int, set], num_groups: int = 4) -> Di
     # Log group statistics
     for group_id, group_chrs in chr_groups.items():
         total_combinations = sum(len(species_set) for species_set in group_chrs.values())
-        logging.info(f"CHR Group {group_id}: {len(group_chrs)} CHRs, {total_combinations} CHR/species combinations")
+        logging.info(
+            f"CHR Group {group_id}: {len(group_chrs)} CHRs, {total_combinations} CHR/species combinations"
+        )
 
     return chr_groups
 
 
-def filter_chr_by_group(chr_to_species: Dict[int, set], chr_group: int, num_groups: int = 4) -> Dict[int, set]:
+def filter_chr_by_group(
+    chr_to_species: dict[int, set], chr_group: int, num_groups: int = 4
+) -> dict[int, set]:
     """
     Filter CHR numbers to only include those assigned to the specified group.
 
@@ -293,7 +297,7 @@ def filter_chr_by_group(chr_to_species: Dict[int, set], chr_group: int, num_grou
     return filtered_chrs
 
 
-def parse_args() -> Dict[str, Any]:
+def parse_args() -> dict[str, Any]:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="CHR Data Pipeline")
 
@@ -304,23 +308,40 @@ def parse_args() -> Dict[str, Any]:
         help="Pipeline steps to run (all, stamdata, herds, herd_details, "
         "diko, animal_movements, ejendom, vetstat, silver_*)",
     )
-    parser.add_argument("--test-species-codes", type=str, help="Comma-separated list of species codes for testing")
-    parser.add_argument("--limit-total-herds", type=int, help="Limit total number of herds to process")
-    parser.add_argument("--limit-herds-per-species", type=int, help="Limit number of herds per species")
     parser.add_argument(
-        "--workers", type=int, default=int(os.getenv("CHR_MAX_WORKERS", "5")), help="Number of parallel workers"
+        "--test-species-codes", type=str, help="Comma-separated list of species codes for testing"
+    )
+    parser.add_argument(
+        "--limit-total-herds", type=int, help="Limit total number of herds to process"
+    )
+    parser.add_argument(
+        "--limit-herds-per-species", type=int, help="Limit number of herds per species"
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=int(os.getenv("CHR_MAX_WORKERS", "5")),
+        help="Number of parallel workers",
     )
     parser.add_argument("--log-level", type=str, default="WARNING", help="Logging level")
     parser.add_argument("--progress", action="store_true", help="Show progress information")
-    parser.add_argument("--start-date", type=str, help="Start date for data collection (YYYY-MM-DD)")
+    parser.add_argument(
+        "--start-date", type=str, help="Start date for data collection (YYYY-MM-DD)"
+    )
     parser.add_argument("--end-date", type=str, help="End date for data collection (YYYY-MM-DD)")
     parser.add_argument(
-        "--discovery-year", type=int, help="Year to use for herd volume discovery (default: current year)"
+        "--discovery-year",
+        type=int,
+        help="Year to use for herd volume discovery (default: current year)",
     )
     parser.add_argument(
-        "--skip-dependencies", action="store_true", help="Skip running dependency steps (for parallel job execution)"
+        "--skip-dependencies",
+        action="store_true",
+        help="Skip running dependency steps (for parallel job execution)",
     )
-    parser.add_argument("--chr-group", type=int, help="CHR group number for parallel processing (1-4)")
+    parser.add_argument(
+        "--chr-group", type=int, help="CHR group number for parallel processing (1-4)"
+    )
 
     args = parser.parse_args()
 
@@ -361,7 +382,9 @@ def parse_args() -> Dict[str, Any]:
     }
 
 
-def fetch_stamdata(client: Any, username: str, test_species_codes: Optional[List[int]] = None) -> List[Dict]:
+def fetch_stamdata(
+    client: Any, username: str, test_species_codes: list[int] | None = None
+) -> list[dict]:
     """Fetch and parse species/usage combinations."""
     logger.info("Fetching species/usage combinations...")
     response = load_species_usage_combinations(client, username)
@@ -398,10 +421,10 @@ def fetch_stamdata(client: Any, username: str, test_species_codes: Optional[List
 def fetch_herds(
     client: Any,
     username: str,
-    combinations: List[Dict],
-    limit_total: Optional[int] = None,
-    limit_per_species: Optional[int] = None,
-) -> Dict[int, int]:
+    combinations: list[dict],
+    limit_total: int | None = None,
+    limit_per_species: int | None = None,
+) -> dict[int, int]:
     """Fetch herd numbers for each species/usage combination."""
     logger.info("Fetching herd numbers...")
     herd_to_species = {}
@@ -412,7 +435,10 @@ def fetch_herds(
         usage_code = combo["usage_code"]
 
         # Skip this combo if the per-species limit is already reached for this species
-        if limit_per_species is not None and herds_count_per_species.get(species_code, 0) >= limit_per_species:
+        if (
+            limit_per_species is not None
+            and herds_count_per_species.get(species_code, 0) >= limit_per_species
+        ):
             logger.debug(
                 f"Skipping combo for species {species_code}, usage {usage_code} as limit {limit_per_species} reached."
             )
@@ -421,8 +447,13 @@ def fetch_herds(
         start_number = 0
         while True:  # Loop for pagination within a combo
             # Check per-species limit before fetching more pages for this combo
-            if limit_per_species is not None and herds_count_per_species.get(species_code, 0) >= limit_per_species:
-                logger.debug(f"Stopping pagination for species {species_code} as limit {limit_per_species} reached.")
+            if (
+                limit_per_species is not None
+                and herds_count_per_species.get(species_code, 0) >= limit_per_species
+            ):
+                logger.debug(
+                    f"Stopping pagination for species {species_code} as limit {limit_per_species} reached."
+                )
                 break  # Stop fetching pages for this combo
 
             try:
@@ -447,7 +478,9 @@ def fetch_herds(
                         if herd_number not in herd_to_species:
                             herd_to_species[herd_number] = species_code
                             # Increment count for this species
-                            herds_count_per_species[species_code] = herds_count_per_species.get(species_code, 0) + 1
+                            herds_count_per_species[species_code] = (
+                                herds_count_per_species.get(species_code, 0) + 1
+                            )
                             herds_added_this_batch += 1
 
                             # Check total limit ONLY if per-species limit is NOT active
@@ -481,7 +514,9 @@ def fetch_herds(
                     break
 
             except Exception as e:
-                logger.error(f"Error fetching herds for species {species_code}, usage {usage_code}: {e}")
+                logger.error(
+                    f"Error fetching herds for species {species_code}, usage {usage_code}: {e}"
+                )
                 break  # Stop processing this combo on error
 
         logger.info(
@@ -494,97 +529,101 @@ def fetch_herds(
     return herd_to_species
 
 
-def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
+def process_parallel(func, tasks: list, workers: int, desc: str | None = None) -> list:
     """Execute tasks in parallel using a thread pool with progress tracking."""
     results = []
 
-    with logging_redirect_tqdm():
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(func, *task) for task in tasks]
+    with (
+        logging_redirect_tqdm(),
+        concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor,
+    ):
+        futures = [executor.submit(func, *task) for task in tasks]
 
-            # Map futures to their task info for better error reporting
-            future_to_task = {future: task for future, task in zip(futures, tasks)}
-            future_to_index = {future: i for i, future in enumerate(futures)}
+        # Map futures to their task info for better error reporting
+        future_to_task = dict(zip(futures, tasks, strict=False))
+        future_to_index = {future: i for i, future in enumerate(futures)}
 
-            # Create progress bar that works in both CI and interactive environments
-            completed_count = 0
-            pbar = tqdm(
-                total=len(futures),
-                desc=desc or func.__name__,
-                unit="tasks",
-                mininterval=1.0,
-                bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-            )
+        # Create progress bar that works in both CI and interactive environments
+        completed_count = 0
+        pbar = tqdm(
+            total=len(futures),
+            desc=desc or func.__name__,
+            unit="tasks",
+            mininterval=1.0,
+            bar_format="{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+        )
 
-            # Track start time for performance monitoring
-            start_time = time.time()
-            running_tasks = {}  # future -> start_time
-            last_log_time = start_time
-            success_count = 0
-            error_count = 0
+        # Track start time for performance monitoring
+        start_time = time.time()
+        running_tasks = {}  # future -> start_time
+        last_log_time = start_time
+        success_count = 0
+        error_count = 0
 
-            try:
-                for future in concurrent.futures.as_completed(futures):
-                    task_idx = future_to_index[future]
-                    task_info = future_to_task[future]
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                task_idx = future_to_index[future]
+                task_info = future_to_task[future]
 
-                    # Remove from running tasks
-                    if future in running_tasks:
-                        task_duration = time.time() - running_tasks[future]
-                        del running_tasks[future]
-                    else:
-                        task_duration = 0
+                # Remove from running tasks
+                if future in running_tasks:
+                    task_duration = time.time() - running_tasks[future]
+                    del running_tasks[future]
+                else:
+                    task_duration = 0
 
-                    try:
-                        result = future.result()
-                        results.append(result)
-                        success_count += 1
+                try:
+                    result = future.result()
+                    results.append(result)
+                    success_count += 1
 
-                        # Log slow tasks for debugging
-                        if task_duration > 60:  # Log tasks taking more than 1 minute
-                            if len(task_info) >= 3:  # Has herd number
-                                herd_number = task_info[2]
-                                logger.info(f"Task {task_idx} (herd {herd_number}) completed in {task_duration:.1f}s")
-                            else:
-                                logger.info(f"Task {task_idx} completed in {task_duration:.1f}s")
-
-                    except Exception as e:
-                        error_count += 1
-                        logger.error(f"Task {task_idx} failed: {e}")
-                        if len(task_info) >= 3:  # If task has herd number
+                    # Log slow tasks for debugging
+                    if task_duration > 60:  # Log tasks taking more than 1 minute
+                        if len(task_info) >= 3:  # Has herd number
                             herd_number = task_info[2]
-                            logger.error(f"Herd {herd_number} failed with error: {e}")
-                            logger.error(f"Task details: {task_info}")
+                            logger.info(
+                                f"Task {task_idx} (herd {herd_number}) completed in {task_duration:.1f}s"
+                            )
                         else:
-                            logger.error(f"Task {task_idx} details: {task_info}")
-                        results.append(None)
+                            logger.info(f"Task {task_idx} completed in {task_duration:.1f}s")
 
-                    completed_count += 1
-                    pbar.update(1)
+                except Exception as e:
+                    error_count += 1
+                    logger.error(f"Task {task_idx} failed: {e}")
+                    if len(task_info) >= 3:  # If task has herd number
+                        herd_number = task_info[2]
+                        logger.error(f"Herd {herd_number} failed with error: {e}")
+                        logger.error(f"Task details: {task_info}")
+                    else:
+                        logger.error(f"Task {task_idx} details: {task_info}")
+                    results.append(None)
 
-                    # Log performance stats every 1000 tasks or every 5 minutes
-                    current_time = time.time()
-                    if (completed_count % 1000 == 0) or (current_time - last_log_time > 300):
-                        elapsed = current_time - start_time
-                        rate = completed_count / elapsed if elapsed > 0 else 0
-                        remaining_tasks = len(futures) - completed_count
-                        eta_seconds = remaining_tasks / rate if rate > 0 else 0
-                        logger.info(
-                            f"Progress: {completed_count}/{len(futures)} tasks completed "
-                            f"({completed_count / len(futures) * 100:.1f}%) - "
-                            f"Rate: {rate:.2f} tasks/sec - "
-                            f"Success: {success_count}, Errors: {error_count} - "
-                            f"ETA: {eta_seconds / 3600:.1f}h"
-                        )
-                        last_log_time = current_time
+                completed_count += 1
+                pbar.update(1)
 
-            finally:
-                pbar.close()
+                # Log performance stats every 1000 tasks or every 5 minutes
+                current_time = time.time()
+                if (completed_count % 1000 == 0) or (current_time - last_log_time > 300):
+                    elapsed = current_time - start_time
+                    rate = completed_count / elapsed if elapsed > 0 else 0
+                    remaining_tasks = len(futures) - completed_count
+                    eta_seconds = remaining_tasks / rate if rate > 0 else 0
+                    logger.info(
+                        f"Progress: {completed_count}/{len(futures)} tasks completed "
+                        f"({completed_count / len(futures) * 100:.1f}%) - "
+                        f"Rate: {rate:.2f} tasks/sec - "
+                        f"Success: {success_count}, Errors: {error_count} - "
+                        f"ETA: {eta_seconds / 3600:.1f}h"
+                    )
+                    last_log_time = current_time
+
+        finally:
+            pbar.close()
 
     return results
 
 
-def get_required_steps(target_step: str) -> List[str]:
+def get_required_steps(target_step: str) -> list[str]:
     """Get the list of bronze steps required to run before the target step."""
     # Only return bronze dependencies
     step_dependencies = {
@@ -597,9 +636,21 @@ def get_required_steps(target_step: str) -> List[str]:
             "stamdata",
             "herds",
         ],  # CHR_dyr animal movements with integrated discovery
-        "ejendom": ["stamdata", "herds", "herd_details"],  # Assuming ejendom depends on CHR numbers from details
-        "vetstat": ["stamdata", "herds", "herd_details"],  # Assuming vetstat depends on CHR numbers from details
-        "spf_su": ["stamdata", "herds", "herd_details"],  # SPF-SU depends on CHR numbers from details
+        "ejendom": [
+            "stamdata",
+            "herds",
+            "herd_details",
+        ],  # Assuming ejendom depends on CHR numbers from details
+        "vetstat": [
+            "stamdata",
+            "herds",
+            "herd_details",
+        ],  # Assuming vetstat depends on CHR numbers from details
+        "spf_su": [
+            "stamdata",
+            "herds",
+            "herd_details",
+        ],  # SPF-SU depends on CHR numbers from details
         # Silver steps - all depend on all bronze steps implicitly
         "silver_vet_practices": [
             "stamdata",
@@ -671,21 +722,31 @@ def get_required_steps(target_step: str) -> List[str]:
             "vetstat",
             "spf_su",
         ],
-        "silver_all": ["stamdata", "herds", "herd_details", "diko", "animal_movements", "ejendom", "vetstat", "spf_su"],
+        "silver_all": [
+            "stamdata",
+            "herds",
+            "herd_details",
+            "diko",
+            "animal_movements",
+            "ejendom",
+            "vetstat",
+            "spf_su",
+        ],
     }
     # Filter out any silver steps from dependencies, only return bronze ones
-    required_bronze = [s for s in step_dependencies.get(target_step, []) if not s.startswith("silver_")]
-    return required_bronze
+    return [s for s in step_dependencies.get(target_step, []) if not s.startswith("silver_")]
 
 
-def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
+def run_bronze_step(step: str, context: dict[str, Any]) -> dict[str, Any]:
     """Run a specific pipeline step and update the context."""
     logging.info(f"Starting step: {step}")
 
     # Only handle bronze steps here
     if step == "stamdata":
         context["combinations"] = fetch_stamdata(
-            get_client(context, "stamdata"), context["username"], context["args"]["test_species_codes"]
+            get_client(context, "stamdata"),
+            context["username"],
+            context["args"]["test_species_codes"],
         )
         if not context["combinations"]:
             raise ValueError("No valid species/usage combinations found")
@@ -724,17 +785,23 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if context["args"]["progress"]:
             logging.info(f"Processing {len(herd_tasks)} herd detail tasks")
 
-        results = process_parallel(load_herd_details, herd_tasks, context["args"]["workers"], "Processing herd details")
+        results = process_parallel(
+            load_herd_details, herd_tasks, context["args"]["workers"], "Processing herd details"
+        )
 
         # Process results to build chr_to_species mapping
-        for result, task in zip(results, herd_tasks):
+        for result, task in zip(results, herd_tasks, strict=False):
             if result and hasattr(result, "Response") and result.Response:
                 context["herd_details"].append(result)
                 # Extract CHR number from the response
                 # Handle potential variations in response structure
-                response_items = result.Response if isinstance(result.Response, list) else [result.Response]
+                response_items = (
+                    result.Response if isinstance(result.Response, list) else [result.Response]
+                )
                 for response_item in response_items:
-                    if hasattr(response_item, "Besaetning") and hasattr(response_item.Besaetning, "ChrNummer"):
+                    if hasattr(response_item, "Besaetning") and hasattr(
+                        response_item.Besaetning, "ChrNummer"
+                    ):
                         chr_number = response_item.Besaetning.ChrNummer
                         if chr_number:  # Ensure CHR number is not None or 0
                             species_code = task[3]  # Get species code directly from the task
@@ -763,7 +830,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         results = process_parallel(
             load_diko_flytninger, diko_tasks, context["args"]["workers"], "Processing DIKO tasks"
         )
-        context["diko_results"] = results  # Keep results in context for potential future use or export
+        context["diko_results"] = (
+            results  # Keep results in context for potential future use or export
+        )
 
         if context["args"]["progress"]:
             successful = sum(1 for r in results if r)
@@ -776,25 +845,38 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         # Filter CHRs by group if CHR group is specified
         chr_to_species_filtered = context["chr_to_species"]
         if context["args"]["chr_group"] is not None:
-            chr_to_species_filtered = filter_chr_by_group(context["chr_to_species"], context["args"]["chr_group"])
+            chr_to_species_filtered = filter_chr_by_group(
+                context["chr_to_species"], context["args"]["chr_group"]
+            )
             if not chr_to_species_filtered:
                 logging.warning(f"No CHRs found for group {context['args']['chr_group']}")
                 return context
 
         ejendom_tasks = [
-            (get_client(context, "ejendom"), context["username"], chr_num) for chr_num in chr_to_species_filtered.keys()
+            (get_client(context, "ejendom"), context["username"], chr_num)
+            for chr_num in chr_to_species_filtered
         ]
 
         if context["args"]["progress"]:
-            group_info = f" (CHR group {context['args']['chr_group']})" if context["args"]["chr_group"] else ""
+            group_info = (
+                f" (CHR group {context['args']['chr_group']})"
+                if context["args"]["chr_group"]
+                else ""
+            )
             logging.info(f"Processing {len(ejendom_tasks)} ejendom tasks{group_info}")
 
         # Run both ejendom operations
         oplysninger_results = process_parallel(
-            load_ejendom_oplysninger, ejendom_tasks, context["args"]["workers"], "Processing Ejendom Oplysninger"
+            load_ejendom_oplysninger,
+            ejendom_tasks,
+            context["args"]["workers"],
+            "Processing Ejendom Oplysninger",
         )
         vet_events_results = process_parallel(
-            load_ejendom_vet_events, ejendom_tasks, context["args"]["workers"], "Processing Ejendom Vet Events"
+            load_ejendom_vet_events,
+            ejendom_tasks,
+            context["args"]["workers"],
+            "Processing Ejendom Vet Events",
         )
         # Results are stored in the buffer by the load functions
 
@@ -811,7 +893,11 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("Cannot run 'animal_movements' step without first running 'herds'")
 
         # Get all cattle herds for processing
-        cattle_herds = [herd_num for herd_num, species_code in context["herd_to_species"].items() if species_code == 12]
+        cattle_herds = [
+            herd_num
+            for herd_num, species_code in context["herd_to_species"].items()
+            if species_code == 12
+        ]
 
         if not cattle_herds:
             logging.warning("No cattle herds found for animal movements")
@@ -846,7 +932,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ]
 
         if context["args"]["progress"]:
-            logging.info(f"Processing {len(movement_tasks)} herd movement tasks with integrated discovery")
+            logging.info(
+                f"Processing {len(movement_tasks)} herd movement tasks with integrated discovery"
+            )
 
         results = process_parallel(
             load_cattle_movement_summaries,
@@ -860,7 +948,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         context["animal_movements_results"] = successful_results
 
         if context["args"]["progress"]:
-            logger.info(f"Animal movements completed: {len(successful_results)}/{len(results)} herds successful")
+            logger.info(
+                f"Animal movements completed: {len(successful_results)}/{len(results)} herds successful"
+            )
 
         # CRITICAL FIX: Finalize consolidated processing to save animal movements data to GCS
         try:
@@ -885,14 +975,18 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         end_date = context["args"]["end_date"]
         monthly_ranges = generate_monthly_date_ranges(start_date, end_date)
 
-        logging.info(f"VetStat will process {len(monthly_ranges)} monthly chunks from {start_date} to {end_date}")
+        logging.info(
+            f"VetStat will process {len(monthly_ranges)} monthly chunks from {start_date} to {end_date}"
+        )
         for i, (month_start, month_end) in enumerate(monthly_ranges):
             logging.debug(f"  Month {i + 1}: {month_start} to {month_end}")
 
         # Filter CHRs by group if CHR group is specified
         chr_to_species_filtered = context["chr_to_species"]
         if context["args"]["chr_group"] is not None:
-            chr_to_species_filtered = filter_chr_by_group(context["chr_to_species"], context["args"]["chr_group"])
+            chr_to_species_filtered = filter_chr_by_group(
+                context["chr_to_species"], context["args"]["chr_group"]
+            )
             if not chr_to_species_filtered:
                 logging.warning(f"No CHRs found for group {context['args']['chr_group']}")
                 return context
@@ -906,10 +1000,16 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         ]
 
         if not vetstat_tasks:
-            logging.warning("No valid CHR number and species code combinations found for VetStat data")
+            logging.warning(
+                "No valid CHR number and species code combinations found for VetStat data"
+            )
         elif context["args"]["progress"]:
             combinations = sum(len(species_set) for species_set in chr_to_species_filtered.values())
-            group_info = f" (CHR group {context['args']['chr_group']})" if context["args"]["chr_group"] else ""
+            group_info = (
+                f" (CHR group {context['args']['chr_group']})"
+                if context["args"]["chr_group"]
+                else ""
+            )
             logging.info(
                 f"Processing {len(vetstat_tasks)} VetStat tasks{group_info} "
                 f"({combinations} CHR/species combinations × {len(monthly_ranges)} months)"
@@ -927,7 +1027,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             )
             # Results are stored in the buffer by the load function
             if context["args"]["progress"]:
-                successful = sum(1 for r in results if r)  # Check if results were returned (even if empty)
+                successful = sum(
+                    1 for r in results if r
+                )  # Check if results were returned (even if empty)
                 logging.info(f"Completed VetStat tasks. Success: {successful}/{len(vetstat_tasks)}")
         except Exception as e:
             logging.error(f"Error processing VetStat tasks: {e}", exc_info=True)
@@ -959,7 +1061,9 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             context["spf_su_results"] = results
             if context["args"]["progress"]:
                 successful = len([r for r in results if r])
-                logging.info(f"Completed SPF-SU tasks. Success: {successful}/{len(pig_herd_numbers)}")
+                logging.info(
+                    f"Completed SPF-SU tasks. Success: {successful}/{len(pig_herd_numbers)}"
+                )
         except Exception as e:
             logging.error(f"Error processing SPF-SU tasks: {e}", exc_info=True)
             raise
@@ -1013,7 +1117,7 @@ def main():
 
             # In GitHub Actions, read bronze timestamp from artifact file
             if not bronze_dir_override and os.path.exists("/tmp/bronze_timestamp.txt"):
-                with open("/tmp/bronze_timestamp.txt", "r") as f:
+                with open("/tmp/bronze_timestamp.txt") as f:
                     bronze_dir_override = f.read().strip()
                 logging.warning(f"Using bronze timestamp from artifact: {bronze_dir_override}")
 
@@ -1026,14 +1130,18 @@ def main():
                     has_bronze_files = True
                     logging.warning(f"Found bronze files in override directory: {bronze_path}")
                 else:
-                    logging.warning(f"Override directory specified but no files found: {bronze_path}")
+                    logging.warning(
+                        f"Override directory specified but no files found: {bronze_path}"
+                    )
 
             # PRIORITY 2: Check current export timestamp directory
             if not has_bronze_files:
                 bronze_path = config.BRONZE_BASE_DIR / EXPORT_TIMESTAMP
                 if bronze_path.exists() and any(bronze_path.glob("*.json")):
                     has_bronze_files = True
-                    logging.warning(f"Found bronze files in current timestamp directory: {bronze_path}")
+                    logging.warning(
+                        f"Found bronze files in current timestamp directory: {bronze_path}"
+                    )
 
             # Check if streaming mode is available for GCS data access
             bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
@@ -1048,7 +1156,12 @@ def main():
                 (bronze_timestamp and not buffer_data)
             )
 
-            if has_buffer_data or has_context_import or has_bronze_files or (can_use_streaming and bronze_timestamp):
+            if (
+                has_buffer_data
+                or has_context_import
+                or has_bronze_files
+                or (can_use_streaming and bronze_timestamp)
+            ):
                 logging.warning(
                     f"Silver-only operation detected with existing data. "
                     f"Buffer: {has_buffer_data}, Context: {has_context_import}, "
@@ -1072,10 +1185,10 @@ def main():
             if needs_fvm_credentials:
                 # Initialize context with imported data and FVM credentials
                 try:
-                    username, password, certificate, private_key = get_fvm_credentials()
+                    username, _password, _certificate, _private_key = get_fvm_credentials()
                 except Exception as e:
                     logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
-                    username, password = get_legacy_fvm_credentials()
+                    username, _password = get_legacy_fvm_credentials()
 
                 context = {
                     "args": args,
@@ -1107,10 +1220,10 @@ def main():
             if needs_fvm_credentials:
                 # Initialize fresh context with FVM credentials
                 try:
-                    username, password, certificate, private_key = get_fvm_credentials()
+                    username, _password, _certificate, _private_key = get_fvm_credentials()
                 except Exception as e:
                     logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
-                    username, password = get_legacy_fvm_credentials()
+                    username, __password = get_legacy_fvm_credentials()
 
                 context = {
                     "args": args,
@@ -1145,7 +1258,11 @@ def main():
             else:
                 bronze_steps_to_run = []  # Skip bronze steps for silver-only with existing data
             run_silver = True
-        elif requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
+        elif requested_step in [
+            "gold_processing",
+            "veterinary_timeline",
+            "transportation_analysis",
+        ]:
             # Gold layer processing - no bronze steps needed, but run silver if no existing silver data
             bronze_steps_to_run = []
             run_silver = True  # Always run silver before gold to ensure we have fresh silver data
@@ -1155,7 +1272,7 @@ def main():
             run_silver = False
         else:
             # Only run requested bronze step and its prerequisites
-            bronze_steps_to_run = get_required_steps(requested_step) + [requested_step]
+            bronze_steps_to_run = [*get_required_steps(requested_step), requested_step]
             run_silver = False
 
         # Ensure unique bronze steps in order
@@ -1180,7 +1297,9 @@ def main():
                 context = run_bronze_step(step, context)
             logging.warning("Bronze steps completed.")
         else:
-            logging.warning("No bronze steps to run - proceeding with silver processing using existing data.")
+            logging.warning(
+                "No bronze steps to run - proceeding with silver processing using existing data."
+            )
 
         # Export context data if requested (for multi-job workflows)
         context_export_path = os.getenv("CONTEXT_EXPORT_PATH")
@@ -1202,9 +1321,11 @@ def main():
 
                 # In GitHub Actions, read bronze timestamp from artifact file
                 if not bronze_dir_override and os.path.exists("/tmp/bronze_timestamp.txt"):
-                    with open("/tmp/bronze_timestamp.txt", "r") as f:
+                    with open("/tmp/bronze_timestamp.txt") as f:
                         bronze_dir_override = f.read().strip()
-                    logging.warning(f"Using bronze timestamp from artifact for streaming: {bronze_dir_override}")
+                    logging.warning(
+                        f"Using bronze timestamp from artifact for streaming: {bronze_dir_override}"
+                    )
 
                 # Determine bronze timestamp for streaming mode
                 bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
@@ -1227,7 +1348,9 @@ def main():
 
                 if use_streaming_mode and bronze_timestamp and INCREMENTAL_PROCESSING_AVAILABLE:
                     try:
-                        processing_mode, backfill_timestamp = determine_processing_mode(bronze_timestamp)
+                        processing_mode, backfill_timestamp = determine_processing_mode(
+                            bronze_timestamp
+                        )
                         logging.warning(f"🎯 Processing mode determined: {processing_mode}")
 
                         # Calculate date ranges based on processing mode
@@ -1235,8 +1358,12 @@ def main():
                         if start_date and end_date:
                             logging.warning(f"📅 Date range: {start_date} to {end_date}")
                             # Update the context args to use the calculated date ranges
-                            context["args"]["start_date"] = datetime.strptime(start_date, "%Y-%m-%d").date()
-                            context["args"]["end_date"] = datetime.strptime(end_date, "%Y-%m-%d").date()
+                            context["args"]["start_date"] = datetime.strptime(
+                                start_date, "%Y-%m-%d"
+                            ).date()
+                            context["args"]["end_date"] = datetime.strptime(
+                                end_date, "%Y-%m-%d"
+                            ).date()
                             logging.warning("✅ Updated pipeline args with incremental date range")
 
                         # Track processing run start (simple upsert)
@@ -1259,14 +1386,20 @@ def main():
 
                 if use_streaming_mode and effective_bronze_timestamp:
                     # Use streaming mode for memory efficiency
-                    mode_desc = f"{processing_mode.upper()} processing" if processing_mode != "full" else "STREAMING"
+                    mode_desc = (
+                        f"{processing_mode.upper()} processing"
+                        if processing_mode != "full"
+                        else "STREAMING"
+                    )
                     logging.warning(
                         f"🚀 Using {mode_desc} mode for memory-efficient processing "
                         f"(bronze_timestamp: {effective_bronze_timestamp})"
                     )
 
                     if processing_mode == "backfill":
-                        logging.warning(f"📅 Using historical data from: {effective_bronze_timestamp}")
+                        logging.warning(
+                            f"📅 Using historical data from: {effective_bronze_timestamp}"
+                        )
 
                     success = run_silver_processing(
                         silver_dir=silver_dir,
@@ -1320,9 +1453,12 @@ def main():
                                 source_datasets=None,
                             )
                             metadata_path = pipeline_metadata_manager.save_metadata(
-                                chr_movements_metadata, silver_dir / "chr_animal_movements_metadata.json"
+                                chr_movements_metadata,
+                                silver_dir / "chr_animal_movements_metadata.json",
                             )
-                            logger.info(f"✅ CHR animal movements metadata saved to {metadata_path}")
+                            logger.info(
+                                f"✅ CHR animal movements metadata saved to {metadata_path}"
+                            )
 
                         # Create metadata for CHR properties
                         if unique_bronze_steps and any(
@@ -1359,11 +1495,18 @@ def main():
 
                 # --- Gold Layer Processing ---
                 # Run gold processing if this is an "all" run or a specific gold step
-                if requested_step in ["all", "gold_processing", "veterinary_timeline", "transportation_analysis"]:
+                if requested_step in [
+                    "all",
+                    "gold_processing",
+                    "veterinary_timeline",
+                    "transportation_analysis",
+                ]:
                     try:
                         logging.warning("🥇 Starting Gold Layer Processing...")
                         gold_success = run_gold_processing(
-                            export_timestamp=EXPORT_TIMESTAMP, silver_dir=silver_dir, step=requested_step
+                            export_timestamp=EXPORT_TIMESTAMP,
+                            silver_dir=silver_dir,
+                            step=requested_step,
                         )
 
                         if gold_success:
@@ -1371,13 +1514,21 @@ def main():
                         else:
                             logging.error("❌ Gold processing failed")
                             # For gold-specific steps, fail the pipeline if gold processing fails
-                            if requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
+                            if requested_step in [
+                                "gold_processing",
+                                "veterinary_timeline",
+                                "transportation_analysis",
+                            ]:
                                 raise RuntimeError("Gold processing failed")
 
                     except Exception as e:
                         logging.error(f"❌ Gold processing failed: {e}", exc_info=True)
                         # For gold-specific steps, fail the pipeline if gold processing fails
-                        if requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
+                        if requested_step in [
+                            "gold_processing",
+                            "veterinary_timeline",
+                            "transportation_analysis",
+                        ]:
                             raise
                         # For "all" runs, don't fail the entire pipeline for gold processing failure
 
@@ -1395,22 +1546,29 @@ def main():
             # Add debugging info about buffer size before export
             if buffer_data:
                 total_records = sum(
-                    len(data.get("json", [])) + len(data.get("xml", [])) for data in buffer_data.values()
+                    len(data.get("json", [])) + len(data.get("xml", []))
+                    for data in buffer_data.values()
                 )
-                logging.warning(f"Buffer contains {total_records} total records across {len(buffer_data)} data types")
+                logging.warning(
+                    f"Buffer contains {total_records} total records across {len(buffer_data)} data types"
+                )
                 for key, data in buffer_data.items():
                     json_count = len(data.get("json", []))
                     xml_count = len(data.get("xml", []))
                     logging.warning(f"  {key}: {json_count} JSON records, {xml_count} XML records")
             else:
-                logging.warning("No buffer data found, but finalizing export anyway due to bronze steps run")
+                logging.warning(
+                    "No buffer data found, but finalizing export anyway due to bronze steps run"
+                )
 
             # FIXED: Actually call finalize_export to save consolidated files instead of thousands of individual ones
             try:
                 from bronze.export import finalize_export
 
                 finalize_export(clear_buffer=clear_buffer_after_export)
-                logging.warning("✅ Bronze export finalization completed - consolidated files saved to GCS")
+                logging.warning(
+                    "✅ Bronze export finalization completed - consolidated files saved to GCS"
+                )
             except Exception as e:
                 logging.error(f"Error finalizing bronze export: {e}", exc_info=True)
                 raise
@@ -1424,13 +1582,18 @@ def main():
         # Run comprehensive cleanup
         try:
             # Import cleanup module with absolute import
-            from backend.pipelines.chr_pipeline.cleanup_temp_files import cleanup_temp_files, monitor_disk_usage
+            from backend.pipelines.chr_pipeline.cleanup_temp_files import (
+                cleanup_temp_files,
+                monitor_disk_usage,
+            )
 
             logger.info("Running final cleanup of temporary files...")
             monitor_disk_usage()
             cleaned_files, total_size = cleanup_temp_files()
             if cleaned_files > 0:
-                logger.info(f"Final cleanup: {cleaned_files} files removed, {total_size / (1024 * 1024):.2f} MB freed")
+                logger.info(
+                    f"Final cleanup: {cleaned_files} files removed, {total_size / (1024 * 1024):.2f} MB freed"
+                )
             monitor_disk_usage()
         except ImportError as import_error:
             logger.warning(f"Cleanup module not available: {import_error}")

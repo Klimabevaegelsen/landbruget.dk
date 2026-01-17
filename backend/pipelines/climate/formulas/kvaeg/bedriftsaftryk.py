@@ -25,19 +25,15 @@ def beregn_bedriftsaftryk_kvaeg(farmahead_data: dict, mark_data: dict) -> float:
     """
     # Summer FarmAhead komponenter
     farmahead_total = (
-        farmahead_data.get('stald_og_lager', 0.0) +
-        farmahead_data.get('fordoejelse', 0.0) +
-        farmahead_data.get('importerede_dyr', 0.0) +
-        farmahead_data.get('importeret_foder', 0.0)
+        farmahead_data.get("stald_og_lager", 0.0)
+        + farmahead_data.get("fordoejelse", 0.0)
+        + farmahead_data.get("importerede_dyr", 0.0)
+        + farmahead_data.get("importeret_foder", 0.0)
     )
 
     # Summer ESGreenTool mark komponenter
-    mark_total = (
-        mark_data.get('grovfoder', 0.0) +
-        mark_data.get('salgsafgroeder', 0.0)
-    )
+    mark_total = mark_data.get("grovfoder", 0.0) + mark_data.get("salgsafgroeder", 0.0)
 
     # Samlet bedriftsaftryk
-    bedriftsaftryk = farmahead_total + mark_total
+    return farmahead_total + mark_total
 
-    return bedriftsaftryk

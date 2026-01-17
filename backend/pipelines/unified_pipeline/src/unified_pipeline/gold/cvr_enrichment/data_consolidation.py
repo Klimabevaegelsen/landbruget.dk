@@ -13,7 +13,7 @@ Key Features:
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -51,7 +51,7 @@ class DataConsolidationConfig(BaseJobConfig):
         description="Whether to include original raw JSON data in consolidated output",
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
@@ -91,7 +91,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.info(f"   • Test limit: {self.config.shared_config.test_limit} companies")
 
     @timed(name="Data consolidation processing")
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> str:
         """
         Run the data consolidation process.
 
@@ -136,7 +136,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.error("=" * 60)
             self.log.error("❌ DATA CONSOLIDATION FAILED")
             self.log.error("=" * 60)
-            self.log.error(f"Error: {str(e)}")
+            self.log.error(f"Error: {e!s}")
             self.log.error("=" * 60)
             raise
 
@@ -160,7 +160,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         return current_path
 
     @timed(name="Loading Silver layer data")
-    def _load_silver_data(self) -> Dict[str, str]:
+    def _load_silver_data(self) -> dict[str, str]:
         """
         Load structured data from Silver layer.
 
@@ -217,7 +217,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         return silver_tables
 
     @timed(name="Consolidating data")
-    def _consolidate_data(self, silver_tables: Dict[str, str]) -> str:
+    def _consolidate_data(self, silver_tables: dict[str, str]) -> str:
         """
         Consolidate Silver layer data into Gold layer format.
 
@@ -366,14 +366,14 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         self.log.info(f"✅ Validation complete: {total_count:,} companies")
         self.log.info(
-            f"   • Valid CVR numbers: {valid_cvr_count:,} ({valid_cvr_count/total_count*100:.1f}%)"
+            f"   • Valid CVR numbers: {valid_cvr_count:,} ({valid_cvr_count / total_count * 100:.1f}%)"
         )
         self.log.info(
             f"   • Valid company names: {valid_name_count:,} "
-            f"({valid_name_count/total_count*100:.1f}%)"
+            f"({valid_name_count / total_count * 100:.1f}%)"
         )
         self.log.info(
-            f"   • Valid UUIDs: {valid_uuid_count:,} ({valid_uuid_count/total_count*100:.1f}%)"
+            f"   • Valid UUIDs: {valid_uuid_count:,} ({valid_uuid_count / total_count * 100:.1f}%)"
         )
 
         return validated_table

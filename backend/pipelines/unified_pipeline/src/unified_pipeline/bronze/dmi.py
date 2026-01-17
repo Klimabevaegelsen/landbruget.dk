@@ -16,7 +16,7 @@ async processing, and retry logic for robustness.
 import asyncio
 import os
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
@@ -56,7 +56,7 @@ class DMIBronzeConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
 
     # DMI-specific configuration
-    parameters: List[str] = ["pot_evaporation_makkink", "acc_precip"]
+    parameters: ClassVar[list[str]] = ["pot_evaporation_makkink", "acc_precip"]
     api_base_url: str = "https://dmigw.govcloud.dk/v2/climateData"
     max_concurrent_fetches: int = 5
     start_year: int = 2011  # DMI grid data available from 2011
@@ -87,8 +87,8 @@ class DMIApiClient:
         stop=stop_after_attempt(3),
     )
     async def _make_request(
-        self, session: aiohttp.ClientSession, endpoint: str, params: Dict[str, Any] = None
-    ) -> Dict:
+        self, session: aiohttp.ClientSession, endpoint: str, params: dict[str, Any] | None = None
+    ) -> dict:
         """Make an authenticated request to the DMI API with error handling and retry logic"""
         if params is None:
             params = {}
@@ -108,7 +108,7 @@ class DMIApiClient:
                 return await response.json()
 
         except Exception as e:
-            raise aiohttp.ClientError(f"Error making request to DMI API: {str(e)}") from e
+            raise aiohttp.ClientError(f"Error making request to DMI API: {e!s}") from e
 
     async def fetch_grid_data(
         self,
@@ -116,7 +116,7 @@ class DMIApiClient:
         parameter_id: str,
         start_time: datetime,
         end_time: datetime,
-    ) -> Dict:
+    ) -> dict:
         """
         Fetch raw climate grid data and return as JSON.
 
@@ -203,7 +203,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         parameter_id: str,
         start_time: datetime,
         end_time: datetime,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Fetch monthly-aggregated data for one climate parameter by iterating month-by-month.
         This avoids the 10 000-feature cap on the DMI endpoint and guarantees we retrieve
@@ -301,8 +301,8 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
     def _save_parameter_data(
         self,
         parameter_id: str,
-        parameter_data: Dict[str, Any],
-        metadata: Dict[str, Any],
+        parameter_data: dict[str, Any],
+        metadata: dict[str, Any],
     ) -> None:
         """
         Save parameter data and metadata to storage.
@@ -329,7 +329,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
             self.log.error(f"Error saving data for parameter {parameter_id}: {e}")
             raise
 
-    async def run(self) -> Optional[Dict[str, Any]]:
+    async def run(self) -> dict[str, Any] | None:
         """
         Run bronze processing for all configured DMI parameters.
 

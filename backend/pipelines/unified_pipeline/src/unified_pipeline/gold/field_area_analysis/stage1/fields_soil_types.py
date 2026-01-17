@@ -16,11 +16,12 @@ References: https://github.com/duckdb/duckdb-spatial/pull/545
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
+
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
-from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 
 class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
@@ -103,7 +104,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
             f"🚀 Processing {fields_count * soil_count:,} potential combinations (optimized)"
         )
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Create field-soil intersections using optimized single-pass processing.
 
@@ -305,13 +306,13 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
             "noise_filtered": filtered_out,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save simplified areas to GCS for Stage 4 compatibility."""
         # Save simplified areas - this is what Stage 4 expects
         self.log.info("Saving field soil areas for Stage 4 compatibility...")
         self._save_stage_output("field_soil_areas", "field_soil_intersections")
 
-    def _get_input_area_reference(self) -> Dict[str, Any]:
+    def _get_input_area_reference(self) -> dict[str, Any]:
         """Get reference area statistics from input data for validation."""
         return getattr(self, "_input_area_reference", None)
 
@@ -440,12 +441,10 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                     from ..area_validation import ValidationException
 
                     raise ValidationException(error_msg)
-                else:
-                    self.log.warning(f"⚠️ {error_msg} but continuing")
+                self.log.warning(f"⚠️ {error_msg} but continuing")
 
         except Exception as e:
-            error_msg = f"❌ Stage 1 validation error: {str(e)}"
+            error_msg = f"❌ Stage 1 validation error: {e!s}"
             if self.validation_config.fail_on_validation_error:
                 raise Exception(error_msg) from e
-            else:
-                self.log.warning(f"⚠️ {error_msg} but continuing")
+            self.log.warning(f"⚠️ {error_msg} but continuing")

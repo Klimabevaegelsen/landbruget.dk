@@ -3,7 +3,6 @@
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Optional
 
 import duckdb
 
@@ -12,6 +11,10 @@ from .data_loader import PMTilesDataLoader
 from .utils import FileManager, GeoJSONWriter, TippecanoeRunner
 
 logger = logging.getLogger(__name__)
+
+# CRS Strategy: With silver/gold layers now in EPSG:25832, we need to transform to
+# EPSG:4326 (WGS84) for PMTiles/GeoJSON output (required for map display)
+USE_UTM_PROCESSING = True
 
 
 class EnvironmentalLayersPMTilesGenerator:
@@ -35,7 +38,7 @@ class EnvironmentalLayersPMTilesGenerator:
         self.conn = duckdb_conn
         self.tippecanoe = TippecanoeRunner(self.config.temp_dir)
 
-    async def generate_all_environmental_pmtiles(self) -> Dict[str, Optional[str]]:
+    async def generate_all_environmental_pmtiles(self) -> dict[str, str | None]:
         """Generate all environmental layer PMTiles.
 
         Returns:
@@ -72,7 +75,7 @@ class EnvironmentalLayersPMTilesGenerator:
 
         return results
 
-    async def _generate_bnbo_pmtiles(self, table_name: str) -> Optional[str]:
+    async def _generate_bnbo_pmtiles(self, table_name: str) -> str | None:
         """Generate BNBO areas PMTiles.
 
         Args:
@@ -146,6 +149,13 @@ class EnvironmentalLayersPMTilesGenerator:
             True if successful, False otherwise
         """
         try:
+            # Geometry expression: Transform from UTM to WGS84 for map display
+            # always_xy := true ensures GeoJSON-standard (lon, lat) coordinate order
+            geom_expr = (
+                "ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))"
+                if USE_UTM_PROCESSING
+                else "ST_AsGeoJSON(ST_FlipCoordinates(geometry))"
+            )
             query = f"""
             SELECT
                 status_category,
@@ -159,7 +169,7 @@ class EnvironmentalLayersPMTilesGenerator:
                     WHEN status_category = 'Completed' THEN 'Gennemført'
                     ELSE 'Ukendt status'
                 END as status_danish,
-                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
+                {geom_expr} as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             """
@@ -172,7 +182,7 @@ class EnvironmentalLayersPMTilesGenerator:
             logger.error(f"Error exporting BNBO GeoJSON: {e}")
             return False
 
-    async def _generate_wetlands_pmtiles(self, table_name: str) -> Optional[str]:
+    async def _generate_wetlands_pmtiles(self, table_name: str) -> str | None:
         """Generate wetlands PMTiles.
 
         Args:
@@ -249,6 +259,13 @@ class EnvironmentalLayersPMTilesGenerator:
             True if successful, False otherwise
         """
         try:
+            # Geometry expression: Transform from UTM to WGS84 for map display
+            # always_xy := true ensures GeoJSON-standard (lon, lat) coordinate order
+            geom_expr = (
+                "ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))"
+                if USE_UTM_PROCESSING
+                else "ST_AsGeoJSON(ST_FlipCoordinates(geometry))"
+            )
             query = f"""
             SELECT
                 wetland_id,
@@ -267,7 +284,7 @@ class EnvironmentalLayersPMTilesGenerator:
                     WHEN toerv_pct = '<3' THEN 'Lav tørv (<3%)'
                     ELSE 'Ukendt tørv indhold'
                 END as toerv_description,
-                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
+                {geom_expr} as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             ORDER BY wetland_id
@@ -284,7 +301,7 @@ class EnvironmentalLayersPMTilesGenerator:
             logger.error(f"Error exporting wetlands GeoJSON: {e}")
             return False
 
-    async def _generate_water_projects_pmtiles(self, table_name: str) -> Optional[str]:
+    async def _generate_water_projects_pmtiles(self, table_name: str) -> str | None:
         """Generate water projects PMTiles.
 
         Args:
@@ -359,6 +376,13 @@ class EnvironmentalLayersPMTilesGenerator:
             True if successful, False otherwise
         """
         try:
+            # Geometry expression: Transform from UTM to WGS84 for map display
+            # always_xy := true ensures GeoJSON-standard (lon, lat) coordinate order
+            geom_expr = (
+                "ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))"
+                if USE_UTM_PROCESSING
+                else "ST_AsGeoJSON(ST_FlipCoordinates(geometry))"
+            )
             query = f"""
             SELECT
                 project_id,
@@ -366,7 +390,7 @@ class EnvironmentalLayersPMTilesGenerator:
                 dissolved_at::varchar as dissolved_at,
                 '#4a90e2' as color,
                 'Vandprojekt' as project_type_danish,
-                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
+                {geom_expr} as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             """

@@ -19,22 +19,16 @@ Supabase Tables (optional):
 - climate_emission_categories (categories breakdown)
 """
 
-import sys
+import os
 from datetime import datetime
-from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any
 
-import pandas as pd
+import duckdb
 
-# Add unified_pipeline to path for GCSDataAccess import
-unified_pipeline_path = Path(__file__).parent.parent / "unified_pipeline" / "src"
-if str(unified_pipeline_path) not in sys.path:
-    sys.path.insert(0, str(unified_pipeline_path))
+from common.gcs import GCSDataAccess
+from unified_pipeline.util.log_util import Logger
 
-from unified_pipeline.util.gcs_access import GCSDataAccess  # noqa: E402
-from unified_pipeline.util.log_util import Logger  # noqa: E402
-
-from climate_calculator import EmissionReport, EmissionCategory  # noqa: E402
+from climate_calculator import EmissionCategory, EmissionReport
 
 logger = Logger.get_logger()
 
@@ -50,7 +44,7 @@ class ClimateOutputWriter:
     - Optionally syncs to Supabase for web access
     """
 
-    def __init__(self, bucket: str = None):
+    def __init__(self, bucket: str | None = None):
         """
         Initialize the climate output writer.
 
@@ -59,19 +53,20 @@ class ClimateOutputWriter:
         """
         self.bucket = bucket or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
         self.gcs = GCSDataAccess()
-        logger.info(f"✅ ClimateOutputWriter initialized with bucket: {self.bucket}")
+        self._duckdb_conn = duckdb.connect()
+        logger.info(f"ClimateOutputWriter initialized with bucket: {self.bucket}")
 
     def write_to_gold_layer(
         self,
-        reports: List[EmissionReport],
-        timestamp: Optional[str] = None,
-        run_metadata: Optional[Dict[str, Any]] = None,
+        reports: list[EmissionReport],
+        timestamp: str | None = None,
+        run_metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Write EmissionReport results to GCS gold layer.
 
         This method:
-        1. Converts EmissionReport objects to DataFrames
+        1. Converts EmissionReport objects to DuckDB tables
         2. Writes emissions.parquet (main report data)
         3. Writes categories.parquet (categories breakdown)
         4. Writes metadata.json (run metadata)
@@ -103,17 +98,9 @@ class ClimateOutputWriter:
         logger.info(f"Writing {len(reports)} emission reports to {output_dir}")
 
         try:
-            # Convert reports to DataFrames
-            emissions_df = self._reports_to_dataframe(reports)
-            categories_df = self._categories_to_dataframe(reports)
-
-            # Create DuckDB tables
-            self.gcs.duckdb_conn.execute("DROP TABLE IF EXISTS emissions_temp")
-            self.gcs.duckdb_conn.execute("DROP TABLE IF EXISTS categories_temp")
-
-            # Register DataFrames as DuckDB tables
-            self.gcs.duckdb_conn.register("emissions_temp", emissions_df)
-            self.gcs.duckdb_conn.register("categories_temp", categories_df)
+            # Convert reports to DuckDB tables
+            self._create_emissions_table(reports)
+            self._create_categories_table(reports)
 
             # Write emissions.parquet
             emissions_path = f"{output_dir}/emissions.parquet"
@@ -123,7 +110,10 @@ class ClimateOutputWriter:
                 compression="zstd",
                 row_group_size=10000,
             )
-            logger.info(f"✅ Wrote {len(emissions_df)} emission records to {emissions_path}")
+            emissions_count = self._duckdb_conn.execute(
+                "SELECT COUNT(*) FROM emissions_temp"
+            ).fetchone()[0]
+            logger.info(f"Wrote {emissions_count} emission records to {emissions_path}")
 
             # Write categories.parquet
             categories_path = f"{output_dir}/categories.parquet"
@@ -133,28 +123,31 @@ class ClimateOutputWriter:
                 compression="zstd",
                 row_group_size=10000,
             )
-            logger.info(f"✅ Wrote {len(categories_df)} category records to {categories_path}")
+            categories_count = self._duckdb_conn.execute(
+                "SELECT COUNT(*) FROM categories_temp"
+            ).fetchone()[0]
+            logger.info(f"Wrote {categories_count} category records to {categories_path}")
 
             # Write metadata.json
             metadata = self._build_metadata(reports, timestamp, run_metadata)
             metadata_path = f"{output_dir}/metadata.json"
             self.gcs.upload_json(metadata, metadata_path)
-            logger.info(f"✅ Wrote metadata to {metadata_path}")
+            logger.info(f"Wrote metadata to {metadata_path}")
 
             # Cleanup temporary tables
-            self.gcs.duckdb_conn.execute("DROP TABLE IF EXISTS emissions_temp")
-            self.gcs.duckdb_conn.execute("DROP TABLE IF EXISTS categories_temp")
+            self._duckdb_conn.execute("DROP TABLE IF EXISTS emissions_temp")
+            self._duckdb_conn.execute("DROP TABLE IF EXISTS categories_temp")
 
-            logger.info(f"✅ Successfully wrote {len(reports)} reports to {output_dir}")
+            logger.info(f"Successfully wrote {len(reports)} reports to {output_dir}")
             return output_dir
 
         except Exception as e:
             logger.error(f"Failed to write reports to gold layer: {e}")
             raise
 
-    def _reports_to_dataframe(self, reports: List[EmissionReport]) -> pd.DataFrame:
+    def _create_emissions_table(self, reports: list[EmissionReport]) -> None:
         """
-        Convert EmissionReport objects to a DataFrame for emissions.parquet.
+        Create DuckDB table from EmissionReport objects for emissions.parquet.
 
         Schema:
         - cvr (string): Company registration number
@@ -168,36 +161,46 @@ class ClimateOutputWriter:
 
         Args:
             reports: List of EmissionReport objects
-
-        Returns:
-            DataFrame with emissions data
         """
-        records = []
+        self._duckdb_conn.execute("DROP TABLE IF EXISTS emissions_temp")
+        self._duckdb_conn.execute("""
+            CREATE TABLE emissions_temp (
+                cvr VARCHAR,
+                year INTEGER,
+                total_co2e_kg DOUBLE,
+                data_completeness DOUBLE,
+                intensity_co2e_per_kg_milk DOUBLE,
+                intensity_co2e_per_ha DOUBLE,
+                intensity_co2e_per_animal_unit DOUBLE,
+                created_at TIMESTAMP
+            )
+        """)
+
+        created_at = datetime.now()
 
         for report in reports:
-            record = {
-                "cvr": report.cvr,
-                "year": report.year,
-                "total_co2e_kg": report.total_co2e_kg,
-                "data_completeness": report.data_completeness,
-                # Intensity metrics (nullable)
-                "intensity_co2e_per_kg_milk": report.intensity_metrics.get("co2e_per_kg_milk"),
-                "intensity_co2e_per_ha": report.intensity_metrics.get("co2e_per_ha"),
-                "intensity_co2e_per_animal_unit": report.intensity_metrics.get("co2e_per_animal_unit"),
-                "created_at": datetime.now(),
-            }
-            records.append(record)
+            # Ensure CVR is 8-digit string with leading zeros
+            cvr = str(report.cvr).zfill(8)
 
-        df = pd.DataFrame(records)
+            self._duckdb_conn.execute(
+                """
+                INSERT INTO emissions_temp VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                [
+                    cvr,
+                    report.year,
+                    report.total_co2e_kg,
+                    report.data_completeness,
+                    report.intensity_metrics.get("co2e_per_kg_milk"),
+                    report.intensity_metrics.get("co2e_per_ha"),
+                    report.intensity_metrics.get("co2e_per_animal_unit"),
+                    created_at,
+                ],
+            )
 
-        # Ensure CVR is 8-digit string with leading zeros
-        df["cvr"] = df["cvr"].astype(str).str.zfill(8)
-
-        return df
-
-    def _categories_to_dataframe(self, reports: List[EmissionReport]) -> pd.DataFrame:
+    def _create_categories_table(self, reports: list[EmissionReport]) -> None:
         """
-        Convert EmissionCategory data to a DataFrame for categories.parquet.
+        Create DuckDB table from EmissionCategory data for categories.parquet.
 
         Schema:
         - cvr (string): Company registration number
@@ -210,39 +213,48 @@ class ClimateOutputWriter:
 
         Args:
             reports: List of EmissionReport objects
-
-        Returns:
-            DataFrame with category data
         """
-        records = []
+        self._duckdb_conn.execute("DROP TABLE IF EXISTS categories_temp")
+        self._duckdb_conn.execute("""
+            CREATE TABLE categories_temp (
+                cvr VARCHAR,
+                year INTEGER,
+                category_name VARCHAR,
+                co2e_kg DOUBLE,
+                data_quality VARCHAR,
+                sub_sources VARCHAR,
+                created_at TIMESTAMP
+            )
+        """)
+
+        created_at = datetime.now()
 
         for report in reports:
+            # Ensure CVR is 8-digit string with leading zeros
+            cvr = str(report.cvr).zfill(8)
+
             for category in report.categories:
-                record = {
-                    "cvr": report.cvr,
-                    "year": report.year,
-                    "category_name": category.name,
-                    "co2e_kg": category.co2e_kg,
-                    "data_quality": category.data_quality,
-                    # Store sub_sources as JSON string for parquet compatibility
-                    "sub_sources": str(category.sub_sources) if category.sub_sources else "{}",
-                    "created_at": datetime.now(),
-                }
-                records.append(record)
-
-        df = pd.DataFrame(records)
-
-        # Ensure CVR is 8-digit string with leading zeros
-        df["cvr"] = df["cvr"].astype(str).str.zfill(8)
-
-        return df
+                self._duckdb_conn.execute(
+                    """
+                    INSERT INTO categories_temp VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                    [
+                        cvr,
+                        report.year,
+                        category.name,
+                        category.co2e_kg,
+                        category.data_quality,
+                        str(category.sub_sources) if category.sub_sources else "{}",
+                        created_at,
+                    ],
+                )
 
     def _build_metadata(
         self,
-        reports: List[EmissionReport],
+        reports: list[EmissionReport],
         timestamp: str,
-        run_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        run_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Build metadata JSON for the emission calculation run.
 
@@ -264,8 +276,10 @@ class ClimateOutputWriter:
             },
             "statistics": {
                 "total_emissions_kg_co2e": sum(report.total_co2e_kg for report in reports),
-                "avg_emissions_kg_co2e": sum(report.total_co2e_kg for report in reports) / len(reports),
-                "avg_data_completeness": sum(report.data_completeness for report in reports) / len(reports),
+                "avg_emissions_kg_co2e": sum(report.total_co2e_kg for report in reports)
+                / len(reports),
+                "avg_data_completeness": sum(report.data_completeness for report in reports)
+                / len(reports),
             },
             "data_sources": {
                 "chr": "silver/chr",
@@ -282,9 +296,65 @@ class ClimateOutputWriter:
 
         return metadata
 
+    def _reports_to_records(self, reports: list[EmissionReport]) -> list[dict]:
+        """
+        Convert EmissionReport objects to a list of dictionaries.
+
+        Args:
+            reports: List of EmissionReport objects
+
+        Returns:
+            List of dictionaries with emissions data
+        """
+        records = []
+
+        for report in reports:
+            record = {
+                "cvr": str(report.cvr).zfill(8),
+                "year": report.year,
+                "total_co2e_kg": report.total_co2e_kg,
+                "data_completeness": report.data_completeness,
+                "intensity_co2e_per_kg_milk": report.intensity_metrics.get("co2e_per_kg_milk"),
+                "intensity_co2e_per_ha": report.intensity_metrics.get("co2e_per_ha"),
+                "intensity_co2e_per_animal_unit": report.intensity_metrics.get(
+                    "co2e_per_animal_unit"
+                ),
+                "created_at": datetime.now(),
+            }
+            records.append(record)
+
+        return records
+
+    def _categories_to_records(self, reports: list[EmissionReport]) -> list[dict]:
+        """
+        Convert EmissionCategory data to a list of dictionaries.
+
+        Args:
+            reports: List of EmissionReport objects
+
+        Returns:
+            List of dictionaries with category data
+        """
+        records = []
+
+        for report in reports:
+            for category in report.categories:
+                record = {
+                    "cvr": str(report.cvr).zfill(8),
+                    "year": report.year,
+                    "category_name": category.name,
+                    "co2e_kg": category.co2e_kg,
+                    "data_quality": category.data_quality,
+                    "sub_sources": str(category.sub_sources) if category.sub_sources else "{}",
+                    "created_at": datetime.now(),
+                }
+                records.append(record)
+
+        return records
+
     def sync_to_supabase(
         self,
-        reports: List[EmissionReport],
+        reports: list[EmissionReport],
         table_prefix: str = "climate_",
         upsert: bool = True,
     ) -> bool:
@@ -321,7 +391,9 @@ class ClimateOutputWriter:
             supabase_key = os.getenv("SUPABASE_KEY")
 
             if not supabase_url or not supabase_key:
-                logger.warning("Supabase sync skipped: SUPABASE_URL and SUPABASE_KEY environment variables not set")
+                logger.warning(
+                    "Supabase sync skipped: SUPABASE_URL and SUPABASE_KEY environment variables not set"
+                )
                 return False
 
             # Try to import supabase (optional dependency)
@@ -334,11 +406,15 @@ class ClimateOutputWriter:
 
             # Create Supabase client
             supabase = create_client(supabase_url, supabase_key)
-            logger.info("✅ Connected to Supabase")
+            logger.info("Connected to Supabase")
 
             # Sync emissions data
-            emissions_df = self._reports_to_dataframe(reports)
-            emissions_records = emissions_df.to_dict("records")
+            emissions_records = self._reports_to_records(reports)
+
+            # Convert datetime to ISO string for JSON serialization
+            for record in emissions_records:
+                if record.get("created_at"):
+                    record["created_at"] = record["created_at"].isoformat()
 
             emissions_table = f"{table_prefix}emissions"
             if upsert:
@@ -347,11 +423,15 @@ class ClimateOutputWriter:
             else:
                 supabase.table(emissions_table).insert(emissions_records).execute()
 
-            logger.info(f"✅ Synced {len(emissions_records)} emission records to {emissions_table}")
+            logger.info(f"Synced {len(emissions_records)} emission records to {emissions_table}")
 
             # Sync categories data
-            categories_df = self._categories_to_dataframe(reports)
-            categories_records = categories_df.to_dict("records")
+            categories_records = self._categories_to_records(reports)
+
+            # Convert datetime to ISO string for JSON serialization
+            for record in categories_records:
+                if record.get("created_at"):
+                    record["created_at"] = record["created_at"].isoformat()
 
             categories_table = f"{table_prefix}emission_categories"
             if upsert:
@@ -360,7 +440,7 @@ class ClimateOutputWriter:
             else:
                 supabase.table(categories_table).insert(categories_records).execute()
 
-            logger.info(f"✅ Synced {len(categories_records)} category records to {categories_table}")
+            logger.info(f"Synced {len(categories_records)} category records to {categories_table}")
 
             return True
 
@@ -368,7 +448,7 @@ class ClimateOutputWriter:
             logger.error(f"Failed to sync to Supabase: {e}")
             return False
 
-    def list_available_reports(self, pattern: str = None) -> List[str]:
+    def list_available_reports(self, pattern: str | None = None) -> list[str]:
         """
         List available emission reports in the gold layer.
 
@@ -402,7 +482,7 @@ class ClimateOutputWriter:
             logger.error(f"Failed to list available reports: {e}")
             return []
 
-    def read_report_metadata(self, report_path: str) -> Optional[Dict[str, Any]]:
+    def read_report_metadata(self, report_path: str) -> dict[str, Any] | None:
         """
         Read metadata for a specific emission report.
 
@@ -419,11 +499,18 @@ class ClimateOutputWriter:
         """
         try:
             metadata_path = f"{report_path}/metadata.json"
-            metadata = self.gcs.download_json(metadata_path)
-            return metadata
+            return self.gcs.download_json(metadata_path)
         except Exception as e:
             logger.error(f"Failed to read metadata from {report_path}: {e}")
             return None
+
+    def __del__(self):
+        """Cleanup DuckDB connection on deletion."""
+        try:
+            if hasattr(self, "_duckdb_conn") and self._duckdb_conn:
+                self._duckdb_conn.close()
+        except Exception:
+            pass
 
 
 # Example usage
@@ -469,14 +556,14 @@ if __name__ == "__main__":
 
     # Write to gold layer
     output_path = writer.write_to_gold_layer([mock_report])
-    print(f"✅ Wrote emission report to: {output_path}")
+    print(f"Wrote emission report to: {output_path}")
 
     # Optionally sync to Supabase
     success = writer.sync_to_supabase([mock_report])
     if success:
-        print("✅ Synced to Supabase")
+        print("Synced to Supabase")
     else:
-        print("⚠️  Supabase sync skipped (not configured)")
+        print("Supabase sync skipped (not configured)")
 
     # List available reports
     available_reports = writer.list_available_reports()

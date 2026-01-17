@@ -6,7 +6,6 @@ including execution frequency, dependencies, and orchestration rules.
 """
 
 from enum import Enum
-from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -43,14 +42,14 @@ class PipelineScheduleConfig(BaseModel):
     """
 
     frequency: ScheduleFrequency
-    depends_on: List[Source] = []
+    depends_on: list[Source] = []
     priority: int = 0
     description: str = ""
-    estimated_duration_minutes: Optional[int] = None
+    estimated_duration_minutes: int | None = None
 
 
 # Pipeline scheduling configuration based on user requirements
-PIPELINE_SCHEDULES: Dict[Source, PipelineScheduleConfig] = {
+PIPELINE_SCHEDULES: dict[Source, PipelineScheduleConfig] = {
     # MANUAL PIPELINES
     Source.soil_types: PipelineScheduleConfig(
         frequency=ScheduleFrequency.MANUAL,
@@ -176,7 +175,7 @@ PIPELINE_SCHEDULES: Dict[Source, PipelineScheduleConfig] = {
 }
 
 
-def get_pipeline_schedule(source: Source) -> Optional[PipelineScheduleConfig]:
+def get_pipeline_schedule(source: Source) -> PipelineScheduleConfig | None:
     """
     Get the scheduling configuration for a pipeline source.
 
@@ -189,7 +188,7 @@ def get_pipeline_schedule(source: Source) -> Optional[PipelineScheduleConfig]:
     return PIPELINE_SCHEDULES.get(source)
 
 
-def get_sources_by_frequency(frequency: ScheduleFrequency) -> List[Source]:
+def get_sources_by_frequency(frequency: ScheduleFrequency) -> list[Source]:
     """
     Get all pipeline sources that should run at the specified frequency.
 
@@ -204,10 +203,12 @@ def get_sources_by_frequency(frequency: ScheduleFrequency) -> List[Source]:
     for source, config in PIPELINE_SCHEDULES.items():
         if config.frequency == frequency:
             sources.append(source)
-        elif config.frequency == ScheduleFrequency.WEEKLY_AND_MONTHLY:
+        elif config.frequency == ScheduleFrequency.WEEKLY_AND_MONTHLY and frequency in [
+            ScheduleFrequency.WEEKLY,
+            ScheduleFrequency.MONTHLY,
+        ]:
             # Include WEEKLY_AND_MONTHLY sources for both weekly and monthly queries
-            if frequency in [ScheduleFrequency.WEEKLY, ScheduleFrequency.MONTHLY]:
-                sources.append(source)
+            sources.append(source)
 
     # Sort by priority (lower number = higher priority)
     sources.sort(key=lambda s: PIPELINE_SCHEDULES[s].priority)
@@ -216,7 +217,7 @@ def get_sources_by_frequency(frequency: ScheduleFrequency) -> List[Source]:
 
 def get_sources_by_frequency_for_batch(
     frequency: ScheduleFrequency, batch_type: str = "foundation"
-) -> List[Source]:
+) -> list[Source]:
     """
     Get pipeline sources for a specific frequency and batch type.
 
@@ -251,7 +252,7 @@ def get_sources_by_frequency_for_batch(
     return filtered_sources
 
 
-def get_dependency_order(sources: List[Source]) -> List[List[Source]]:
+def get_dependency_order(sources: list[Source]) -> list[list[Source]]:
     """
     Organize sources into execution batches based on dependencies.
 
@@ -307,7 +308,7 @@ def get_dependency_order(sources: List[Source]) -> List[List[Source]]:
     return batches
 
 
-def validate_dependencies() -> List[str]:
+def validate_dependencies() -> list[str]:
     """
     Validate that all pipeline dependencies are properly configured.
 
@@ -340,7 +341,7 @@ def validate_dependencies() -> List[str]:
     return errors
 
 
-def get_estimated_total_duration(sources: List[Source]) -> int:
+def get_estimated_total_duration(sources: list[Source]) -> int:
     """
     Get estimated total duration for a list of sources, accounting for parallel execution.
 

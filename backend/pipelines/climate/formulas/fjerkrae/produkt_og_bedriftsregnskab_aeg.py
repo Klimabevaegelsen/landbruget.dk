@@ -1,6 +1,11 @@
-from typing import List, Dict
 
-def beregn_produktaftryk_aeg_pr_kg(co2e_total_pr_holdhoene: float, co2e_slagt_pr_holdhoene: float, v_aeg_gram: float, a_aeg_pr_holdhoene: float) -> float:
+
+def beregn_produktaftryk_aeg_pr_kg(
+    co2e_total_pr_holdhoene: float,
+    co2e_slagt_pr_holdhoene: float,
+    v_aeg_gram: float,
+    a_aeg_pr_holdhoene: float,
+) -> float:
     """
     Beregner produktaftrykket for æg pr. kg.
 
@@ -23,8 +28,8 @@ def beregn_produktaftryk_aeg_pr_kg(co2e_total_pr_holdhoene: float, co2e_slagt_pr
         return 0.0
 
     # P_æg = P_h / ((V_æg / 1000) * A_æg)
-    p_aeg_pr_kg = p_h / total_aeg_kg_pr_holdhoene
-    return p_aeg_pr_kg
+    return p_h / total_aeg_kg_pr_holdhoene
+
 
 def beregn_co2e_total_holdhoene(
     co2e_el: float,
@@ -34,7 +39,7 @@ def beregn_co2e_total_holdhoene(
     co2e_lager: float,
     co2e_stald: float,
     co2e_stroelse: float,
-    co2e_varme: float
+    co2e_varme: float,
 ) -> float:
     """
     Beregner den totale CO2e udledning fra alle emissionskilder for en holdhøne.
@@ -52,20 +57,20 @@ def beregn_co2e_total_holdhoene(
     Returns:
         Total CO2e udledning (kg CO2e).
     """
-    co2e_total = (
-        co2e_el +
-        co2e_enterisk_metan +
-        co2e_foder +
-        co2e_indkoeb_dyr +
-        co2e_lager +
-        co2e_stald +
-        co2e_stroelse +
-        co2e_varme
+    return (
+        co2e_el
+        + co2e_enterisk_metan
+        + co2e_foder
+        + co2e_indkoeb_dyr
+        + co2e_lager
+        + co2e_stald
+        + co2e_stroelse
+        + co2e_varme
     )
 
-    return co2e_total
 
-def beregn_bedriftsaftryk_aeg(hold_data: List[Dict[str, float]]) -> float:
+
+def beregn_bedriftsaftryk_aeg(hold_data: list[dict[str, float]]) -> float:
     """
     Beregner bedriftsaftrykket for æg pr. kalenderår.
 
@@ -87,8 +92,10 @@ def beregn_bedriftsaftryk_aeg(hold_data: List[Dict[str, float]]) -> float:
 
     bedriftsaftryk = 0.0
     for hold in hold_data:
-        p_h_netto = hold['p_h'] - hold['co2e_slagt']  # This is P_h from the formula: CO2e_tot - CO2e_slagt
-        bidrag_til_bedrift = (p_h_netto - hold['co2e_hjemme']) * hold['a_aars']
+        p_h_netto = (
+            hold["p_h"] - hold["co2e_slagt"]
+        )  # This is P_h from the formula: CO2e_tot - CO2e_slagt
+        bidrag_til_bedrift = (p_h_netto - hold["co2e_hjemme"]) * hold["a_aars"]
         bedriftsaftryk += bidrag_til_bedrift
 
     return bedriftsaftryk

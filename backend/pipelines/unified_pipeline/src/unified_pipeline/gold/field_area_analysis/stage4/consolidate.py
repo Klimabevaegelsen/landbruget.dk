@@ -6,7 +6,7 @@ Creates the final field_area_analysis_final dataset.
 Optimized for DuckDB Spatial v1.2.2 with single spatial predicates.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
@@ -129,7 +129,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 "✅ FIXED: Updated environmental JOINs to use field_uuid instead of composite keys!"
             )
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Consolidate BNBO and wetland analyses into final comprehensive table.
 
@@ -591,7 +591,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
 
         self.log.info("   Environmental category breakdown:")
-        for category, count, avg_props, avg_env, avg_prop_env, total_relationships in env_breakdown:
+        for category, count, avg_props, avg_env, _avg_prop_env, total_relationships in env_breakdown:
             avg_props_str = f"{avg_props:.1f}" if avg_props is not None else "0.0"
             avg_env_str = f"{avg_env:.1f}" if avg_env is not None else "0.0"
             self.log.info(
@@ -660,7 +660,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
                 failed_result = validation_results[failed_validations[0]]
                 raise ValidationException(failed_result)
-            elif failed_validations:
+            if failed_validations:
                 self.log.warning(
                     f"⚠️ Validation failures detected but continuing: {failed_validations}"
                 )
@@ -697,7 +697,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
             "env_breakdown": env_breakdown,
         }
 
-    def _get_input_area_reference(self) -> Dict[str, Any]:
+    def _get_input_area_reference(self) -> dict[str, Any]:
         """Get reference area statistics from input data for validation."""
         return getattr(self, "_input_area_reference", None)
 
@@ -705,6 +705,6 @@ class ConsolidateResults(FieldAnalysisStageBase):
         """Get the name of the main output table for area validation."""
         return "field_environmental_analysis"
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save final consolidated analysis to GCS."""
         self._save_stage_output("field_area_analysis_final", "consolidated")

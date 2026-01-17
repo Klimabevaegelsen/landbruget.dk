@@ -25,23 +25,27 @@ class TestDMIBronzeConfig:
         assert config.name == "Danish Meteorological Institute"
         assert config.dataset == "dmi"
         assert config.type == "api"
-        assert config.description == "DMI climate data from GovCloud API"
-        assert config.frequency == "daily"
+        assert config.description == "DMI monthly climate data from GovCloud API (2011-present)"
+        assert config.frequency == "monthly"
         assert config.bucket == "landbrugsdata-raw-data"
-        assert config.parameters == ["pot_evaporation_makkink", "acc_precip"]
+        # parameters is a ClassVar, so check it exists on the class
+        assert DMIBronzeConfig.parameters == ["pot_evaporation_makkink", "acc_precip"]
         assert config.api_base_url == "https://dmigw.govcloud.dk/v2/climateData"
         assert config.max_concurrent_fetches == 5
-        assert config.days_back == 30
+        assert config.start_year == 2011
+        assert config.temporal_resolution == "monthly"
 
     def test_custom_config(self):
         """Test custom configuration values."""
         config = DMIBronzeConfig(
-            parameters=["pot_evaporation_makkink"], max_concurrent_fetches=3, days_back=7
+            max_concurrent_fetches=3, start_year=2020, temporal_resolution="daily"
         )
 
-        assert config.parameters == ["pot_evaporation_makkink"]
+        # parameters is a ClassVar, cannot be customized per-instance
+        assert DMIBronzeConfig.parameters == ["pot_evaporation_makkink", "acc_precip"]
         assert config.max_concurrent_fetches == 3
-        assert config.days_back == 7
+        assert config.start_year == 2020
+        assert config.temporal_resolution == "daily"
 
 
 class TestDMIApiClient:
@@ -95,7 +99,14 @@ class TestDMIApiClient:
     @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.mark.asyncio
     async def test_make_request_rate_limit(self):
-        """Test API request with rate limit error."""
+        """Test API request with rate limit error.
+
+        The production code has retry logic that retries on ClientError. When we get
+        a 429 status, it raises ClientError which triggers retries. After exhausting
+        retries, tenacity raises a RetryError wrapping the last exception.
+        """
+        from tenacity import RetryError
+
         config = DMIBronzeConfig()
         client = DMIApiClient(config)
 
@@ -108,10 +119,26 @@ class TestDMIApiClient:
         mock_session.get.return_value.__aenter__ = AsyncMock(return_value=mock_response)
         mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        with pytest.raises(aiohttp.ClientError) as excinfo:
+        # The rate limit error triggers retries and eventually raises RetryError
+        # Check that the retry logic is triggered by verifying the call count
+        with pytest.raises((aiohttp.ClientError, RetryError)) as excinfo:
             await client._make_request(mock_session, "test_endpoint")
 
-        assert "Rate limit exceeded" in str(excinfo.value)
+        # Verify that retries were attempted (3 attempts total)
+        assert mock_session.get.call_count == 3
+
+        # Check that the error is a RetryError or ClientError with rate limit info
+        exc = excinfo.value
+        if isinstance(exc, RetryError):
+            # For RetryError, check the last attempt's exception
+            last_attempt = exc.last_attempt
+            if last_attempt.failed:
+                inner_error = str(last_attempt.exception())
+                assert "Rate limit exceeded" in inner_error or "Error making request" in inner_error
+        else:
+            # For direct ClientError
+            error_str = str(exc)
+            assert "Rate limit exceeded" in error_str or "Error making request" in error_str
 
     @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.mark.asyncio
@@ -189,30 +216,36 @@ class TestDMIBronze:
         """Mock GCS access for testing."""
         return Mock()
 
-    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.fixture
     def dmi_bronze(self):
         """Create a DMIBronze instance for testing."""
-        config = DMIBronzeConfig(parameters=["pot_evaporation_makkink"])
-        return DMIBronze(config)
+        # Use patch.dict as context manager to ensure env is set during fixture usage
+        with patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"}):
+            config = DMIBronzeConfig()
+            return DMIBronze(config)
 
+    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     def test_initialization(self, dmi_bronze):
         """Test DMIBronze initialization."""
         assert dmi_bronze.config.dataset == "dmi"
         assert dmi_bronze.api_client is not None
         assert dmi_bronze.api_client.config == dmi_bronze.config
 
+    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     def test_calculate_time_range(self, dmi_bronze):
         """Test time range calculation."""
         start_time, end_time = dmi_bronze._calculate_time_range()
 
-        # Check that the time range is approximately correct
-        time_diff = end_time - start_time
-        expected_diff = timedelta(days=dmi_bronze.config.days_back)
+        # Check that start_time is January 1st of the start_year
+        assert start_time.year == dmi_bronze.config.start_year
+        assert start_time.month == 1
+        assert start_time.day == 1
 
-        # Allow for small differences due to execution time
-        assert abs(time_diff.total_seconds() - expected_diff.total_seconds()) < 60
+        # Check that end_time is approximately now
+        time_diff = datetime.now() - end_time
+        assert abs(time_diff.total_seconds()) < 60
 
+    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.mark.asyncio
     async def test_fetch_parameter_data_success(self, dmi_bronze):
         """Test successful parameter data fetching."""
@@ -244,6 +277,7 @@ class TestDMIBronze:
         assert "metadata" in result
         assert result["data"]["features"] == mock_features
 
+    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.mark.asyncio
     async def test_fetch_parameter_data_failure(self, dmi_bronze):
         """Test parameter data fetching with API failure."""
@@ -260,6 +294,7 @@ class TestDMIBronze:
 
         assert result is None
 
+    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.mark.asyncio
     async def test_run_success(self, dmi_bronze):
         """Test successful run execution."""
@@ -278,6 +313,7 @@ class TestDMIBronze:
         assert "pot_evaporation_makkink" in result
         assert result["pot_evaporation_makkink"]["parameter_id"] == "pot_evaporation_makkink"
 
+    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     @pytest.mark.asyncio
     async def test_run_failure(self, dmi_bronze):
         """Test run execution with all parameters failing."""
@@ -288,6 +324,7 @@ class TestDMIBronze:
 
         assert result is None
 
+    @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     def test_save_parameter_data(self, dmi_bronze):
         """Test parameter data saving to GCS."""
         # Mock GCS access

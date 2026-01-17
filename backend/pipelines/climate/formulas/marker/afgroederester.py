@@ -3,11 +3,10 @@ Beregning af afgrøderester på marken (N og CO2e).
 """
 
 import json
-from pathlib import Path
-from typing import Tuple, Any, Optional
-
 import sys
+from pathlib import Path
 from pathlib import Path as SysPath
+from typing import Any
 
 # Add climate root to path for imports
 _climate_root = SysPath(__file__).resolve().parent.parent.parent
@@ -25,7 +24,7 @@ def load_json_data(file_path: str) -> Any:
     base_path = Path(__file__).resolve().parent.parent.parent / "reference_values"
     full_path = base_path / file_path
     try:
-        with open(full_path, "r", encoding="utf-8") as f:
+        with open(full_path, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"Error: JSON file not found at {full_path}")
@@ -40,7 +39,9 @@ def load_json_data(file_path: str) -> Any:
 THETA_N2O_CO2 = 273.0  # GWP for N2O (IPCC AR6, 2021)
 MOL_WEIGHT_N2O_N_FACTOR = 44.0 / 28.0  # (M_N2O / M_N2)
 try:
-    tabel_19_data = load_json_data("tabel_19_ammoniak-emissionerne_fra_udbringning_af_organisk_gødning_side_75-76.json")
+    tabel_19_data = load_json_data(
+        "tabel_19_ammoniak-emissionerne_fra_udbringning_af_organisk_gødning_side_75-76.json"
+    )
     EF_N2O_AFGROEDERESTER = tabel_19_data["data"][0]["EF_N2O"]
 except Exception as e:
     print(f"Failed to load EF_N2O_AFGROEDERESTER from tabel_19: {e}")
@@ -57,13 +58,13 @@ def calculate_k_graes(n_graes_kg_n_ha: float) -> float:
     """
     if n_graes_kg_n_ha >= 50:
         return 1.49
-    elif 10 <= n_graes_kg_n_ha < 50:
+    if 10 <= n_graes_kg_n_ha < 50:
         return 1.24
-    else:  # n_graes_kg_n_ha < 10
-        return 1.0
+    # n_graes_kg_n_ha < 10
+    return 1.0
 
 
-def calculate_A_over_kg_ts_ha(
+def calculate_A_over_kg_ts_ha(  # noqa: N802
     x1_halmnedmulding: bool,
     x2_udbytte_nedmuldes: bool,
     t_torstof_total_kg_ts_ha: float,
@@ -101,11 +102,10 @@ def calculate_A_over_kg_ts_ha(
     # Term 4: X2_val * T
     term4 = x2_val * t_torstof_total_kg_ts_ha
 
-    a_over = term1 + term2 + term3 + term4
-    return a_over
+    return term1 + term2 + term3 + term4
 
 
-def calculate_A_under_kg_ts_ha(
+def calculate_A_under_kg_ts_ha(  # noqa: N802
     t_torstof_total_kg_ts_ha: float,
     h_u_fast_halmudbytte_kg_ts_ha: float,
     s_slope: float,
@@ -126,8 +126,7 @@ def calculate_A_under_kg_ts_ha(
     # Term ((T + H_u) * S + I) * k_græs
     term_residue_calc = (inner_base * s_slope + i_intercept) * k_graes
 
-    a_under = (inner_base + term_residue_calc) * f_forhold_under_over_biomasse
-    return a_under
+    return (inner_base + term_residue_calc) * f_forhold_under_over_biomasse
 
 
 def calculate_n_afgroederester_kg_n_ha(
@@ -137,7 +136,7 @@ def calculate_n_afgroederester_kg_n_ha(
     n_under_kg_n_pr_kg_ts: float,  # N indhold i afgrøderester under jorden
     # o_omlaegningsfrekvens: float, # This is applied per ha, not to the total N_afgroederester.
     # areal_ha: float # This is applied per ha for N, and then CO2e. Function returns per ha.
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """
     Beregner N i afgrøderester pr. ha.
     Returns N_A_over_kg_n_ha, N_A_under_kg_n_ha, N_total_afgroederester_kg_n_ha
@@ -181,8 +180,12 @@ def calculate_co2e_afgroederester_kg_co2e_ha(
     # N_under is not affected by omlægningsfrekvens in this step.
     n_total_effektiv_for_co2e_kg_n_ha = n_over_effektiv_kg_n_ha + n_a_under_kg_n_ha
 
-    co2e_kg_ha = n_total_effektiv_for_co2e_kg_n_ha * EF_N2O_AFGROEDERESTER * MOL_WEIGHT_N2O_N_FACTOR * THETA_N2O_CO2
-    return co2e_kg_ha
+    return (
+        n_total_effektiv_for_co2e_kg_n_ha
+        * EF_N2O_AFGROEDERESTER
+        * MOL_WEIGHT_N2O_N_FACTOR
+        * THETA_N2O_CO2
+    )
 
 
 # Functions for Afgrøde 2 (Efterafgrøder / Udlægsafgrøder)
@@ -203,8 +206,7 @@ def calculate_stub_mv_efterafgroede_kg_ts_ha(
     """
     # Current interpretation: (Udbytte_kg_ts_ha * Hældning) + Intercept
     # This means Table 27 Hældning is unitless ratio, Intercept is kg_ts_ha
-    stub_mv_kg_ts_ha = udbytte_efterafgroede_kg_ts_ha * haeldning_table27 + intercept_table27
-    return stub_mv_kg_ts_ha
+    return udbytte_efterafgroede_kg_ts_ha * haeldning_table27 + intercept_table27
 
 
 def calculate_n_efterafgroede_kg_n_ha(
@@ -215,7 +217,7 @@ def calculate_n_efterafgroede_kg_n_ha(
     n_indhold_over_table27: float,  # N content for above-ground from Table 27 (kg N / kg ts)
     faktor_under_table28: float,  # Factor for below-ground from Table 28 (ratio)
     n_indhold_under_table28: float,  # N content for below-ground from Table 28 (kg N / kg ts)
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """
     Beregner N i afgrøderester for efterafgrøder/udlægsafgrøder pr. ha.
     Returns N_over_nedmuldet_kg_n_ha, N_under_kg_n_ha, N_total_efterafgroede_kg_n_ha
@@ -252,8 +254,12 @@ def calculate_co2e_efterafgroede_kg_co2e_ha(n_total_efterafgroede_kg_n_ha: float
     """
     # EF_Lattergas for efterafgrøde is 0.01 (same as EF_N2O_AFGROEDERESTER)
     # N2O_Efterafgrøde = EF_lattergas x N_Efterafgrøde x 44/28 (Page 90)
-    co2e_kg_ha = n_total_efterafgroede_kg_n_ha * EF_N2O_AFGROEDERESTER * MOL_WEIGHT_N2O_N_FACTOR * THETA_N2O_CO2
-    return co2e_kg_ha
+    return (
+        n_total_efterafgroede_kg_n_ha
+        * EF_N2O_AFGROEDERESTER
+        * MOL_WEIGHT_N2O_N_FACTOR
+        * THETA_N2O_CO2
+    )
 
 
 # Testcases
@@ -310,8 +316,12 @@ if __name__ == "__main__":
         n_under_kg_n_pr_kg_ts=N_under_vb,
     )
     print(f"N i A_over (Vårbyg): {n_a_over_vb:.4f} kg N/ha")  # Expected: 5421.4 * 0.007 = 37.9498
-    print(f"N i A_under (Vårbyg): {n_a_under_vb:.4f} kg N/ha")  # Expected: 2277.308 * 0.014 = 31.882312
-    print(f"Total N afgrøderester (Vårbyg): {n_total_vb:.4f} kg N/ha")  # Expected: 37.9498 + 31.882312 = 69.832112
+    print(
+        f"N i A_under (Vårbyg): {n_a_under_vb:.4f} kg N/ha"
+    )  # Expected: 2277.308 * 0.014 = 31.882312
+    print(
+        f"Total N afgrøderester (Vårbyg): {n_total_vb:.4f} kg N/ha"
+    )  # Expected: 37.9498 + 31.882312 = 69.832112
 
     # Beregning CO2e for Vårbyg
     co2e_vb_ha = calculate_co2e_afgroederester_kg_co2e_ha(
@@ -378,8 +388,12 @@ if __name__ == "__main__":
         n_under_kg_n_pr_kg_ts=N_under_rg,
     )
     print(f"N i A_over (Rajgræs): {n_a_over_rg:.4f} kg N/ha")  # Expected: 1671 * 0.015 = 25.065
-    print(f"N i A_under (Rajgræs): {n_a_under_rg:.4f} kg N/ha")  # Expected: 5792.8 * 0.012 = 69.5136
-    print(f"Total N afgrøderester (Rajgræs): {n_total_rg:.4f} kg N/ha")  # Expected: 25.065 + 69.5136 = 94.5786
+    print(
+        f"N i A_under (Rajgræs): {n_a_under_rg:.4f} kg N/ha"
+    )  # Expected: 5792.8 * 0.012 = 69.5136
+    print(
+        f"Total N afgrøderester (Rajgræs): {n_total_rg:.4f} kg N/ha"
+    )  # Expected: 25.065 + 69.5136 = 94.5786
 
     # Test Rajgræs (assuming it's a perennial ploughed after O_rg years, and O_rg is the cycle length for this test)
     # The original C# test used O_rg = 1.0, effectively treating it as annual or ploughed annually for the test.
@@ -399,9 +413,13 @@ if __name__ == "__main__":
     print(
         "The C# code in the notebook defined theta_N2O_CO2 = 265.0, but its printed CO2e results used a factor of 298."
     )
-    print("The CO2e calculations should now align better with C# output that effectively used 298 for N2O GWP.")
+    print(
+        "The CO2e calculations should now align better with C# output that effectively used 298 for N2O GWP."
+    )
     print("The complex A_over calculation and k_graes are retained from original script structure.")
-    print("Added functions for Efterafgrøder (Afgrøde 2). Unit consistency for Table 27 Hældning/Intercept needs care.")
+    print(
+        "Added functions for Efterafgrøder (Afgrøde 2). Unit consistency for Table 27 Hældning/Intercept needs care."
+    )
 
     # Example of using k_graes function
     print("\nTesting k_graes function:")
@@ -416,6 +434,7 @@ if __name__ == "__main__":
 # Convenience functions using crop_parameters lookup
 # ============================================================================
 
+
 def calculate_crop_residue_emissions(
     crop_code: int,
     yield_kg_ha: float,
@@ -424,7 +443,7 @@ def calculate_crop_residue_emissions(
     yield_incorporated: bool = False,
     is_perennial: bool = False,
     rotation_years: float = 1.0,
-) -> Optional[Tuple[float, float, float, float]]:
+) -> tuple[float, float, float, float] | None:
     """
     Calculate crop residue emissions using crop_parameters lookup.
 
@@ -506,8 +525,8 @@ def calculate_crop_residue_emissions(
 def calculate_simple_crop_residue_co2e(
     crop_code: int,
     area_ha: float,
-    standard_yield_kg_ha: Optional[float] = None,
-) -> Optional[float]:
+    standard_yield_kg_ha: float | None = None,
+) -> float | None:
     """
     Simplified crop residue CO2e calculation using default parameters.
 
@@ -529,20 +548,20 @@ def calculate_simple_crop_residue_co2e(
     if standard_yield_kg_ha is None:
         # Standard yields in kg dry matter per hectare
         standard_yields = {
-            1: 5000,    # Vårbyg
-            2: 5500,    # Vårhvede
-            3: 4500,    # Havre
-            5: 9000,    # Majs
-            10: 5500,   # Vinterbyg
-            11: 7000,   # Vinterhvede
-            14: 5000,   # Vinterrug
-            16: 5500,   # Triticale
-            21: 2500,   # Vårraps
-            22: 3500,   # Vinterraps
-            30: 3000,   # Markærter
-            31: 3500,   # Hestebønner
+            1: 5000,  # Vårbyg
+            2: 5500,  # Vårhvede
+            3: 4500,  # Havre
+            5: 9000,  # Majs
+            10: 5500,  # Vinterbyg
+            11: 7000,  # Vinterhvede
+            14: 5000,  # Vinterrug
+            16: 5500,  # Triticale
+            21: 2500,  # Vårraps
+            22: 3500,  # Vinterraps
+            30: 3000,  # Markærter
+            31: 3500,  # Hestebønner
             151: 8000,  # Kartofler (fresh weight basis differs)
-            160: 10000, # Sukkerroer
+            160: 10000,  # Sukkerroer
             216: 9000,  # Majs variants
             218: 9000,
             252: 6000,  # Græs

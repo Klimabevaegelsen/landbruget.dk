@@ -14,7 +14,7 @@ Total pipeline complexity reduction: ~10-15x improvement
 
 import asyncio
 import time
-from typing import Any, Dict
+from typing import Any
 
 from unified_pipeline.util.log_util import Logger
 
@@ -27,7 +27,7 @@ from .water_projects_prefilter import WaterProjectsPreFilter
 from .wetlands_prefilter import WetlandsPreFilter
 
 
-async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Dict[str, Any]:
+async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> dict[str, Any]:
     """
     Run all Stage 0 pre-filtering operations.
 

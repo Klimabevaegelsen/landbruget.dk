@@ -2,11 +2,10 @@
 
 import asyncio
 import logging
-from typing import Dict, Optional
 
 import duckdb
 
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 
 from .config import PMTilesGeneratorConfig
 
@@ -33,7 +32,7 @@ class PMTilesDataLoader:
         self.gcs = gcs_access
         self.conn = duckdb_conn
 
-    async def load_and_integrate_field_data(self, year: int) -> Optional[str]:
+    async def load_and_integrate_field_data(self, year: int) -> str | None:
         """Load and integrate all field-related data for a given year.
 
         Args:
@@ -73,7 +72,7 @@ class PMTilesDataLoader:
                 nles5_table = await self._load_nles5_estimates(year)
 
             # Integrate all data
-            integrated_table = await self._integrate_field_data(
+            return await self._integrate_field_data(
                 field_table,
                 env_analysis_table,
                 production_table,
@@ -82,13 +81,11 @@ class PMTilesDataLoader:
                 year,
             )
 
-            return integrated_table
-
         except Exception as e:
             logger.error(f"Error loading and integrating field data for year {year}: {e}")
             return None
 
-    async def _load_fvm_marker_data(self, year: int) -> Optional[str]:
+    async def _load_fvm_marker_data(self, year: int) -> str | None:
         """Load FVM marker data for a specific year.
 
         For 2023 pesticide data, we need 2024 field boundaries (Y+1 pattern).
@@ -180,7 +177,7 @@ class PMTilesDataLoader:
             logger.warning(f"Error ensuring schema compatibility for {table_name}: {e}")
             # Don't fail the pipeline for schema issues
 
-    async def _load_field_environmental_analysis(self, year: int) -> Optional[str]:
+    async def _load_field_environmental_analysis(self, year: int) -> str | None:
         """Load field environmental analysis data for a specific year.
 
         Environmental data (BNBO/wetlands) should only be joined for specific year pairings:
@@ -237,7 +234,7 @@ class PMTilesDataLoader:
             logger.error(f"Error loading field environmental analysis for year {year}: {e}")
             return None
 
-    async def _load_field_production(self, year: int) -> Optional[str]:
+    async def _load_field_production(self, year: int) -> str | None:
         """Load field production estimates for a specific year.
 
         Production data uses Y+1 pattern to match field boundaries.
@@ -287,7 +284,7 @@ class PMTilesDataLoader:
             logger.error(f"Error loading field production data for year {year}: {e}")
             return None
 
-    async def _load_pesticide_proximity(self, year: int) -> Optional[str]:
+    async def _load_pesticide_proximity(self, year: int) -> str | None:
         """Load pesticide proximity data for a specific year.
 
         Args:
@@ -330,7 +327,7 @@ class PMTilesDataLoader:
             logger.error(f"Error loading pesticide proximity data for year {year}: {e}")
             return None
 
-    async def _load_nles5_estimates(self, year: int) -> Optional[str]:
+    async def _load_nles5_estimates(self, year: int) -> str | None:
         """Load NLES5 nitrogen estimation data for a specific year.
 
         Args:
@@ -375,10 +372,10 @@ class PMTilesDataLoader:
     async def _integrate_field_data(
         self,
         field_table: str,
-        env_analysis_table: Optional[str],
-        production_table: Optional[str],
-        pesticide_table: Optional[str],
-        nles5_table: Optional[str],
+        env_analysis_table: str | None,
+        production_table: str | None,
+        pesticide_table: str | None,
+        nles5_table: str | None,
         year: int,
     ) -> str:
         """Integrate all field data sources into a single table.
@@ -1023,7 +1020,7 @@ class PMTilesDataLoader:
                 # Ultimate fallback - return original table
                 return pesticide_table
 
-    async def _load_bmd_data(self) -> Optional[str]:
+    async def _load_bmd_data(self) -> str | None:
         """Load BMD pesticide product database.
 
         Returns:
@@ -1062,7 +1059,7 @@ class PMTilesDataLoader:
             logger.warning(f"Could not load BMD data: {e}")
             return None
 
-    async def load_environmental_layers(self) -> Dict[str, str]:
+    async def load_environmental_layers(self) -> dict[str, str]:
         """Load environmental layer data (year-independent).
 
         Returns:
@@ -1094,7 +1091,7 @@ class PMTilesDataLoader:
 
         return layers
 
-    async def _find_latest_timestamped_path(self, base_path: str) -> Optional[str]:
+    async def _find_latest_timestamped_path(self, base_path: str) -> str | None:
         """Find the latest timestamped directory in a base path.
 
         Uses the same proven pattern as other pipelines in the codebase.
@@ -1149,7 +1146,7 @@ class PMTilesDataLoader:
             logger.error(f"Error finding latest timestamped path for {base_path}: {e}")
             return None
 
-    async def _load_bnbo_status(self) -> Optional[str]:
+    async def _load_bnbo_status(self) -> str | None:
         """Load BNBO status dissolved data."""
         try:
             base_path = f"gs://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
@@ -1182,7 +1179,7 @@ class PMTilesDataLoader:
             logger.error(f"Error loading BNBO status data: {e}")
             return None
 
-    async def _load_wetlands(self) -> Optional[str]:
+    async def _load_wetlands(self) -> str | None:
         """Load wetlands dissolved data."""
         try:
             base_path = f"gs://{self.config.gcs_bucket}/{self.config.wetlands_path}"
@@ -1215,7 +1212,7 @@ class PMTilesDataLoader:
             logger.error(f"Error loading wetlands data: {e}")
             return None
 
-    async def _load_water_projects(self) -> Optional[str]:
+    async def _load_water_projects(self) -> str | None:
         """Load water projects dissolved data."""
         try:
             base_path = f"gs://{self.config.gcs_bucket}/{self.config.water_projects_path}"
@@ -1248,7 +1245,7 @@ class PMTilesDataLoader:
             logger.error(f"Error loading water projects data: {e}")
             return None
 
-    async def _load_bbr_buildings(self) -> Optional[str]:
+    async def _load_bbr_buildings(self) -> str | None:
         """Load BBR buildings data."""
         try:
             base_path = f"gs://{self.config.gcs_bucket}/{self.config.bbr_buildings_path}"

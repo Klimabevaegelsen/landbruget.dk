@@ -16,7 +16,7 @@ Architectural Benefits:
 - Creates clean input for Stage 4 calculations
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
@@ -84,7 +84,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             "water_bnbo_count": water_bnbo_count,
         }
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Simplified Stage 3A: Create property-level BNBO geometries using existing Stage 2A data.
 
@@ -172,7 +172,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
             "unique_properties": unique_properties,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save both geometric intersection tables to GCS."""
         # Save property × BNBO intersections
         self._save_stage_output("property_bnbo_intersections", "property_bnbo_intersections")

@@ -42,7 +42,9 @@ def validate_gwp_factors():
     assert 0 < data["indirect_n2o_factors"]["atmospheric_deposition"] < 1, (
         "Atmospheric deposition EF should be between 0 and 1"
     )
-    assert 0 < data["indirect_n2o_factors"]["leaching_runoff"] < 1, "Leaching/runoff EF should be between 0 and 1"
+    assert 0 < data["indirect_n2o_factors"]["leaching_runoff"] < 1, (
+        "Leaching/runoff EF should be between 0 and 1"
+    )
 
     # Check metadata
     assert "source" in data["metadata"], "Missing source in metadata"
@@ -59,7 +61,14 @@ def validate_emission_factors():
         data = json.load(f)
 
     # Check required top-level keys
-    required_keys = ["metadata", "manure_storage", "housing_emissions", "field_application", "grazing", "crop_residues"]
+    required_keys = [
+        "metadata",
+        "manure_storage",
+        "housing_emissions",
+        "field_application",
+        "grazing",
+        "crop_residues",
+    ]
     for key in required_keys:
         assert key in data, f"Missing required key: {key}"
 
@@ -97,7 +106,7 @@ def validate_loader_functions():
     """Validate that loader functions work correctly."""
     print("Validating loader functions...")
 
-    from loader import get_gwp, get_mcf, get_b0_factor, get_molecular_weight_factor
+    from loader import get_b0_factor, get_gwp, get_mcf, get_molecular_weight_factor
 
     # Test GWP lookup (IPCC AR6, 2021)
     assert get_gwp("CH4") == 27, "CH4 GWP lookup failed"

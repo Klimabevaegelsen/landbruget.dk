@@ -5,7 +5,6 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Dict, Optional
 
 from unified_pipeline.common.base import BaseSource
 
@@ -110,7 +109,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
             logger.error(f"❌ Failed to setup GCS HMAC authentication: {e}")
             # Don't raise - let it fall back to service account auth
 
-    async def run(self, target_year: Optional[int] = None) -> Dict[str, any]:
+    async def run(self, target_year: int | None = None) -> dict[str, any]:
         """Run the PMTiles generation pipeline.
 
         Args:
@@ -197,10 +196,10 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
 
     async def _upload_all_pmtiles(
         self,
-        field_pmtiles: Dict[int, Optional[str]],
-        environmental_pmtiles: Dict[str, Optional[str]],
-        buildings_pmtiles: Dict[str, Optional[str]],
-    ) -> Dict[str, Dict[str, Optional[str]]]:
+        field_pmtiles: dict[int, str | None],
+        environmental_pmtiles: dict[str, str | None],
+        buildings_pmtiles: dict[str, str | None],
+    ) -> dict[str, dict[str, str | None]]:
         """Upload all generated PMTiles to R2 with automatic cleanup.
 
         Args:
@@ -316,7 +315,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         except Exception as e:
             logger.warning(f"Failed to cleanup temporary files: {e}")
 
-    async def generate_year_specific(self, year: int) -> Dict[str, any]:
+    async def generate_year_specific(self, year: int) -> dict[str, any]:
         """Generate PMTiles for a specific year only.
 
         Args:
@@ -346,7 +345,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
 
         return results
 
-    async def generate_environmental_only(self) -> Dict[str, any]:
+    async def generate_environmental_only(self) -> dict[str, any]:
         """Generate only environmental layers PMTiles.
 
         Returns:

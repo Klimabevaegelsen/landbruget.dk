@@ -20,7 +20,7 @@ Memory Efficiency:
 
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -58,12 +58,12 @@ class CVRDataParserConfig(BaseJobConfig):
     )
 
     # Test configuration
-    test_limit: Optional[int] = Field(
+    test_limit: int | None = Field(
         default=None,
         description="Limit number of companies to process for testing (None = no limit)",
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
@@ -158,7 +158,7 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
         self.log.info("✅ UUID functions configured with namespace")
 
     @timed(name="CVR data parsing processing")
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[dict[str, Any]]:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """
         Run the CVR data parsing process.
 
@@ -206,12 +206,12 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
             self.log.error("=" * 60)
             self.log.error("❌ CVR DATA PARSING FAILED")
             self.log.error("=" * 60)
-            self.log.error(f"Error: {str(e)}")
+            self.log.error(f"Error: {e!s}")
             self.log.error("=" * 60)
             raise
 
     @timed(name="Loading raw data")
-    def _load_raw_data(self, bronze_data: Optional[Any] = None) -> str:
+    def _load_raw_data(self, bronze_data: Any | None = None) -> str:
         """
         Load raw JSON data from Bronze layer.
 
@@ -606,13 +606,12 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
         # Also save locally for GitHub Actions artifact sharing
         import os
 
-        if os.getenv("GITHUB_ACTIONS") == "true":
-            if self.config.save_companies_table:
-                local_companies_path = "/tmp/cvr_companies_silver.parquet"
-                self.conn.execute(
-                    f"COPY {companies_table} TO '{local_companies_path}' "
-                    f"(FORMAT 'parquet', COMPRESSION 'zstd')"
-                )
-                self.log.info(f"💾 Saved companies to artifact: {local_companies_path}")
+        if os.getenv("GITHUB_ACTIONS") == "true" and self.config.save_companies_table:
+            local_companies_path = "/tmp/cvr_companies_silver.parquet"
+            self.conn.execute(
+                f"COPY {companies_table} TO '{local_companies_path}' "
+                f"(FORMAT 'parquet', COMPRESSION 'zstd')"
+            )
+            self.log.info(f"💾 Saved companies to artifact: {local_companies_path}")
 
         self.log.info("✅ All Silver layer data saved successfully")

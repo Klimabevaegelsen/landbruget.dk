@@ -9,7 +9,7 @@ All methods maintain the exact same functionality and error handling as the orig
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from unified_pipeline.util.timing import timed
 
@@ -36,14 +36,14 @@ class NLES5DataLoader:
         self.gcs_access = processor.gcs_access
         self.db = processor.conn
 
-    def _get_available_fvm_marker_years(self) -> List[int]:
+    def _get_available_fvm_marker_years(self) -> list[int]:
         """
         Get all available fvm_marker years from GCS storage.
 
         Returns:
             List of available years for fvm_marker datasets
         """
-        years: Set[int] = set()
+        years: set[int] = set()
 
         # Primary: discover from GCS using the correct fvm_marker path pattern
         try:
@@ -105,9 +105,9 @@ class NLES5DataLoader:
             years.update(fallback_years)
             self.log.info(f"Using hardcoded fallback FVM years from GCS tree: {sorted(years)}")
 
-        return sorted(list(years))
+        return sorted(years)
 
-    def _read_fvm_marker_data_for_year(self, year: int) -> Optional[str]:
+    def _read_fvm_marker_data_for_year(self, year: int) -> str | None:
         """
         Read FVM marker data for a specific year using dynamic timestamped directory discovery.
 
@@ -156,7 +156,7 @@ class NLES5DataLoader:
 
     def _get_latest_timestamped_directory(
         self, base_path: str, dataset_name: str = "dataset"
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get the latest timestamped directory from a base GCS path.
 
@@ -253,7 +253,7 @@ class NLES5DataLoader:
             self.log.debug(f"   Traceback: {traceback.format_exc()}")
         return None
 
-    def _get_fertilizer_data_path(self, target_year: int = None) -> str:
+    def _get_fertilizer_data_path(self, target_year: int | None = None) -> str:
         """
         Get the path to fertilizer data from the fertiliser directory structure.
 
@@ -280,7 +280,7 @@ class NLES5DataLoader:
             self.log.error(f"Fertilizer directory discovery failed: {e}")
             raise
 
-    def _get_fertilizer_accounts_file_path(self, target_year: int = None) -> str:
+    def _get_fertilizer_accounts_file_path(self, target_year: int | None = None) -> str:
         """
         Get the specific path to fertilizer accounts data file (Gødningsregnskab - GR).
 
@@ -392,15 +392,14 @@ class NLES5DataLoader:
                     f"Found fertilizer accounts file: {selected_file} (year: {selected_year})"
                 )
                 return selected_file
-            else:
-                self.log.warning(f"❌ No fertilizer accounts files found in {fertilizer_dir}")
-                return None
+            self.log.warning(f"❌ No fertilizer accounts files found in {fertilizer_dir}")
+            return None
 
         except Exception as e:
             self.log.error(f"Error finding fertilizer accounts file: {e}")
             return None
 
-    def _get_field_plan_data_path(self, target_year: int = None) -> str:
+    def _get_field_plan_data_path(self, target_year: int | None = None) -> str:
         """
         Get the path to GKEA field plan data from the fertiliser directory.
 
@@ -479,7 +478,7 @@ class NLES5DataLoader:
             self.log.error(f"Failed to get field plan data path: {e}")
             raise
 
-    def _get_catch_crops_data_path(self, target_year: int = None) -> str:
+    def _get_catch_crops_data_path(self, target_year: int | None = None) -> str:
         """
         Get the path to catch crops (Efterafgrøder) data from the fertiliser directory.
 
@@ -628,19 +627,18 @@ class NLES5DataLoader:
                 return self._process_gkea_with_column_names(
                     file_path, target_table, gkea_year, column_names
                 )
-            else:
-                # Legacy format: need to read headers from row 2
-                self.log.info("🔄 Parquet file uses legacy format (headers in row 2)")
-                return self._process_gkea_legacy_format(
-                    file_path, target_table, gkea_year, column_names
-                )
+            # Legacy format: need to read headers from row 2
+            self.log.info("🔄 Parquet file uses legacy format (headers in row 2)")
+            return self._process_gkea_legacy_format(
+                file_path, target_table, gkea_year, column_names
+            )
 
         except Exception as e:
             self.log.error(f"❌ Failed to process GKEA field plan data: {e}")
             return False
 
     def _process_gkea_with_column_names(
-        self, file_path: str, target_table: str, gkea_year: int, column_names: List[str]
+        self, file_path: str, target_table: str, gkea_year: int, column_names: list[str]
     ) -> bool:
         """
         Process GKEA data that already has proper Danish column names.
@@ -717,7 +715,7 @@ class NLES5DataLoader:
                     NULL as mineral_n_spring,
                     NULL as organic_n_total
                 FROM field_plan_temp
-                WHERE "{marknummer_col}" IS NOT NULL 
+                WHERE "{marknummer_col}" IS NOT NULL
                   AND "{marknummer_col}" != ''
                   AND TRY_CAST("{areal_col}" AS DOUBLE) > 0
             """)
@@ -734,7 +732,7 @@ class NLES5DataLoader:
             return False
 
     def _process_gkea_legacy_format(
-        self, file_path: str, target_table: str, gkea_year: int, column_names: List[str]
+        self, file_path: str, target_table: str, gkea_year: int, column_names: list[str]
     ) -> bool:
         """
         Process GKEA data with legacy format (headers in row 2).
@@ -752,7 +750,7 @@ class NLES5DataLoader:
             # Add row numbers to find header row
             self.db.execute("""
                 CREATE OR REPLACE TABLE field_plan_all AS
-                SELECT 
+                SELECT
                     ROW_NUMBER() OVER () as row_num,
                     *
                 FROM field_plan_temp
@@ -760,7 +758,7 @@ class NLES5DataLoader:
 
             # Get the header row (row 2) to map column names
             headers = self.db.execute("""
-                SELECT * FROM field_plan_all 
+                SELECT * FROM field_plan_all
                 WHERE row_num = 2
                 LIMIT 1
             """).fetchone()
@@ -771,7 +769,7 @@ class NLES5DataLoader:
             # Create raw data table (skip first 2 rows)
             self.db.execute("""
                 CREATE OR REPLACE TABLE field_plan_raw AS
-                SELECT * FROM field_plan_all 
+                SELECT * FROM field_plan_all
                 WHERE row_num >= 3
             """)
 
@@ -849,10 +847,10 @@ class NLES5DataLoader:
                     TRY_CAST({areal_column} as DOUBLE) as areal,  -- 'Areal' (dynamic)
                     -- Additional columns with fallbacks for different year structures
                     -- Only in 2021
-                    CASE WHEN '{gkea_year}' = '2021' THEN column_7 
+                    CASE WHEN '{gkea_year}' = '2021' THEN column_7
                         ELSE NULL END as harmoni_areal_indikator,
                     -- Only in 2021
-                    CASE WHEN '{gkea_year}' = '2021' THEN TRY_CAST(column_8 as DOUBLE) 
+                    CASE WHEN '{gkea_year}' = '2021' THEN TRY_CAST(column_8 as DOUBLE)
                         ELSE NULL END as harmoni_areal,
                     -- Only in 2021
                     CASE WHEN '{gkea_year}' = '2021' THEN column_9 ELSE NULL END as jordbundstype,
@@ -864,7 +862,7 @@ class NLES5DataLoader:
                     NULL as mineral_n_spring,   -- Structure varies too much between years
                     NULL as organic_n_total     -- Structure varies too much between years
                 FROM field_plan_raw
-                WHERE {marknummer_column} IS NOT NULL 
+                WHERE {marknummer_column} IS NOT NULL
                   AND {marknummer_column} != ''
                   AND {marknummer_column} != 'Marknummer'  -- Skip any remaining header rows
                   AND {journal_column} IS NOT NULL     -- Must have journal number for composite key
@@ -889,7 +887,7 @@ class NLES5DataLoader:
             # Log sample data for verification
             sample = self.db.execute(f"""
                 SELECT field_id, journal_nummer, cvr_number, areal, crop_code
-                FROM {target_table} 
+                FROM {target_table}
                 LIMIT 5
             """).fetchall()
 
@@ -951,17 +949,17 @@ class NLES5DataLoader:
                 try:
                     self.db.execute(f"""
                         CREATE OR REPLACE TABLE gkea_fvm_enhanced_mappings AS
-                        SELECT 
+                        SELECT
                             g.field_id as gkea_field_id,
                             f.field_id as fvm_field_id,
                             'direct_composite_key' as match_method,
                             1.0 as confidence_score
                         FROM {gkea_table} g
                         JOIN marker f ON g.field_id = f.field_id
-                        
+
                         UNION ALL
-                        
-                        SELECT 
+
+                        SELECT
                             gkea_field_id,
                             fvm_field_id,
                             'agricultural_pattern' as match_method,
@@ -974,7 +972,7 @@ class NLES5DataLoader:
                         "SELECT COUNT(*) FROM gkea_fvm_enhanced_mappings"
                     ).fetchone()[0]
                     original_matches = self.db.execute("""
-                        SELECT COUNT(*) FROM gkea_fvm_enhanced_mappings 
+                        SELECT COUNT(*) FROM gkea_fvm_enhanced_mappings
                         WHERE match_method = 'direct_composite_key'
                     """).fetchone()[0]
 
@@ -993,7 +991,7 @@ class NLES5DataLoader:
                 self.log.info("   No additional matches found via agricultural pattern matching")
 
         except Exception as e:
-            self.log.warning(f"⚠️ Agricultural pattern matching failed: {str(e)}")
+            self.log.warning(f"⚠️ Agricultural pattern matching failed: {e!s}")
             self.log.warning("   Continuing with standard GKEA field processing...")
 
     def _apply_agricultural_pattern_matching_sync(self, gkea_table: str) -> None:
@@ -1009,13 +1007,13 @@ class NLES5DataLoader:
             finally:
                 loop.close()
         except Exception as e:
-            self.log.warning(f"⚠️ Agricultural pattern matching sync wrapper failed: {str(e)}")
+            self.log.warning(f"⚠️ Agricultural pattern matching sync wrapper failed: {e!s}")
             self.log.warning("   Continuing with standard GKEA field processing...")
 
     @timed(name="Loading required silver datasets")
     def _load_required_silver_datasets(
-        self, silver_data: Optional[Dict[str, Any]]
-    ) -> Dict[str, str]:
+        self, silver_data: dict[str, Any] | None
+    ) -> dict[str, str]:
         """
         Load all required silver datasets for NLES5 processing.
 
@@ -1025,7 +1023,7 @@ class NLES5DataLoader:
         Returns:
             Dictionary mapping dataset names to table names
         """
-        loaded_tables: Dict[str, str] = {}
+        loaded_tables: dict[str, str] = {}
         required_datasets = [
             (self.config.soil_types_dataset, "soil_types"),
             ("dmi_climate", "dmi_data"),  # Special handling for DMI data
@@ -1052,9 +1050,8 @@ class NLES5DataLoader:
                                 loaded_tables[dataset_name] = table_name
                                 self.log.info("✅ Successfully loaded DMI climate data")
                                 continue
-                            else:
-                                self.log.error("❌ Failed to load DMI climate data")
-                                continue
+                            self.log.error("❌ Failed to load DMI climate data")
+                            continue
                         except Exception as e:
                             self.log.error(
                                 f"❌ CRITICAL: Failed to load required DMI climate data: {e}"
@@ -1086,9 +1083,8 @@ class NLES5DataLoader:
                                     f"✅ Successfully loaded field plan data: {dataset_name}"
                                 )
                                 continue
-                            else:
-                                self.log.error(f"❌ Failed to load field plan data {dataset_name}")
-                                continue
+                            self.log.error(f"❌ Failed to load field plan data {dataset_name}")
+                            continue
                         except Exception as e:
                             self.log.error(
                                 f"❌ CRITICAL: Failed to load required field plan data: {e}"
@@ -1171,17 +1167,15 @@ class NLES5DataLoader:
                                                 f"{dataset_name}"
                                             )
                                             continue
-                                        else:
-                                            self.log.error(
-                                                f"❌ Failed to load fertilizer data {dataset_name}"
-                                            )
-                                            continue
-                                    else:
                                         self.log.error(
-                                            f"❌ No fertilizer accounts file found for year "
-                                            f"{target_year}"
+                                            f"❌ Failed to load fertilizer data {dataset_name}"
                                         )
                                         continue
+                                    self.log.error(
+                                        f"❌ No fertilizer accounts file found for year "
+                                        f"{target_year}"
+                                    )
+                                    continue
                                 except Exception as e:
                                     self.log.error(
                                         f"❌ CRITICAL: Failed to load required fertilizer data: {e}"
@@ -1212,12 +1206,11 @@ class NLES5DataLoader:
                                             f"{dataset_name}"
                                         )
                                         continue
-                                    else:
-                                        self.log.warning(
-                                            f"⚠️ Catch crops data not available (optional): "
-                                            f"{dataset_name}"
-                                        )
-                                        continue
+                                    self.log.warning(
+                                        f"⚠️ Catch crops data not available (optional): "
+                                        f"{dataset_name}"
+                                    )
+                                    continue
                                 except Exception as e:
                                     self.log.warning(
                                         f"⚠️ Catch crops data not available (optional): {e}"
@@ -1285,19 +1278,18 @@ class NLES5DataLoader:
                 # Combine the two datasets
                 self._combine_dmi_datasets()
                 return True
-            elif precip_success:
+            if precip_success:
                 self.log.warning("⚠️ Only precipitation data available, using that")
                 self.db.execute(
                     "CREATE OR REPLACE TABLE dmi_data AS SELECT * FROM dmi_precipitation"
                 )
                 return True
-            elif evap_success:
+            if evap_success:
                 self.log.warning("⚠️ Only evaporation data available, using that")
                 self.db.execute("CREATE OR REPLACE TABLE dmi_data AS SELECT * FROM dmi_evaporation")
                 return True
-            else:
-                self.log.error("❌ No DMI climate data could be loaded")
-                return False
+            self.log.error("❌ No DMI climate data could be loaded")
+            return False
 
         except Exception as e:
             self.log.error(f"❌ Failed to load DMI data: {e}")
@@ -1377,13 +1369,13 @@ class NLES5DataLoader:
 
             # DIAGNOSTIC: Check variation in raw silver data BEFORE combining
             precip_variation = self.db.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_records,
                     COUNT(DISTINCT avg_value) as unique_values,
                     MIN(avg_value) as min_value,
                     MAX(avg_value) as max_value,
                     AVG(avg_value) as avg_value
-                FROM dmi_precipitation 
+                FROM dmi_precipitation
                 WHERE avg_value IS NOT NULL
             """).fetchone()
 
@@ -1410,13 +1402,13 @@ class NLES5DataLoader:
             # Also check evaporation data variation
             try:
                 evap_variation = self.db.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_records,
                         COUNT(DISTINCT avg_value) as unique_values,
                         MIN(avg_value) as min_value,
                         MAX(avg_value) as max_value,
                         AVG(avg_value) as avg_value
-                    FROM dmi_evaporation 
+                    FROM dmi_evaporation
                     WHERE avg_value IS NOT NULL
                 """).fetchone()
 
@@ -1443,7 +1435,7 @@ class NLES5DataLoader:
             # TODO: Implement proper spatial joining once we understand the spatial column structure
             self.db.execute("""
                 CREATE OR REPLACE TABLE dmi_data AS
-                SELECT 
+                SELECT
                     *,
                     'precipitation' as data_type
                 FROM dmi_precipitation
@@ -1456,7 +1448,7 @@ class NLES5DataLoader:
             self.log.warning(f"⚠️ Failed to combine DMI datasets, using precipitation only: {e}")
             self.db.execute("CREATE OR REPLACE TABLE dmi_data AS SELECT * FROM dmi_precipitation")
 
-    def _load_climate_data_for_years(self, years: List[int]) -> str:
+    def _load_climate_data_for_years(self, years: list[int]) -> str:
         """
         Load climate data for specific years.
 
@@ -1500,7 +1492,7 @@ class NLES5DataLoader:
             raise
 
     @timed(name="Loading farm data")
-    def _load_farm_data(self, years: List[int]) -> Optional[str]:
+    def _load_farm_data(self, years: list[int]) -> str | None:
         """
         Load farm-level gødningsregnskab data for enhanced NLES5 calculations.
 
@@ -1577,7 +1569,7 @@ class NLES5DataLoader:
             self.log.error(f"❌ Failed to load farm data: {e}")
             return None
 
-    def _load_farm_data_for_year(self, year: int) -> Optional[str]:
+    def _load_farm_data_for_year(self, year: int) -> str | None:
         """
         Load farm data for a specific year from GCS bucket into DuckDB.
 
@@ -1671,7 +1663,7 @@ class NLES5DataLoader:
                 try:
                     self.db.execute(f"""
                         CREATE TABLE {final_table} AS
-                        SELECT m.*, 
+                        SELECT m.*,
                                COALESCE(a.organic_n_production, 0) as organic_n_production,
                                COALESCE(a.animal_count, 0) as animal_count,
                                COALESCE(a.animal_units, 0) as animal_units
@@ -1707,7 +1699,7 @@ class NLES5DataLoader:
             self.log.error(f"Failed to load farm data for year {year}: {e}")
             return None
 
-    def _find_main_farm_file(self, base_path: Path) -> Optional[Path]:
+    def _find_main_farm_file(self, base_path: Path) -> Path | None:
         """
         Legacy method for finding main farm data file - no longer used with GCS implementation.
 
@@ -1730,7 +1722,7 @@ class NLES5DataLoader:
         )
         return False
 
-    def _load_and_combine_animal_data(self, animal_files: List[Path], animal_table: str) -> None:
+    def _load_and_combine_animal_data(self, animal_files: list[Path], animal_table: str) -> None:
         """
         Legacy method for loading and combining animal data files
         - no longer used with GCS implementation.
@@ -1744,7 +1736,7 @@ class NLES5DataLoader:
         )
         return
 
-    def _get_key_farm_data_columns(self) -> List[str]:
+    def _get_key_farm_data_columns(self) -> list[str]:
         """
         Get the list of key farm data columns needed for NLES5 integration.
 
@@ -1774,7 +1766,7 @@ class NLES5DataLoader:
         ]
 
     @timed(name="Loading agricultural fields data")
-    def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
+    def _load_agricultural_fields_data(self, silver_data: dict[str, Any] | None) -> str:
         """
         Load agricultural fields data from multiple yearly datasets.
 
@@ -1877,7 +1869,7 @@ class NLES5DataLoader:
 
         # Combine all yearly tables
         combined_table = self._combine_yearly_fvm_data(
-            {year: table for year, table in yearly_tables}
+            dict(yearly_tables)
         )
 
         self.log.info(
@@ -1885,7 +1877,7 @@ class NLES5DataLoader:
         )
         return combined_table
 
-    def _load_agricultural_fields_for_years(self, years: List[int], table_name: str):
+    def _load_agricultural_fields_for_years(self, years: list[int], table_name: str):
         """
         Load agricultural fields data for specific years into a named table.
 
@@ -1935,8 +1927,8 @@ class NLES5DataLoader:
             raise
 
     def _load_required_silver_datasets_for_batch(
-        self, silver_data: Optional[Dict[str, Any]], batch_years: List[int]
-    ) -> Dict[str, str]:
+        self, silver_data: dict[str, Any] | None, batch_years: list[int]
+    ) -> dict[str, str]:
         """
         Load required silver datasets for a specific batch of years.
 
@@ -1959,9 +1951,9 @@ class NLES5DataLoader:
 
     def _load_agricultural_fields_data_for_batch(
         self,
-        silver_data: Optional[Dict[str, Any]],
-        batch_years: List[int],
-        loaded_tables: Dict[str, str],
+        silver_data: dict[str, Any] | None,
+        batch_years: list[int],
+        loaded_tables: dict[str, str],
     ) -> str:
         """
         Load agricultural fields data for a specific batch of years.
@@ -1990,7 +1982,7 @@ class NLES5DataLoader:
 
         return "agricultural_fields"
 
-    def _combine_yearly_fvm_data(self, yearly_tables: Dict[int, str]) -> str:
+    def _combine_yearly_fvm_data(self, yearly_tables: dict[int, str]) -> str:
         """
         Combine FVM data from multiple years into a single table.
 
@@ -2084,13 +2076,13 @@ class NLES5DataLoader:
 
             # Add year column to the existing table as INTEGER (not VARCHAR)
             self.processor.conn.execute(f"""
-                ALTER TABLE {table_name} 
+                ALTER TABLE {table_name}
                 ADD COLUMN IF NOT EXISTS year INTEGER DEFAULT {year}
             """)
 
             # Update all rows with the extracted year, ensuring it's stored as INTEGER
             self.processor.conn.execute(f"""
-                UPDATE {table_name} 
+                UPDATE {table_name}
                 SET year = CAST({year} AS INTEGER)
                 WHERE year IS NULL OR year = {year}
             """)
@@ -2153,7 +2145,7 @@ class NLES5DataLoader:
             self._create_minimal_fertilizer_schema(table_name)
 
     def _transform_fertilizer_accounting_data(
-        self, table_name: str, column_names: List[str]
+        self, table_name: str, column_names: list[str]
     ) -> None:
         """Transform fertilizer accounting data with form codes (f_901, etc.)."""
         try:
@@ -2187,7 +2179,7 @@ class NLES5DataLoader:
             self.log.error(f"Failed to transform accounting data: {e}")
             raise
 
-    def _transform_fertilizer_field_data(self, table_name: str, column_names: List[str]) -> None:
+    def _transform_fertilizer_field_data(self, table_name: str, column_names: list[str]) -> None:
         """Transform GKEA-style field data to fertilizer schema."""
         try:
             # This is actually field plan data, not fertilizer accounts

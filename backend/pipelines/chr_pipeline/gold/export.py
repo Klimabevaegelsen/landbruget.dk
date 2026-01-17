@@ -2,11 +2,10 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 # Try to import GCS utilities
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -14,7 +13,7 @@ except ImportError:
     GCSDataAccess = None
 
 
-def save_table(output_path: Path, con, table_name: str) -> Optional[Path]:
+def save_table(output_path: Path, con, table_name: str) -> Path | None:
     """
     Save table data to parquet file using DuckDB.
 
@@ -74,7 +73,9 @@ def upload_to_gcs(local_path: Path, gcs_path: str, bucket: str = "landbrugsdata-
         return False
 
 
-def export_gold_table(con, table_name: str, timestamp: str, output_dir: Path, upload_to_cloud: bool = True) -> bool:
+def export_gold_table(
+    con, table_name: str, timestamp: str, output_dir: Path, upload_to_cloud: bool = True
+) -> bool:
     """
     Export a gold table locally and optionally to GCS.
 

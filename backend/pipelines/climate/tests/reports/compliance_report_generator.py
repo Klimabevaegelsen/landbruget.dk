@@ -9,12 +9,12 @@ Runs pytest compliance tests and generates a comprehensive report showing:
 - Critical failures
 """
 
-import subprocess
 import json
+import subprocess
 import sys
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any
 
 
 class ComplianceReportGenerator:
@@ -27,15 +27,15 @@ class ComplianceReportGenerator:
                 "generated_at": datetime.now().isoformat(),
                 "python_version": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
                 "reference": "Reference emission calculation implementation",
-                "gwp_version": "IPCC AR6 (2021)"
+                "gwp_version": "IPCC AR6 (2021)",
             },
             "summary": {},
             "categories": [],
             "intentional_deviations": [],
-            "critical_failures": []
+            "critical_failures": [],
         }
 
-    def run_tests(self) -> Dict[str, Any]:
+    def run_tests(self) -> dict[str, Any]:
         """Run pytest compliance tests and capture results."""
         print("Running compliance tests...")
 
@@ -46,12 +46,13 @@ class ComplianceReportGenerator:
                 str(self.test_dir / "compliance/"),
                 "-v",
                 "--tb=short",
-                "-m", "compliance",
+                "-m",
+                "compliance",
                 "--json-report",
-                "--json-report-file=" + str(self.test_dir / "reports" / "pytest_results.json")
+                "--json-report-file=" + str(self.test_dir / "reports" / "pytest_results.json"),
             ],
             capture_output=True,
-            text=True
+            text=True,
         )
 
         print(result.stdout)
@@ -67,7 +68,7 @@ class ComplianceReportGenerator:
             # Fallback: parse from text output
             return self._parse_text_output(result.stdout)
 
-    def _parse_text_output(self, output: str) -> Dict[str, Any]:
+    def _parse_text_output(self, output: str) -> dict[str, Any]:
         """Parse pytest text output if JSON report not available."""
         lines = output.split("\n")
         passed = failed = skipped = 0
@@ -77,18 +78,18 @@ class ComplianceReportGenerator:
                 parts = line.split()
                 for i, part in enumerate(parts):
                     if part == "passed":
-                        passed = int(parts[i-1])
+                        passed = int(parts[i - 1])
                     elif part == "failed":
-                        failed = int(parts[i-1])
+                        failed = int(parts[i - 1])
                     elif part == "skipped":
-                        skipped = int(parts[i-1])
+                        skipped = int(parts[i - 1])
 
         return {
             "summary": {
                 "total": passed + failed + skipped,
                 "passed": passed,
                 "failed": failed,
-                "skipped": skipped
+                "skipped": skipped,
             }
         }
 
@@ -106,7 +107,7 @@ class ComplianceReportGenerator:
             "total_tests": total,
             "passed": passed,
             "failed": failed,
-            "compliance_percentage": (passed / total * 100) if total > 0 else 0.0
+            "compliance_percentage": (passed / total * 100) if total > 0 else 0.0,
         }
 
         # Document intentional deviations
@@ -116,15 +117,15 @@ class ComplianceReportGenerator:
                 "description": "N2O GWP: Using AR6 (273) instead of AR4 (298)",
                 "impact": "~8% lower N2O-related CO2e emissions",
                 "rationale": "IPCC AR6 (2021) is most recent science",
-                "affected_formulas": ["nitrate_leaching", "crop_residue", "fertilizer_application"]
+                "affected_formulas": ["nitrate_leaching", "crop_residue", "fertilizer_application"],
             },
             {
                 "deviation_id": "DEV-002",
                 "description": "CH4 GWP: Using AR6 biogenic (27) instead of AR4 (25)",
                 "impact": "~8% higher CH4-related CO2e emissions",
                 "rationale": "IPCC AR6 (2021) distinguishes biogenic vs fossil CH4",
-                "affected_formulas": ["cattle_digestion", "pig_digestion", "manure_storage"]
-            }
+                "affected_formulas": ["cattle_digestion", "pig_digestion", "manure_storage"],
+            },
         ]
 
         return self._format_report()
@@ -133,19 +134,19 @@ class ComplianceReportGenerator:
         """Format report as readable markdown."""
         report_md = f"""# Compliance Report
 
-Generated: {self.report['metadata']['generated_at']}
+Generated: {self.report["metadata"]["generated_at"]}
 Python Implementation: climate v1.0
-Reference: {self.report['metadata']['reference']}
-GWP Version: {self.report['metadata']['gwp_version']}
+Reference: {self.report["metadata"]["reference"]}
+GWP Version: {self.report["metadata"]["gwp_version"]}
 
 ## Executive Summary
 
 | Metric | Value |
 |--------|-------|
-| Total Tests | {self.report['summary']['total_tests']} |
-| Passed | {self.report['summary']['passed']} |
-| Failed | {self.report['summary']['failed']} |
-| **Compliance Rate** | **{self.report['summary']['compliance_percentage']:.1f}%** |
+| Total Tests | {self.report["summary"]["total_tests"]} |
+| Passed | {self.report["summary"]["passed"]} |
+| Failed | {self.report["summary"]["failed"]} |
+| **Compliance Rate** | **{self.report["summary"]["compliance_percentage"]:.1f}%** |
 
 ## Intentional Deviations from AR4 Reference
 
@@ -154,11 +155,11 @@ These are NOT bugs - they represent intentional updates to use more recent scien
 """
         for deviation in self.report["intentional_deviations"]:
             report_md += f"""
-### {deviation['deviation_id']}: {deviation['description']}
+### {deviation["deviation_id"]}: {deviation["description"]}
 
-- **Impact**: {deviation['impact']}
-- **Rationale**: {deviation['rationale']}
-- **Affected Formulas**: {', '.join(deviation['affected_formulas'])}
+- **Impact**: {deviation["impact"]}
+- **Rationale**: {deviation["rationale"]}
+- **Affected Formulas**: {", ".join(deviation["affected_formulas"])}
 """
 
         report_md += """
@@ -209,14 +210,14 @@ python tests/reports/compliance_report_generator.py
         """Save report to file."""
         report_md = self.generate_report()
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(report_md)
 
         print(f"\nCompliance report saved to: {output_path}")
 
         # Also save JSON version
-        json_path = output_path.with_suffix('.json')
-        with open(json_path, 'w') as f:
+        json_path = output_path.with_suffix(".json")
+        with open(json_path, "w") as f:
             json.dump(self.report, f, indent=2)
 
         print(f"JSON report saved to: {json_path}")
@@ -231,7 +232,7 @@ if __name__ == "__main__":
         "-o",
         type=Path,
         default=Path(__file__).parent / "compliance_report.md",
-        help="Output path for report (default: compliance_report.md)"
+        help="Output path for report (default: compliance_report.md)",
     )
 
     args = parser.parse_args()

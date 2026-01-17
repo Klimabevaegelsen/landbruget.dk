@@ -122,12 +122,11 @@ class SchemaValidator(BaseValidator):
         if hasattr(data, "columns"):
             # This covers pandas DataFrames
             return data.columns.tolist()
-        elif hasattr(data, "column_names"):
+        if hasattr(data, "column_names"):
             # This covers some Ibis tables
             return data.column_names
-        else:
-            logger.warning("Could not determine columns from data")
-            return []
+        logger.warning("Could not determine columns from data")
+        return []
 
 
 class DataTypeValidator(BaseValidator):

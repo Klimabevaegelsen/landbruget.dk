@@ -11,5 +11,4 @@ def beregn_co2e_el_fjerkrae(e_total: float, e_egen: float, o_el: float, a_fjer: 
     Returns:
         CO2e fra el (kg CO2e).
     """
-    co2e_el = ((e_total - e_egen) * o_el) / a_fjer
-    return co2e_el
+    return ((e_total - e_egen) * o_el) / a_fjer

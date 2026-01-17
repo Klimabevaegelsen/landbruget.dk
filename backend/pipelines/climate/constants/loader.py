@@ -7,16 +7,16 @@ constants and emission factors stored in JSON files.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Get constants directory path
 CONSTANTS_DIR = Path(__file__).parent
 
 # Cache loaded data
-_CACHE: Dict[str, Any] = {}
+_CACHE: dict[str, Any] = {}
 
 
-def load_gwp_factors() -> Dict[str, Any]:
+def load_gwp_factors() -> dict[str, Any]:
     """
     Load Global Warming Potential factors from JSON file.
 
@@ -24,12 +24,12 @@ def load_gwp_factors() -> Dict[str, Any]:
         dict: GWP factors including gwp_100, molecular_weights, and indirect_n2o_factors
     """
     if "gwp_factors" not in _CACHE:
-        with open(CONSTANTS_DIR / "gwp_factors.json", "r") as f:
+        with open(CONSTANTS_DIR / "gwp_factors.json") as f:
             _CACHE["gwp_factors"] = json.load(f)
     return _CACHE["gwp_factors"]
 
 
-def load_emission_factors() -> Dict[str, Any]:
+def load_emission_factors() -> dict[str, Any]:
     """
     Load emission factors from JSON file.
 
@@ -37,7 +37,7 @@ def load_emission_factors() -> Dict[str, Any]:
         dict: Emission factors organized by source type (manure_storage, housing_emissions, etc.)
     """
     if "emission_factors" not in _CACHE:
-        with open(CONSTANTS_DIR / "emission_factors.json", "r") as f:
+        with open(CONSTANTS_DIR / "emission_factors.json") as f:
             _CACHE["emission_factors"] = json.load(f)
     return _CACHE["emission_factors"]
 
@@ -78,7 +78,7 @@ def get_molecular_weight_factor(factor_name: str) -> float:
     return factors["molecular_weights"][factor_name]
 
 
-def get_mcf(storage_type: str) -> Dict[str, Any]:
+def get_mcf(storage_type: str) -> dict[str, Any]:
     """
     Get Methane Conversion Factor for a storage type.
 
@@ -97,7 +97,7 @@ def get_mcf(storage_type: str) -> Dict[str, Any]:
     return factors["manure_storage"]["mcf"][storage_type]
 
 
-def get_b0_factor(animal_type: str) -> Dict[str, Any]:
+def get_b0_factor(animal_type: str) -> dict[str, Any]:
     """
     Get B0 factor (maximum CH4 producing capacity) for an animal type.
 
@@ -116,7 +116,7 @@ def get_b0_factor(animal_type: str) -> Dict[str, Any]:
     return factors["manure_storage"]["b0_factors"][animal_type]
 
 
-def get_nh3_emission_factor(source: str, sub_type: str) -> Dict[str, Any]:
+def get_nh3_emission_factor(source: str, sub_type: str) -> dict[str, Any]:
     """
     Get NH3 emission factor for a specific source and sub-type.
 
@@ -136,7 +136,7 @@ def get_nh3_emission_factor(source: str, sub_type: str) -> Dict[str, Any]:
     return factors[source]["nh3"][sub_type]
 
 
-def get_n2o_emission_factor(source: str, sub_type: Optional[str] = None) -> Dict[str, Any]:
+def get_n2o_emission_factor(source: str, sub_type: str | None = None) -> dict[str, Any]:
     """
     Get N2O emission factor for a specific source and optional sub-type.
 
@@ -158,7 +158,9 @@ def get_n2o_emission_factor(source: str, sub_type: Optional[str] = None) -> Dict
     return factors[source]["n2o"]
 
 
-def get_crop_residue_factors(crop: str, factor_type: str = "ipcc_2006_dry_matter") -> Dict[str, Any]:
+def get_crop_residue_factors(
+    crop: str, factor_type: str = "ipcc_2006_dry_matter"
+) -> dict[str, Any]:
     """
     Get crop residue calculation factors.
 

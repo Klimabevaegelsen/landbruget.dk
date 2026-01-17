@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-from typing import Dict, List, Optional
 
 import duckdb
 
@@ -12,6 +11,10 @@ from .data_loader import PMTilesDataLoader
 from .utils import FileManager, GeoJSONWriter, TippecanoeRunner
 
 logger = logging.getLogger(__name__)
+
+# CRS Strategy: All input data (BBR buildings, agricultural fields) is now in EPSG:25832 (Danish UTM).
+# Processing is done in EPSG:25832 (meters work directly for buffers/distances).
+# Final GeoJSON/PMTiles output is transformed to EPSG:4326 (WGS84) for web map display.
 
 
 class BuildingsProximityPMTilesGenerator:
@@ -35,7 +38,7 @@ class BuildingsProximityPMTilesGenerator:
         self.conn = duckdb_conn
         self.tippecanoe = TippecanoeRunner(self.config.temp_dir)
 
-    async def generate_buildings_proximity_pmtiles(self) -> Optional[str]:
+    async def generate_buildings_proximity_pmtiles(self) -> str | None:
         """Generate buildings proximity PMTiles.
 
         Returns:
@@ -124,10 +127,10 @@ class BuildingsProximityPMTilesGenerator:
             # First, load agricultural fields data to filter buildings by proximity
             await self._load_agricultural_fields_for_proximity()
 
-            # COORDINATE ALIGNMENT - Flip BBR buildings to match field coordinate order
+            # All data is now in EPSG:25832 (Danish UTM) - no coordinate flipping needed
             logger.info("📍 Creating buildings table for proximity analysis...")
 
-            # DEBUG: Log building coordinates before proximity filtering
+            # Validate that buildings are in expected EPSG:25832 coordinate range
             try:
                 building_bounds = await asyncio.to_thread(
                     self.conn.execute,
@@ -137,38 +140,21 @@ class BuildingsProximityPMTilesGenerator:
                 )
                 b_min_x, b_min_y, b_max_x, b_max_y = building_bounds.fetchone()
                 logger.info(
-                    f"DEBUG: Building bounds ORIGINAL: X({b_min_x:.6f} to {b_max_x:.6f}), Y({b_min_y:.6f} to {b_max_y:.6f})"
+                    f"Building bounds (EPSG:25832): X({b_min_x:.0f} to {b_max_x:.0f}), "
+                    f"Y({b_min_y:.0f} to {b_max_y:.0f})"
                 )
 
-                # Determine coordinate format based on bounds
-                if b_min_x > 50 and b_max_x < 60 and b_min_y > 8 and b_max_y < 16:
-                    logger.info(
-                        "DEBUG: Buildings appear to be in lat,lon format (X>50 suggests latitude)"
-                    )
-                    buildings_need_flip = True  # Flip to lon,lat format - CORRECT!
-                elif b_min_x > 8 and b_max_x < 16 and b_min_y > 50 and b_max_y < 60:
-                    logger.info(
-                        "DEBUG: Buildings appear to be in lon,lat format (X<16 suggests longitude)"
-                    )
-                    buildings_need_flip = False  # Already in lon,lat format - don't flip!
-                else:
+                # Validate EPSG:25832 bounds for Denmark (X: 400k-900k, Y: 6M-6.5M)
+                if not (b_min_x > 100000 and b_max_x < 1000000 and b_min_y > 5500000):
                     logger.warning(
-                        "DEBUG: Buildings coordinates don't match Denmark bounds - using default"
+                        "Buildings coordinates don't match expected EPSG:25832 bounds for Denmark. "
+                        "Expected X: 400k-900k, Y: 6M-6.5M"
                     )
-                    buildings_need_flip = False
 
             except Exception as e:
-                logger.warning(f"Could not log building bounds: {e}")
-                buildings_need_flip = False
+                logger.warning(f"Could not validate building bounds: {e}")
 
-            # Apply coordinate transformation based on detection
-            if buildings_need_flip:
-                buildings_geom_sql = "ST_FlipCoordinates(geometry)"
-                logger.info("DEBUG: Applying ST_FlipCoordinates to buildings geometry")
-            else:
-                buildings_geom_sql = "geometry"
-                logger.info("DEBUG: Using original buildings geometry")
-
+            # Create buildings table - geometry is already in EPSG:25832
             buildings_query = f"""
                 CREATE OR REPLACE TABLE buildings_for_proximity AS
                 SELECT
@@ -177,7 +163,7 @@ class BuildingsProximityPMTilesGenerator:
                     inspire_construction_year, inspire_floors, inspire_dwellings,
                     bbr_usage_code,
                     COALESCE(bbr_usage_name, 'Ukendt bygningstype') as bbr_usage_name,
-                    {buildings_geom_sql} as geometry
+                    geometry
                 FROM {table_name}
                 WHERE category_group IN ('residential', 'publicServices', 'agricultural')
                     AND geometry IS NOT NULL
@@ -185,25 +171,11 @@ class BuildingsProximityPMTilesGenerator:
 
             await asyncio.to_thread(self.conn.execute, buildings_query)
 
-            # DEBUG: Log building coordinates AFTER transformation
-            try:
-                transformed_bounds = await asyncio.to_thread(
-                    self.conn.execute,
-                    "SELECT ST_XMin(ST_Extent(geometry)), ST_YMin(ST_Extent(geometry)), "
-                    "ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) "
-                    "FROM buildings_for_proximity",
-                )
-                t_min_x, t_min_y, t_max_x, t_max_y = transformed_bounds.fetchone()
-                logger.info(
-                    f"DEBUG: Building bounds AFTER transform: X({t_min_x:.6f} to {t_max_x:.6f}), Y({t_min_y:.6f} to {t_max_y:.6f})"
-                )
-            except Exception as e:
-                logger.warning(f"Could not log transformed building bounds: {e}")
+            # Step 2: Create buffered agricultural fields
+            # Fields are now in EPSG:25832, so buffer works directly in meters
+            logger.info("🌾 Creating buffered agricultural fields (100m buffer in EPSG:25832)...")
 
-            # Step 2: Create buffered agricultural fields (use geometry as-is like field analysis)
-            logger.info("🌾 Creating buffered agricultural fields...")
-
-            # DEBUG: Log field coordinates before buffering and validate coordinate system
+            # Validate field coordinates are in expected EPSG:25832 range
             try:
                 field_bounds = await asyncio.to_thread(
                     self.conn.execute,
@@ -213,39 +185,18 @@ class BuildingsProximityPMTilesGenerator:
                 )
                 f_min_x, f_min_y, f_max_x, f_max_y = field_bounds.fetchone()
                 logger.info(
-                    f"DEBUG: Field bounds AFTER loading: X({f_min_x:.6f} to {f_max_x:.6f}), Y({f_min_y:.6f} to {f_max_y:.6f})"
+                    f"Field bounds (EPSG:25832): X({f_min_x:.0f} to {f_max_x:.0f}), "
+                    f"Y({f_min_y:.0f} to {f_max_y:.0f})"
                 )
 
-                # Validate coordinate format for Denmark
-                if f_min_x > 50 and f_max_x < 60 and f_min_y > 8 and f_max_y < 16:
-                    logger.info(
-                        "DEBUG: Fields appear to be in lat,lon format (X>50 suggests latitude)"
-                    )
-                    fields_format = "lat,lon"
-                elif f_min_x > 8 and f_max_x < 16 and f_min_y > 50 and f_max_y < 60:
-                    logger.info(
-                        "DEBUG: Fields appear to be in lon,lat format (X<16 suggests longitude)"
-                    )
-                    fields_format = "lon,lat"
-                else:
-                    logger.error("DEBUG: Fields coordinates don't match Denmark bounds!")
-                    fields_format = "unknown"
-
-                # Check if coordinate systems match for spatial join
-                buildings_format = "lon,lat" if buildings_need_flip else "lat,lon"
-                logger.info(
-                    f"DEBUG: Coordinate system status - Buildings: {buildings_format}, Fields: {fields_format}"
-                )
-
-                if buildings_format != fields_format:
+                # Validate EPSG:25832 bounds for Denmark
+                if not (f_min_x > 100000 and f_max_x < 1000000 and f_min_y > 5500000):
                     logger.warning(
-                        "DEBUG: Coordinate system mismatch detected - spatial join may fail!"
+                        "Field coordinates don't match expected EPSG:25832 bounds for Denmark"
                     )
-                else:
-                    logger.info("DEBUG: Coordinate systems match - spatial join should work!")
 
             except Exception as e:
-                logger.warning(f"Could not log field bounds: {e}")
+                logger.warning(f"Could not validate field bounds: {e}")
 
             await asyncio.to_thread(
                 self.conn.execute,
@@ -253,7 +204,7 @@ class BuildingsProximityPMTilesGenerator:
                 CREATE OR REPLACE TABLE fields_buffered AS
                 SELECT
                     field_uuid,
-                    ST_Buffer(geometry, 0.001) as geometry_buffer
+                    ST_Buffer(geometry, 100) as geometry_buffer  -- 100 meters (EPSG:25832 uses meters)
                 FROM agricultural_fields_proximity
                 WHERE geometry IS NOT NULL
             """,
@@ -413,7 +364,7 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 'Landbrug'
                     ELSE 'Andet'
                 END as building_type_simple,
-                ST_AsGeoJSON(geometry) as geometry  -- Already in lon,lat format
+                ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)) as geometry  -- Transform to WGS84 for web display
             FROM buildings_with_proximity
             ORDER BY distance_to_field_m, category_group, building_uuid
             """
@@ -471,11 +422,12 @@ class BuildingsProximityPMTilesGenerator:
                             f"Loading agricultural fields from {year} for proximity filtering"
                         )
 
+                        # Fields are already in EPSG:25832 from silver layer - no flipping needed
                         query = f"""
                         CREATE OR REPLACE TABLE agricultural_fields_proximity AS
                         SELECT DISTINCT
                             field_uuid,
-                            ST_FlipCoordinates(geometry) as geometry  -- Flip fields to lon,lat to match buildings
+                            geometry  -- Keep in EPSG:25832 for processing
                         FROM read_parquet('{gcs_path}data.parquet')
                         WHERE geometry IS NOT NULL
                             AND ST_IsValid(geometry)
@@ -530,7 +482,7 @@ class BuildingsProximityPMTilesGenerator:
             """,
             )
 
-    def _get_buildings_tippecanoe_args(self) -> List[str]:
+    def _get_buildings_tippecanoe_args(self) -> list[str]:
         """Get additional tippecanoe arguments for buildings proximity.
 
         Returns:
@@ -554,7 +506,7 @@ class BuildingsProximityPMTilesGenerator:
 
         return args
 
-    async def generate_residential_buildings_pmtiles(self) -> Optional[str]:
+    async def generate_residential_buildings_pmtiles(self) -> str | None:
         """Generate PMTiles specifically for residential buildings.
 
         Returns:
@@ -644,6 +596,7 @@ class BuildingsProximityPMTilesGenerator:
             True if successful, False otherwise
         """
         try:
+            # Transform from EPSG:25832 to WGS84 for GeoJSON/web display
             query = f"""
             SELECT
                 building_uuid,
@@ -656,7 +609,7 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_dwellings,
                 '#ff6b6b' as color,
                 'Boligbyggeri' as category_danish,
-                ST_AsGeoJSON(ST_FlipCoordinates(geo_building_polygon)) as geometry
+                ST_AsGeoJSON(ST_Transform(geo_building_polygon, 'EPSG:25832', 'EPSG:4326', always_xy := true)) as geometry
             FROM {table_name}
             WHERE category_group = 'residential'
                 AND geo_building_polygon IS NOT NULL
@@ -685,7 +638,7 @@ class BuildingsProximityPMTilesGenerator:
             logger.error(f"Error exporting residential buildings GeoJSON: {e}")
             return False
 
-    async def generate_educational_facilities_pmtiles(self) -> Optional[str]:
+    async def generate_educational_facilities_pmtiles(self) -> str | None:
         """Generate PMTiles specifically for educational facilities.
 
         Returns:
@@ -772,6 +725,7 @@ class BuildingsProximityPMTilesGenerator:
             True if successful, False otherwise
         """
         try:
+            # Transform from EPSG:25832 to WGS84 for GeoJSON/web display
             query = f"""
             SELECT
                 building_uuid,
@@ -784,7 +738,7 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_construction_year,
                 '#45b7d1' as color,
                 'Uddannelsesinstitution' as category_danish,
-                ST_AsGeoJSON(geo_building_polygon) as geometry
+                ST_AsGeoJSON(ST_Transform(geo_building_polygon, 'EPSG:25832', 'EPSG:4326', always_xy := true)) as geometry
             FROM {table_name}
             WHERE category_group = 'publicServices'
                 AND (
@@ -819,7 +773,7 @@ class BuildingsProximityPMTilesGenerator:
             logger.error(f"Error exporting educational facilities GeoJSON: {e}")
             return False
 
-    async def generate_all_building_pmtiles(self) -> Dict[str, Optional[str]]:
+    async def generate_all_building_pmtiles(self) -> dict[str, str | None]:
         """Generate building-related PMTiles (only the one needed by frontend).
 
         Returns:

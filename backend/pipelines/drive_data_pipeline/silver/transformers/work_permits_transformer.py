@@ -4,18 +4,23 @@ Work Permits transformer for processing agricultural work permits from PDF docum
 This transformer specializes in extracting agricultural work permit statistics
 from Danish "Landbrugsvisum" (Agricultural Visa) PDFs which contain pivot tables
 with company CVR numbers, nationalities, years, and permit counts.
+
+Refactored to use vanilla DuckDB instead of pandas.
 """
 
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+import duckdb
 
 try:
     import pdfplumber
 except ImportError:
     pdfplumber = None
+
+import contextlib
 
 from ...utils.logging import get_logger
 from ...utils.storage import DriveStorageManager
@@ -25,12 +30,13 @@ logger = get_logger()
 
 
 class WorkPermitsTransformer(BaseTransformer):
-    """Transformer for extracting agricultural work permits data from PDFs."""
+    """Transformer for extracting agricultural work permits data from PDFs using DuckDB."""
 
     def __init__(self) -> None:
         """Initialize the work permits transformer."""
         super().__init__()
         self.name = "WorkPermitsTransformer"
+        self.conn = duckdb.connect()
         logger.info("Initialized WorkPermitsTransformer for visa/work permits processing")
 
         # Dynamic extraction - no hardcoded lists
@@ -51,7 +57,7 @@ class WorkPermitsTransformer(BaseTransformer):
         logger.info(f"WorkPermitsTransformer.can_handle() checking file: {file_path}")
 
         # Check if it's a PDF file that might contain work permits data
-        if not file_path.suffix.lower() == ".pdf":
+        if file_path.suffix.lower() != ".pdf":
             logger.info(f"WorkPermitsTransformer: Not a PDF file, skipping: {file_path.suffix}")
             return False
 
@@ -88,9 +94,6 @@ class WorkPermitsTransformer(BaseTransformer):
         Returns:
             TransformResult object
         """
-        # Import TransformResult here to avoid circular imports
-        from .base import TransformResult
-
         if not pdfplumber:
             logger.error("pdfplumber not available - cannot process PDF")
             return TransformResult(success=False, error="pdfplumber not available")
@@ -109,16 +112,23 @@ class WorkPermitsTransformer(BaseTransformer):
             records = self._parse_work_permits_data(full_text)
             logger.info(f"Found {len(records)} raw records from parsing")
 
-            # Clean and validate the data
-            cleaned_records = self._clean_work_permits_data(records)
-
-            logger.info(f"Extracted {len(cleaned_records)} work permit records")
-
-            if not cleaned_records:
+            if not records:
                 return TransformResult(success=False, error="No work permit data extracted")
 
-            # Convert to DataFrame and save as Parquet
-            df = pd.DataFrame(cleaned_records)
+            # Create DuckDB table from records
+            table_name = self._create_work_permits_table(records)
+
+            # Clean and validate the data using DuckDB
+            cleaned_table = self._clean_work_permits_data(table_name)
+
+            # Get row count
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {cleaned_table}").fetchone()[0]
+            logger.info(f"Extracted {row_count} work permit records")
+
+            if row_count == 0:
+                self._drop_table(table_name)
+                self._drop_table(cleaned_table)
+                return TransformResult(success=False, error="No work permit data extracted")
 
             # Create output filename
             output_filename = f"work_permits_{file_path.stem}.parquet"
@@ -127,27 +137,110 @@ class WorkPermitsTransformer(BaseTransformer):
             # Ensure output directory exists
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Save as Parquet file
-            df.to_parquet(output_path, index=False)
+            # Save as Parquet file using DuckDB
+            self.conn.execute(f"""
+                COPY {cleaned_table} TO '{output_path}' (FORMAT PARQUET)
+            """)
             logger.info(f"Saved work permits data to: {output_path}")
+
+            # Get metadata for result
+            companies_count = self.conn.execute(
+                f"SELECT COUNT(DISTINCT company_id) FROM {cleaned_table}"
+            ).fetchone()[0]
+            nationalities_count = self.conn.execute(
+                f"SELECT COUNT(DISTINCT nationality) FROM {cleaned_table}"
+            ).fetchone()[0]
+            years_covered = self.conn.execute(
+                f"SELECT DISTINCT year FROM {cleaned_table} ORDER BY year"
+            ).fetchall()
+            years_list = [row[0] for row in years_covered]
+            total_permits = (
+                self.conn.execute(
+                    f"SELECT SUM(first_permits_count) FROM {cleaned_table}"
+                ).fetchone()[0]
+                or 0
+            )
+
+            # Clean up tables
+            self._drop_table(table_name)
+            self._drop_table(cleaned_table)
 
             return TransformResult(
                 success=True,
                 output_path=output_path,
-                row_count=len(cleaned_records),
+                row_count=row_count,
                 schema=self.get_output_schema(),
                 metadata={
                     "transformer": "WorkPermitsTransformer",
-                    "companies_count": df["company_id"].nunique(),
-                    "nationalities_count": df["nationality"].nunique(),
-                    "years_covered": sorted(df["year"].unique().tolist()),
-                    "total_permits": df["first_permits_count"].sum(),
+                    "companies_count": companies_count,
+                    "nationalities_count": nationalities_count,
+                    "years_covered": years_list,
+                    "total_permits": total_permits,
                 },
             )
 
         except Exception as e:
             logger.error(f"Error processing work permits PDF {file_path}: {e}")
             return TransformResult(success=False, error=str(e))
+
+    def _drop_table(self, table_name: str) -> None:
+        """Safely drop a table if it exists."""
+        with contextlib.suppress(Exception):
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+    def _create_work_permits_table(self, records: list[dict[str, Any]]) -> str:
+        """Create a DuckDB table from parsed records.
+
+        Args:
+            records: List of record dictionaries
+
+        Returns:
+            Table name
+        """
+        table_name = f"work_permits_raw_{id(self)}"
+
+        # Create table schema
+        self.conn.execute(f"""
+            CREATE TABLE {table_name} (
+                company_id VARCHAR,
+                nationality VARCHAR,
+                year INTEGER,
+                first_permits_count INTEGER,
+                source_line VARCHAR,
+                line_number INTEGER,
+                page_number INTEGER,
+                source_file VARCHAR,
+                extracted_at TIMESTAMP
+            )
+        """)
+
+        # Insert records
+        for record in records:
+            company_id = str(record.get("company_id", "")).replace("'", "''")
+            nationality = str(record.get("nationality", "")).replace("'", "''")
+            year = record.get("year", 0)
+            permits = record.get("first_permits_count", 0)
+            source_line = str(record.get("source_line", "")).replace("'", "''")[:500]
+            line_number = record.get("line_number", 0)
+            page_number = record.get("page_number", 0)
+            source_file = str(record.get("source_file", "")).replace("'", "''")
+            extracted_at = record.get("extracted_at", datetime.now())
+
+            self.conn.execute(f"""
+                INSERT INTO {table_name} VALUES (
+                    '{company_id}',
+                    '{nationality}',
+                    {year},
+                    {permits},
+                    '{source_line}',
+                    {line_number},
+                    {page_number},
+                    '{source_file}',
+                    '{extracted_at}'
+                )
+            """)
+
+        return table_name
 
     def _extract_text_from_pdf(
         self, pdf_path: Path, storage_manager: DriveStorageManager | None = None
@@ -157,13 +250,8 @@ class WorkPermitsTransformer(BaseTransformer):
 
         # Handle both absolute and relative paths
         if pdf_path.is_absolute():
-            # Use absolute path directly
             actual_path = pdf_path
         else:
-            # For relative paths, try to construct absolute path
-            # This assumes we're running from the project root
-            from pathlib import Path
-
             project_root = Path.cwd()
             actual_path = project_root / "data_local" / pdf_path
 
@@ -185,7 +273,7 @@ class WorkPermitsTransformer(BaseTransformer):
         found_years = re.findall(year_pattern, text)
 
         # Get unique years and sort them
-        unique_years = sorted(list(set(found_years)))
+        unique_years = sorted(set(found_years))
 
         # Filter to reasonable range for work permits
         valid_years = [year for year in unique_years if 2015 <= int(year) <= 2030]
@@ -196,11 +284,8 @@ class WorkPermitsTransformer(BaseTransformer):
     def _extract_countries_from_text(self, text: str) -> list[str]:
         """Extract country names from PDF text dynamically."""
         # Common patterns for country names in Danish agricultural work permit documents
-        # Look for capitalized words that appear to be country names
-        # This regex finds capitalized words that are likely country names
         country_pattern = r"\b[A-ZÆØÅ][a-zæøå]+(?:land|ien|stan|ien|ien|ien)?\b"
 
-        # Also look for some common country patterns
         potential_countries = re.findall(country_pattern, text)
 
         # Filter out common Danish words that aren't countries
@@ -233,7 +318,6 @@ class WorkPermitsTransformer(BaseTransformer):
             "Landbruget",
             "Ministeriet",
             "Arbejdstilladelser",
-            # Additional words from real PDF
             "Notat",
             "Natio",
             "Økonomi",
@@ -262,26 +346,24 @@ class WorkPermitsTransformer(BaseTransformer):
                 country not in danish_words_to_exclude
                 and country not in unique_countries
                 and len(country) > 3
-            ):  # Country names are typically longer than 3 chars
+            ):
                 unique_countries.append(country)
 
-        # Additionally, look for lines that contain CVR numbers followed by country-like words
-        # This helps identify countries in the pivot table structure
+        # Look for lines containing CVR numbers followed by country-like words
         cvr_lines = [line for line in text.split("\n") if re.search(r"\b\d{8}\b", line)]
 
-        # Also look for lines that are indented (nationality lines in the table structure)
+        # Look for lines that are indented (nationality lines in the table structure)
         nationality_lines = []
         for line in text.split("\n"):
             stripped = line.strip()
-            # Look for lines that start with a country name (capitalized, not a CVR number)
             if (
                 stripped
                 and stripped[0].isupper()
-                and not re.match(r"^\d", stripped)  # Not starting with number
-                and not re.match(r"^CVR", stripped)  # Not CVR header
-                and not re.match(r"^Tabel", stripped)  # Not table header
+                and not re.match(r"^\d", stripped)
+                and not re.match(r"^CVR", stripped)
+                and not re.match(r"^Tabel", stripped)
                 and len(stripped.split()[0]) > 3
-            ):  # First word is substantial
+            ):
                 nationality_lines.append(stripped)
 
         # Extract countries from these lines
@@ -294,7 +376,6 @@ class WorkPermitsTransformer(BaseTransformer):
                     and word[0].isupper()
                     and word not in danish_words_to_exclude
                     and word not in unique_countries
-                    # Additional filter: likely country names
                     and not word.isdigit()
                     and not re.match(r"^\d+$", word)
                 ):
@@ -376,10 +457,11 @@ class WorkPermitsTransformer(BaseTransformer):
                 continue
 
             # Look for table headers with years
-            if any(year in line for year in self.expected_years):
-                if "CVR-nummer" in line or "Nationalitet" in line:
-                    logger.debug(f"Found table header on page {current_page}: {line}")
-                    continue
+            if any(year in line for year in self.expected_years) and (
+                "CVR-nummer" in line or "Nationalitet" in line
+            ):
+                logger.debug(f"Found table header on page {current_page}: {line}")
+                continue
 
             # Look for nationality rows with data
             for country in self.country_names:
@@ -395,19 +477,15 @@ class WorkPermitsTransformer(BaseTransformer):
                     if numbers:
                         logger.debug(f"Found {country} in CVR {current_cvr}: numbers {numbers}")
 
-                        # Filter out obvious totals (usually the largest number or at the end)
+                        # Filter out obvious totals
                         permit_counts = []
                         for num_str in numbers:
                             num = int(num_str)
-                            # Reasonable permit count range (not CVR numbers, not huge totals)
                             if 1 <= num <= 1000:
                                 permit_counts.append(num)
 
-                        # Try to map numbers to years based on position
-                        # This is tricky without exact column positions, so we'll be conservative
+                        # Map numbers to years based on position
                         if permit_counts:
-                            # For now, let's create records for the actual numbers we find
-                            # We'll need to infer years or use a more sophisticated approach
                             for i, count in enumerate(
                                 permit_counts[:-1]
                             ):  # Skip the last (likely total)
@@ -423,7 +501,7 @@ class WorkPermitsTransformer(BaseTransformer):
                                             "line_number": line_num,
                                             "page_number": current_page,
                                             "source_file": "work_permits_pdf",
-                                            "extracted_at": pd.Timestamp.now(),
+                                            "extracted_at": datetime.now(),
                                         }
                                     )
                                     logger.debug(
@@ -439,39 +517,52 @@ class WorkPermitsTransformer(BaseTransformer):
         )
         return visa_records
 
-    def _clean_work_permits_data(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Clean and validate the work permits data."""
-        if not records:
-            return []
+    def _clean_work_permits_data(self, table_name: str) -> str:
+        """Clean and validate the work permits data using DuckDB.
+
+        Args:
+            table_name: Name of the raw data table
+
+        Returns:
+            Name of cleaned table
+        """
+        cleaned_table = f"work_permits_cleaned_{id(self)}"
 
         logger.debug("Cleaning work permits data...")
 
-        # Convert to DataFrame for easier processing
-        df = pd.DataFrame(records)
+        # Get initial count
+        initial_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
-        # Remove duplicates
-        initial_count = len(df)
-        df = df.drop_duplicates(subset=["company_id", "nationality", "year", "first_permits_count"])
-        logger.debug(f"Removed {initial_count - len(df)} duplicates")
+        # Create cleaned table with deduplication and aggregation
+        self.conn.execute(f"""
+            CREATE TABLE {cleaned_table} AS
+            SELECT
+                company_id,
+                nationality,
+                year,
+                SUM(first_permits_count) AS first_permits_count,
+                FIRST(source_file) AS source_file,
+                FIRST(extracted_at) AS extracted_at,
+                CURRENT_TIMESTAMP AS created_at,
+                CURRENT_TIMESTAMP AS updated_at
+            FROM (
+                SELECT DISTINCT
+                    company_id,
+                    nationality,
+                    year,
+                    first_permits_count,
+                    source_file,
+                    extracted_at
+                FROM {table_name}
+            ) deduped
+            GROUP BY company_id, nationality, year
+        """)
 
-        # Group by company, nationality, year and sum permits (in case of multiple entries)
-        df_clean = (
-            df.groupby(["company_id", "nationality", "year"])
-            .agg({"first_permits_count": "sum", "source_file": "first", "extracted_at": "first"})
-            .reset_index()
-        )
+        final_count = self.conn.execute(f"SELECT COUNT(*) FROM {cleaned_table}").fetchone()[0]
+        logger.debug(f"Removed {initial_count - final_count} duplicates")
+        logger.info(f"Cleaned data: {final_count} unique company-nationality-year combinations")
 
-        # Add timestamps for database compatibility
-        df_clean["created_at"] = pd.Timestamp.now()
-        df_clean["updated_at"] = pd.Timestamp.now()
-
-        # Convert back to records
-        cleaned_records = df_clean.to_dict("records")
-
-        logger.info(
-            f"Cleaned data: {len(cleaned_records)} unique company-nationality-year combinations"
-        )
-        return cleaned_records
+        return cleaned_table
 
     def get_output_schema(self) -> dict[str, str]:
         """Get the expected output schema for work permits data."""

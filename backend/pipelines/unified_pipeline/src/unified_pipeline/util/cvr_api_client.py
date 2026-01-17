@@ -14,7 +14,7 @@ import os
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -67,8 +67,8 @@ class CVRAPIClient:
 
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
         enable_geocoding: bool = True,
         geocode_current_only: bool = True,
     ):
@@ -143,7 +143,7 @@ class CVRAPIClient:
         wait=wait_exponential(multiplier=1, min=4, max=10),
         stop=stop_after_attempt(3),
     )
-    def _make_request(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_request(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         """
         Make an authenticated request to the CVR API with retry logic.
 
@@ -181,7 +181,7 @@ class CVRAPIClient:
 
     def get_company_data(
         self, cvr_number: str, fetch_all_fields: bool = True, enrich_with_geometry: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Fetch comprehensive company data for a specific CVR number.
 
@@ -239,7 +239,7 @@ class CVRAPIClient:
 
     def get_financial_documents(
         self, cvr_number: str, max_results: int = 10, xml_only: bool = True
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch financial documents and reports for a specific CVR number.
 
@@ -287,7 +287,7 @@ class CVRAPIClient:
             self.log.error(f"Error fetching financial documents for CVR {cvr_number}: {e}")
             return []
 
-    def _safe_nested_get(self, data: Dict[str, Any], *keys: str, default=None):
+    def _safe_nested_get(self, data: dict[str, Any], *keys: str, default=None):
         """
         Safely access nested dictionary values with null checks.
 
@@ -308,7 +308,7 @@ class CVRAPIClient:
                 return default
         return current
 
-    def _parse_company_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_company_data(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """
         Parse raw company data from CVR API response with comprehensive field extraction.
 
@@ -524,35 +524,33 @@ class CVRAPIClient:
         parsed_data["contact_info"] = contact_info
 
         # Extract comprehensive industry information (hovedbranche + bibranche1/2/3)
-        industries = []
-
         # Main industry (hovedbranche)
-        for industry_entry in company.get("hovedbranche", []):
-            industries.append(
-                {
-                    "industry_code": industry_entry.get("branchekode"),
-                    "industry_description": industry_entry.get("branchetekst"),
-                    "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
-                    "is_main": True,
-                }
-            )
+        industries = [
+            {
+                "industry_code": industry_entry.get("branchekode"),
+                "industry_description": industry_entry.get("branchetekst"),
+                "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
+                "is_main": True,
+            }
+            for industry_entry in company.get("hovedbranche", [])
+        ]
 
         # Secondary industries (bibranche1, bibranche2, bibranche3)
-        for bibranche_key in ["bibranche1", "bibranche2", "bibranche3"]:
-            for industry_entry in company.get(bibranche_key, []):
-                industries.append(
-                    {
-                        "industry_code": industry_entry.get("branchekode"),
-                        "industry_description": industry_entry.get("branchetekst"),
-                        "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
-                        "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
-                        "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
-                        "is_main": False,
-                        "bibranche_type": bibranche_key,
-                    }
-                )
+        industries.extend(
+            {
+                "industry_code": industry_entry.get("branchekode"),
+                "industry_description": industry_entry.get("branchetekst"),
+                "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
+                "is_main": False,
+                "bibranche_type": bibranche_key,
+            }
+            for bibranche_key in ["bibranche1", "bibranche2", "bibranche3"]
+            for industry_entry in company.get(bibranche_key, [])
+        )
 
         parsed_data["industries"] = industries
 
@@ -596,12 +594,7 @@ class CVRAPIClient:
                     person_data = {
                         "person_type": deltager.get("enhedstype"),
                         "unit_number": deltager.get("enhedsNummer"),
-                        "names": [],
-                    }
-
-                    # Extract all names
-                    for name_entry in deltager.get("navne", []):
-                        person_data["names"].append(
+                        "names": [
                             {
                                 "name": name_entry.get("navn"),
                                 "period_start": name_entry.get("periode", {}).get("gyldigFra"),
@@ -609,29 +602,29 @@ class CVRAPIClient:
                                 "is_current": name_entry.get("periode", {}).get("gyldigTil")
                                 is None,
                             }
-                        )
+                            for name_entry in deltager.get("navne", [])
+                        ],
+                    }
 
                     # Extract addresses (with PII filtering)
-                    person_addresses = []
-                    for addr_entry in deltager.get("beliggenhedsadresse", []):
-                        person_addresses.append(
-                            {
-                                "postal_code": addr_entry.get("postnummer"),
-                                "city": addr_entry.get("postdistrikt"),
-                                "municipality_code": (addr_entry.get("kommune") or {}).get(
-                                    "kommuneKode"
-                                ),
-                                "municipality_name": self._format_municipality_name(
-                                    (addr_entry.get("kommune") or {}).get("kommuneNavn")
-                                ),
-                                "country_code": addr_entry.get("landekode"),
-                                "period_start": (addr_entry.get("periode") or {}).get("gyldigFra"),
-                                "period_end": (addr_entry.get("periode") or {}).get("gyldigTil"),
-                                "is_current": (addr_entry.get("periode") or {}).get("gyldigTil")
-                                is None,
-                            }
-                        )
-                    person_data["addresses"] = person_addresses
+                    person_data["addresses"] = [
+                        {
+                            "postal_code": addr_entry.get("postnummer"),
+                            "city": addr_entry.get("postdistrikt"),
+                            "municipality_code": (addr_entry.get("kommune") or {}).get(
+                                "kommuneKode"
+                            ),
+                            "municipality_name": self._format_municipality_name(
+                                (addr_entry.get("kommune") or {}).get("kommuneNavn")
+                            ),
+                            "country_code": addr_entry.get("landekode"),
+                            "period_start": (addr_entry.get("periode") or {}).get("gyldigFra"),
+                            "period_end": (addr_entry.get("periode") or {}).get("gyldigTil"),
+                            "is_current": (addr_entry.get("periode") or {}).get("gyldigTil")
+                            is None,
+                        }
+                        for addr_entry in deltager.get("beliggenhedsadresse", [])
+                    ]
 
                 # Extract organization information
                 organization_data = {}
@@ -720,54 +713,48 @@ class CVRAPIClient:
         parsed_data["ownership"] = ownership
 
         # Extract company status history
-        status_history = []
-        for status_entry in company.get("virksomhedsstatus", []):
-            status_history.append(
-                {
-                    "status": status_entry.get("status"),
-                    "period_start": status_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": status_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": status_entry.get("periode", {}).get("gyldigTil") is None,
-                }
-            )
-        parsed_data["status_history"] = status_history
+        parsed_data["status_history"] = [
+            {
+                "status": status_entry.get("status"),
+                "period_start": status_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": status_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": status_entry.get("periode", {}).get("gyldigTil") is None,
+            }
+            for status_entry in company.get("virksomhedsstatus", [])
+        ]
 
         # Extract business form history
-        business_form_history = []
-        for form_entry in company.get("virksomhedsform", []):
-            business_form_history.append(
-                {
-                    "form_code": form_entry.get("virksomhedsformkode"),
-                    "form_description": form_entry.get("langBeskrivelse"),
-                    "short_description": form_entry.get("kortBeskrivelse"),
-                    "period_start": form_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": form_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": form_entry.get("periode", {}).get("gyldigTil") is None,
-                }
-            )
-        parsed_data["business_form_history"] = business_form_history
+        parsed_data["business_form_history"] = [
+            {
+                "form_code": form_entry.get("virksomhedsformkode"),
+                "form_description": form_entry.get("langBeskrivelse"),
+                "short_description": form_entry.get("kortBeskrivelse"),
+                "period_start": form_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": form_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": form_entry.get("periode", {}).get("gyldigTil") is None,
+            }
+            for form_entry in company.get("virksomhedsform", [])
+        ]
 
         # Extract subsidiary information (penheder)
-        subsidiaries = []
-        for subsidiary in company.get("penheder", []):
-            subsidiaries.append(
-                {
-                    "p_number": subsidiary.get("pNummer"),
-                    "name": subsidiary.get("navne", [{}])[0].get("navn")
-                    if subsidiary.get("navne")
-                    else None,
-                    "main_industry": subsidiary.get("hovedbranche", [{}])[0].get("branchetekst")
-                    if subsidiary.get("hovedbranche")
-                    else None,
-                    "status": subsidiary.get("virksomhedsstatus", [{}])[0].get("status")
-                    if subsidiary.get("virksomhedsstatus")
-                    else None,
-                    "period_start": subsidiary.get("periode", {}).get("gyldigFra"),
-                    "period_end": subsidiary.get("periode", {}).get("gyldigTil"),
-                    "is_current": subsidiary.get("periode", {}).get("gyldigTil") is None,
-                }
-            )
-        parsed_data["subsidiaries"] = subsidiaries
+        parsed_data["subsidiaries"] = [
+            {
+                "p_number": subsidiary.get("pNummer"),
+                "name": subsidiary.get("navne", [{}])[0].get("navn")
+                if subsidiary.get("navne")
+                else None,
+                "main_industry": subsidiary.get("hovedbranche", [{}])[0].get("branchetekst")
+                if subsidiary.get("hovedbranche")
+                else None,
+                "status": subsidiary.get("virksomhedsstatus", [{}])[0].get("status")
+                if subsidiary.get("virksomhedsstatus")
+                else None,
+                "period_start": subsidiary.get("periode", {}).get("gyldigFra"),
+                "period_end": subsidiary.get("periode", {}).get("gyldigTil"),
+                "is_current": subsidiary.get("periode", {}).get("gyldigTil") is None,
+            }
+            for subsidiary in company.get("penheder", [])
+        ]
 
         # Extract comprehensive employment data
         employment_data = {
@@ -859,9 +846,9 @@ class CVRAPIClient:
         metadata = {
             "total_fields_in_response": len(str(company).split(",")),  # Rough field count
             "has_current_address": any(addr.get("is_current") for addr in addresses),
-            "has_current_industry": any(ind.get("is_current") for ind in industries),
+            "has_current_industry": any(ind.get("is_current") for ind in parsed_data["industries"]),
             "has_leadership_data": len(filtered_leadership) > 0,
-            "has_subsidiaries": len(subsidiaries) > 0,
+            "has_subsidiaries": len(parsed_data["subsidiaries"]) > 0,
             "has_contact_info": bool(contact_info),
             "has_company_attributes": bool(attributes),
             "pii_filtering_applied": True,
@@ -874,7 +861,7 @@ class CVRAPIClient:
 
         return parsed_data
 
-    def enrich_company_with_geometry(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
+    def enrich_company_with_geometry(self, company_data: dict[str, Any]) -> dict[str, Any]:
         """
         Enrich company data with address geometry using DAWA API.
 
@@ -1008,7 +995,7 @@ class CVRAPIClient:
             self.log.error(f"Error enriching company data with geometry: {e}")
             return company_data
 
-    def _parse_address(self, address_obj: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_address(self, address_obj: dict[str, Any]) -> dict[str, Any]:
         """Parse address object from CVR data."""
         try:
             # Build formatted address string - convert all values to strings
@@ -1031,15 +1018,15 @@ class CVRAPIClient:
             )
 
             return {
-                "street_name": address_obj.get("vejnavn", None),
-                "house_number": address_obj.get("husnummerFra", None),
-                "letter": address_obj.get("bogstavFra", None),
-                "floor": address_obj.get("etage", None),
-                "door": address_obj.get("sidedoer", None),
-                "postal_code": address_obj.get("postnummer", None),
-                "city": address_obj.get("postdistrikt", None),
-                "district": address_obj.get("bynavn", None),
-                "country_code": address_obj.get("landekode", None),
+                "street_name": address_obj.get("vejnavn"),
+                "house_number": address_obj.get("husnummerFra"),
+                "letter": address_obj.get("bogstavFra"),
+                "floor": address_obj.get("etage"),
+                "door": address_obj.get("sidedoer"),
+                "postal_code": address_obj.get("postnummer"),
+                "city": address_obj.get("postdistrikt"),
+                "district": address_obj.get("bynavn"),
+                "country_code": address_obj.get("landekode"),
                 "full_address": full_address,
             }
 
@@ -1048,8 +1035,8 @@ class CVRAPIClient:
             return {"full_address": None, "error": str(e)}
 
     def _parse_financial_document(
-        self, doc_source: Dict[str, Any], cvr_number: str, xml_only: bool = True
-    ) -> Optional[Dict[str, Any]]:
+        self, doc_source: dict[str, Any], cvr_number: str, xml_only: bool = True
+    ) -> dict[str, Any] | None:
         """
         Parse financial document data from CVR API response.
 
@@ -1063,9 +1050,9 @@ class CVRAPIClient:
         try:
             document_data = {
                 "cvr_number": cvr_number,
-                "publication_type": doc_source.get("offentliggoerelsestype", None),
-                "publication_time": doc_source.get("offentliggoerelsesTidspunkt", None),
-                "case_number": doc_source.get("sagsNummer", None),
+                "publication_type": doc_source.get("offentliggoerelsestype"),
+                "publication_time": doc_source.get("offentliggoerelsesTidspunkt"),
+                "case_number": doc_source.get("sagsNummer"),
                 "fetch_timestamp": datetime.now().isoformat(),
             }
 
@@ -1105,11 +1092,11 @@ class CVRAPIClient:
 
     def fetch_multiple_companies(
         self,
-        cvr_numbers: List[str],
+        cvr_numbers: list[str],
         fetch_all_fields: bool = True,
         enrich_with_geometry: bool = True,
         batch_size: int = 50,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fetch company data for multiple CVR numbers efficiently using batch API calls.
 
@@ -1197,8 +1184,8 @@ class CVRAPIClient:
         }
 
     def _fetch_companies_batch(
-        self, cvr_numbers: List[str], fetch_all_fields: bool = True
-    ) -> Dict[str, Dict[str, Any]]:
+        self, cvr_numbers: list[str], fetch_all_fields: bool = True
+    ) -> dict[str, dict[str, Any]]:
         """
         Fetch multiple companies in a single API call using terms query.
 
@@ -1302,7 +1289,7 @@ class CVRAPIClient:
             self.log.error(f"Error downloading financial document {document_url}: {e}")
             raise
 
-    def parse_financial_xml(self, xml_content: str) -> List[Dict[str, Any]]:
+    def parse_financial_xml(self, xml_content: str) -> list[dict[str, Any]]:
         """
         Parse financial XML document to extract financial values.
 
@@ -1382,7 +1369,7 @@ class CVRAPIClient:
 
     def get_enriched_company_data(
         self, cvr_number: str, include_financial_data: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get enriched company data including parsed financial information.
 
@@ -1411,7 +1398,7 @@ class CVRAPIClient:
                         enriched_doc = doc.copy()
 
                         # Download and parse financial XML if available
-                        if "documents" in doc and doc["documents"]:
+                        if doc.get("documents"):
                             xml_doc = doc["documents"][0]
                             if "document_url" in xml_doc:
                                 try:
@@ -1466,14 +1453,11 @@ class CVRAPIClient:
             return False
 
         # Should not start with 0
-        if cvr_number.startswith("0"):
-            return False
-
-        return True
+        return not cvr_number.startswith("0")
 
     def get_pnumber_data(
         self, pnumber: str, fetch_all_fields: bool = True, enrich_with_geometry: bool = True
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Fetch comprehensive P-number (production unit) data from CVR register.
 
@@ -1530,11 +1514,11 @@ class CVRAPIClient:
 
     def fetch_multiple_pnumbers(
         self,
-        pnumbers: List[str],
+        pnumbers: list[str],
         fetch_all_fields: bool = True,
         enrich_with_geometry: bool = True,
         batch_size: int = 50,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Fetch P-number data for multiple P-numbers efficiently using batch API calls.
 
@@ -1624,8 +1608,8 @@ class CVRAPIClient:
         }
 
     def _fetch_pnumbers_batch(
-        self, pnumbers: List[str], fetch_all_fields: bool = True
-    ) -> Dict[str, Dict[str, Any]]:
+        self, pnumbers: list[str], fetch_all_fields: bool = True
+    ) -> dict[str, dict[str, Any]]:
         """
         Fetch multiple P-numbers in a single API call using terms query.
 
@@ -1742,7 +1726,7 @@ class CVRAPIClient:
             self.log.error(f"P-number batch fetch traceback: {traceback.format_exc()}")
             return {}
 
-    def get_company_pnumbers(self, company_data: Dict[str, Any]) -> List[str]:
+    def get_company_pnumbers(self, company_data: dict[str, Any]) -> list[str]:
         """
         Extract P-numbers from company data.
 
@@ -1780,12 +1764,9 @@ class CVRAPIClient:
             return False
 
         # Should not start with 0
-        if pnumber.startswith("0"):
-            return False
+        return not pnumber.startswith("0")
 
-        return True
-
-    def _parse_pnumber_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _parse_pnumber_data(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """
         Parse raw P-number data from CVR API response.
 
@@ -1817,35 +1798,29 @@ class CVRAPIClient:
             "fetch_timestamp": datetime.now().isoformat(),
         }
 
-        # Extract parent company relationship
-        company_relations = []
-        for relation in pnumber_unit.get("virksomhedsrelation", []):
-            if relation.get("periode", {}).get("gyldigTil") is None:  # Current relations only
-                company_relations.append(
-                    {
-                        "cvr_number": relation.get(
-                            "cvrNummer"
-                        ),  # CVR number is directly in the relation
-                        "relation_type": relation.get("virksomhedsrelation"),
-                        "period_start": relation.get("periode", {}).get("gyldigFra"),
-                        "period_end": relation.get("periode", {}).get("gyldigTil"),
-                        "is_current": relation.get("periode", {}).get("gyldigTil") is None,
-                    }
-                )
-        parsed_data["company_relations"] = company_relations
+        # Extract parent company relationship (current relations only)
+        parsed_data["company_relations"] = [
+            {
+                "cvr_number": relation.get("cvrNummer"),  # CVR number is directly in the relation
+                "relation_type": relation.get("virksomhedsrelation"),
+                "period_start": relation.get("periode", {}).get("gyldigFra"),
+                "period_end": relation.get("periode", {}).get("gyldigTil"),
+                "is_current": relation.get("periode", {}).get("gyldigTil") is None,
+            }
+            for relation in pnumber_unit.get("virksomhedsrelation", [])
+            if relation.get("periode", {}).get("gyldigTil") is None
+        ]
 
         # Extract P-number names (current and historical)
-        names = []
-        for name_entry in pnumber_unit.get("navne", []):
-            names.append(
-                {
-                    "name": name_entry.get("navn"),
-                    "period_start": name_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": name_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": name_entry.get("periode", {}).get("gyldigTil") is None,
-                }
-            )
-        parsed_data["all_names"] = names
+        parsed_data["all_names"] = [
+            {
+                "name": name_entry.get("navn"),
+                "period_start": name_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": name_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": name_entry.get("periode", {}).get("gyldigTil") is None,
+            }
+            for name_entry in pnumber_unit.get("navne", [])
+        ]
 
         # Extract comprehensive address information (beliggenhedsadresse) - CURRENT ONLY
         addresses = []
@@ -1947,19 +1922,17 @@ class CVRAPIClient:
         parsed_data["contact_info"] = contact_info
 
         # Extract industry information (hovedbranche)
-        industries = []
-        for industry_entry in pnumber_unit.get("hovedbranche", []):
-            industries.append(
-                {
-                    "industry_code": industry_entry.get("branchekode"),
-                    "industry_description": industry_entry.get("branchetekst"),
-                    "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
-                    "is_main": True,
-                }
-            )
-        parsed_data["industries"] = industries
+        parsed_data["industries"] = [
+            {
+                "industry_code": industry_entry.get("branchekode"),
+                "industry_description": industry_entry.get("branchetekst"),
+                "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
+                "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
+                "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
+                "is_main": True,
+            }
+            for industry_entry in pnumber_unit.get("hovedbranche", [])
+        ]
 
         # Extract P-number attributes
         attributes = {}
@@ -2024,13 +1997,13 @@ class CVRAPIClient:
         # Extract metadata
         metadata = {
             "has_current_address": len(addresses) > 0,  # All addresses are current now
-            "has_current_industry": any(ind.get("is_current") for ind in industries),
+            "has_current_industry": any(ind.get("is_current") for ind in parsed_data["industries"]),
             "has_contact_info": bool(contact_info),
             "has_unit_attributes": bool(attributes),
-            "has_company_relations": len(company_relations) > 0,
+            "has_company_relations": len(parsed_data["company_relations"]) > 0,
             "total_addresses": len(addresses),
             "current_addresses_only": True,  # Flag to indicate filtering applied
-            "total_company_relations": len(company_relations),
+            "total_company_relations": len(parsed_data["company_relations"]),
             "vrproduktionsenhed_fields": list(pnumber_unit.keys())[:10],  # Sample fields
             "total_vrproduktionsenhed_fields": len(pnumber_unit.keys()),
         }
@@ -2038,7 +2011,7 @@ class CVRAPIClient:
 
         return parsed_data
 
-    def enrich_pnumber_with_geometry(self, pnumber_data: Dict[str, Any]) -> Dict[str, Any]:
+    def enrich_pnumber_with_geometry(self, pnumber_data: dict[str, Any]) -> dict[str, Any]:
         """
         Enrich P-number data with address geometry using DAWA API.
 

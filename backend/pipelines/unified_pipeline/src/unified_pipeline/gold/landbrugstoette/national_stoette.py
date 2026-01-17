@@ -9,7 +9,7 @@ Output table: landbrugstoette_national
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -66,7 +66,7 @@ class LandbrugstoetteNationalGold(BaseSource[LandbrugstoetteNationalGoldConfig],
         self.conn.execute("SET s3_region = 'europe-west1'")
 
     @timed
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, str] | None:
         """Execute national subsidies gold processing."""
         self.log.info("Starting Landbrugsstøtte National Gold processing")
 
@@ -90,7 +90,7 @@ class LandbrugstoetteNationalGold(BaseSource[LandbrugstoetteNationalGoldConfig],
             self.log.error(f"Error in Landbrugsstøtte National Gold: {e}")
             raise
 
-    async def _load_silver_data(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def _load_silver_data(self, silver_data: dict[str, Any] | None = None) -> None:
         """Load silver de minimis and slaughter premium data."""
         self.log.info("Loading silver national subsidies data")
 
@@ -103,7 +103,7 @@ class LandbrugstoetteNationalGold(BaseSource[LandbrugstoetteNationalGoldConfig],
         )
 
     async def _load_dataset(
-        self, table_name: str, dataset: str, silver_data: Optional[Dict[str, Any]]
+        self, table_name: str, dataset: str, silver_data: dict[str, Any] | None
     ) -> None:
         """Load a single silver dataset."""
         if silver_data and dataset in silver_data:
@@ -245,7 +245,7 @@ class LandbrugstoetteNationalGold(BaseSource[LandbrugstoetteNationalGoldConfig],
         ).fetchone()[0]
         self.log.info(f"Created combined national summary: {count:,} unique CVRs")
 
-    async def _validate_data(self) -> Dict[str, Any]:
+    async def _validate_data(self) -> dict[str, Any]:
         """Validate national subsidies data."""
         self.log.info("Validating national subsidies data")
 
@@ -311,7 +311,7 @@ class LandbrugstoetteNationalGold(BaseSource[LandbrugstoetteNationalGoldConfig],
 
         return validation
 
-    async def _save_gold_data(self) -> Dict[str, str]:
+    async def _save_gold_data(self) -> dict[str, str]:
         """Save gold tables to GCS."""
         self.log.info("Saving national subsidies gold data")
 

@@ -31,11 +31,11 @@ from .water_projects_prefilter import WaterProjectsPreFilter
 from .wetlands_prefilter import WetlandsPreFilter
 
 __all__ = [
-    "run_stage0_prefiltering",
-    "PropertiesPreFilter",
     "BNBOPreFilter",
-    "WetlandsPreFilter",
-    "WaterProjectsPreFilter",
-    "SoilTypesPreFilter",
     "GrukosPreFilter",
+    "PropertiesPreFilter",
+    "SoilTypesPreFilter",
+    "WaterProjectsPreFilter",
+    "WetlandsPreFilter",
+    "run_stage0_prefiltering",
 ]

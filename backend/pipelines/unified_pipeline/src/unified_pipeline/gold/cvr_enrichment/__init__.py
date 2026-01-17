@@ -30,6 +30,8 @@ from .financial_documents import FinancialDocuments, FinancialDocumentsConfig
 from .pnumber_fetching import PNumberFetching, PNumberFetchingConfig
 
 __all__ = [
+    "AddressGeocoding",
+    "AddressGeocodingConfig",
     # New modular steps
     "CVRCollection",
     "CVRCollectionConfig",
@@ -37,10 +39,8 @@ __all__ = [
     "CompanyFetchingConfig",
     "DataConsolidation",
     "DataConsolidationConfig",
-    "PNumberFetching",
-    "PNumberFetchingConfig",
     "FinancialDocuments",
     "FinancialDocumentsConfig",
-    "AddressGeocoding",
-    "AddressGeocodingConfig",
+    "PNumberFetching",
+    "PNumberFetchingConfig",
 ]

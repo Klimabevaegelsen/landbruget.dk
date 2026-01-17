@@ -12,19 +12,31 @@ The module consists of two main components:
 
 The process reads in bronze layer data, transforms it using DuckDB-spatial,
 validates geometries, and stores the processed data in GCS.
+
+CRS Strategy:
+- Output CRS: EPSG:25832 (Danish UTM Zone 32N) for all processing
+- This enables accurate area/distance calculations in meters
+- Transform to EPSG:4326 (WGS84) only at final Supabase upload
 """
 
+import contextlib
 import gc
 import json
 import os
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 import psutil
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 from unified_pipeline.util.timing import AsyncTimer
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+USE_UTM_PROCESSING = True  # Set to False to use old WGS84 processing
 
 
 class AgriculturalFieldsSilverConfig(BaseJobConfig):
@@ -56,8 +68,8 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
 
     # Years to process (these should match what's available in bronze)
     # Note: Fields have 2020-2025, Blocks have 2020-2024
-    available_years: list[int] = [2020, 2021, 2022, 2023, 2024, 2025]
-    column_mapping: dict[str, str] = {
+    available_years: ClassVar[list[int]] = [2020, 2021, 2022, 2023, 2024, 2025]
+    column_mapping: ClassVar[dict[str, str]] = {
         "Marknr": "field_id",
         "IMK_areal": "area_ha",
         "Journalnr": "journal_number",
@@ -136,11 +148,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
             ]
 
             for table in cleanup_tables:
-                try:
+                with contextlib.suppress(Exception):
                     self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except Exception:
-                    # Ignore errors for tables that don't exist
-                    pass
 
             # 2. Clean up temporary connection if it exists
             if hasattr(self, "_temp_raw_conn") and temp_conn != self.conn:
@@ -223,10 +232,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
             for table_row in all_tables:
                 table_name = table_row[0]
-                try:
+                with contextlib.suppress(Exception):
                     self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-                except Exception:
-                    pass
 
             # Final DuckDB cleanup
             self.conn.execute("VACUUM")
@@ -373,9 +380,9 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                         # Prepare batch insert (column names are already cleaned)
                         placeholders = ", ".join(["?" for _ in columns])
-                        values = []
-                        for feature in batch_features:
-                            values.append([feature.get(col) for col in columns])
+                        values = [
+                            [feature.get(col) for col in columns] for feature in batch_features
+                        ]
 
                         # Insert batch
                         processing_conn.executemany(
@@ -453,7 +460,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 # Add unmapped columns (except geometry_json and payload_id)
                 mapped_columns = set()
-                for old_col, new_col in self.config.column_mapping.items():
+                for old_col in self.config.column_mapping:
                     # Add both original and cleaned versions to mapped set
                     mapped_columns.add(old_col)
                     cleaned_old_col = (
@@ -464,13 +471,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     )
                     mapped_columns.add(cleaned_old_col)
 
-                for col in available_columns:
-                    if col not in mapped_columns and col not in [
-                        "geometry_json",
-                        "payload_id",
-                    ]:
-                        # Column names are already cleaned, so use them as-is
-                        select_columns.append(f"{col}")
+                # Column names are already cleaned, so use them as-is
+                select_columns.extend(
+                    col
+                    for col in available_columns
+                    if col not in mapped_columns and col not in ["geometry_json", "payload_id"]
+                )
 
                 # DEBUG: Log what columns will be selected
                 self.log.info(f"Select columns built: {select_columns}")
@@ -482,10 +488,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         "No columns mapped, using all available columns except geometry_json "
                         "and payload_id"
                     )
-                    for col in available_columns:
-                        if col not in ["geometry_json", "payload_id"]:
-                            # Column names are already cleaned, so use them as-is
-                            select_columns.append(f"{col}")
+                    # Column names are already cleaned, so use them as-is
+                    select_columns.extend(
+                        col
+                        for col in available_columns
+                        if col not in ["geometry_json", "payload_id"]
+                    )
 
                 # Ensure we have a valid select clause
                 if select_columns:
@@ -523,14 +531,24 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 processing_conn.execute(sql_query)
 
-                # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate
-                # transformation
-                validate_and_transform_geometries_duckdb(
-                    processing_conn,
-                    final_table_name,
-                    "agricultural_fields",
-                    geometry_column="geometry",
-                )
+                # ✅ MIGRATION: Use unified geometry validator
+                # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
+                if USE_UTM_PROCESSING:
+                    validate_and_normalize_to_utm(
+                        processing_conn,
+                        final_table_name,
+                        "agricultural_fields",
+                        geometry_column="geometry",
+                    )
+                else:
+                    # Legacy path: Also output EPSG:25832 (Danish UTM) for consistent processing
+                    validate_and_transform_geometries_duckdb(
+                        processing_conn,
+                        final_table_name,
+                        "agricultural_fields",
+                        geometry_column="geometry",
+                        target_crs="EPSG:25832",
+                    )
 
                 # ✅ MIGRATION: Return table name instead of
                 row_count = processing_conn.execute(
@@ -549,7 +567,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 self.log.error(f"Error processing data with DuckDB-spatial: {e}")
                 return None, None
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Execute the silver processing job for all available years using DuckDB-spatial.
 

@@ -14,7 +14,7 @@ with Danish field names mapped to English equivalents and proper geometry handli
 
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 import duckdb
 
@@ -58,14 +58,14 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
     end_year: int = 2024
 
     # WFS namespaces for parsing XML responses
-    namespaces: Dict[str, str] = {
+    namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "gml": "http://www.opengis.net/gml/3.2",
         "Jordbrugsanalyser": "Jordbrugsanalyser",
     }
 
     # Field mapping from Danish WFS fields to standardized English field names
-    field_mapping: Dict[str, tuple] = {
+    field_mapping: ClassVar[dict[str, tuple]] = {
         "AfgKat": ("crop_category", str),
         "AfgNavn": ("crop_name", str),
         "AfgNr": ("crop_code", lambda x: int(x) if x and x.isdigit() else None),
@@ -113,7 +113,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             config (JordbrugsanalyserSilverConfig): Configuration for the processor"""
         super().__init__(config)
 
-    def _clean_text_value(self, value: Optional[str]) -> Optional[str]:
+    def _clean_text_value(self, value: str | None) -> str | None:
         """
         Clean and normalize text values.
 
@@ -145,7 +145,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
 
         return cleaned
 
-    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[str]:
+    def _parse_geometry(self, geom_elem: ET.Element) -> str | None:
         """
         Parse GML geometry element to WKT string.
 
@@ -258,7 +258,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error parsing geometry: {e}")
             return None
 
-    def _parse_feature(self, feature_elem: ET.Element, year: int) -> Optional[Dict[str, Any]]:
+    def _parse_feature(self, feature_elem: ET.Element, year: int) -> dict[str, Any] | None:
         """
         Parse a single Marker feature from XML.
 
@@ -313,7 +313,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error parsing feature: {e}")
             return None
 
-    def _parse_wfs_response(self, xml_content: str, year: int) -> List[Dict[str, Any]]:
+    def _parse_wfs_response(self, xml_content: str, year: int) -> list[dict[str, Any]]:
         """
         Parse a WFS FeatureCollection XML response.
 
@@ -351,7 +351,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error parsing WFS response for year {year}: {e}")
             return []
 
-    def _process_year_data(self, year: int, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    def _process_year_data(self, year: int, bronze_data: Any | None = None) -> Any | None:
         """
         Process all data for a specific year from bronze layer.
 
@@ -509,7 +509,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error processing year {year}: {e}")
             return None
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Any | None = None) -> None:
         """
         Run the silver layer processing pipeline.
 

@@ -13,10 +13,8 @@ Based on SPF-SU documentation:
 
 import logging
 from pathlib import Path
-from typing import Optional
 
-import ibis
-import ibis.expr.datatypes as dt
+import duckdb
 
 from . import export
 
@@ -24,148 +22,106 @@ logger = logging.getLogger(__name__)
 
 
 def create_spf_su_herds_table(
-    con: ibis.BaseBackend, spf_su_raw: Optional[ibis.Table], silver_dir: Path
-) -> Optional[ibis.Table]:
+    con: duckdb.DuckDBPyConnection, spf_su_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
     """
     Create the main SPF-SU herds table with basic farm information.
 
     Args:
-        con: Database connection
-        spf_su_raw: Raw SPF-SU data table
+        con: DuckDB connection
+        spf_su_raw_table: Name of the raw SPF-SU data table in DuckDB (or None if not available)
         silver_dir: Output directory for silver files
 
     Returns:
-        Processed SPF-SU herds table or None if failed
+        DuckDB relation with processed SPF-SU herds data or None if failed
     """
-    if spf_su_raw is None:
-        logging.warning("Cannot create SPF-SU herds table: spf_su_raw is None")
+    if spf_su_raw_table is None:
+        logging.warning("Cannot create SPF-SU herds table: spf_su_raw_table is None")
         return None
 
     logging.info("Creating SPF-SU herds table...")
 
     try:
-        # Register table for SQL operations
-        con.create_table("spf_su_raw", spf_su_raw, overwrite=True)
-
-        # Extract basic herd information
-        spf_su_herds = con.sql("""
+        # Create the cleaned and processed herds table with SQL
+        con.execute(f"""
+            CREATE OR REPLACE TABLE spf_su_herds AS
+            WITH raw_data AS (
+                SELECT
+                    ownerDetailInfo.chrNumber AS chr_number_raw,
+                    ownerDetailInfo.herdNumber AS herd_number_raw,
+                    ownerDetailInfo.ownerNumber AS owner_number_raw,
+                    ownerDetailInfo.name AS farm_name_raw,
+                    ownerDetailInfo.address.farmName AS address_farm_name_raw,
+                    ownerDetailInfo.address.line1 AS address_line1_raw,
+                    ownerDetailInfo.address.postalCode AS postal_code_raw,
+                    ownerDetailInfo.address.city AS city_raw,
+                    ownerDetailInfo.address.name AS address_name_raw,
+                    ownerDetailInfo.danishCertificate.approved AS certificate_approved_raw,
+                    ownerDetailInfo.danishCertificate.pdfFileName AS certificate_pdf_url_raw,
+                    ownerDetailInfo.danishCertificate.date AS certificate_date_raw,
+                    ownerDetailInfo.danishCertificate.expiryDate AS certificate_expiry_date_raw,
+                    ownerDetailInfo.danishCertificate.isExpired AS certificate_is_expired_raw,
+                    ownerDetailInfo.healthData.conditionalStatus AS conditional_status_raw,
+                    ownerDetailInfo.healthData.healthStatus AS health_status_raw,
+                    ownerDetailInfo.healthData.healthStatusColor AS health_status_color_raw,
+                    ownerDetailInfo.healthData.supplementaryStatus AS supplementary_status_raw,
+                    ownerDetailInfo.salmonellaData.salmonellaDate AS salmonella_date_raw,
+                    ownerDetailInfo.salmonellaData.salmonellaStatus AS salmonella_status_raw,
+                    ownerDetailInfo.salmonellaData.hasIndexDetails AS salmonella_has_index_details_raw,
+                    ownerDetailInfo.salmonellaData.showData AS salmonella_show_data_raw,
+                    _export_timestamp
+                FROM {spf_su_raw_table}
+                WHERE ownerDetailInfo IS NOT NULL
+            )
             SELECT
-                ownerDetailInfo.chrNumber AS chr_number_raw,
-                ownerDetailInfo.herdNumber AS herd_number_raw,
-                ownerDetailInfo.ownerNumber AS owner_number_raw,
-                ownerDetailInfo.name AS farm_name_raw,
-                ownerDetailInfo.address.farmName AS address_farm_name_raw,
-                ownerDetailInfo.address.line1 AS address_line1_raw,
-                ownerDetailInfo.address.postalCode AS postal_code_raw,
-                ownerDetailInfo.address.city AS city_raw,
-                ownerDetailInfo.address.name AS address_name_raw,
-                ownerDetailInfo.danishCertificate.approved AS certificate_approved_raw,
-                ownerDetailInfo.danishCertificate.pdfFileName AS certificate_pdf_url_raw,
-                ownerDetailInfo.danishCertificate.date AS certificate_date_raw,
-                ownerDetailInfo.danishCertificate.expiryDate AS certificate_expiry_date_raw,
-                ownerDetailInfo.danishCertificate.isExpired AS certificate_is_expired_raw,
-                ownerDetailInfo.healthData.conditionalStatus AS conditional_status_raw,
-                ownerDetailInfo.healthData.healthStatus AS health_status_raw,
-                ownerDetailInfo.healthData.healthStatusColor AS health_status_color_raw,
-                ownerDetailInfo.healthData.supplementaryStatus AS supplementary_status_raw,
-                ownerDetailInfo.salmonellaData.salmonellaDate AS salmonella_date_raw,
-                ownerDetailInfo.salmonellaData.salmonellaStatus AS salmonella_status_raw,
-                ownerDetailInfo.salmonellaData.hasIndexDetails AS salmonella_has_index_details_raw,
-                ownerDetailInfo.salmonellaData.showData AS salmonella_show_data_raw,
-                _export_timestamp
-            FROM spf_su_raw
-            WHERE ownerDetailInfo IS NOT NULL
+                uuid() AS spf_su_id,
+                -- Basic identifiers: cast to string, trim, nullif empty, then cast to int64
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(owner_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS owner_number,
+                -- Farm information
+                NULLIF(TRIM(CAST(farm_name_raw AS VARCHAR)), '') AS farm_name,
+                NULLIF(TRIM(CAST(address_farm_name_raw AS VARCHAR)), '') AS address_farm_name,
+                NULLIF(TRIM(CAST(address_line1_raw AS VARCHAR)), '') AS address_line1,
+                NULLIF(TRIM(CAST(postal_code_raw AS VARCHAR)), '') AS postal_code,
+                NULLIF(TRIM(CAST(city_raw AS VARCHAR)), '') AS city,
+                NULLIF(TRIM(CAST(address_name_raw AS VARCHAR)), '') AS address_name,
+                -- Certificate information
+                CAST(certificate_approved_raw AS BOOLEAN) AS certificate_approved,
+                NULLIF(TRIM(CAST(certificate_pdf_url_raw AS VARCHAR)), '') AS certificate_pdf_url,
+                TRY_CAST(certificate_date_raw AS TIMESTAMP) AS certificate_date,
+                TRY_CAST(certificate_expiry_date_raw AS TIMESTAMP) AS certificate_expiry_date,
+                CAST(certificate_is_expired_raw AS BOOLEAN) AS certificate_is_expired,
+                -- Health status information
+                NULLIF(TRIM(CAST(conditional_status_raw AS VARCHAR)), '') AS conditional_status,
+                NULLIF(TRIM(CAST(health_status_raw AS VARCHAR)), '') AS health_status,
+                NULLIF(TRIM(CAST(health_status_color_raw AS VARCHAR)), '') AS health_status_color,
+                NULLIF(TRIM(CAST(supplementary_status_raw AS VARCHAR)), '') AS supplementary_status,
+                -- Salmonella information
+                TRY_CAST(salmonella_date_raw AS TIMESTAMP) AS salmonella_date,
+                NULLIF(TRIM(CAST(salmonella_status_raw AS VARCHAR)), '') AS salmonella_status,
+                CAST(salmonella_has_index_details_raw AS BOOLEAN) AS salmonella_has_index_details,
+                CAST(salmonella_show_data_raw AS BOOLEAN) AS salmonella_show_data,
+                -- Metadata
+                CAST(_export_timestamp AS VARCHAR) AS export_timestamp
+            FROM raw_data
+            WHERE
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
+                AND COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
         """)
 
-        # Clean and cast columns
-        spf_su_herds_clean = spf_su_herds.mutate(
-            # Generate unique ID
-            spf_su_id=ibis.uuid(),
-            # Basic identifiers
-            chr_number=ibis.coalesce(
-                spf_su_herds.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            herd_number=ibis.coalesce(
-                spf_su_herds.herd_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            owner_number=ibis.coalesce(
-                spf_su_herds.owner_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            # Farm information
-            farm_name=spf_su_herds.farm_name_raw.cast(dt.string).strip().nullif(""),
-            address_farm_name=spf_su_herds.address_farm_name_raw.cast(dt.string).strip().nullif(""),
-            address_line1=spf_su_herds.address_line1_raw.cast(dt.string).strip().nullif(""),
-            postal_code=spf_su_herds.postal_code_raw.cast(dt.string).strip().nullif(""),
-            city=spf_su_herds.city_raw.cast(dt.string).strip().nullif(""),
-            address_name=spf_su_herds.address_name_raw.cast(dt.string).strip().nullif(""),
-            # Certificate information
-            certificate_approved=spf_su_herds.certificate_approved_raw.cast(dt.boolean),
-            certificate_pdf_url=spf_su_herds.certificate_pdf_url_raw.cast(dt.string).strip().nullif(""),
-            certificate_date=spf_su_herds.certificate_date_raw.cast(dt.timestamp),
-            certificate_expiry_date=spf_su_herds.certificate_expiry_date_raw.cast(dt.timestamp),
-            certificate_is_expired=spf_su_herds.certificate_is_expired_raw.cast(dt.boolean),
-            # Health status information
-            conditional_status=spf_su_herds.conditional_status_raw.cast(dt.string).strip().nullif(""),
-            health_status=spf_su_herds.health_status_raw.cast(dt.string).strip().nullif(""),
-            health_status_color=spf_su_herds.health_status_color_raw.cast(dt.string).strip().nullif(""),
-            supplementary_status=spf_su_herds.supplementary_status_raw.cast(dt.string).strip().nullif(""),
-            # Salmonella information
-            salmonella_date=spf_su_herds.salmonella_date_raw.cast(dt.timestamp),
-            salmonella_status=spf_su_herds.salmonella_status_raw.cast(dt.string).strip().nullif(""),
-            salmonella_has_index_details=spf_su_herds.salmonella_has_index_details_raw.cast(dt.boolean),
-            salmonella_show_data=spf_su_herds.salmonella_show_data_raw.cast(dt.boolean),
-            # Metadata
-            export_timestamp=spf_su_herds._export_timestamp.cast(dt.string),
-        )
-
-        # Select final columns
-        final_cols = [
-            "spf_su_id",
-            "chr_number",
-            "herd_number",
-            "owner_number",
-            "farm_name",
-            "address_farm_name",
-            "address_line1",
-            "postal_code",
-            "city",
-            "address_name",
-            "certificate_approved",
-            "certificate_pdf_url",
-            "certificate_date",
-            "certificate_expiry_date",
-            "certificate_is_expired",
-            "conditional_status",
-            "health_status",
-            "health_status_color",
-            "supplementary_status",
-            "salmonella_date",
-            "salmonella_status",
-            "salmonella_has_index_details",
-            "salmonella_show_data",
-            "export_timestamp",
-        ]
-
-        spf_su_herds_final = spf_su_herds_clean.select(*final_cols)
-
-        # Filter out rows with null identifiers
-        spf_su_herds_final = spf_su_herds_final.filter(
-            spf_su_herds_final.chr_number.notnull() & spf_su_herds_final.herd_number.notnull()
-        )
-
-        # Save to parquet
-        output_path = silver_dir / "spf_su_herds.parquet"
-        rows = spf_su_herds_final.count().execute()
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM spf_su_herds").fetchone()[0]
 
         if rows == 0:
             logging.warning("SPF-SU herds table is empty after processing")
             return None
 
         logging.info(f"Saving SPF-SU herds table with {rows} rows")
-        saved_path = export.save_table(output_path, spf_su_herds_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "spf_su_herds.parquet"
+        saved_path = export.save_table(output_path, "spf_su_herds", con, is_geo=False)
 
         if saved_path is None:
             logging.error("Failed to save SPF-SU herds table - no path returned")
@@ -173,26 +129,17 @@ def create_spf_su_herds_table(
 
         logging.info(f"Saved SPF-SU herds table to {saved_path}")
 
-        # Clean up
-        try:
-            con.drop_table("spf_su_raw", force=True)
-        except Exception:
-            pass
-
-        return spf_su_herds_final
+        # Return the relation
+        return con.sql("SELECT * FROM spf_su_herds")
 
     except Exception as e:
         logging.error(f"Failed to create SPF-SU herds table: {e}", exc_info=True)
-        try:
-            con.drop_table("spf_su_raw", force=True)
-        except Exception:
-            pass
         return None
 
 
 def create_spf_su_health_controls_table(
-    con: ibis.BaseBackend, spf_su_raw: Optional[ibis.Table], silver_dir: Path
-) -> Optional[ibis.Table]:
+    con: duckdb.DuckDBPyConnection, spf_su_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
     """
     Create SPF-SU health controls table with disease-specific information.
 
@@ -205,107 +152,89 @@ def create_spf_su_health_controls_table(
     - Nys: Atrophic rhinitis
     - Skab: Mange
     - Lus: Lice
+
+    Args:
+        con: DuckDB connection
+        spf_su_raw_table: Name of the raw SPF-SU data table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed SPF-SU health controls data or None if failed
     """
-    if spf_su_raw is None:
-        logging.warning("Cannot create SPF-SU health controls table: spf_su_raw is None")
+    if spf_su_raw_table is None:
+        logging.warning("Cannot create SPF-SU health controls table: spf_su_raw_table is None")
         return None
 
     logging.info("Creating SPF-SU health controls table...")
 
     try:
-        # Register table for SQL operations
-        con.create_table("spf_su_raw", spf_su_raw, overwrite=True)
-
-        # Extract health control information by unnesting the array
-        health_controls = con.sql("""
-            SELECT
-                ownerDetailInfo.chrNumber AS chr_number_raw,
-                ownerDetailInfo.herdNumber AS herd_number_raw,
-                UNNEST(healthStatus.healthControlInfo) AS health_control_raw,
-                _export_timestamp
-            FROM spf_su_raw
-            WHERE ownerDetailInfo IS NOT NULL
-              AND healthStatus.healthControlInfo IS NOT NULL
-              AND len(healthStatus.healthControlInfo) > 0
-        """)
-
-        # Register the intermediate table for the next query
-        con.create_table("health_controls", health_controls, overwrite=True)
-
-        # Extract disease information from the unnested health control data
-        health_controls_expanded = con.sql("""
-            SELECT
-                chr_number_raw,
-                herd_number_raw,
-                health_control_raw.disease AS disease_code_raw,
-                _export_timestamp
-            FROM health_controls
-            WHERE health_control_raw.disease IS NOT NULL
-        """)
-
-        # Clean and cast columns
-        health_controls_clean = health_controls_expanded.mutate(
-            # Generate unique ID
-            health_control_id=ibis.uuid(),
-            # Basic identifiers
-            chr_number=ibis.coalesce(
-                health_controls_expanded.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
+        # Create the health controls table with SQL
+        con.execute(f"""
+            CREATE OR REPLACE TABLE spf_su_health_controls AS
+            WITH unnested_controls AS (
+                SELECT
+                    ownerDetailInfo.chrNumber AS chr_number_raw,
+                    ownerDetailInfo.herdNumber AS herd_number_raw,
+                    UNNEST(healthStatus.healthControlInfo) AS health_control_raw,
+                    _export_timestamp
+                FROM {spf_su_raw_table}
+                WHERE ownerDetailInfo IS NOT NULL
+                  AND healthStatus.healthControlInfo IS NOT NULL
+                  AND len(healthStatus.healthControlInfo) > 0
             ),
-            herd_number=ibis.coalesce(
-                health_controls_expanded.herd_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            # Disease information
-            disease_code=health_controls_expanded.disease_code_raw.cast(dt.string).strip().nullif(""),
-            # Add disease name mapping based on SPF-SU documentation
-            disease_name=ibis.case()
-            .when(health_controls_expanded.disease_code_raw.cast(dt.string).strip() == "Myc", "Mycoplasma lung disease")
-            .when(
-                health_controls_expanded.disease_code_raw.cast(dt.string).strip().startswith("Ap"),
-                "Malignant lung disease (Actinobacillus)",
+            expanded_controls AS (
+                SELECT
+                    chr_number_raw,
+                    herd_number_raw,
+                    health_control_raw.disease AS disease_code_raw,
+                    _export_timestamp
+                FROM unnested_controls
+                WHERE health_control_raw.disease IS NOT NULL
             )
-            .when(health_controls_expanded.disease_code_raw.cast(dt.string).strip() == "PRRS1", "PRRS virus (European)")
-            .when(health_controls_expanded.disease_code_raw.cast(dt.string).strip() == "PRRS2", "PRRS virus (American)")
-            .when(health_controls_expanded.disease_code_raw.cast(dt.string).strip() == "Dys", "Swine dysentery")
-            .when(health_controls_expanded.disease_code_raw.cast(dt.string).strip() == "Nys", "Atrophic rhinitis")
-            .when(health_controls_expanded.disease_code_raw.cast(dt.string).strip() == "Skab", "Mange")
-            .when(health_controls_expanded.disease_code_raw.cast(dt.string).strip() == "Lus", "Lice")
-            .else_(health_controls_expanded.disease_code_raw.cast(dt.string).strip())
-            .end(),
-            # Metadata
-            export_timestamp=health_controls_expanded._export_timestamp.cast(dt.string),
-        )
+            SELECT
+                uuid() AS health_control_id,
+                -- Basic identifiers
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
+                -- Disease information
+                NULLIF(TRIM(CAST(disease_code_raw AS VARCHAR)), '') AS disease_code,
+                -- Disease name mapping based on SPF-SU documentation
+                CASE TRIM(CAST(disease_code_raw AS VARCHAR))
+                    WHEN 'Myc' THEN 'Mycoplasma lung disease'
+                    WHEN 'PRRS1' THEN 'PRRS virus (European)'
+                    WHEN 'PRRS2' THEN 'PRRS virus (American)'
+                    WHEN 'Dys' THEN 'Swine dysentery'
+                    WHEN 'Nys' THEN 'Atrophic rhinitis'
+                    WHEN 'Skab' THEN 'Mange'
+                    WHEN 'Lus' THEN 'Lice'
+                    ELSE
+                        CASE
+                            WHEN TRIM(CAST(disease_code_raw AS VARCHAR)) LIKE 'Ap%'
+                            THEN 'Malignant lung disease (Actinobacillus)'
+                            ELSE TRIM(CAST(disease_code_raw AS VARCHAR))
+                        END
+                END AS disease_name,
+                -- Metadata
+                CAST(_export_timestamp AS VARCHAR) AS export_timestamp
+            FROM expanded_controls
+            WHERE
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
+                AND COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
+                AND NULLIF(TRIM(CAST(disease_code_raw AS VARCHAR)), '') IS NOT NULL
+        """)
 
-        # Select final columns
-        final_cols = [
-            "health_control_id",
-            "chr_number",
-            "herd_number",
-            "disease_code",
-            "disease_name",
-            "export_timestamp",
-        ]
-
-        health_controls_final = health_controls_clean.select(*final_cols)
-
-        # Filter out rows with null identifiers
-        health_controls_final = health_controls_final.filter(
-            health_controls_final.chr_number.notnull()
-            & health_controls_final.herd_number.notnull()
-            & health_controls_final.disease_code.notnull()
-        )
-
-        # Save to parquet
-        output_path = silver_dir / "spf_su_health_controls.parquet"
-        rows = health_controls_final.count().execute()
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM spf_su_health_controls").fetchone()[0]
 
         if rows == 0:
             logging.warning("SPF-SU health controls table is empty after processing")
             return None
 
         logging.info(f"Saving SPF-SU health controls table with {rows} rows")
-        saved_path = export.save_table(output_path, health_controls_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "spf_su_health_controls.parquet"
+        saved_path = export.save_table(output_path, "spf_su_health_controls", con, is_geo=False)
 
         if saved_path is None:
             logging.error("Failed to save SPF-SU health controls table - no path returned")
@@ -313,119 +242,90 @@ def create_spf_su_health_controls_table(
 
         logging.info(f"Saved SPF-SU health controls table to {saved_path}")
 
-        # Clean up
-        try:
-            con.drop_table("spf_su_raw", force=True)
-            con.drop_table("health_controls", force=True)
-        except Exception:
-            pass
-
-        return health_controls_final
+        # Return the relation
+        return con.sql("SELECT * FROM spf_su_health_controls")
 
     except Exception as e:
         logging.error(f"Failed to create SPF-SU health controls table: {e}", exc_info=True)
-        try:
-            con.drop_table("spf_su_raw", force=True)
-            con.drop_table("health_controls", force=True)
-        except Exception:
-            pass
         return None
 
 
 def create_spf_su_salmonella_data_table(
-    con: ibis.BaseBackend, spf_su_raw: Optional[ibis.Table], silver_dir: Path
-) -> Optional[ibis.Table]:
+    con: duckdb.DuckDBPyConnection, spf_su_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
     """
     Create SPF-SU salmonella data table with detailed salmonella information.
 
     This table contains salmonella levels, indexes, and test results.
+
+    Args:
+        con: DuckDB connection
+        spf_su_raw_table: Name of the raw SPF-SU data table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed SPF-SU salmonella data or None if failed
     """
-    if spf_su_raw is None:
-        logging.warning("Cannot create SPF-SU salmonella data table: spf_su_raw is None")
+    if spf_su_raw_table is None:
+        logging.warning("Cannot create SPF-SU salmonella data table: spf_su_raw_table is None")
         return None
 
     logging.info("Creating SPF-SU salmonella data table...")
 
     try:
-        # Register table for SQL operations
-        con.create_table("spf_su_raw", spf_su_raw, overwrite=True)
-
-        # Extract salmonella data - this is more complex due to nested arrays
-        salmonella_data = con.sql("""
+        # Create the salmonella data table with SQL
+        con.execute(f"""
+            CREATE OR REPLACE TABLE spf_su_salmonella_data AS
+            WITH raw_salmonella AS (
+                SELECT
+                    ownerDetailInfo.chrNumber AS chr_number_raw,
+                    ownerDetailInfo.herdNumber AS herd_number_raw,
+                    ownerDetailInfo.salmonellaData.salmonellaLevel AS salmonella_level_array_raw,
+                    ownerDetailInfo.salmonellaData.salmonellaIndexes AS salmonella_indexes_array_raw,
+                    ownerDetailInfo.salmonellaData.salmonellaTestResults AS salmonella_test_results_array_raw,
+                    ownerDetailInfo.salmonellaData.salmonellaDate AS salmonella_date_raw,
+                    ownerDetailInfo.salmonellaData.salmonellaStatus AS salmonella_status_raw,
+                    ownerDetailInfo.salmonellaData.hasIndexDetails AS has_index_details_raw,
+                    ownerDetailInfo.salmonellaData.showData AS show_data_raw,
+                    _export_timestamp
+                FROM {spf_su_raw_table}
+                WHERE ownerDetailInfo IS NOT NULL
+                  AND ownerDetailInfo.salmonellaData IS NOT NULL
+            )
             SELECT
-                ownerDetailInfo.chrNumber AS chr_number_raw,
-                ownerDetailInfo.herdNumber AS herd_number_raw,
-                ownerDetailInfo.salmonellaData.salmonellaLevel AS salmonella_level_array_raw,
-                ownerDetailInfo.salmonellaData.salmonellaIndexes AS salmonella_indexes_array_raw,
-                ownerDetailInfo.salmonellaData.salmonellaTestResults AS salmonella_test_results_array_raw,
-                ownerDetailInfo.salmonellaData.salmonellaDate AS salmonella_date_raw,
-                ownerDetailInfo.salmonellaData.salmonellaStatus AS salmonella_status_raw,
-                ownerDetailInfo.salmonellaData.hasIndexDetails AS has_index_details_raw,
-                ownerDetailInfo.salmonellaData.showData AS show_data_raw,
-                _export_timestamp
-            FROM spf_su_raw
-            WHERE ownerDetailInfo IS NOT NULL
-              AND ownerDetailInfo.salmonellaData IS NOT NULL
+                uuid() AS salmonella_id,
+                -- Basic identifiers
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
+                -- Salmonella information
+                TRY_CAST(salmonella_date_raw AS TIMESTAMP) AS salmonella_date,
+                NULLIF(TRIM(CAST(salmonella_status_raw AS VARCHAR)), '') AS salmonella_status,
+                CAST(has_index_details_raw AS BOOLEAN) AS has_index_details,
+                CAST(show_data_raw AS BOOLEAN) AS show_data,
+                -- Convert arrays to JSON strings for storage
+                CAST(salmonella_level_array_raw AS VARCHAR) AS salmonella_level_json,
+                CAST(salmonella_indexes_array_raw AS VARCHAR) AS salmonella_indexes_json,
+                CAST(salmonella_test_results_array_raw AS VARCHAR) AS salmonella_test_results_json,
+                -- Metadata
+                CAST(_export_timestamp AS VARCHAR) AS export_timestamp
+            FROM raw_salmonella
+            WHERE
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
+                AND COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
         """)
 
-        # Clean and cast columns
-        salmonella_data_clean = salmonella_data.mutate(
-            # Generate unique ID
-            salmonella_id=ibis.uuid(),
-            # Basic identifiers
-            chr_number=ibis.coalesce(
-                salmonella_data.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            herd_number=ibis.coalesce(
-                salmonella_data.herd_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            # Salmonella information
-            salmonella_date=salmonella_data.salmonella_date_raw.cast(dt.timestamp),
-            salmonella_status=salmonella_data.salmonella_status_raw.cast(dt.string).strip().nullif(""),
-            has_index_details=salmonella_data.has_index_details_raw.cast(dt.boolean),
-            show_data=salmonella_data.show_data_raw.cast(dt.boolean),
-            # Convert arrays to JSON strings for storage (DuckDB/Ibis handling of complex nested data)
-            salmonella_level_json=salmonella_data.salmonella_level_array_raw.cast(dt.string),
-            salmonella_indexes_json=salmonella_data.salmonella_indexes_array_raw.cast(dt.string),
-            salmonella_test_results_json=salmonella_data.salmonella_test_results_array_raw.cast(dt.string),
-            # Metadata
-            export_timestamp=salmonella_data._export_timestamp.cast(dt.string),
-        )
-
-        # Select final columns
-        final_cols = [
-            "salmonella_id",
-            "chr_number",
-            "herd_number",
-            "salmonella_date",
-            "salmonella_status",
-            "has_index_details",
-            "show_data",
-            "salmonella_level_json",
-            "salmonella_indexes_json",
-            "salmonella_test_results_json",
-            "export_timestamp",
-        ]
-
-        salmonella_data_final = salmonella_data_clean.select(*final_cols)
-
-        # Filter out rows with null identifiers
-        salmonella_data_final = salmonella_data_final.filter(
-            salmonella_data_final.chr_number.notnull() & salmonella_data_final.herd_number.notnull()
-        )
-
-        # Save to parquet
-        output_path = silver_dir / "spf_su_salmonella_data.parquet"
-        rows = salmonella_data_final.count().execute()
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM spf_su_salmonella_data").fetchone()[0]
 
         if rows == 0:
             logging.warning("SPF-SU salmonella data table is empty after processing")
             return None
 
         logging.info(f"Saving SPF-SU salmonella data table with {rows} rows")
-        saved_path = export.save_table(output_path, salmonella_data_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "spf_su_salmonella_data.parquet"
+        saved_path = export.save_table(output_path, "spf_su_salmonella_data", con, is_geo=False)
 
         if saved_path is None:
             logging.error("Failed to save SPF-SU salmonella data table - no path returned")
@@ -433,18 +333,9 @@ def create_spf_su_salmonella_data_table(
 
         logging.info(f"Saved SPF-SU salmonella data table to {saved_path}")
 
-        # Clean up
-        try:
-            con.drop_table("spf_su_raw", force=True)
-        except Exception:
-            pass
-
-        return salmonella_data_final
+        # Return the relation
+        return con.sql("SELECT * FROM spf_su_salmonella_data")
 
     except Exception as e:
         logging.error(f"Failed to create SPF-SU salmonella data table: {e}", exc_info=True)
-        try:
-            con.drop_table("spf_su_raw", force=True)
-        except Exception:
-            pass
         return None

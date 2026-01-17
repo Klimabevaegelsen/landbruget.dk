@@ -31,7 +31,6 @@ SOURCE:
 import logging
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List
 
 import duckdb
 
@@ -152,7 +151,7 @@ class NLES5FertilizerDistributor:
             CropPriority.VINTERBYG_ANDET_VINTERKORN: 160,  # Winter cereals
         }
 
-    def get_crop_priority(self, crop_name: str, m_code: str = None) -> int:
+    def get_crop_priority(self, crop_name: str, m_code: str | None = None) -> int:
         """
         Determine crop priority based on crop name and M-code.
 
@@ -192,8 +191,8 @@ class NLES5FertilizerDistributor:
         return quota_per_ha * area_ha
 
     def distribute_fertilizer_for_farm(
-        self, farm_budget: FarmFertilizerBudget, field_data: List[Dict]
-    ) -> List[FieldFertilizerAllocation]:
+        self, farm_budget: FarmFertilizerBudget, field_data: list[dict]
+    ) -> list[FieldFertilizerAllocation]:
         """
         Distribute fertilizer across fields for a single farm according to NLES5 algorithm.
 
@@ -261,8 +260,8 @@ class NLES5FertilizerDistributor:
         return allocations
 
     def _distribute_proportional(
-        self, farm_budget: FarmFertilizerBudget, fields: List[Dict], total_n_quota: float
-    ) -> List[FieldFertilizerAllocation]:
+        self, farm_budget: FarmFertilizerBudget, fields: list[dict], total_n_quota: float
+    ) -> list[FieldFertilizerAllocation]:
         """Distribute fertilizer proportionally based on N-quota when organic > 50%."""
         allocations = []
 
@@ -304,8 +303,8 @@ class NLES5FertilizerDistributor:
         return allocations
 
     def _distribute_priority_based(
-        self, farm_budget: FarmFertilizerBudget, fields: List[Dict]
-    ) -> List[FieldFertilizerAllocation]:
+        self, farm_budget: FarmFertilizerBudget, fields: list[dict]
+    ) -> list[FieldFertilizerAllocation]:
         """Distribute fertilizer by priority when organic ≤ 50%, up to 50% of each field's quota."""
         allocations = []
         remaining_organic_n = farm_budget.total_organic_n_kg
@@ -425,14 +424,14 @@ class NLES5FertilizerDistributor:
         self.log.info("Creating farm-level fertilizer budgets...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE farm_fertilizer_budgets AS
-            SELECT 
+            SELECT
                 cvr_number,
                 year,
                 SUM(organic_n_hus * area_ha) as total_organic_n_kg,
-                SUM((mineral_n_foraar + mineral_n_eft + mineral_n_udb) * area_ha) 
+                SUM((mineral_n_foraar + mineral_n_eft + mineral_n_udb) * area_ha)
                     as total_mineral_n_kg,
                 -- Convert tonnes to kg
-                SUM(tn_t_ha * area_ha * 1000) as total_n_kg  
+                SUM(tn_t_ha * area_ha * 1000) as total_n_kg
             FROM fertilizer_accounts fa
             WHERE cvr_number IS NOT NULL
             GROUP BY cvr_number, year
@@ -440,7 +439,7 @@ class NLES5FertilizerDistributor:
 
         # Step 2: Get field data grouped by farm
         farm_fields = self.conn.execute(f"""
-            SELECT 
+            SELECT
                 cvr_number,
                 year,
                 field_id,
@@ -528,31 +527,30 @@ class NLES5FertilizerDistributor:
         batch_size = 1000
         for i in range(0, len(all_allocations), batch_size):
             batch = all_allocations[i : i + batch_size]
-            values = []
-            for alloc in batch:
-                values.append(
-                    (
-                        alloc.field_id,
-                        alloc.cvr_number,
-                        alloc.year,
-                        alloc.crop_name,
-                        alloc.crop_priority,
-                        alloc.area_ha,
-                        alloc.n_quota_kg_ha,
-                        alloc.total_n_quota_kg,
-                        alloc.organic_n_allocated_kg,
-                        alloc.mineral_n_allocated_kg,
-                        alloc.total_n_allocated_kg,
-                        alloc.organic_n_rate_kg_ha,
-                        alloc.mineral_n_rate_kg_ha,
-                        alloc.organic_quota_fraction,
-                        alloc.allocation_method,
-                    )
+            values = [
+                (
+                    alloc.field_id,
+                    alloc.cvr_number,
+                    alloc.year,
+                    alloc.crop_name,
+                    alloc.crop_priority,
+                    alloc.area_ha,
+                    alloc.n_quota_kg_ha,
+                    alloc.total_n_quota_kg,
+                    alloc.organic_n_allocated_kg,
+                    alloc.mineral_n_allocated_kg,
+                    alloc.total_n_allocated_kg,
+                    alloc.organic_n_rate_kg_ha,
+                    alloc.mineral_n_rate_kg_ha,
+                    alloc.organic_quota_fraction,
+                    alloc.allocation_method,
                 )
+                for alloc in batch
+            ]
 
             self.conn.executemany(
                 """
-                INSERT INTO distributed_fertilizer_data 
+                INSERT INTO distributed_fertilizer_data
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 values,
@@ -563,12 +561,12 @@ class NLES5FertilizerDistributor:
         self.conn.execute(f"DROP TABLE IF EXISTS {result_table}")
         self.conn.execute(f"""
             CREATE TABLE {result_table} AS
-            SELECT 
+            SELECT
                 f.*,
                 COALESCE(d.organic_n_rate_kg_ha, 0.0) as organic_n_hus,
                 -- Assume 40% spring
                 COALESCE(d.mineral_n_rate_kg_ha * 0.4, 0.0) as mineral_n_foraar,
-                -- Assume 10% autumn  
+                -- Assume 10% autumn
                 COALESCE(d.mineral_n_rate_kg_ha * 0.1, 0.0) as mineral_n_eft,
                 -- Assume 50% growing season
                 COALESCE(d.mineral_n_rate_kg_ha * 0.5, 0.0) as mineral_n_udb,
@@ -576,7 +574,7 @@ class NLES5FertilizerDistributor:
                 COALESCE(
                     d.total_n_allocated_kg / NULLIF(f.area_ha, 0) / 1000, 0.0
                 ) as tn_t_ha,
-                COALESCE(d.allocation_method, 'no_fertilizer_data') 
+                COALESCE(d.allocation_method, 'no_fertilizer_data')
                     as fertilizer_allocation_method,
                 COALESCE(d.organic_quota_fraction, 0.0) as organic_quota_fraction,
                 COALESCE(d.crop_priority, 7) as fertilizer_crop_priority
@@ -590,7 +588,7 @@ class NLES5FertilizerDistributor:
 
         distributed_count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
         with_fertilizer = self.conn.execute(f"""
-            SELECT COUNT(*) FROM {result_table} 
+            SELECT COUNT(*) FROM {result_table}
             WHERE fertilizer_allocation_method != 'no_fertilizer_data'
         """).fetchone()[0]
 

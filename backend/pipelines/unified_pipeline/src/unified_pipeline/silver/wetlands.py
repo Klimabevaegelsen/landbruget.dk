@@ -15,7 +15,7 @@ merging adjacent polygons, and comprehensive logging of geometry statistics.
 
 import xml.etree.ElementTree as ET
 from collections import Counter
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 # ✅ MIGRATION: Removed geopandas import - using DuckDB-spatial for all operations
 # # ✅ MIGRATION: Removed shapely import - using DuckDB-spatial for geometry operations
@@ -43,7 +43,7 @@ class WetlandsSilverConfig(BaseJobConfig):
     dataset: str = "wetlands"
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 8000  # Increased for better performance with 16GB RAM
-    namespaces: dict[str, str] = {
+    namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "natur": "http://wfs2-miljoegis.mim.dk/natur",
         "gml": "http://www.opengis.net/gml/3.2",
@@ -207,7 +207,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         self.log.info(f"Average vertices per feature: {avg_vertices:.1f}")
         self.log.info(f"Total area covered: {total_area / 1_000_000:.2f} km²")
 
-    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[str]:
+    def _parse_geometry(self, geom_elem: ET.Element) -> str | None:
         """
         Parse a GML geometry element into a WKT string using DuckDB-spatial.
 
@@ -255,10 +255,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             return result[0] if result else None
 
         except Exception as e:
-            self.log.error(f"Error parsing geometry: {str(e)}")
+            self.log.error(f"Error parsing geometry: {e!s}")
             return None
 
-    def _get_attribute(self, element: ET.Element, tag: str) -> Optional[str]:
+    def _get_attribute(self, element: ET.Element, tag: str) -> str | None:
         """
         Get an attribute value from an XML element.
 
@@ -275,7 +275,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         attr = element.find(tag, self.config.namespaces)
         return attr.text if attr is not None else None
 
-    def _parse_feature(self, feature: ET.Element) -> Optional[dict[str, Any]]:
+    def _parse_feature(self, feature: ET.Element) -> dict[str, Any] | None:
         """
         Parse an XML feature element into a feature dictionary with WKT geometry.
 
@@ -319,11 +319,11 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 "geometry_wkt": geom_wkt,
             }
         except Exception as e:
-            self.log.error(f"Error parsing feature: {str(e)}")
+            self.log.error(f"Error parsing feature: {e!s}")
             return None
 
     @timed(name="Processing XML data")  # type: ignore
-    def _process_xml_data(self, raw_data_input) -> Optional[str]:
+    def _process_xml_data(self, raw_data_input) -> str | None:
         """
         Process raw XML data into a DuckDB table.
 
@@ -373,7 +373,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                         self.log.info(f"Processed {len(features):,} features")
 
             except Exception as e:
-                self.log.error(f"Error processing row {i}: {str(e)}", exc_info=True)
+                self.log.error(f"Error processing row {i}: {e!s}", exc_info=True)
                 raise e
 
         self.log.info(f"Parsed {len(features):,} features from XML data")
@@ -438,28 +438,42 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
         # ✅ CRITICAL: Perform adjacency detection BEFORE coordinate transformation
         # Grid cells are perfectly adjacent in original coordinate system (EPSG:25832)
-        # but may have tiny gaps after transformation to EPSG:4326
+        # With new CRS strategy, we keep data in EPSG:25832 so adjacency is preserved
         dissolved_table_name = self._create_dissolved_df_before_transform(
             table_name, self.config.dataset
         )
 
-        # ✅ COORDINATE FIX: Apply geometry validation and transformation AFTER adjacency detection
+        # ✅ COORDINATE FIX: Apply geometry validation
+        # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
         from unified_pipeline.common.geometry_validator import (
             validate_and_transform_geometries_duckdb,
+            validate_and_normalize_to_utm,
         )
 
-        # Transform the original non-dissolved table
-        validate_and_transform_geometries_duckdb(
-            conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry"
-        )
+        USE_UTM_PROCESSING = True  # Local flag for this file
 
-        # Transform the dissolved table
-        validate_and_transform_geometries_duckdb(
-            conn,
-            dissolved_table_name,
-            f"silver.{self.config.dataset}_dissolved",
-            geometry_column="geometry",
-        )
+        if USE_UTM_PROCESSING:
+            # Keep in UTM - preserves perfect adjacency
+            validate_and_normalize_to_utm(
+                conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry"
+            )
+            validate_and_normalize_to_utm(
+                conn,
+                dissolved_table_name,
+                f"silver.{self.config.dataset}_dissolved",
+                geometry_column="geometry",
+            )
+        else:
+            # Legacy: Transform to WGS84 (may introduce tiny gaps)
+            validate_and_transform_geometries_duckdb(
+                conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry"
+            )
+            validate_and_transform_geometries_duckdb(
+                conn,
+                dissolved_table_name,
+                f"silver.{self.config.dataset}_dissolved",
+                geometry_column="geometry",
+            )
 
         return table_name
 
@@ -858,10 +872,10 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             return dissolved_table_name
 
         except Exception as e:
-            self.log.error(f"Error during DuckDB-spatial dissolve operation: {str(e)}")
+            self.log.error(f"Error during DuckDB-spatial dissolve operation: {e!s}")
             raise e
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[dict[str, Any]]:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """
         Run the wetlands silver layer processing pipeline.
 

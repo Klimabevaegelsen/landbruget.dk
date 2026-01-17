@@ -15,12 +15,11 @@ Source Attribution:
 - Methodology: Danish GHG inventory aligned with IPCC guidelines
 """
 
-from typing import Dict
-from pathlib import Path
 import json
+from pathlib import Path
 
 
-def load_nh3_factors() -> Dict[str, Dict[str, float]]:
+def load_nh3_factors() -> dict[str, dict[str, float]]:
     """
     Load NH3 emission factors from SR671 2023 national data.
 
@@ -34,11 +33,7 @@ def load_nh3_factors() -> Dict[str, Dict[str, float]]:
         data = json.load(f)
 
     # Extract pig factors
-    pig_factors = {}
-    for pig_type, factor_data in data["data"]["grise"].items():
-        pig_factors[pig_type] = factor_data
-
-    return pig_factors
+    return dict(data["data"]["grise"].items())
 
 
 # Load constants once at module import
@@ -48,7 +43,7 @@ NH3_FACTORS = load_nh3_factors()
 def calculate_nh3_emissions_svin(
     dyretype: str,
     antal_dyr: float,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate NH3 emissions from pig manure management.
 
@@ -143,8 +138,8 @@ def calculate_nh3_emissions_svin(
 
 
 def calculate_all_pig_nh3(
-    livestock_data: Dict[str, Dict[str, float]],
-) -> Dict[str, Dict]:
+    livestock_data: dict[str, dict[str, float]],
+) -> dict[str, dict]:
     """
     Calculate NH3 emissions for all pig types in a farm.
 
@@ -193,7 +188,7 @@ if __name__ == "__main__":
 
     # Test 1: Sows (årsdyr)
     result = calculate_nh3_emissions_svin("årssøer", 200)
-    print(f"200 sows (årsdyr):")
+    print("200 sows (årsdyr):")
     print(f"  NH3 emissions: {result['nh3_kg']:.2f} kg NH3/year")
     print(f"  Per sow: {result['nh3_per_animal']:.4f} kg NH3/year")
     print(f"  Source: {result['source']}")
@@ -201,7 +196,7 @@ if __name__ == "__main__":
 
     # Test 2: Weaners (produceret dyr)
     result = calculate_nh3_emissions_svin("smågrise", 500)
-    print(f"500 weaners (produceret dyr):")
+    print("500 weaners (produceret dyr):")
     print(f"  NH3 emissions: {result['nh3_kg']:.2f} kg NH3")
     print(f"  Per weaner: {result['nh3_per_animal']:.5f} kg NH3")
     print(f"  Source: {result['source']}")
@@ -209,7 +204,7 @@ if __name__ == "__main__":
 
     # Test 3: Finishers (produceret dyr)
     result = calculate_nh3_emissions_svin("slagtesvin", 1500)
-    print(f"1500 finishers (produceret dyr):")
+    print("1500 finishers (produceret dyr):")
     print(f"  NH3 emissions: {result['nh3_kg']:.2f} kg NH3")
     print(f"  Per finisher: {result['nh3_per_animal']:.4f} kg NH3")
     print(f"  Source: {result['source']}")
@@ -225,7 +220,7 @@ if __name__ == "__main__":
     print("Full farm (200 sows, 500 weaners, 1500 finishers):")
     print(f"  Total NH3 emissions: {results['total']['nh3_kg']:.2f} kg NH3/year")
     total_animals = 200 + 500 + 1500
-    print(f"  Per animal (average): {results['total']['nh3_kg']/total_animals:.4f} kg NH3")
+    print(f"  Per animal (average): {results['total']['nh3_kg'] / total_animals:.4f} kg NH3")
     print()
 
     print("Environmental Impact:")

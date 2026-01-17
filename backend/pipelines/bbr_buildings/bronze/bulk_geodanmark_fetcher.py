@@ -69,7 +69,7 @@ class BulkGeoDanmarkFetcher:
             "request": "GetFeature",
             "typeName": "gdk60:Bygning",
             "resultType": "hits",
-            "srsName": "EPSG:4326",  # Request data in WGS84 for consistency
+            "srsName": "EPSG:25832",  # Request in Danish UTM (native CRS) for processing
             "username": self.username,
             "password": self.password,
         }
@@ -103,7 +103,7 @@ class BulkGeoDanmarkFetcher:
             "request": "GetFeature",
             "typeName": "gdk60:Bygning",
             "outputFormat": "application/gml+xml; version=3.2",
-            "srsName": "EPSG:4326",  # Request data in WGS84 for consistency
+            "srsName": "EPSG:25832",  # Request in Danish UTM (native CRS) for processing
             "startIndex": start_index,
             "count": count,
             "username": self.username,
@@ -118,9 +118,8 @@ class BulkGeoDanmarkFetcher:
             if response.status_code == 200:
                 logger.info(f"Successfully fetched batch starting at {start_index:,}")
                 return response.text
-            else:
-                logger.error(f"HTTP {response.status_code}: {response.text}")
-                return None
+            logger.error(f"HTTP {response.status_code}: {response.text}")
+            return None
 
         except requests.exceptions.Timeout:
             logger.error(f"Timeout fetching batch starting at {start_index:,}")

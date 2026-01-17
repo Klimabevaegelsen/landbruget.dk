@@ -63,13 +63,9 @@ class SilverBase(DuckDBProcessor):
         try:
             # Enhanced validation for silver layer
             count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            if count == 0:
-                return False
-
             # Add more specific validation logic here
             # Example: Check for required columns, data types, etc.
-
-            return True
+            return count != 0
         except Exception as e:
             print(f"Silver validation failed: {e}")
             return False

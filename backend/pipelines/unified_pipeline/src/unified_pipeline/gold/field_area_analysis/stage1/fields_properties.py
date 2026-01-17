@@ -7,11 +7,12 @@ OPTIMIZATION: 13x faster due to Stage 0 pre-filtering (6.5M → 500K properties)
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
+
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
-from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 
 class FieldsPropertiesIntersection(FieldAnalysisStageBase):
@@ -107,7 +108,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 "field_count": fields_area_stats[0] or 0,
             }
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Create field-property intersections using Stage 0 pre-filtered properties.
 
@@ -356,7 +357,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             ),
         }
 
-    def _get_input_area_reference(self) -> Dict[str, Any]:
+    def _get_input_area_reference(self) -> dict[str, Any]:
         """Get reference area statistics from input data for validation."""
         return getattr(self, "_input_area_reference", None)
 
@@ -514,17 +515,15 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     from ..area_validation import ValidationException
 
                     raise ValidationException(error_msg)
-                else:
-                    self.log.warning(f"⚠️ {error_msg} but continuing")
-
-        except Exception as e:
-            error_msg = f"❌ Stage 1 validation error: {str(e)}"
-            if self.validation_config.fail_on_validation_error:
-                raise Exception(error_msg) from e
-            else:
                 self.log.warning(f"⚠️ {error_msg} but continuing")
 
-    def _save_output_data(self, result: Dict[str, Any]):
+        except Exception as e:
+            error_msg = f"❌ Stage 1 validation error: {e!s}"
+            if self.validation_config.fail_on_validation_error:
+                raise Exception(error_msg) from e
+            self.log.warning(f"⚠️ {error_msg} but continuing")
+
+    def _save_output_data(self, result: dict[str, Any]):
         """Save field-property intersection data - already handled in _execute_stage_processing."""
         # Data is already saved in _execute_stage_processing using save_data_direct
         # This method is required by the abstract base class but no additional saving is needed

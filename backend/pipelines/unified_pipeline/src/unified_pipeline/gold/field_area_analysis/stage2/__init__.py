@@ -12,4 +12,4 @@ from .fields_bnbo_water import FieldsBNBOWaterCoverage
 from .fields_grukos import FieldsGrukosCoverage
 from .fields_wetland_water import FieldsWetlandWaterCoverage
 
-__all__ = ["FieldsBNBOWaterCoverage", "FieldsWetlandWaterCoverage", "FieldsGrukosCoverage"]
+__all__ = ["FieldsBNBOWaterCoverage", "FieldsGrukosCoverage", "FieldsWetlandWaterCoverage"]

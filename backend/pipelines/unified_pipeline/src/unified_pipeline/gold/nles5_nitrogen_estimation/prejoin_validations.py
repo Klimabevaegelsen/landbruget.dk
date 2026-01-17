@@ -89,71 +89,71 @@ class NLES5PrejoinValidator:
                     SELECT
                         COUNT(*) AS total,
                         -- Basic negative values (Table 1 row 1)
-                        COUNT(CASE WHEN mineral_n_foraar < 0 OR mineral_n_eft < 0 
-                            OR mineral_n_udb < 0 OR organic_n_hus < 0 
+                        COUNT(CASE WHEN mineral_n_foraar < 0 OR mineral_n_eft < 0
+                            OR mineral_n_udb < 0 OR organic_n_hus < 0
                             THEN 1 END) AS negative_fertilizer,
-                        COUNT(CASE WHEN tn_t_ha IS NOT NULL AND tn_t_ha < 0 
+                        COUNT(CASE WHEN tn_t_ha IS NOT NULL AND tn_t_ha < 0
                             THEN 1 END) AS negative_total_n,
-                        
+
                         -- Missing/zero fertilizer consumption (Table 1 rows 2-3)
-                        COUNT(CASE WHEN (mineral_n_foraar IS NULL OR mineral_n_foraar = 0) 
-                            AND (mineral_n_eft IS NULL OR mineral_n_eft = 0) 
-                            AND (mineral_n_udb IS NULL OR mineral_n_udb = 0) 
+                        COUNT(CASE WHEN (mineral_n_foraar IS NULL OR mineral_n_foraar = 0)
+                            AND (mineral_n_eft IS NULL OR mineral_n_eft = 0)
+                            AND (mineral_n_udb IS NULL OR mineral_n_udb = 0)
                             THEN 1 END) AS missing_mineral_fertilizer,
-                        
+
                         -- CVR validation
-                        COUNT(CASE WHEN cvr_number IS NULL OR cvr_number = '' 
+                        COUNT(CASE WHEN cvr_number IS NULL OR cvr_number = ''
                             THEN 1 END) AS missing_cvr,
-                        
+
                         -- Area validations (Table 1 rows 14-16)
-                        COUNT(CASE WHEN landbrugsareal_ha IS NULL 
+                        COUNT(CASE WHEN landbrugsareal_ha IS NULL
                             OR landbrugsareal_ha <= 0 THEN 1 END) AS invalid_landbrugsareal,
-                        COUNT(CASE WHEN harmoniareal_ha IS NOT NULL 
+                        COUNT(CASE WHEN harmoniareal_ha IS NOT NULL
                             AND harmoniareal_ha < 0 THEN 1 END) AS negative_harmoniareal,
-                        
+
                         -- N-quota validations (Table 1 rows 17-20)
-                        COUNT(CASE WHEN landbrugsareal_ha > 0 
-                            AND (n_kvote IS NULL OR n_kvote <= 0) 
+                        COUNT(CASE WHEN landbrugsareal_ha > 0
+                            AND (n_kvote IS NULL OR n_kvote <= 0)
                             THEN 1 END) AS missing_n_quota,
-                        COUNT(CASE WHEN landbrugsareal_ha > 0 AND n_kvote > 400 
+                        COUNT(CASE WHEN landbrugsareal_ha > 0 AND n_kvote > 400
                             THEN 1 END) AS excessive_n_quota,
-                        COUNT(CASE WHEN landbrugsareal_ha > 0 AND n_kvote < 10 
+                        COUNT(CASE WHEN landbrugsareal_ha > 0 AND n_kvote < 10
                             THEN 1 END) AS too_low_n_quota,
-                        COUNT(CASE WHEN landbrugsareal_ha > 0 AND tn_t_ha > 600 
+                        COUNT(CASE WHEN landbrugsareal_ha > 0 AND tn_t_ha > 600
                             THEN 1 END) AS excessive_n_consumption,
-                        
+
                         -- Livestock fertilizer validations (Table 1 rows 4-8)
-                        COUNT(CASE WHEN organic_n_hus > 0 
-                            AND (husdyrgodning_type IS NULL OR husdyrgodning_type = '') 
+                        COUNT(CASE WHEN organic_n_hus > 0
+                            AND (husdyrgodning_type IS NULL OR husdyrgodning_type = '')
                             THEN 1 END) AS livestock_no_type,
-                        COUNT(CASE WHEN (organic_n_hus IS NULL OR organic_n_hus = 0) 
-                            AND husdyrgodning_applied > 0 
+                        COUNT(CASE WHEN (organic_n_hus IS NULL OR organic_n_hus = 0)
+                            AND husdyrgodning_applied > 0
                             THEN 1 END) AS consumption_mismatch_1,
-                        COUNT(CASE WHEN organic_n_hus > 0 
-                            AND (husdyrgodning_applied IS NULL 
-                                OR husdyrgodning_applied = 0) 
+                        COUNT(CASE WHEN organic_n_hus > 0
+                            AND (husdyrgodning_applied IS NULL
+                                OR husdyrgodning_applied = 0)
                             THEN 1 END) AS consumption_mismatch_2,
-                        COUNT(CASE WHEN husdyrgodning_applied > 0 
-                            AND organic_n_hus > husdyrgodning_applied 
+                        COUNT(CASE WHEN husdyrgodning_applied > 0
+                            AND organic_n_hus > husdyrgodning_applied
                             THEN 1 END) AS utilization_inconsistency,
-                        COUNT(CASE WHEN husdyrgodning_applied > 0 
-                            AND organic_n_hus > 0 
-                            AND (organic_n_hus / NULLIF(husdyrgodning_applied, 0)) < 0.30 
+                        COUNT(CASE WHEN husdyrgodning_applied > 0
+                            AND organic_n_hus > 0
+                            AND (organic_n_hus / NULLIF(husdyrgodning_applied, 0)) < 0.30
                             THEN 1 END) AS low_utilization_rate,
-                        
+
                         -- Cover crop validations (Table 1 rows 11-13)
-                        COUNT(CASE WHEN efterafgroede_areal > 0 
-                            AND (efterafgroede_grundareal IS NULL 
-                                OR efterafgroede_grundareal = 0) 
+                        COUNT(CASE WHEN efterafgroede_areal > 0
+                            AND (efterafgroede_grundareal IS NULL
+                                OR efterafgroede_grundareal = 0)
                             THEN 1 END) AS cover_crop_base_missing,
-                        COUNT(CASE WHEN efterafgroede_grundareal > landbrugsareal_ha 
+                        COUNT(CASE WHEN efterafgroede_grundareal > landbrugsareal_ha
                             THEN 1 END) AS cover_crop_base_exceeds,
-                        COUNT(CASE WHEN efterafgroede_areal > efterafgroede_grundareal 
+                        COUNT(CASE WHEN efterafgroede_areal > efterafgroede_grundareal
                             THEN 1 END) AS cover_crop_exceeds_base,
-                        
+
                         -- Livestock unit validation (Table 1 row 21)
-                        COUNT(CASE WHEN dyreenheder > 1000 
-                            AND normproduktion < 50000 
+                        COUNT(CASE WHEN dyreenheder > 1000
+                            AND normproduktion < 50000
                             THEN 1 END) AS livestock_production_mismatch
                     FROM fertilizer_history
                 )
@@ -313,8 +313,7 @@ class NLES5PrejoinValidator:
         except Exception as e:
             if "fertilizer_history validation failed" in str(e):
                 raise  # Re-raise validation failures
-            else:
-                raise ValueError(f"Failed §3.1 validation on fertilizer_history: {e}")
+            raise ValueError(f"Failed §3.1 validation on fertilizer_history: {e}") from e
 
     @timed(name="§3.2 Validate linkage: field_plan vs fertilizer accounts")
     def _validate_fieldplan_vs_accounts_linkage(self) -> None:
@@ -338,7 +337,7 @@ class NLES5PrejoinValidator:
                 """
             )
         except Exception as e:
-            raise ValueError(f"Cannot aggregate field_plan by CVR: {e}")
+            raise ValueError(f"Cannot aggregate field_plan by CVR: {e}") from e
 
         # Aggregate accounts areas by CVR
         try:
@@ -355,7 +354,7 @@ class NLES5PrejoinValidator:
                 """
             )
         except Exception as e:
-            raise ValueError(f"Cannot aggregate fertilizer_history by CVR: {e}")
+            raise ValueError(f"Cannot aggregate fertilizer_history by CVR: {e}") from e
 
         # Classify linkage per Table 3 thresholds
         try:
@@ -367,33 +366,33 @@ class NLES5PrejoinValidator:
                     fp.fp_area_ha,
                     acc.harmoniareal_ha,
                     acc.landbrugsareal_ha,
-                    CASE 
+                    CASE
                         WHEN acc.cvr_number IS NULL THEN '5. Ikke koblet'
                         ELSE (
                             -- Compare using whichever account area is available,
                             -- prefer harmoniareal
-                            CASE 
+                            CASE
                                 WHEN acc.harmoniareal_ha IS NOT NULL THEN
-                                    CASE 
+                                    CASE
                                         WHEN fp.fp_area_ha IS NULL THEN '5. Ikke koblet'
-                                        WHEN ABS(acc.harmoniareal_ha - fp.fp_area_ha) <= 2 
-                                            OR (ABS(acc.harmoniareal_ha - fp.fp_area_ha) 
-                                                / NULLIF(fp.fp_area_ha,0)) <= 0.05 
+                                        WHEN ABS(acc.harmoniareal_ha - fp.fp_area_ha) <= 2
+                                            OR (ABS(acc.harmoniareal_ha - fp.fp_area_ha)
+                                                / NULLIF(fp.fp_area_ha,0)) <= 0.05
                                             THEN '1. CVR5 %'
-                                        WHEN (ABS(acc.harmoniareal_ha - fp.fp_area_ha) 
-                                            / NULLIF(fp.fp_area_ha,0)) <= 0.10 
+                                        WHEN (ABS(acc.harmoniareal_ha - fp.fp_area_ha)
+                                            / NULLIF(fp.fp_area_ha,0)) <= 0.10
                                             THEN '3. CVR10 %'
                                         ELSE '4. CVR>10 %'
                                     END
                                 WHEN acc.landbrugsareal_ha IS NOT NULL THEN
-                                    CASE 
+                                    CASE
                                         WHEN fp.fp_area_ha IS NULL THEN '5. Ikke koblet'
-                                        WHEN ABS(acc.landbrugsareal_ha - fp.fp_area_ha) <= 2 
-                                            OR (ABS(acc.landbrugsareal_ha - fp.fp_area_ha) 
-                                                / NULLIF(fp.fp_area_ha,0)) <= 0.05 
+                                        WHEN ABS(acc.landbrugsareal_ha - fp.fp_area_ha) <= 2
+                                            OR (ABS(acc.landbrugsareal_ha - fp.fp_area_ha)
+                                                / NULLIF(fp.fp_area_ha,0)) <= 0.05
                                             THEN '1. CVR5 %'
-                                        WHEN (ABS(acc.landbrugsareal_ha - fp.fp_area_ha) 
-                                            / NULLIF(fp.fp_area_ha,0)) <= 0.10 
+                                        WHEN (ABS(acc.landbrugsareal_ha - fp.fp_area_ha)
+                                            / NULLIF(fp.fp_area_ha,0)) <= 0.10
                                             THEN '3. CVR10 %'
                                         ELSE '4. CVR>10 %'
                                     END
@@ -435,7 +434,7 @@ class NLES5PrejoinValidator:
                 )
 
         except Exception as e:
-            raise ValueError(f"Failed §3.2 linkage validation: {e}")
+            raise ValueError(f"Failed §3.2 linkage validation: {e}") from e
 
     @timed(name="§3.3 Validate agricultural fields integrity")
     def _validate_agricultural_fields_integrity(self) -> None:
@@ -443,12 +442,12 @@ class NLES5PrejoinValidator:
         try:
             geom_stats = self.conn.execute(
                 """
-                SELECT 
+                SELECT
                     COUNT(*) AS total,
                     COUNT(CASE WHEN geom IS NULL THEN 1 END) AS null_geom,
-                    COUNT(CASE WHEN geom IS NOT NULL AND NOT ST_IsValid(geom) 
+                    COUNT(CASE WHEN geom IS NOT NULL AND NOT ST_IsValid(geom)
                         THEN 1 END) AS invalid_geom,
-                    COUNT(CASE WHEN area_ha IS NULL OR area_ha <= 0 
+                    COUNT(CASE WHEN area_ha IS NULL OR area_ha <= 0
                         THEN 1 END) AS invalid_area
                 FROM agricultural_fields_spatial
                 """
@@ -474,7 +473,7 @@ class NLES5PrejoinValidator:
                     "§3.3 agricultural_fields_spatial validation failed: " + ", ".join(issues)
                 )
         except Exception as e:
-            raise ValueError(f"Failed §3.3 validation on agricultural_fields_spatial: {e}")
+            raise ValueError(f"Failed §3.3 validation on agricultural_fields_spatial: {e}") from e
 
     def _log_table1_coverage(self) -> None:
         """Log coverage of N2023_62 Table 1 validation rules."""

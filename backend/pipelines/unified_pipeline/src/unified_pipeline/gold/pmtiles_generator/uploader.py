@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import subprocess
-from typing import Dict, List, Optional
 
 from .config import PMTilesGeneratorConfig
 
@@ -91,15 +90,14 @@ class CloudflareR2Uploader:
             if result.returncode == 0:
                 logger.info(f"Successfully configured rclone remote '{self.r2_remote}'")
                 return True
-            else:
-                logger.error(f"Failed to configure rclone remote: {result.stderr}")
-                return False
+            logger.error(f"Failed to configure rclone remote: {result.stderr}")
+            return False
 
         except Exception as e:
             logger.error(f"Error setting up rclone config: {e}")
             return False
 
-    async def upload_pmtiles(self, file_path: str, r2_key: str) -> Optional[str]:
+    async def upload_pmtiles(self, file_path: str, r2_key: str) -> str | None:
         """Upload a PMTiles file to Cloudflare R2.
 
         Args:
@@ -154,17 +152,16 @@ class CloudflareR2Uploader:
                 logger.info(f"Public URL: {public_url}")
 
                 return public_url
-            else:
-                logger.error(f"Upload failed with return code {process.returncode}")
-                logger.error(f"stdout: {stdout.decode()}")
-                logger.error(f"stderr: {stderr.decode()}")
-                return None
+            logger.error(f"Upload failed with return code {process.returncode}")
+            logger.error(f"stdout: {stdout.decode()}")
+            logger.error(f"stderr: {stderr.decode()}")
+            return None
 
         except Exception as e:
             logger.error(f"Error uploading PMTiles: {e}")
             return None
 
-    async def upload_multiple_pmtiles(self, files: Dict[str, str]) -> Dict[str, Optional[str]]:
+    async def upload_multiple_pmtiles(self, files: dict[str, str]) -> dict[str, str | None]:
         """Upload multiple PMTiles files to R2.
 
         Args:
@@ -216,7 +213,7 @@ class CloudflareR2Uploader:
             logger.error(f"Error verifying upload: {e}")
             return False
 
-    async def list_existing_pmtiles(self, prefix: str = "pmtiles/") -> List[str]:
+    async def list_existing_pmtiles(self, prefix: str = "pmtiles/") -> list[str]:
         """List existing PMTiles files in R2.
 
         Args:
@@ -243,9 +240,8 @@ class CloudflareR2Uploader:
                 ]
                 logger.info(f"Found {len(files)} existing PMTiles files in R2")
                 return files
-            else:
-                logger.error(f"Failed to list R2 files: {result.stderr}")
-                return []
+            logger.error(f"Failed to list R2 files: {result.stderr}")
+            return []
 
         except Exception as e:
             logger.error(f"Error listing R2 files: {e}")
@@ -272,9 +268,8 @@ class CloudflareR2Uploader:
             if result.returncode == 0:
                 logger.info(f"Successfully deleted {r2_key}")
                 return True
-            else:
-                logger.error(f"Failed to delete {r2_key}: {result.stderr}")
-                return False
+            logger.error(f"Failed to delete {r2_key}: {result.stderr}")
+            return False
 
         except Exception as e:
             logger.error(f"Error deleting PMTiles: {e}")
@@ -327,19 +322,18 @@ class CloudflareR2Uploader:
             if process.returncode == 0:
                 logger.info("Successfully synced PMTiles directory")
                 return True
-            else:
-                logger.error(f"Sync failed with return code {process.returncode}")
-                logger.error(f"stdout: {stdout.decode()}")
-                logger.error(f"stderr: {stderr.decode()}")
-                return False
+            logger.error(f"Sync failed with return code {process.returncode}")
+            logger.error(f"stdout: {stdout.decode()}")
+            logger.error(f"stderr: {stderr.decode()}")
+            return False
 
         except Exception as e:
             logger.error(f"Error syncing PMTiles directory: {e}")
             return False
 
     def generate_upload_manifest(
-        self, pmtiles_files: Dict[str, str], year: Optional[int] = None
-    ) -> Dict[str, str]:
+        self, pmtiles_files: dict[str, str], year: int | None = None
+    ) -> dict[str, str]:
         """Generate upload manifest mapping local files to R2 keys.
 
         Args:
@@ -375,8 +369,8 @@ class CloudflareR2Uploader:
         return manifest
 
     async def cleanup_old_pmtiles(
-        self, current_files: Dict[str, str], keep_versions: int = 3
-    ) -> Dict[str, bool]:
+        self, current_files: dict[str, str], keep_versions: int = 3
+    ) -> dict[str, bool]:
         """Clean up old PMTiles files, keeping only the most recent versions.
 
         Args:
@@ -466,8 +460,8 @@ class CloudflareR2Uploader:
             return {}
 
     async def upload_with_cleanup(
-        self, files: Dict[str, str], cleanup_old: bool = True, keep_versions: int = 3
-    ) -> Dict[str, Optional[str]]:
+        self, files: dict[str, str], cleanup_old: bool = True, keep_versions: int = 3
+    ) -> dict[str, str | None]:
         """Upload PMTiles files and optionally clean up old versions.
 
         Args:
@@ -500,7 +494,7 @@ class CloudflareR2Uploader:
 
         return upload_results
 
-    async def replace_pmtiles(self, r2_key: str, new_file_path: str) -> Optional[str]:
+    async def replace_pmtiles(self, r2_key: str, new_file_path: str) -> str | None:
         """Replace an existing PMTiles file with a new version.
 
         Args:
@@ -525,9 +519,8 @@ class CloudflareR2Uploader:
                 else:
                     logger.info(f"Successfully uploaded new PMTiles: {r2_key}")
                 return public_url
-            else:
-                logger.error(f"Failed to upload replacement PMTiles: {r2_key}")
-                return None
+            logger.error(f"Failed to upload replacement PMTiles: {r2_key}")
+            return None
 
         except Exception as e:
             logger.error(f"Error replacing PMTiles {r2_key}: {e}")
@@ -535,9 +528,9 @@ class CloudflareR2Uploader:
 
     async def create_deployment_summary(
         self,
-        upload_results: Dict[str, Optional[str]],
-        year: Optional[int] = None,
-        cleanup_results: Optional[Dict[str, bool]] = None,
+        upload_results: dict[str, str | None],
+        year: int | None = None,
+        cleanup_results: dict[str, bool] | None = None,
     ) -> str:
         """Create a deployment summary with URLs and metadata.
 

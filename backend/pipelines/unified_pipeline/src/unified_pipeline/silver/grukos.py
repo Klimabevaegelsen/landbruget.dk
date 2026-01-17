@@ -23,11 +23,17 @@ The processing includes:
 """
 
 import xml.etree.ElementTree as ET
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 from unified_pipeline.util.timing import AsyncTimer, timed
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+USE_UTM_PROCESSING = True
 
 
 class GrukosSilverConfig(BaseJobConfig):
@@ -53,16 +59,16 @@ class GrukosSilverConfig(BaseJobConfig):
     dataset: str = "grukos"
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 8000
-    namespaces: dict[str, str] = {
+    namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "gml": "http://www.opengis.net/gml/3.2",
         "grukos": "https://wfs2-miljoegis.mim.dk/grukos",
     }
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
-    layers: list[str] = [
+    layers: ClassVar[list[str]] = [
         "grukos:indsatsomraader",  # Indsatsområder (action areas for groundwater protection)
     ]
-    service_types: dict[str, str] = {}  # All layers use default WFS service type
+    service_types: ClassVar[dict[str, str]] = {}  # All layers use default WFS service type
 
 
 class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
@@ -99,7 +105,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
         super().__init__(config)
         self.log.info("✅ GrukosSilver: Using unified GCS access and DuckDB connection")
 
-    def get_first_namespace(self, root: ET.Element) -> Optional[str]:
+    def get_first_namespace(self, root: ET.Element) -> str | None:
         """
         Extract the namespace from an XML root element.
 
@@ -117,7 +123,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
                 return elem.tag.split("}")[0].strip("{")
         return None
 
-    def clean_value(self, value: Any) -> Optional[str]:
+    def clean_value(self, value: Any) -> str | None:
         """
         Clean and standardize string values from XML.
 
@@ -135,7 +141,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
         cleaned = str(value).strip()
         return cleaned if cleaned else None
 
-    def _parse_gml_to_wkt(self, gml_xml: str) -> Optional[str]:
+    def _parse_gml_to_wkt(self, gml_xml: str) -> str | None:
         """
         Parse GML geometry XML to WKT format.
 
@@ -170,18 +176,17 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
             if "multisurface" in gml_text or "multipolygon" in gml_text:
                 # Handle MultiSurface
                 return self._create_multipolygon_wkt(pos_lists)
-            elif "polygon" in gml_text:
+            if "polygon" in gml_text:
                 # Handle simple Polygon
                 return self._create_polygon_wkt(pos_lists[0]) if pos_lists else None
-            else:
-                # Default to polygon for unknown types
-                return self._create_polygon_wkt(pos_lists[0]) if pos_lists else None
+            # Default to polygon for unknown types
+            return self._create_polygon_wkt(pos_lists[0]) if pos_lists else None
 
         except Exception as e:
             self.log.debug(f"Error parsing GML geometry: {e}")
             return None
 
-    def _create_multipolygon_wkt(self, pos_lists: list[str]) -> Optional[str]:
+    def _create_multipolygon_wkt(self, pos_lists: list[str]) -> str | None:
         """Create MULTIPOLYGON WKT from coordinate lists."""
         try:
             polygons = []
@@ -202,7 +207,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
         except Exception:
             return None
 
-    def _create_polygon_wkt(self, coords: str) -> Optional[str]:
+    def _create_polygon_wkt(self, coords: str) -> str | None:
         """Create POLYGON WKT from coordinate string."""
         try:
             polygon_coords = self._parse_coordinates(coords)
@@ -250,7 +255,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
             return []
 
     @timed(name="Processing XML data")  # type: ignore
-    def process_xml_payload(self, payload: str, layer: str) -> Optional[str]:
+    def process_xml_payload(self, payload: str, layer: str) -> str | None:
         """
         Process XML payload from WFS response and extract features.
 
@@ -362,7 +367,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
             return None
 
     @timed(name="Processing raw data")  # type: ignore
-    def _process_data(self, raw_data: list[dict[str, Any]]) -> Optional[str]:
+    def _process_data(self, raw_data: list[dict[str, Any]]) -> str | None:
         """
         Process raw data from multiple layers and combine into a single table.
 
@@ -472,7 +477,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
                 WHERE geometry_xml IS NOT NULL
             """).fetchall()
 
-            for rowid, geometry_xml, layer in rows:
+            for rowid, geometry_xml, _layer in rows:
                 try:
                     # Parse the GML XML to extract coordinates
                     wkt_geom = self._parse_gml_to_wkt(geometry_xml)
@@ -676,7 +681,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
             return dissolved_table_name
 
         except Exception as e:
-            self.log.error(f"Error creating dissolved geometries: {str(e)}", exc_info=True)
+            self.log.error(f"Error creating dissolved geometries: {e!s}", exc_info=True)
             # Create empty table on error
             empty_table_name = "grukos_dissolved_empty"
             self.conn.execute(f"""
@@ -690,7 +695,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
             """)
             return empty_table_name
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Run the Grukos silver layer processing.
 
@@ -782,12 +787,22 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
                     self.log.info(
                         f"Validating and transforming {spatial_geom_count:,} spatial geometries..."
                     )
-                    validate_and_transform_geometries_duckdb(
-                        self.conn,
-                        table_name,
-                        self.config.dataset,
-                        geometry_column="geometry_spatial",
-                    )
+                    # CRS Strategy: Keep in EPSG:25832 for processing
+                    if USE_UTM_PROCESSING:
+                        validate_and_normalize_to_utm(
+                            self.conn,
+                            table_name,
+                            self.config.dataset,
+                            geometry_column="geometry_spatial",
+                        )
+                    else:
+                        # Legacy: Transform to WGS84 in silver layer
+                        validate_and_transform_geometries_duckdb(
+                            self.conn,
+                            table_name,
+                            self.config.dataset,
+                            geometry_column="geometry_spatial",
+                        )
 
                     # ✅ UPDATE: Replace original geometry column with transformed WKT
                     self.conn.execute(f"""

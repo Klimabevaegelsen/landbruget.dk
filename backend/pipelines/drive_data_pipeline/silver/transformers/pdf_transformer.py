@@ -99,7 +99,7 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             )
 
         except Exception as e:
-            error_msg = f"Failed to transform PDF file {file_path}: {str(e)}"
+            error_msg = f"Failed to transform PDF file {file_path}: {e!s}"
             logger.error(error_msg)
             return TransformResult(
                 success=False,
@@ -171,7 +171,7 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
 
                 if common_columns:
                     # Union with common columns only
-                    common_cols_list = sorted(list(common_columns))  # Sort for consistency
+                    common_cols_list = sorted(common_columns)  # Sort for consistency
                     common_cols_str = ", ".join([f'"{col}"' for col in common_cols_list])
 
                     union_query = " UNION ALL ".join(
@@ -195,7 +195,7 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             return final_table
 
         except Exception as e:
-            logger.error(f"Failed to transform PDF content for {filename}: {str(e)}")
+            logger.error(f"Failed to transform PDF content for {filename}: {e!s}")
             return None
         finally:
             # Clean up temporary file
@@ -233,7 +233,7 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             return tables
 
         except Exception as e:
-            logger.error(f"Failed to extract tables from PDF {file_path}: {str(e)}")
+            logger.error(f"Failed to extract tables from PDF {file_path}: {e!s}")
             return []
 
     def _standardize_table_with_duckdb(
@@ -332,7 +332,7 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             return clean_table
 
         except Exception as e:
-            logger.warning(f"Failed to standardize table {table_name}: {str(e)}")
+            logger.warning(f"Failed to standardize table {table_name}: {e!s}")
             # Return original table if standardization fails
             return table_name
 
@@ -485,5 +485,5 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             return schema
 
         except Exception as e:
-            logger.warning(f"Failed to create schema from table {table_name}: {str(e)}")
+            logger.warning(f"Failed to create schema from table {table_name}: {e!s}")
             return {}

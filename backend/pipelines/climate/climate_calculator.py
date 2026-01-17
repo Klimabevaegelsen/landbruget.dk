@@ -10,40 +10,40 @@ Data Flow:
 3. climate_calculator.py (this file) → Convert to formula module inputs → Calculate emissions
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
 import logging
+from dataclasses import dataclass, field
+from typing import Any
 
 # Import data structures from transformer
 from data_transformer import (
-    LivestockSummary,
-    FieldSummary,
     FertilizerSummary,
+    FieldSummary,
     IntegratedFarmTransformer,
+    LivestockSummary,
 )
 
 # Import existing formula modules
 from formulas.kvaeg import enterisk_metan
-from formulas.kvaeg.foder import calculate_feed_emissions_kvaeg
 from formulas.kvaeg.ammoniak import calculate_nh3_emissions_kvaeg
-from formulas.svin import (
-    calculate_ch4_enteric_svin,
-    calculate_manure_emissions_svin,
-    calculate_feed_emissions_svin,
-)
-from formulas.svin.ammoniak import calculate_nh3_emissions_svin
+from formulas.kvaeg.foder import calculate_feed_emissions_kvaeg
 from formulas.marker import (
-    goedning_og_nitrifikationshaemmer,
-    kulstofbalance,
     afgroederester,
+    goedning_og_nitrifikationshaemmer,
+    kalkning,
+    kulstofbalance,
     nitratudvaskning,
     organogene_jorde,
-    kalkning,
 )
 from formulas.marker.ammoniak import calculate_nh3_field_per_ha
+from formulas.svin import (
+    calculate_ch4_enteric_svin,
+    calculate_feed_emissions_svin,
+    calculate_manure_emissions_svin,
+)
+from formulas.svin.ammoniak import calculate_nh3_emissions_svin
 
 # Import standardfaktorer module for feed intake lookups
-from standardfaktorer import lookup_pig_fe, lookup_cattle_ts
+from standardfaktorer import lookup_cattle_ts, lookup_pig_fe
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +59,9 @@ class EmissionCategory:
     name: str
     co2e_kg: float
     data_quality: str  # "measured", "calculated", "standard", "estimated", "unavailable"
-    sub_sources: Dict[str, float] = field(default_factory=dict)
+    sub_sources: dict[str, float] = field(default_factory=dict)
     nh3_kg: float = 0.0  # NH3 emissions (kg NH3) - not converted to CO2e
-    nh3_sub_sources: Dict[str, float] = field(default_factory=dict)
+    nh3_sub_sources: dict[str, float] = field(default_factory=dict)
 
     def add_sub_source(self, name: str, co2e_kg: float) -> None:
         """Add a GHG sub-source emission to this category."""
@@ -97,8 +97,8 @@ class EmissionReport:
     cvr: str
     year: int
     total_co2e_kg: float
-    categories: List[EmissionCategory]
-    intensity_metrics: Dict[str, float]
+    categories: list[EmissionCategory]
+    intensity_metrics: dict[str, float]
     data_completeness: float
     total_nh3_kg: float = 0.0  # Total NH3 emissions (kg NH3) - not converted to CO2e
 
@@ -114,10 +114,12 @@ class EmissionReport:
         }
         if self.total_nh3_kg > 0:
             result["total_nh3_kg"] = self.total_nh3_kg
-            result["environmental_note"] = "NH3 emissions contribute to acidification and eutrophication, not climate change directly"
+            result["environmental_note"] = (
+                "NH3 emissions contribute to acidification and eutrophication, not climate change directly"
+            )
         return result
 
-    def get_category(self, name: str) -> Optional[EmissionCategory]:
+    def get_category(self, name: str) -> EmissionCategory | None:
         """Retrieve a specific emission category by name."""
         for cat in self.categories:
             if cat.name == name:
@@ -173,7 +175,9 @@ class FarmClimateCalculator:
 
         # Cattle emissions (if applicable)
         if "cattle" in farm_data["livestock"]:
-            cattle_cat = self._calculate_cattle_emissions(farm_data["livestock"]["cattle"], cvr, year)
+            cattle_cat = self._calculate_cattle_emissions(
+                farm_data["livestock"]["cattle"], cvr, year
+            )
             if cattle_cat:
                 categories.append(cattle_cat)
                 logger.info(f"Cattle emissions: {cattle_cat.co2e_kg:.1f} kg CO2e")
@@ -188,7 +192,9 @@ class FarmClimateCalculator:
         # Field emissions (if applicable)
         # Calculate even without fertilizer data - crop residues, carbon balance, and liming can still be computed
         if len(farm_data["fields"]) > 0:
-            field_cat = self._calculate_field_emissions(farm_data["fields"], farm_data["fertilizer"], cvr, year)
+            field_cat = self._calculate_field_emissions(
+                farm_data["fields"], farm_data["fertilizer"], cvr, year
+            )
             if field_cat:
                 categories.append(field_cat)
                 logger.info(f"Field emissions: {field_cat.co2e_kg:.1f} kg CO2e")
@@ -205,9 +211,13 @@ class FarmClimateCalculator:
         # 7. Calculate total NH3 emissions across all categories
         total_nh3_kg = sum(cat.nh3_kg for cat in categories)
 
-        logger.info(f"Total emissions: {total_co2e_kg:.1f} kg CO2e (completeness: {completeness:.1%})")
+        logger.info(
+            f"Total emissions: {total_co2e_kg:.1f} kg CO2e (completeness: {completeness:.1%})"
+        )
         if total_nh3_kg > 0:
-            logger.info(f"Total NH3 emissions: {total_nh3_kg:.1f} kg NH3 (acidification/eutrophication)")
+            logger.info(
+                f"Total NH3 emissions: {total_nh3_kg:.1f} kg NH3 (acidification/eutrophication)"
+            )
 
         # 8. Return report
         return EmissionReport(
@@ -220,7 +230,9 @@ class FarmClimateCalculator:
             total_nh3_kg=total_nh3_kg,
         )
 
-    def _calculate_cattle_emissions(self, cattle_summary: LivestockSummary, cvr: str, year: int) -> Optional[EmissionCategory]:
+    def _calculate_cattle_emissions(
+        self, cattle_summary: LivestockSummary, cvr: str, year: int
+    ) -> EmissionCategory | None:
         """
         Calculate cattle emissions using formulas from formulas/kvaeg/.
 
@@ -285,7 +297,9 @@ class FarmClimateCalculator:
                 logger.warning(f"Failed to lookup TS intake for {subtype}: {meta}")
                 continue
 
-            logger.debug(f"Cattle {subtype} TS from standardfaktorer: {ts_per_day} kg/day (source: {meta.get('source', 'unknown')})")
+            logger.debug(
+                f"Cattle {subtype} TS from standardfaktorer: {ts_per_day} kg/day (source: {meta.get('source', 'unknown')})"
+            )
 
             try:
                 feed_result = calculate_feed_emissions_kvaeg(
@@ -294,7 +308,9 @@ class FarmClimateCalculator:
                     ts_per_day=ts_per_day,
                 )
                 total_feed_co2e += feed_result["co2e_kg"]
-                logger.debug(f"  {subtype} feed: {feed_result['co2e_kg']:.1f} kg CO2e ({count} animals)")
+                logger.debug(
+                    f"  {subtype} feed: {feed_result['co2e_kg']:.1f} kg CO2e ({count} animals)"
+                )
             except Exception as e:
                 logger.warning(f"Failed to calculate feed emissions for {subtype}: {e}")
 
@@ -327,7 +343,9 @@ class FarmClimateCalculator:
                     antal_dyr=count,
                 )
                 total_nh3_kg += nh3_result["nh3_kg"]
-                logger.debug(f"  {subtype} NH3: {nh3_result['nh3_kg']:.1f} kg NH3 ({count} animals)")
+                logger.debug(
+                    f"  {subtype} NH3: {nh3_result['nh3_kg']:.1f} kg NH3 ({count} animals)"
+                )
             except Exception as e:
                 logger.warning(f"Failed to calculate NH3 emissions for {subtype}: {e}")
 
@@ -369,12 +387,16 @@ class FarmClimateCalculator:
                 return False
 
             # Check if Jersey is the dominant breed
-            total_animals = breeds_df['animal_count'].sum()
-            jersey_count = breeds_df[breeds_df['breed'].str.contains('Jersey', case=False, na=False)]['animal_count'].sum()
+            total_animals = breeds_df["animal_count"].sum()
+            jersey_count = breeds_df[
+                breeds_df["breed"].str.contains("Jersey", case=False, na=False)
+            ]["animal_count"].sum()
 
             if jersey_count > 0:
                 jersey_ratio = jersey_count / total_animals
-                logger.debug(f"Jersey breed ratio: {jersey_ratio:.1%} ({jersey_count}/{total_animals})")
+                logger.debug(
+                    f"Jersey breed ratio: {jersey_ratio:.1%} ({jersey_count}/{total_animals})"
+                )
                 return jersey_ratio > 0.5
 
             return False
@@ -382,7 +404,9 @@ class FarmClimateCalculator:
             logger.debug(f"Could not detect breed from CHR: {e}")
             return False
 
-    def _prepare_cattle_data_for_enteric(self, cattle_summary: LivestockSummary, is_jersey: bool = False) -> Dict:
+    def _prepare_cattle_data_for_enteric(
+        self, cattle_summary: LivestockSummary, is_jersey: bool = False
+    ) -> dict:
         """
         Transform LivestockSummary into structure needed by enteric methane formulas.
 
@@ -444,7 +468,9 @@ class FarmClimateCalculator:
 
         return dyretype_counts
 
-    def _assess_cattle_data_quality(self, cattle_summary: LivestockSummary, dyretype_counts: Dict) -> str:
+    def _assess_cattle_data_quality(
+        self, cattle_summary: LivestockSummary, dyretype_counts: dict
+    ) -> str:
         """
         Assess data quality for cattle emissions calculation.
 
@@ -463,7 +489,7 @@ class FarmClimateCalculator:
         # Quality upgraded from "estimated" to "standard" as of 2026-01-11
         return "standard"
 
-    def _calculate_pig_emissions(self, pig_summary: LivestockSummary) -> Optional[EmissionCategory]:
+    def _calculate_pig_emissions(self, pig_summary: LivestockSummary) -> EmissionCategory | None:
         """
         Calculate pig emissions using formulas from formulas/svin/.
 
@@ -555,7 +581,9 @@ class FarmClimateCalculator:
 
         return pig_category
 
-    def _map_pig_subtype(self, subtype: str, count: int, production_system: str = "conventional") -> tuple[str, bool, float, float]:
+    def _map_pig_subtype(
+        self, subtype: str, count: int, production_system: str = "conventional"
+    ) -> tuple[str, bool, float, float]:
         """
         Map English pig subtype to Danish type with parameters using Standardfaktorer.
 
@@ -573,7 +601,7 @@ class FarmClimateCalculator:
         Source: KB_21_5397_AP2 page 28 - Standardfaktorer for Danish livestock
         """
         # Use production_system from organic detection (already determined)
-        is_organic = (production_system == "organic")
+        is_organic = production_system == "organic"
 
         # Map subtypes and lookup standardfaktorer
         if subtype in ["sows", "søer", "breeding_sows"]:
@@ -581,49 +609,57 @@ class FarmClimateCalculator:
             if fe_value is None:
                 logger.error(f"Failed to lookup standardfaktor for sows: {meta}")
                 fe_value = 1492  # Fallback
-            logger.debug(f"Sows FE from standardfaktorer: {fe_value} (source: {meta.get('source', 'unknown')})")
+            logger.debug(
+                f"Sows FE from standardfaktorer: {fe_value} (source: {meta.get('source', 'unknown')})"
+            )
             return (
                 "søer",
                 is_organic,
                 220.0,  # Average sow weight (kg)
                 fe_value,  # FE per year from standardfaktorer
             )
-        elif subtype in ["weaners", "smågrise", "piglets"]:
+        if subtype in ["weaners", "smågrise", "piglets"]:
             fe_value, meta = lookup_pig_fe("smågrise", production_system)
             if fe_value is None:
                 logger.error(f"Failed to lookup standardfaktor for weaners: {meta}")
                 avg_weight_gain = 24.3 if not is_organic else 16.0
                 fe_per_kg = 1.87 if not is_organic else 2.11
                 fe_value = avg_weight_gain * fe_per_kg
-            logger.debug(f"Weaners FE from standardfaktorer: {fe_value} (source: {meta.get('source', 'unknown')})")
+            logger.debug(
+                f"Weaners FE from standardfaktorer: {fe_value} (source: {meta.get('source', 'unknown')})"
+            )
             return (
                 "smågrise",
                 is_organic,
                 30.0,  # Average weaner weight (kg)
                 fe_value,  # FE per animal from standardfaktorer
             )
-        elif subtype in ["finishers", "slagtesvin", "slaughter_pigs", "fattening_pigs"]:
+        if subtype in ["finishers", "slagtesvin", "slaughter_pigs", "fattening_pigs"]:
             fe_value, meta = lookup_pig_fe("slagtesvin", production_system)
             if fe_value is None:
                 logger.error(f"Failed to lookup standardfaktor for finishers: {meta}")
                 fe_value = 227.0  # Fallback
-            logger.debug(f"Finishers FE from standardfaktorer: {fe_value} (source: {meta.get('source', 'unknown')})")
+            logger.debug(
+                f"Finishers FE from standardfaktorer: {fe_value} (source: {meta.get('source', 'unknown')})"
+            )
             return (
                 "slagtesvin",
                 is_organic,
                 100.0,  # Average finisher weight (kg)
                 fe_value,  # FE per animal from standardfaktorer
             )
-        else:
-            # Default to finishers if unknown
-            logger.warning(f"Unknown pig subtype: {subtype}, defaulting to finishers")
-            fe_value, _ = lookup_pig_fe("slagtesvin", "conventional")
-            return ("slagtesvin", False, 100.0, fe_value or 227.0)
+        # Default to finishers if unknown
+        logger.warning(f"Unknown pig subtype: {subtype}, defaulting to finishers")
+        fe_value, _ = lookup_pig_fe("slagtesvin", "conventional")
+        return ("slagtesvin", False, 100.0, fe_value or 227.0)
 
     def _calculate_field_emissions(
-        self, field_summaries: List[FieldSummary], fertilizer_summary: FertilizerSummary,
-        cvr: str, year: int
-    ) -> Optional[EmissionCategory]:
+        self,
+        field_summaries: list[FieldSummary],
+        fertilizer_summary: FertilizerSummary,
+        cvr: str,
+        year: int,
+    ) -> EmissionCategory | None:
         """
         Calculate field emissions using formulas from formulas/marker/.
 
@@ -652,7 +688,7 @@ class FarmClimateCalculator:
         # Only if fertilizer data is available
         if fertilizer_summary is not None:
             try:
-                n2o_kg, n2o_co2e = goedning_og_nitrifikationshaemmer.calculate_n2o_goedning(
+                _n2o_kg, n2o_co2e = goedning_og_nitrifikationshaemmer.calculate_n2o_goedning(
                     n_total_kg_ha=fertilizer_summary.avg_n_kg_per_ha,
                     areal_ha=fertilizer_summary.total_area_ha,
                     goedningstype="handelsgoedning",
@@ -673,20 +709,23 @@ class FarmClimateCalculator:
             if not nles5_df.empty:
                 # Use actual calculated nitrogen washout values from NLES5 model
                 for _, row in nles5_df.iterrows():
-                    nitrogen_washout_kg_ha = row.get('nitrogen_washout_kg_ha', 0.0)
-                    area_ha = row.get('area_ha', 0.0)
+                    nitrogen_washout_kg_ha = row.get("nitrogen_washout_kg_ha", 0.0)
+                    area_ha = row.get("area_ha", 0.0)
 
                     if nitrogen_washout_kg_ha > 0 and area_ha > 0:
-                        n2o_kg, co2e_kg = nitratudvaskning.calculate_n2o_nitratudvaskning(
-                            t=nitrogen_washout_kg_ha,
-                            h=area_ha
+                        _n2o_kg, co2e_kg = nitratudvaskning.calculate_n2o_nitratudvaskning(
+                            t=nitrogen_washout_kg_ha, h=area_ha
                         )
                         n2o_leaching_total += co2e_kg
 
                 total_co2e += n2o_leaching_total
-                logger.debug(f"N2O from nitrate leaching (NLES5): {n2o_leaching_total:.1f} kg CO2e from {len(nles5_df)} fields")
+                logger.debug(
+                    f"N2O from nitrate leaching (NLES5): {n2o_leaching_total:.1f} kg CO2e from {len(nles5_df)} fields"
+                )
             else:
-                logger.debug(f"No NLES5 nitrogen data available for CVR {cvr}, year {year} - nitrate leaching = 0")
+                logger.debug(
+                    f"No NLES5 nitrogen data available for CVR {cvr}, year {year} - nitrate leaching = 0"
+                )
         except Exception as e:
             logger.warning(f"Failed to calculate nitrate leaching from NLES5 data: {e}")
 
@@ -697,21 +736,23 @@ class FarmClimateCalculator:
             if not lavbundsjord_df.empty:
                 # Use actual carbon percentage data from wetlands intersections
                 for _, row in lavbundsjord_df.iterrows():
-                    area_ha = row.get('area_ha', 0.0)
-                    carbon_pct = row.get('carbon_pct', '')
+                    area_ha = row.get("area_ha", 0.0)
+                    carbon_pct = row.get("carbon_pct", "")
 
-                    if area_ha > 0 and carbon_pct in ['6-12%', '>12%']:
+                    if area_ha > 0 and carbon_pct in ["6-12%", ">12%"]:
                         # Calculate emissions using actual formula
                         co2e_kg = organogene_jorde.calculate_co2_organogene_jorde(
                             h=area_ha,
                             i_omdrift=True,  # Assume in rotation (default conservative)
                             lav_vandstand=False,  # Assume normal water level
-                            kulstof_percentage=carbon_pct
+                            kulstof_percentage=carbon_pct,
                         )
                         lavbundsjord_total += co2e_kg
 
                 total_co2e += lavbundsjord_total
-                logger.debug(f"CO2 from lavbundsjord: {lavbundsjord_total:.1f} kg CO2e from {len(lavbundsjord_df)} intersections")
+                logger.debug(
+                    f"CO2 from lavbundsjord: {lavbundsjord_total:.1f} kg CO2e from {len(lavbundsjord_df)} intersections"
+                )
             else:
                 logger.debug(f"No lavbundsjord data available for CVR {cvr}, year {year}")
         except Exception as e:
@@ -738,7 +779,7 @@ class FarmClimateCalculator:
                 )
 
                 if result is not None:
-                    a_over, a_under, n_total, co2e = result
+                    a_over, a_under, _, co2e = result
                     crop_residue_total += co2e
                     crops_with_residues += 1
 
@@ -748,7 +789,9 @@ class FarmClimateCalculator:
                     # Default N from organic fertilizer (husdyrgødning) - use avg from fertilizer summary
                     # This is N from animal manure applied to fields
                     if fertilizer_summary is not None:
-                        n_hus_kg_ha = fertilizer_summary.avg_n_kg_per_ha * 0.3  # ~30% from organic sources
+                        n_hus_kg_ha = (
+                            fertilizer_summary.avg_n_kg_per_ha * 0.3
+                        )  # ~30% from organic sources
                     else:
                         # Default to 0 if no fertilizer data - conservative estimate
                         n_hus_kg_ha = 0.0
@@ -781,7 +824,9 @@ class FarmClimateCalculator:
             if total_area_ha > 0:
                 liming_total = kalkning.calculate_co2_kalkning_bedrift(total_area_ha)
                 total_co2e += liming_total
-                logger.debug(f"CO2 from liming: {liming_total:.1f} kg CO2e for {total_area_ha:.1f} ha")
+                logger.debug(
+                    f"CO2 from liming: {liming_total:.1f} kg CO2e for {total_area_ha:.1f} ha"
+                )
         except Exception as e:
             logger.warning(f"Failed to calculate liming emissions: {e}")
 
@@ -808,7 +853,9 @@ class FarmClimateCalculator:
         field_category = EmissionCategory(
             name="fields",
             co2e_kg=total_co2e,
-            data_quality="complete" if (nles5_df is not None and not nles5_df.empty) else "estimated",
+            data_quality="complete"
+            if (nles5_df is not None and not nles5_df.empty)
+            else "estimated",
             nh3_kg=nh3_fertilizer_total,
         )
 
@@ -831,8 +878,9 @@ class FarmClimateCalculator:
 
         return field_category
 
-
-    def _calculate_intensity_metrics(self, total_co2e_kg: float, farm_data: Dict[str, Any]) -> Dict[str, float]:
+    def _calculate_intensity_metrics(
+        self, total_co2e_kg: float, farm_data: dict[str, Any]
+    ) -> dict[str, float]:
         """
         Calculate intensity metrics (emissions per unit production).
 
@@ -857,7 +905,7 @@ class FarmClimateCalculator:
 
         return metrics
 
-    def _calculate_data_completeness(self, categories: List[EmissionCategory]) -> float:
+    def _calculate_data_completeness(self, categories: list[EmissionCategory]) -> float:
         """
         Calculate overall data completeness score.
 
@@ -920,11 +968,13 @@ if __name__ == "__main__":
 
         # Display results
         print(f"\n{'=' * 70}")
-        print(f"EMISSION REPORT")
+        print("EMISSION REPORT")
         print(f"{'=' * 70}")
         print(f"CVR: {report.cvr}")
         print(f"Year: {report.year}")
-        print(f"Total CO2e: {report.total_co2e_kg:,.1f} kg ({report.total_co2e_kg / 1000:.1f} tonnes)")
+        print(
+            f"Total CO2e: {report.total_co2e_kg:,.1f} kg ({report.total_co2e_kg / 1000:.1f} tonnes)"
+        )
         print(f"Data Completeness: {report.data_completeness:.1%}")
 
         print(f"\n{'Emission Categories':-^70}")

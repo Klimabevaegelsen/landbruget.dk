@@ -5,9 +5,10 @@ Tests that Python field emission formulas match reference implementation.
 Formula logic must match exactly; intentional GWP differences are documented.
 """
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -34,13 +35,14 @@ class TestNitrateLeachingCompliance:
         area = test_case["inputs"]["area_ha"]
 
         # Calculate using Python
-        n2o_kg, co2e_kg = nitratudvaskning.calculate_n2o_nitratudvaskning(typetal, area)
+        n2o_kg, _co2e_kg = nitratudvaskning.calculate_n2o_nitratudvaskning(typetal, area)
 
         # Verify intermediate N2O calculation matches C# exactly
         # This is GWP-independent - formula logic only
         expected_n2o = test_case["expected_outputs"]["n2o_kg"]
-        assert abs(n2o_kg - expected_n2o) < 0.01, \
+        assert abs(n2o_kg - expected_n2o) < 0.01, (
             f"N2O calculation mismatch: expected {expected_n2o}, got {n2o_kg}"
+        )
 
     @pytest.mark.compliance
     @pytest.mark.field
@@ -51,12 +53,13 @@ class TestNitrateLeachingCompliance:
         typetal = test_case["inputs"]["typetal_kg_n_per_ha"]
         area = test_case["inputs"]["area_ha"]
 
-        n2o_kg, co2e_kg = nitratudvaskning.calculate_n2o_nitratudvaskning(typetal, area)
+        _n2o_kg, co2e_kg = nitratudvaskning.calculate_n2o_nitratudvaskning(typetal, area)
 
         # Verify AR6 GWP is used
         expected_co2e_ar6 = test_case["expected_outputs"]["co2e_kg_gwp_ar6"]
-        assert abs(co2e_kg - expected_co2e_ar6) < 1.0, \
+        assert abs(co2e_kg - expected_co2e_ar6) < 1.0, (
             f"AR6 CO2e mismatch: expected {expected_co2e_ar6}, got {co2e_kg}"
+        )
 
         # Document difference from C# AR4 values
         expected_co2e_ar4 = test_case["expected_outputs"]["co2e_kg_gwp_ar4"]
@@ -81,8 +84,7 @@ class TestNitrateLeachingCompliance:
             total_n2o = 0.0
             for crop in test_case["inputs"]["crops"]:
                 n2o, _ = nitratudvaskning.calculate_n2o_nitratudvaskning(
-                    crop["typetal_kg_n_per_ha"],
-                    crop["area_ha"]
+                    crop["typetal_kg_n_per_ha"], crop["area_ha"]
                 )
                 total_n2o += n2o
 
@@ -91,8 +93,7 @@ class TestNitrateLeachingCompliance:
         else:
             # Single crop case
             n2o, _ = nitratudvaskning.calculate_n2o_nitratudvaskning(
-                test_case["inputs"]["typetal_kg_n_per_ha"],
-                test_case["inputs"]["area_ha"]
+                test_case["inputs"]["typetal_kg_n_per_ha"], test_case["inputs"]["area_ha"]
             )
 
             expected_n2o = test_case["expected_outputs"]["n2o_kg"]
@@ -124,8 +125,9 @@ class TestLimingCompliance:
         expected_co2 = test_case["expected_outputs"]["co2_kg"]
         tolerance = expected_co2 * test_case["tolerance_pct"] / 100
 
-        assert abs(co2_kg - expected_co2) <= tolerance, \
+        assert abs(co2_kg - expected_co2) <= tolerance, (
             f"Liming CO2 mismatch: expected {expected_co2:.2f}, got {co2_kg:.2f}"
+        )
 
 
 class TestCropResidueCompliance:
@@ -153,8 +155,9 @@ class TestCropResidueCompliance:
         above_ground = crop_yield * slope + intercept
 
         expected = test_case["expected_outputs"]["above_ground_kg_ts_ha"]
-        assert abs(above_ground - expected) < 0.1, \
+        assert abs(above_ground - expected) < 0.1, (
             f"Above-ground residue mismatch: expected {expected}, got {above_ground}"
+        )
 
     @pytest.mark.compliance
     @pytest.mark.field
@@ -172,8 +175,9 @@ class TestCropResidueCompliance:
         below_ground = (crop_yield + above_ground) * biomass_ratio
 
         expected = test_case["expected_outputs"]["below_ground_kg_ts_ha"]
-        assert abs(below_ground - expected) < 0.1, \
+        assert abs(below_ground - expected) < 0.1, (
             f"Below-ground residue mismatch: expected {expected}, got {below_ground}"
+        )
 
     @pytest.mark.compliance
     @pytest.mark.field
@@ -191,8 +195,9 @@ class TestCropResidueCompliance:
         n_with = test_with_straw["expected_outputs"]["n_above_kg_ha"]
         n_without = test_without_straw["expected_outputs"]["n_above_kg_ha"]
 
-        assert n_without < n_with, \
+        assert n_without < n_with, (
             "N content should be lower when straw is removed (not ploughed in)"
+        )
 
 
 class TestFormulaParity:
@@ -211,17 +216,17 @@ class TestFormulaParity:
         """
         n2o_total = kg_n_per_ha * 0.0075 * (44 / 28) * area_ha
         co2e = n2o_total * gwp
-        return {
-            "n2o": round(n2o_total, 2),
-            "co2e": round(co2e, 0)
-        }
+        return {"n2o": round(n2o_total, 2), "co2e": round(co2e, 0)}
 
     @pytest.mark.compliance
-    @pytest.mark.parametrize("typetal,area,gwp_ar6_n2o", [
-        (63.0, 100.0, 273),   # Spring barley
-        (74.0, 100.0, 273),   # Sunflower
-        (33.0, 50.0, 273),    # Half area test
-    ])
+    @pytest.mark.parametrize(
+        "typetal,area,gwp_ar6_n2o",
+        [
+            (63.0, 100.0, 273),  # Spring barley
+            (74.0, 100.0, 273),  # Sunflower
+            (33.0, 50.0, 273),  # Half area test
+        ],
+    )
     def test_formula_parity_with_ar6(self, typetal, area, gwp_ar6_n2o):
         """Python should match C# formula when using same GWP."""
         # C# logic with AR6 GWP
@@ -231,9 +236,11 @@ class TestFormulaParity:
         python_n2o, python_co2e = nitratudvaskning.calculate_n2o_nitratudvaskning(typetal, area)
 
         # N2O should match exactly (GWP-independent)
-        assert abs(python_n2o - csharp_result["n2o"]) < 0.01, \
+        assert abs(python_n2o - csharp_result["n2o"]) < 0.01, (
             f"N2O mismatch: C#={csharp_result['n2o']}, Python={python_n2o}"
+        )
 
         # CO2e should match when using same GWP
-        assert abs(python_co2e - csharp_result["co2e"]) < 10, \
+        assert abs(python_co2e - csharp_result["co2e"]) < 10, (
             f"CO2e mismatch: C#={csharp_result['co2e']}, Python={python_co2e}"
+        )

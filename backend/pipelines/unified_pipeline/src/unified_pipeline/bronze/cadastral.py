@@ -6,7 +6,7 @@ import time
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
 from datetime import datetime
-from typing import Optional
+from typing import ClassVar
 
 import aiohttp
 from dotenv import load_dotenv
@@ -43,7 +43,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )
-    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
+    headers: ClassVar[dict[str, str]] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
     request_semaphore: Semaphore = Semaphore(max_concurrent)
     type: str = "wfs"
     url: str = "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS"
@@ -141,7 +141,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
         try:
             if os.path.exists(self.checkpoint_file):
-                with open(self.checkpoint_file, "r") as f:
+                with open(self.checkpoint_file) as f:
                     checkpoint_data = json.load(f)
 
                 # Check if checkpoint is recent (within 6 hours)
@@ -150,9 +150,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                         f"Resuming from checkpoint: {checkpoint_data['total_processed']:,} features"
                     )
                     return checkpoint_data
-                else:
-                    self.log.info("Checkpoint too old, starting fresh")
-                    os.remove(self.checkpoint_file)
+                self.log.info("Checkpoint too old, starting fresh")
+                os.remove(self.checkpoint_file)
 
         except Exception as e:
             self.log.warning(f"Failed to load checkpoint: {e}")
@@ -227,7 +226,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                         continue
 
                 except Exception as e:
-                    logger.warning(f"Error creating polygon WKT: {str(e)}")
+                    logger.warning(f"Error creating polygon WKT: {e!s}")
                     continue
 
             if not polygon_wkts:
@@ -244,7 +243,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             return final_wkt
 
         except Exception as e:
-            logger.error(f"Error parsing geometry: {str(e)}")
+            logger.error(f"Error parsing geometry: {e!s}")
             return None
 
     def _parse_feature(self, feature_elem):
@@ -266,7 +265,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                         if value is not None:
                             feature[db_field] = converter(value)
                     except (ValueError, TypeError) as e:
-                        logger.warning(f"Error converting field {xml_field}: {str(e)}")
+                        logger.warning(f"Error converting field {xml_field}: {e!s}")
                         continue
 
             # Parse geometry
@@ -287,7 +286,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             return feature if feature.get("bfe_number") and feature.get("geometry") else None
 
         except Exception as e:
-            logger.error(f"Error parsing feature: {str(e)}")
+            logger.error(f"Error parsing feature: {e!s}")
             return None
 
     async def _wait_for_rate_limit(self):
@@ -361,7 +360,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                     return features
 
             except Exception as e:
-                self.log.error(f"Error fetching chunk at index {start_index}: {str(e)}")
+                self.log.error(f"Error fetching chunk at index {start_index}: {e!s}")
                 raise
 
     async def _parse_features(self):
@@ -464,7 +463,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                                 )
 
                     except Exception as e:
-                        logger.error(f"Error processing batch at {start_index}: {str(e)}")
+                        logger.error(f"Error processing batch at {start_index}: {e!s}")
                         failed_chunks.append(start_index)
                         continue
 
@@ -491,7 +490,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
         except Exception as e:
             self.is_sync_complete = False
-            logger.error(f"Error in sync: {str(e)}")
+            logger.error(f"Error in sync: {e!s}")
             raise
 
     async def _get_total_count(self, session):
@@ -552,10 +551,10 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 return total_available
 
         except Exception as e:
-            self.log.error(f"Error getting total count: {str(e)}")
+            self.log.error(f"Error getting total count: {e!s}")
             raise
 
-    async def run(self) -> Optional[list]:
+    async def run(self) -> list | None:
         """
         Run the complete Cadastral bronze layer job.
 

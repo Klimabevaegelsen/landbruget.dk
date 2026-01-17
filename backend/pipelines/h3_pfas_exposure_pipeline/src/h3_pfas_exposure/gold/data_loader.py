@@ -168,10 +168,9 @@ class H3DataLoader:
         """Get list of years for which both pesticide and field data are available."""
         self.log.info("🔍 Checking data availability for all years")
 
-        available_years = []
-        for year in self.config.available_years:
-            if self._check_year_data_availability(year):
-                available_years.append(year)
+        available_years = [
+            year for year in self.config.available_years if self._check_year_data_availability(year)
+        ]
 
         if available_years:
             self.log.info(f"✅ Found data for {len(available_years)} years: {available_years}")

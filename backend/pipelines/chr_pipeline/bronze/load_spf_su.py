@@ -9,15 +9,18 @@ for pig herds (species_code = 15).
 import asyncio
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
+
 from bronze.export import save_raw_data
 
 logger = logging.getLogger(__name__)
 
 
-async def load_spf_su_data(pig_herd_numbers: List[int], max_workers: int = None) -> List[Dict[str, Any]]:
+async def load_spf_su_data(
+    pig_herd_numbers: list[int], max_workers: int | None = None
+) -> list[dict[str, Any]]:
     """
     Load SPF-SU data for individual pig herd numbers.
 
@@ -33,7 +36,9 @@ async def load_spf_su_data(pig_herd_numbers: List[int], max_workers: int = None)
 
     logger.info(f"Starting SPF-SU data collection for {len(pig_herd_numbers)} pig herd numbers")
     logger.info(f"Using {max_workers} concurrent workers for rate limiting")
-    logger.info(f"⏱️ Estimated time: {len(pig_herd_numbers) * 2 / 60:.1f} minutes at 30 requests/minute")
+    logger.info(
+        f"⏱️ Estimated time: {len(pig_herd_numbers) * 2 / 60:.1f} minutes at 30 requests/minute"
+    )
 
     results = []
     successful_requests = 0
@@ -56,13 +61,19 @@ async def load_spf_su_data(pig_herd_numbers: List[int], max_workers: int = None)
                 if result:
                     results.append(result)
                     successful_requests += 1
-                    logger.debug(f"✅ Successfully processed herd {result.get('herdNumber', 'unknown')}")
+                    logger.debug(
+                        f"✅ Successfully processed herd {result.get('herdNumber', 'unknown')}"
+                    )
                 # Progress logging - scale frequency based on total count
-                progress_interval = max(100, len(pig_herd_numbers) // 20)  # Show ~20 progress updates total
+                progress_interval = max(
+                    100, len(pig_herd_numbers) // 20
+                )  # Show ~20 progress updates total
                 if i % progress_interval == 0 or i == len(pig_herd_numbers):
                     # Get current counts from function attributes
                     current_not_found = getattr(_fetch_spf_su_for_herd, "not_found_count", 0)
-                    current_errors = sum(getattr(_fetch_spf_su_for_herd, "error_counts", {}).values())
+                    current_errors = sum(
+                        getattr(_fetch_spf_su_for_herd, "error_counts", {}).values()
+                    )
 
                     success_rate = (successful_requests / i) * 100
                     logger.warning(
@@ -100,7 +111,7 @@ async def load_spf_su_data(pig_herd_numbers: List[int], max_workers: int = None)
 
 async def _fetch_spf_su_for_herd(
     session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, herd_number: int
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Fetch SPF-SU data for a specific herd number using the individual herd endpoint.
 
@@ -126,76 +137,79 @@ async def _fetch_spf_su_for_herd(
                     data = await response.json()
 
                     # Save raw data
-                    save_raw_data(raw_response=data, data_type="spf_su_herds", identifier=str(herd_number))
+                    save_raw_data(
+                        raw_response=data, data_type="spf_su_herds", identifier=str(herd_number)
+                    )
 
                     logger.debug(f"Successfully fetched SPF-SU data for herd {herd_number}")
                     return data
 
-                elif response.status == 404:
+                if response.status == 404:
                     logger.debug(f"No SPF-SU data available for herd {herd_number}")
                     # Track 404s separately for statistics
                     if not hasattr(_fetch_spf_su_for_herd, "not_found_count"):
                         _fetch_spf_su_for_herd.not_found_count = 0
                     _fetch_spf_su_for_herd.not_found_count += 1
                     return None
-                else:
-                    # Enhanced error logging for debugging - but limit detailed logs to avoid spam
-                    response_text = await response.text()
+                # Enhanced error logging for debugging - but limit detailed logs to avoid spam
+                response_text = await response.text()
 
-                    # Always log the basic error
+                # Always log the basic error
+                logger.warning(
+                    f"HTTP {response.status} for herd {herd_number}: "
+                    f"{response_text[:200]}{'...' if len(response_text) > 200 else ''}"
+                )
+
+                # Only log full details for first 3 errors of each status code to avoid spam
+                if not hasattr(_fetch_spf_su_for_herd, "error_counts"):
+                    _fetch_spf_su_for_herd.error_counts = {}
+
+                status_code = response.status
+                if status_code not in _fetch_spf_su_for_herd.error_counts:
+                    _fetch_spf_su_for_herd.error_counts[status_code] = 0
+
+                _fetch_spf_su_for_herd.error_counts[status_code] += 1
+
+                # Log detailed info only for first 3 occurrences of each error type
+                if _fetch_spf_su_for_herd.error_counts[status_code] <= 3:
                     logger.warning(
-                        f"HTTP {response.status} for herd {herd_number}: "
-                        f"{response_text[:200]}{'...' if len(response_text) > 200 else ''}"
+                        f"  Detailed error info for HTTP {status_code} "
+                        f"(occurrence #{_fetch_spf_su_for_herd.error_counts[status_code]}):"
+                    )
+                    logger.warning(f"  URL: {url}")
+                    logger.warning(f"  Response headers: {dict(response.headers)}")
+                    logger.warning(
+                        f"  Response content-type: {response.headers.get('content-type', 'unknown')}"
+                    )
+                    logger.warning(
+                        f"  Response content-length: {response.headers.get('content-length', 'unknown')}"
+                    )
+                    logger.warning(f"  Full response text: {response_text}")
+
+                    # Try to parse response text as JSON to get more structured error info
+                    try:
+                        import json
+
+                        json_response = json.loads(response_text)
+                        logger.warning(f"  Parsed JSON response: {json_response}")
+                    except json.JSONDecodeError:
+                        logger.warning("  Response is not valid JSON")
+                elif _fetch_spf_su_for_herd.error_counts[status_code] == 4:
+                    logger.warning(
+                        f"  (Suppressing further detailed logs for HTTP {status_code} errors to avoid spam)"
                     )
 
-                    # Only log full details for first 3 errors of each status code to avoid spam
-                    if not hasattr(_fetch_spf_su_for_herd, "error_counts"):
-                        _fetch_spf_su_for_herd.error_counts = {}
-
-                    status_code = response.status
-                    if status_code not in _fetch_spf_su_for_herd.error_counts:
-                        _fetch_spf_su_for_herd.error_counts[status_code] = 0
-
-                    _fetch_spf_su_for_herd.error_counts[status_code] += 1
-
-                    # Log detailed info only for first 3 occurrences of each error type
-                    if _fetch_spf_su_for_herd.error_counts[status_code] <= 3:
-                        logger.warning(
-                            f"  Detailed error info for HTTP {status_code} "
-                            f"(occurrence #{_fetch_spf_su_for_herd.error_counts[status_code]}):"
-                        )
-                        logger.warning(f"  URL: {url}")
-                        logger.warning(f"  Response headers: {dict(response.headers)}")
-                        logger.warning(f"  Response content-type: {response.headers.get('content-type', 'unknown')}")
-                        logger.warning(
-                            f"  Response content-length: {response.headers.get('content-length', 'unknown')}"
-                        )
-                        logger.warning(f"  Full response text: {response_text}")
-
-                        # Try to parse response text as JSON to get more structured error info
-                        try:
-                            import json
-
-                            json_response = json.loads(response_text)
-                            logger.warning(f"  Parsed JSON response: {json_response}")
-                        except json.JSONDecodeError:
-                            logger.warning("  Response is not valid JSON")
-                    elif _fetch_spf_su_for_herd.error_counts[status_code] == 4:
-                        logger.warning(
-                            f"  (Suppressing further detailed logs for HTTP {status_code} errors to avoid spam)"
-                        )
-
-                    return None
+                return None
 
         except Exception as e:
             logger.error(f"Error fetching SPF-SU data for herd {herd_number}: {e}")
             logger.error(f"  URL attempted: {url}")
             logger.error(f"  Exception type: {type(e).__name__}")
-            logger.error(f"  Exception details: {str(e)}")
+            logger.error(f"  Exception details: {e!s}")
             return None
 
 
-def get_pig_herd_numbers(herd_to_species: Dict[int, int]) -> List[int]:
+def get_pig_herd_numbers(herd_to_species: dict[int, int]) -> list[int]:
     """
     Extract herd numbers that are pig herds (species_code = 15).
 
@@ -211,7 +225,9 @@ def get_pig_herd_numbers(herd_to_species: Dict[int, int]) -> List[int]:
         if species_code == 15:  # 15 is the species code for pigs
             pig_herd_numbers.append(herd_number)
 
-    logger.info(f"Found {len(pig_herd_numbers)} pig herd numbers out of {len(herd_to_species)} total herds")
+    logger.info(
+        f"Found {len(pig_herd_numbers)} pig herd numbers out of {len(herd_to_species)} total herds"
+    )
     return pig_herd_numbers
 
 

@@ -1,7 +1,7 @@
 """Module for loading CHR Ejendom data (Properties) - Bronze Layer."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from zeep import Client
 
@@ -16,7 +16,9 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_ejendom")
 # --- Generic SOAP Fetcher ---
 
 
-def fetch_raw_soap_response(client: Client, operation_name: str, request_data: Dict) -> Optional[Any]:
+def fetch_raw_soap_response(
+    client: Client, operation_name: str, request_data: dict
+) -> Any | None:
     """Fetch raw response from a SOAP endpoint using Zeep."""
     try:
         operation = getattr(client.service, operation_name)
@@ -35,7 +37,7 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
 # --- Ejendom Loading Functions ---
 
 
-def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> Optional[Any]:
+def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> Any | None:
     """Load property details (EjendomsOplysninger) using the 'hentOplysninger' operation."""
     logger.info(f"Fetching property details for CHR: {chr_number}...")
 
@@ -54,11 +56,13 @@ def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> 
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
         # Save the raw response
-        save_raw_data(raw_response=response, data_type="ejendom_oplysninger", identifier=f"{chr_number}")
+        save_raw_data(
+            raw_response=response, data_type="ejendom_oplysninger", identifier=f"{chr_number}"
+        )
     return response
 
 
-def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> Optional[Any]:
+def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> Any | None:
     """Load veterinary events (VeterinaereHaendelser) using the 'hentVeterinaereHaendelser' operation."""
     logger.info(f"Fetching veterinary events for CHR: {chr_number}...")
 
@@ -74,7 +78,9 @@ def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> O
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
         # Save the raw response
-        save_raw_data(raw_response=response, data_type="ejendom_vet_events", identifier=f"{chr_number}")
+        save_raw_data(
+            raw_response=response, data_type="ejendom_vet_events", identifier=f"{chr_number}"
+        )
     return response
 
 

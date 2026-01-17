@@ -8,7 +8,7 @@ for the companies, processing them in batches for parallel execution.
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -37,11 +37,11 @@ class FinancialDocumentsConfig(BaseJobConfig):
     )
 
     # Financial documents specific configuration
-    batch_number: Optional[int] = Field(
+    batch_number: int | None = Field(
         default=None, description="Batch number for parallel processing (1-based)"
     )
 
-    total_batches: Optional[int] = Field(
+    total_batches: int | None = Field(
         default=None, description="Total number of batches in this step"
     )
 
@@ -57,7 +57,7 @@ class FinancialDocumentsConfig(BaseJobConfig):
         default=True, description="Whether to fetch only XML documents (not other formats)"
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
@@ -117,7 +117,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         self.log.info(f"   • XML only: {self.config.xml_only}")
 
     @timed(name="Financial documents processing")
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> str:
         """
         Run the financial documents fetching process.
 
@@ -163,7 +163,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             raise
 
     @timed(name="Loading company batch")
-    def _load_company_batch(self) -> List[Dict[str, Any]]:
+    def _load_company_batch(self) -> list[dict[str, Any]]:
         """
         Load company data for this batch from company fetching step output.
 
@@ -196,8 +196,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     f"{self.config.shared_config.max_days_back_for_inputs} days. "
                     f"Please run the company fetching step first or disable independent execution."
                 )
-            else:
-                raise ValueError("No input paths found for financial documents step")
+            raise ValueError("No input paths found for financial documents step")
 
         all_companies = []
 
@@ -245,32 +244,31 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     # In GitHub Actions, we only need to process the artifact once
                     break
 
-                else:
-                    # Use GCS temp download for local development
-                    self.log.info(f"Local development - downloading from GCS: {input_path}")
-                    with self.gcs_access._temp_download(input_path) as temp_file:
-                        # Load company data from temp file
-                        result = self.conn.execute(
-                            """
+                # Use GCS temp download for local development
+                self.log.info(f"Local development - downloading from GCS: {input_path}")
+                with self.gcs_access._temp_download(input_path) as temp_file:
+                    # Load company data from temp file
+                    result = self.conn.execute(
+                        """
                             SELECT cvr_number, company_name, company_data_json
                             FROM read_parquet(?)
                             WHERE company_data_json IS NOT NULL
                         """,
-                            [temp_file],
-                        ).fetchall()
+                        [temp_file],
+                    ).fetchall()
 
-                        # Parse company JSON data inside the context manager
-                        for cvr_number, company_name, company_json in result:
-                            try:
-                                company_data = json.loads(company_json)
-                                company_data["cvr_number"] = cvr_number
-                                company_data["company_name"] = company_name
-                                all_companies.append(company_data)
-                            except json.JSONDecodeError as e:
-                                self.log.warning(
-                                    f"Failed to parse company data for CVR {cvr_number}: {e}"
-                                )
-                                continue
+                    # Parse company JSON data inside the context manager
+                    for cvr_number, company_name, company_json in result:
+                        try:
+                            company_data = json.loads(company_json)
+                            company_data["cvr_number"] = cvr_number
+                            company_data["company_name"] = company_name
+                            all_companies.append(company_data)
+                        except json.JSONDecodeError as e:
+                            self.log.warning(
+                                f"Failed to parse company data for CVR {cvr_number}: {e}"
+                            )
+                            continue
 
             except Exception as e:
                 self.log.error(f"Failed to load company data from {input_path}: {e}")
@@ -283,7 +281,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         return company_batch
 
     @timed(name="Validating CVR consistency")
-    def _validate_cvr_consistency(self, company_batch: List[Dict[str, Any]]) -> None:
+    def _validate_cvr_consistency(self, company_batch: list[dict[str, Any]]) -> None:
         """
         Validate that this step is processing companies from the same pipeline run.
 
@@ -340,7 +338,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self.log.warning("This may indicate independent execution mode is enabled")
 
         # Log success
-        run_id = list(pipeline_run_ids)[0] if pipeline_run_ids else "unknown"
+        run_id = next(iter(pipeline_run_ids)) if pipeline_run_ids else "unknown"
         self.log.info("✅ CVR consistency validation passed:")
         self.log.info(f"   • Companies from pipeline run: {run_id}")
         self.log.info(f"   • Total companies: {len(company_batch)}")
@@ -349,8 +347,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
     @timed(name="Fetching financial documents")
     async def _fetch_financial_documents(
-        self, company_batch: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, company_batch: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Fetch financial documents for companies.
 
@@ -430,8 +428,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         }
 
     def _download_and_parse_xml_documents(
-        self, docs: List[Dict[str, Any]], cvr_number: str
-    ) -> List[Dict[str, Any]]:
+        self, docs: list[dict[str, Any]], cvr_number: str
+    ) -> list[dict[str, Any]]:
         """
         Download and parse XML financial documents.
 
@@ -673,7 +671,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             return {"parse_error": str(e)}
 
     @timed(name="Processing financial data")
-    def _process_financial_data(self, financial_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_financial_data(self, financial_data: dict[str, Any]) -> dict[str, Any]:
         """
         Process and structure financial documents data.
 
@@ -690,7 +688,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         # Process each company's financial data
         processed_financial = []
 
-        for cvr_number, company_financial in financial_results.items():
+        for company_financial in financial_results.values():
             # Add processing metadata
             company_financial["processing_timestamp"] = datetime.now().isoformat()
             company_financial["pipeline_run_id"] = self.date_pattern
@@ -751,7 +749,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         return processed_data
 
     @timed(name="Saving financial data")
-    def _save_financial_data(self, processed_data: Dict[str, Any]) -> str:
+    def _save_financial_data(self, processed_data: dict[str, Any]) -> str:
         """
         Save processed financial documents data to GCS using batch processing to avoid memory
         issues. Now creates both document metadata table AND comprehensive financial table.
@@ -1433,7 +1431,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
         return metadata_table  # Return metadata table for compatibility
 
-    def _save_summary_data(self, summary: Dict[str, Any]) -> None:
+    def _save_summary_data(self, summary: dict[str, Any]) -> None:
         """Save processing summary data."""
         # No batching - single summary file
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/financial_summary.json"
@@ -1444,7 +1442,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
         self.log.info(f"Saved processing summary to {summary_path}")
 
-    def _process_employment_data_directly(self, companies_data: List[Dict]) -> None:
+    def _process_employment_data_directly(self, companies_data: list[dict]) -> None:
         """
         Process employment data directly to parquet files.
         Moved from data_consolidation.py to eliminate memory bottleneck.
@@ -1507,7 +1505,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self._process_employment_type_batched(companies_data, employment_field, table_suffix)
 
     def _process_employment_type_batched(
-        self, companies_data: List[Dict], employment_field: str, table_suffix: str
+        self, companies_data: list[dict], employment_field: str, table_suffix: str
     ):
         """Process one employment type in batches and save directly."""
         batch_size = 500  # Small batches to avoid memory accumulation
@@ -1562,8 +1560,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self.log.info(f"No {employment_field} records found")
 
     def _extract_employment_records(
-        self, companies: List[Dict], employment_field: str
-    ) -> List[Dict]:
+        self, companies: list[dict], employment_field: str
+    ) -> list[dict]:
         """Extract employment records from company data for a specific employment type."""
         employment_records = []
 
@@ -1620,7 +1618,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         return employment_records
 
     def _save_employment_batch(
-        self, employment_records: List[Dict], table_name: str, is_first_batch: bool
+        self, employment_records: list[dict], table_name: str, is_first_batch: bool
     ) -> int:
         """Save employment records batch to DuckDB table."""
         if not employment_records:

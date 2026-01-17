@@ -13,6 +13,7 @@ All methods maintain the exact same functionality and cleanup strategies
 from the original implementation.
 """
 
+import contextlib
 import gc
 import os
 
@@ -43,8 +44,7 @@ class NLES5MemoryUtils:
         try:
             process = psutil.Process()
             memory_info = process.memory_info()
-            memory_gb = memory_info.rss / (1024**3)  # Convert bytes to GB
-            return memory_gb
+            return memory_info.rss / (1024**3)  # Convert bytes to GB
         except Exception as e:
             self.log.debug(f"Could not get memory usage: {e}")
             return 0.0
@@ -82,11 +82,9 @@ class NLES5MemoryUtils:
             initial_memory = self._get_memory_usage()
 
             # Close any temporary database connections
-            try:
-                # Force garbage collection
+            # Force garbage collection
+            with contextlib.suppress(Exception):
                 gc.collect()
-            except Exception:
-                pass
 
             # Clean up temporary files
             self.processor._cleanup_temp_files()
@@ -104,10 +102,8 @@ class NLES5MemoryUtils:
             ]
 
             for table in temp_tables_to_drop:
-                try:
+                with contextlib.suppress(Exception):
                     self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except Exception:
-                    pass  # Table might not exist
 
             # Force another garbage collection
             gc.collect()
@@ -169,10 +165,8 @@ class NLES5MemoryUtils:
                 # Drop exact matches
                 for table in target_year_tables:
                     if "*" not in table:
-                        try:
+                        with contextlib.suppress(Exception):
                             self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                        except Exception:
-                            pass
 
             except Exception as e:
                 self.log.debug(f"Could not list tables for cleanup: {e}")
@@ -231,7 +225,7 @@ class NLES5MemoryUtils:
                         ):
                             # Keep year-specific enhanced mappings
                             continue
-                        elif any(
+                        if any(
                             temp_marker in table_name
                             for temp_marker in [
                                 "_temp",
@@ -343,7 +337,7 @@ class NLES5MemoryUtils:
             self.log.info(f"🔍 CLEANUP: Starting temp file cleanup in {temp_dir}")
 
             # Remove temporary files
-            for root, dirs, files in os.walk(temp_dir):
+            for root, _dirs, files in os.walk(temp_dir):
                 for file in files:
                     file_path = os.path.join(root, file)
 
@@ -494,11 +488,10 @@ class NLES5MemoryUtils:
                         f"need {required_gb:.1f} GB, "
                         f"have {available_memory:.1f} GB available after cleanup"
                     )
-                else:
-                    self.log.info(
-                        f"✅ Memory available for {operation_name}: "
-                        f"{available_memory:.1f} GB after cleanup"
-                    )
+                self.log.info(
+                    f"✅ Memory available for {operation_name}: "
+                    f"{available_memory:.1f} GB after cleanup"
+                )
             else:
                 self.log.debug(
                     f"✅ Sufficient memory for {operation_name}: "

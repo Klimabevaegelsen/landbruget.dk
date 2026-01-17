@@ -3,7 +3,7 @@
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.log_util import Logger
@@ -139,7 +139,7 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.log.info(f"✅ Loaded {count:,} rows into table {table_name}")
 
-    def _get_input_area_reference(self) -> Optional[Dict[str, Any]]:
+    def _get_input_area_reference(self) -> dict[str, Any] | None:
         """
         Get reference area statistics from input data for validation.
         Should be overridden by stages that need validation.
@@ -149,7 +149,7 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         """
         return None
 
-    def _get_main_output_table(self) -> Optional[str]:
+    def _get_main_output_table(self) -> str | None:
         """
         Get the name of the main output table for area validation.
         Should be overridden by stages that need validation.
@@ -171,12 +171,9 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
         # Stage 2: Filtering stages intentionally reduce dataset size
         # (only fields with intersections)
-        if self.stage_name.startswith("Stage 2"):
-            return False
-
         # All other stages should preserve area
         # (Stage 1: enrichment, Stage 3: analysis, Stage 4: consolidation)
-        return True
+        return not self.stage_name.startswith("Stage 2")
 
     def _validate_stage_areas(self) -> None:
         """Validate areas after stage processing if validation is enabled."""
@@ -208,23 +205,21 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
             if not validation_result.is_valid:
                 if self.validation_config.fail_on_validation_error:
                     raise ValidationError(validation_result)
-                else:
-                    msg = (
-                        f"⚠️ Area validation failed but continuing: "
-                        f"{validation_result.validation_message}"
-                    )
-                    self.log.warning(msg)
+                msg = (
+                    f"⚠️ Area validation failed but continuing: "
+                    f"{validation_result.validation_message}"
+                )
+                self.log.warning(msg)
 
         except ValidationError:
             raise  # Re-raise validation exceptions
         except Exception as e:
-            error_msg = f"❌ Area validation error for {self.stage_name}: {str(e)}"
+            error_msg = f"❌ Area validation error for {self.stage_name}: {e!s}"
             if self.validation_config.fail_on_validation_error:
                 raise RuntimeError(error_msg) from e
-            else:
-                self.log.warning(f"⚠️ {error_msg} - continuing anyway")
+            self.log.warning(f"⚠️ {error_msg} - continuing anyway")
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute the stage processing."""
         self.start_time = time.time()
         self.log.info(f"🚀 Starting {self.stage_name}")
@@ -259,11 +254,11 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         pass
 
     @abstractmethod
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """Execute the main processing logic for this stage."""
         pass
 
     @abstractmethod
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save the output data from this stage."""
         pass

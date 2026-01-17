@@ -1,7 +1,7 @@
 """PII (Personally Identifiable Information) validator for Silver layer using DuckDB."""
 
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 # Handle imports for both standalone and package usage
 try:
@@ -47,7 +47,7 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
     """Validator for detecting and handling PII using DuckDB."""
 
     # Regular expressions for different PII types
-    PII_PATTERNS = {
+    PII_PATTERNS: ClassVar[dict[PIIType, str]] = {
         PIIType.EMAIL: r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
         # Danish phone: ONLY with +45 country code to avoid false positives with dates/other numbers
         PIIType.PHONE: r"\b\+45[ -]?\d{2}[ -]?\d{2}[ -]?\d{2}[ -]?\d{2}\b",
@@ -59,10 +59,10 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
 
     def __init__(
         self,
-        pii_types: set[PIIType] = None,
+        pii_types: set[PIIType] | None = None,
         action: PIIAction = PIIAction.REPORT,
         threshold: float = 0.3,
-        column_name_hints: dict[PIIType, list[str]] = None,
+        column_name_hints: dict[PIIType, list[str]] | None = None,
     ) -> None:
         """Initialize the PII validator.
 
@@ -235,7 +235,7 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
                             )
 
                     except Exception as e:
-                        logger.debug(f"Error checking column '{col_name}' for PII: {str(e)}")
+                        logger.debug(f"Error checking column '{col_name}' for PII: {e!s}")
 
             # Mark as invalid if PII is found
             if pii_columns and self.action != PIIAction.REPORT:
@@ -251,7 +251,7 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
             logger.info(f"PII validation completed. Found PII in {len(pii_columns)} column types")
 
         except Exception as e:
-            self.add_error(result, f"PII validation failed: {str(e)}")
+            self.add_error(result, f"PII validation failed: {e!s}")
 
         return result
 
@@ -325,11 +325,10 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
                     f"Applied PII handling ({self.action.value}) to create table {handled_table}"
                 )
                 return handled_table
-            else:
-                # All columns were deleted
-                logger.warning("All columns contained PII and were deleted")
-                return source_table
+            # All columns were deleted
+            logger.warning("All columns contained PII and were deleted")
+            return source_table
 
         except Exception as e:
-            logger.error(f"Failed to handle PII: {str(e)}")
+            logger.error(f"Failed to handle PII: {e!s}")
             return source_table if isinstance(table_name_or_data, str) else "pii_handling_data"

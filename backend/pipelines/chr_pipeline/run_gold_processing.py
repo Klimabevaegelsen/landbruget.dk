@@ -36,7 +36,9 @@ def setup_logging(log_level: str):
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
     logging.basicConfig(
-        level=numeric_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        level=numeric_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
 
@@ -67,7 +69,11 @@ Examples:
         help="Logging level (default: INFO)",
     )
 
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without actually running")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be processed without actually running",
+    )
 
     args = parser.parse_args()
 
@@ -109,9 +115,8 @@ Examples:
             logger.info("   - veterinary_timeline.parquet (main timeline)")
             logger.info("   - timeline_summary.parquet (summary statistics)")
             return 0
-        else:
-            logger.error("❌ Gold processing failed")
-            return 1
+        logger.error("❌ Gold processing failed")
+        return 1
 
     except Exception as e:
         logger.error(f"❌ Error during gold processing: {e}", exc_info=True)

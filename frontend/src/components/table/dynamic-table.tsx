@@ -124,12 +124,12 @@ export function DynamicDataTable<TData, TValue>({
   });
 
   return (
-    <div className="">
+    <div className="" data-testid="dynamic-table">
       {/* Year Filter and Search Controls */}
       {(yearFilter?.enabled || filterable) && (
-        <div className="flex items-center gap-4 py-4">
+        <div className="flex items-center gap-4 py-4" data-testid="table-controls">
           {yearFilter?.enabled && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" data-testid="year-filter">
               <span className="text-sm font-medium">År:</span>
               <div className="flex gap-1">
                 {yearFilter.availableYears.map((year) => (
@@ -141,6 +141,7 @@ export function DynamicDataTable<TData, TValue>({
                     size="sm"
                     onClick={() => yearFilter.onYearChange?.(year)}
                     className="h-8 px-3 text-xs"
+                    data-testid={`year-button-${year}`}
                   >
                     {year}
                   </Button>
@@ -154,6 +155,7 @@ export function DynamicDataTable<TData, TValue>({
               value={globalFilter ?? ''}
               onChange={(e) => table.setGlobalFilter(String(e.target.value))}
               className="max-w-sm"
+              data-testid="table-filter-input"
             />
           )}
         </div>
@@ -163,14 +165,15 @@ export function DynamicDataTable<TData, TValue>({
           'rounded border border-slate-300',
           rowCount > 10 && 'min-h-[575px]'
         )}
+        data-testid="table-container"
       >
         <Table>
-          <TableHeader className="">
+          <TableHeader className="" data-testid="table-header">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead key={header.id} data-testid={`table-header-${header.id}`}>
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -183,13 +186,14 @@ export function DynamicDataTable<TData, TValue>({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
+          <TableBody data-testid="table-body">
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row, index) => (
                 <TableRow
                   index={index}
                   key={row.id}
                   data-state={row.getIsSelected() && 'selected'}
+                  data-testid={`table-row-${index}`}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const columnDef = cell.column.columnDef as ColumnDef<
@@ -213,7 +217,7 @@ export function DynamicDataTable<TData, TValue>({
                 </TableRow>
               ))
             ) : (
-              <TableRow>
+              <TableRow data-testid="table-no-results">
                 <TableCell
                   colSpan={columns.length}
                   className="h-24 text-center"
@@ -225,7 +229,7 @@ export function DynamicDataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {rowCount > 10 && <DataTablePagination table={table} />}
+      {rowCount > 10 && <DataTablePagination table={table} data-testid="table-pagination" />}
     </div>
   );
 }

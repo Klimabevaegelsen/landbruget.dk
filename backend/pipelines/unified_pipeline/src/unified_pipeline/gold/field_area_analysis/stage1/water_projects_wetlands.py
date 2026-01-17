@@ -6,7 +6,7 @@ This creates a foundation dataset for later field-level analysis.
 Optimized for DuckDB Spatial v1.2.2 with ST_Dump for multipolygon decomposition.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import duckdb
 
@@ -113,7 +113,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             f"{wetlands_count * projects_count:,} potential combinations"
         )
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Create wetland-water project intersection foundation data for Stage 3B.
 
@@ -351,7 +351,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             "batches_processed": num_batches,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save intersection records for later stages to use."""
         # Save detailed intersection records for Stage 3B to use
         self._save_stage_output(
@@ -460,15 +460,16 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     )
 
             # Test coordinate transformation manually
+            # always_xy := true ensures GeoJSON-standard (lon, lat) coordinate order
             self.log.info("🧪 Testing manual coordinate transformation:")
             try:
                 test_result = conn.execute("""
                     SELECT
-                        ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')
+                        ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326', always_xy := true)
                             as transformed_point,
-                        ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326'))
+                        ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326', always_xy := true))
                             as lon,
-                        ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326'))
+                        ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326', always_xy := true))
                             as lat
                 """).fetchone()
 

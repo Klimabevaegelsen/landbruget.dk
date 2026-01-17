@@ -1,4 +1,16 @@
-def beregn_co2e_slagtekyllingefoder(t_total: float, a_fuld: float, a_til: float, a_hvede: float, i_hvede: float, co2e_fuld: float, co2e_til: float, co2e_egen: float, co2e_ind: float, a_grov: float = 0.0, co2e_grov: float = 0.0) -> float:
+def beregn_co2e_slagtekyllingefoder(
+    t_total: float,
+    a_fuld: float,
+    a_til: float,
+    a_hvede: float,
+    i_hvede: float,
+    co2e_fuld: float,
+    co2e_til: float,
+    co2e_egen: float,
+    co2e_ind: float,
+    a_grov: float = 0.0,
+    co2e_grov: float = 0.0,
+) -> float:
     """
     Beregner CO2e fra foder til slagtekyllinger.
 
@@ -23,10 +35,24 @@ def beregn_co2e_slagtekyllingefoder(t_total: float, a_fuld: float, a_til: float,
     f_hvede = t_total * a_hvede * (1 - i_hvede) * co2e_egen + t_total * a_hvede * i_hvede * co2e_ind
     f_grov = t_total * a_grov * co2e_grov
 
-    co2e_slagtekyllingefoder = f_fuld + f_til + f_hvede + f_grov
-    return co2e_slagtekyllingefoder
+    return f_fuld + f_til + f_hvede + f_grov
 
-def beregn_co2e_aeglaeggerfoder(m_fuld: float, m_til: float, m_skal: float, m_korn: float, m_grov: float, i_korn: float, co2e_fuld: float, co2e_til: float, co2e_skal: float, co2e_egen_korn: float, co2e_ind_korn: float, co2e_grov: float, a_hoene: float) -> float:
+
+def beregn_co2e_aeglaeggerfoder(
+    m_fuld: float,
+    m_til: float,
+    m_skal: float,
+    m_korn: float,
+    m_grov: float,
+    i_korn: float,
+    co2e_fuld: float,
+    co2e_til: float,
+    co2e_skal: float,
+    co2e_egen_korn: float,
+    co2e_ind_korn: float,
+    co2e_grov: float,
+    a_hoene: float,
+) -> float:
     """
     Beregner CO2e fra foder til æglæggende høner.
 
@@ -54,5 +80,4 @@ def beregn_co2e_aeglaeggerfoder(m_fuld: float, m_til: float, m_skal: float, m_ko
     f_korn = (m_korn - i_korn) * co2e_egen_korn + i_korn * co2e_ind_korn
     f_grov = m_grov * co2e_grov
 
-    co2e_aeglaeggerfoder = (f_fuld + f_til + f_skal + f_korn + f_grov) / a_hoene
-    return co2e_aeglaeggerfoder
+    return (f_fuld + f_til + f_skal + f_korn + f_grov) / a_hoene

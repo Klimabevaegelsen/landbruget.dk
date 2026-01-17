@@ -11,11 +11,11 @@ from .schema import (
 from .schema_adapter import SchemaAdapter
 
 __all__ = [
-    "DataType",
     "ColumnSchema",
-    "TableSchema",
+    "DataType",
     "DatasetSchema",
     "SchemaAdapter",
+    "TableSchema",
     "create_animal_welfare_schema",
     "create_farm_schema",
 ]

@@ -2,9 +2,9 @@
 Beregning af N2O fra gødning og nitrifikationshæmmer på marken.
 """
 
-from typing import Tuple, Any
 import json
 from pathlib import Path
+from typing import Any
 
 # Utility function to load data from JSON files (if not already present from a previous edit)
 # This function should be defined once, typically in a shared utility module or at the top of the first file that needs it.
@@ -19,7 +19,7 @@ if "load_json_data" not in globals():
         base_path = Path(__file__).resolve().parent.parent.parent / "reference_values"
         full_path = base_path / file_path
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             print(f"Error: JSON file not found at {full_path}")
@@ -51,7 +51,9 @@ NITRIFICATION_INHIBITOR_EFFECTIVENESS = 0.4  # 40% reduction
 
 # Load EF_N2O_GENERAL from tabel_19
 try:
-    tabel_19_data = load_json_data("tabel_19_ammoniak-emissionerne_fra_udbringning_af_organisk_gødning_side_75-76.json")
+    tabel_19_data = load_json_data(
+        "tabel_19_ammoniak-emissionerne_fra_udbringning_af_organisk_gødning_side_75-76.json"
+    )
     # Assuming the first entry in 'data' array and 'EF_N2O' key exists and is the correct one.
     EF_N2O_GENERAL = tabel_19_data["data"][0]["EF_N2O"]
 except Exception as e:
@@ -92,7 +94,7 @@ def calculate_n2o_components(
     areal_ha: float,
     ef_n2o_jord: float,
     ef_nh3: float,
-) -> Tuple[float, float, float]:
+) -> tuple[float, float, float]:
     """
     Calculates the three N2O components: N2O_jord, N2O_NH3, N2O_NOx.
 
@@ -123,7 +125,11 @@ def calculate_n2o_components(
     # The formula divides by (46/14) which is M_NO2/M_N. This seems to convert N in fertilizer to N in NOx emission.
     # However, the EF_NOX should represent fraction of N lost as N-NOx.
     # Let's follow the notebook's direct formula structure.
-    n2o_nox_kg = ((n_total_on_areal_kg * EF_NOX) / MOL_WEIGHT_FACTOR_NOX_N) * EF_N2O_GENERAL * MOL_WEIGHT_FACTOR_N2O_N
+    n2o_nox_kg = (
+        ((n_total_on_areal_kg * EF_NOX) / MOL_WEIGHT_FACTOR_NOX_N)
+        * EF_N2O_GENERAL
+        * MOL_WEIGHT_FACTOR_N2O_N
+    )
 
     return n2o_jord_kg, n2o_nh3_kg, n2o_nox_kg
 
@@ -133,8 +139,9 @@ def calculate_n2o_goedning(
     areal_ha: float,  # Markens areal i ha
     goedningstype: str,  # "handelsgoedning", "husdyrgoedning", "afgraesning"
     n_nitri_kg_ha: float = 0.0,  # Mængde N pr ha tilsat nitrifikationshæmmer
-    handelsgoedning_detail_type: str | None = None,  # Specific type of "handelsgoedning" from tabel_22
-) -> Tuple[float, float]:
+    handelsgoedning_detail_type: str
+    | None = None,  # Specific type of "handelsgoedning" from tabel_22
+) -> tuple[float, float]:
     """
     Beregner N2O udledning fra gødning og CO2e.
 
@@ -181,7 +188,10 @@ def calculate_n2o_goedning(
             n_nitri_on_areal_kg = n_nitri_kg_ha * areal_ha
 
         n2o_jord_reduction = (
-            n_nitri_on_areal_kg * ef_n2o_jord_selected * MOL_WEIGHT_FACTOR_N2O_N * NITRIFICATION_INHIBITOR_EFFECTIVENESS
+            n_nitri_on_areal_kg
+            * ef_n2o_jord_selected
+            * MOL_WEIGHT_FACTOR_N2O_N
+            * NITRIFICATION_INHIBITOR_EFFECTIVENESS
         )
         n2o_jord_kg -= n2o_jord_reduction
 
@@ -193,7 +203,9 @@ def calculate_n2o_goedning(
 
 # Testcases from Marker/Gødning_og_nitrifikationshæmmer.ipynb
 if __name__ == "__main__":
-    AREAL_HA_TEST = 1.0  # All notebook tests seem to use A=1 implicitly by providing N_total as total N.
+    AREAL_HA_TEST = (
+        1.0  # All notebook tests seem to use A=1 implicitly by providing N_total as total N.
+    )
     # The python functions expect N_total_kg_ha and areal_ha separately.
     # For consistency with notebook output, we will set areal_ha=1 and N_total_kg_ha to the notebook's N_total.
 
@@ -202,9 +214,12 @@ if __name__ == "__main__":
     N_nitri_handel_kg_ha = 12.0  # 12 kg N (ud af 122 kg N) er med nitrihæmmer
 
     n2o_handel_no_nitri, co2e_handel_no_nitri = calculate_n2o_goedning(
-        n_total_kg_ha=N_total_handel_kg_ha, areal_ha=AREAL_HA_TEST, goedningstype="handelsgoedning", n_nitri_kg_ha=0
+        n_total_kg_ha=N_total_handel_kg_ha,
+        areal_ha=AREAL_HA_TEST,
+        goedningstype="handelsgoedning",
+        n_nitri_kg_ha=0,
     )
-    print(f"Handelsgødning (uden nitri, default EF_NH3):")
+    print("Handelsgødning (uden nitri, default EF_NH3):")
     print(f"  N2O: {n2o_handel_no_nitri:.4f} kg")
     print(f"  CO2e: {co2e_handel_no_nitri:.4f} kg")
     # Expected N2O from notebook: 2.0363391304347824
@@ -258,9 +273,12 @@ if __name__ == "__main__":
     N_nitri_husdyr_kg_ha = 50.0  # 50 kg N (ud af 100 kg N) er med nitrihæmmer
 
     n2o_husdyr_no_nitri, co2e_husdyr_no_nitri = calculate_n2o_goedning(
-        n_total_kg_ha=N_total_husdyr_kg_ha, areal_ha=AREAL_HA_TEST, goedningstype="husdyrgoedning", n_nitri_kg_ha=0
+        n_total_kg_ha=N_total_husdyr_kg_ha,
+        areal_ha=AREAL_HA_TEST,
+        goedningstype="husdyrgoedning",
+        n_nitri_kg_ha=0,
     )
-    print(f"Husdyrgødning (uden nitri):")
+    print("Husdyrgødning (uden nitri):")
     print(
         f"  N2O: {n2o_husdyr_no_nitri:.4f} kg"
     )  # Notebook uses "Handelsgødning" in print statement, but values match husdyr
@@ -286,7 +304,7 @@ if __name__ == "__main__":
     n2o_afgraes, co2e_afgraes = calculate_n2o_goedning(
         n_total_kg_ha=N_total_afgraes_kg_ha, areal_ha=AREAL_HA_TEST, goedningstype="afgraesning"
     )
-    print(f"Gødning afsat under afgræsning:")
+    print("Gødning afsat under afgræsning:")
     print(f"  N2O: {n2o_afgraes:.4f} kg")
     print(f"  CO2e: {co2e_afgraes:.4f} kg")
     # Expected N2O from notebook: 0.7797018633540372
@@ -331,6 +349,8 @@ if __name__ == "__main__":
         goedningstype="husdyrgoedning",
         n_nitri_kg_ha=0,
     )
-    print(f"\nHusdyrgødning ({AREAL_HA_TEST_t5} ha, {N_total_husdyr_kg_ha_t5} N/ha, uden nitrihæmmer):")
+    print(
+        f"\nHusdyrgødning ({AREAL_HA_TEST_t5} ha, {N_total_husdyr_kg_ha_t5} N/ha, uden nitrihæmmer):"
+    )
     print(f"  N2O: {n2o_hus_t5:.4f} kg")
     print(f"  CO2e: {co2e_hus_t5:.4f} kg")

@@ -100,6 +100,31 @@ WHERE geom IS NOT NULL
 -- Should be 0 or very few
 ```
 
+**CRS Detection (coordinate range check):**
+```sql
+-- Check if coordinates are in expected range for CRS
+SELECT
+    MIN(ST_XMin(geom)) as min_x,
+    MAX(ST_XMax(geom)) as max_x,
+    MIN(ST_YMin(geom)) as min_y,
+    MAX(ST_YMax(geom)) as max_y
+FROM [table]
+WHERE geom IS NOT NULL;
+
+-- For EPSG:4326 (WGS84): X should be 7.5-15.5, Y should be 54.5-58
+-- For EPSG:25832 (UTM): X should be 400k-900k, Y should be 6M-6.5M
+-- If values are wrong CRS, data may be corrupted!
+```
+
+**Buffer Operation Check (DuckDB):**
+```sql
+-- CRITICAL: Verify ST_Buffer operations use UTM for meters
+-- If you see ST_Buffer(geometry, 1000) on EPSG:4326 data,
+-- that's 1000 DEGREES not meters - a critical bug!
+
+-- Use common.crs_utils.sql_buffer_meters() instead
+```
+
 ### Duplicate Detection
 
 ```sql

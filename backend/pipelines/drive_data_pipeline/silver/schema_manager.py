@@ -45,12 +45,12 @@ class SchemaManager:
                     logger.debug(f"Loaded schema: {schema_name}")
 
                 except Exception as e:
-                    logger.warning(f"Failed to load schema {schema_file}: {str(e)}")
+                    logger.warning(f"Failed to load schema {schema_file}: {e!s}")
 
             logger.info(f"Loaded {len(self.schemas)} schemas from {self.schema_dir}")
 
         except Exception as e:
-            logger.error(f"Failed to load schemas: {str(e)}")
+            logger.error(f"Failed to load schemas: {e!s}")
 
     def get_schema(self, schema_name: str) -> dict | None:
         """Get a schema by name.
@@ -95,7 +95,7 @@ class SchemaManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to create schema {schema_name}: {str(e)}")
+            logger.error(f"Failed to create schema {schema_name}: {e!s}")
             return False
 
     def update_schema(self, schema_name: str, schema: dict, save_to_file: bool = True) -> bool:
@@ -147,7 +147,7 @@ class SchemaManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to delete schema {schema_name}: {str(e)}")
+            logger.error(f"Failed to delete schema {schema_name}: {e!s}")
             return False
 
     def get_schema_by_subfolder(self, subfolder: str) -> dict | None:

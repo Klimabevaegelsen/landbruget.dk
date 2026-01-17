@@ -13,7 +13,7 @@ All methods maintain the exact same functionality and validation criteria
 from the original implementation.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from unified_pipeline.util.timing import timed
 
@@ -84,11 +84,11 @@ class NLES5Validator:
 
             # Validate minimum data quality requirements
             data_quality_check = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
                     COUNT(CASE WHEN crop_type IS NOT NULL THEN 1 END) as fields_with_crop_data,
                     COUNT(CASE WHEN area_ha IS NOT NULL THEN 1 END) as fields_with_area_data,
-                    COUNT(CASE WHEN nitrogen_washout_kg_ha IS NOT NULL 
+                    COUNT(CASE WHEN nitrogen_washout_kg_ha IS NOT NULL
                         THEN 1 END) as fields_with_nitrogen_data
                 FROM {found_table}
             """).fetchone()
@@ -242,7 +242,7 @@ class NLES5Validator:
 
             # Sample data preview
             sample_data = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     field_id,
                     year,
                     crop_type,
@@ -271,7 +271,7 @@ class NLES5Validator:
 
             # Crop type distribution
             crop_stats = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     crop_type,
                     COUNT(*) as field_count,
                     AVG(area_ha) as avg_area,
@@ -366,9 +366,9 @@ class NLES5Validator:
             # This is hardcoded in the calculation, let's verify it appears in the results
             try:
                 sample_trend = self.conn.execute("""
-                    SELECT trend_effect, year 
-                    FROM nles5_nitrogen_estimates 
-                    WHERE year IS NOT NULL 
+                    SELECT trend_effect, year
+                    FROM nles5_nitrogen_estimates
+                    WHERE year IS NOT NULL
                     LIMIT 1
                 """).fetchone()
 
@@ -416,9 +416,8 @@ class NLES5Validator:
             if failures:
                 self.log.error(f"❌ Reference compliance failed: {len(failures)} test(s) failed")
                 return False
-            else:
-                self.log.info("✅ Reference compliance tests passed")
-                return True
+            self.log.info("✅ Reference compliance tests passed")
+            return True
 
         except Exception as e:
             self.log.error(f"Error during reference compliance testing: {e}")
@@ -490,12 +489,12 @@ class NLES5Validator:
                     FROM nles5_nitrogen_estimates
                     WHERE nitrogen_washout_kg_ha IS NOT NULL
                     GROUP BY data_quality
-                    ORDER BY 
-                        CASE data_quality 
-                            WHEN 'high' THEN 1 
-                            WHEN 'medium' THEN 2 
-                            WHEN 'low' THEN 3 
-                            ELSE 4 
+                    ORDER BY
+                        CASE data_quality
+                            WHEN 'high' THEN 1
+                            WHEN 'medium' THEN 2
+                            WHEN 'low' THEN 3
+                            ELSE 4
                         END
                 """).fetchall()
 
@@ -546,7 +545,7 @@ class NLES5Validator:
                     cvr_number,
                     year,
                     nitrogen_washout_kg_ha,
-                    
+
                     -- Component uncertainties from config
                     nitrogen_washout_kg_ha * ? as bt_uncertainty,
                     nitrogen_washout_kg_ha * ? as bcs_uncertainty,
@@ -556,22 +555,22 @@ class NLES5Validator:
                     nitrogen_washout_kg_ha * ? as bf0_uncertainty,
                     nitrogen_washout_kg_ha * ? as bf1_uncertainty,
                     nitrogen_washout_kg_ha * ? as bg0_uncertainty,
-                    
+
                     -- Total uncertainty (quadratic combination)
                     nitrogen_washout_kg_ha * SQRT(
                         POWER(?, 2) + POWER(?, 2) + POWER(?, 2) + POWER(?, 2) +
                         POWER(?, 2) + POWER(?, 2) + POWER(?, 2) + POWER(?, 2)
                     ) as total_uncertainty_kg_ha,
-                    
+
                     -- Uncertainty percentage
                     100.0 * SQRT(
                         POWER(?, 2) + POWER(?, 2) + POWER(?, 2) + POWER(?, 2) +
                         POWER(?, 2) + POWER(?, 2) + POWER(?, 2) + POWER(?, 2)
                     ) as total_uncertainty_pct,
-                    
+
                     data_quality,
                     soil_type
-                    
+
                 FROM nles5_nitrogen_estimates
                 WHERE nitrogen_washout_kg_ha IS NOT NULL
             """,
@@ -685,12 +684,12 @@ class NLES5Validator:
                     STDDEV(total_uncertainty_pct) as stddev_uncertainty
                 FROM nles5_uncertainty_estimates
                 GROUP BY data_quality
-                ORDER BY 
-                    CASE data_quality 
-                        WHEN 'high' THEN 1 
-                        WHEN 'medium' THEN 2 
-                        WHEN 'low' THEN 3 
-                        ELSE 4 
+                ORDER BY
+                    CASE data_quality
+                        WHEN 'high' THEN 1
+                        WHEN 'medium' THEN 2
+                        WHEN 'low' THEN 3
+                        ELSE 4
                     END
             """).fetchall()
 
@@ -710,9 +709,9 @@ class NLES5Validator:
                     STDDEV(total_uncertainty_pct) as stddev_uncertainty_pct
                 FROM nles5_uncertainty_estimates
                 GROUP BY soil_type
-                
+
                 UNION ALL
-                
+
                 SELECT
                     'data_quality' as analysis_type,
                     data_quality as category,
@@ -737,7 +736,7 @@ class NLES5Validator:
             raise
 
     @timed(name="Comprehensive data validation")
-    def _comprehensive_data_validation(self) -> Dict[str, Any]:
+    def _comprehensive_data_validation(self) -> dict[str, Any]:
         """Perform comprehensive validation of all data sources and quality."""
         try:
             self.log.info("🔍 Performing comprehensive data validation")
@@ -779,7 +778,7 @@ class NLES5Validator:
                 try:
                     table_exists = (
                         self.conn.execute(f"""
-                        SELECT COUNT(*) FROM information_schema.tables 
+                        SELECT COUNT(*) FROM information_schema.tables
                         WHERE table_name = '{table_name}'
                     """).fetchone()[0]
                         > 0
@@ -828,13 +827,13 @@ class NLES5Validator:
             self.log.error(f"Error in comprehensive data validation: {e}")
             return {"error": str(e)}
 
-    def _validate_table_quality(self, table_name: str) -> Dict[str, Any]:
+    def _validate_table_quality(self, table_name: str) -> dict[str, Any]:
         """Validate the quality of a specific table."""
         try:
             # Check if table exists
             table_exists = (
                 self.conn.execute(f"""
-                SELECT COUNT(*) FROM information_schema.tables 
+                SELECT COUNT(*) FROM information_schema.tables
                 WHERE table_name = '{table_name}'
             """).fetchone()[0]
                 > 0
@@ -883,7 +882,7 @@ class NLES5Validator:
         except Exception as e:
             return {"exists": False, "error": str(e)}
 
-    def _validate_climate_data_quality(self, stats: Dict[str, Any]) -> None:
+    def _validate_climate_data_quality(self, stats: dict[str, Any]) -> None:
         """Validate climate data quality and coverage."""
         if not stats or stats.get("error"):
             return
@@ -892,10 +891,10 @@ class NLES5Validator:
             climate_stats = self.conn.execute("""
                 SELECT
                     COUNT(*) as total_fields,
-                    COUNT(CASE WHEN total_percolation IS NOT NULL AND total_percolation > 0 
+                    COUNT(CASE WHEN total_percolation IS NOT NULL AND total_percolation > 0
                         THEN 1 END) as fields_with_percolation,
                     AVG(total_percolation) as avg_percolation,
-                    COUNT(CASE WHEN climate_distance_m IS NOT NULL 
+                    COUNT(CASE WHEN climate_distance_m IS NOT NULL
                         THEN 1 END) as fields_with_distance,
                     AVG(climate_distance_m) as avg_climate_distance
                 FROM fields_with_climate_soil_crops
@@ -933,7 +932,7 @@ class NLES5Validator:
         except Exception as e:
             self.log.warning(f"Could not validate climate data quality: {e}")
 
-    def _validate_field_data_quality(self, stats: Dict[str, Any]) -> None:
+    def _validate_field_data_quality(self, stats: dict[str, Any]) -> None:
         """Validate field data quality and completeness."""
         if not stats or stats.get("error"):
             return
@@ -942,7 +941,7 @@ class NLES5Validator:
             field_stats = self.conn.execute("""
                 SELECT
                     COUNT(*) as total_fields,
-                    COUNT(CASE WHEN area_ha IS NOT NULL AND area_ha > 0 
+                    COUNT(CASE WHEN area_ha IS NOT NULL AND area_ha > 0
                         THEN 1 END) as fields_with_area,
                     AVG(area_ha) as avg_area_ha,
                     COUNT(CASE WHEN crop_name IS NOT NULL THEN 1 END) as fields_with_crop,
@@ -979,7 +978,7 @@ class NLES5Validator:
         except Exception as e:
             self.log.warning(f"Could not validate field data quality: {e}")
 
-    def _validate_soil_data_quality(self, stats: Dict[str, Any]) -> None:
+    def _validate_soil_data_quality(self, stats: dict[str, Any]) -> None:
         """Validate soil data quality and coverage."""
         if not stats or stats.get("error"):
             return
@@ -988,9 +987,9 @@ class NLES5Validator:
             soil_stats = self.conn.execute("""
                 SELECT
                     COUNT(*) as total_fields,
-                    COUNT(CASE WHEN soil_type_category IS NOT NULL 
+                    COUNT(CASE WHEN soil_type_category IS NOT NULL
                         THEN 1 END) as fields_with_soil_type,
-                    COUNT(CASE WHEN clay_content IS NOT NULL 
+                    COUNT(CASE WHEN clay_content IS NOT NULL
                         THEN 1 END) as fields_with_clay_content,
                     AVG(clay_content) as avg_clay_content,
                     COUNT(DISTINCT soil_type_category) as unique_soil_types
@@ -1009,7 +1008,7 @@ class NLES5Validator:
                     f"({soil_type_coverage:.1f}%)"
                 )
                 self.log.info(
-                    f"   Clay content coverage: {with_clay:,}/{total:,} " f"({clay_coverage:.1f}%)"
+                    f"   Clay content coverage: {with_clay:,}/{total:,} ({clay_coverage:.1f}%)"
                 )
                 self.log.info(
                     f"   Average clay content: {avg_clay:.1f}%"
@@ -1026,7 +1025,7 @@ class NLES5Validator:
         except Exception as e:
             self.log.warning(f"Could not validate soil data quality: {e}")
 
-    def _generate_validation_recommendations(self, validation_results: Dict[str, Any]) -> None:
+    def _generate_validation_recommendations(self, validation_results: dict[str, Any]) -> None:
         """Generate recommendations based on validation results."""
         recommendations = validation_results.get("recommendations", [])
         errors = validation_results.get("errors", [])
@@ -1079,7 +1078,7 @@ class NLES5Validator:
         else:
             self.log.info("✅ No major data quality issues detected")
 
-    def _calculate_data_quality_score(self, validation_results: Dict[str, Any]) -> None:
+    def _calculate_data_quality_score(self, validation_results: dict[str, Any]) -> None:
         """Calculate data quality score based on validation results."""
         score = 0.0
 
@@ -1145,12 +1144,10 @@ class NLES5Validator:
 
         # Pass validation if we have agricultural fields (the essential input data)
         # The output tables (nles5_nitrogen_estimates, etc.) will be created during processing
-        if not agricultural_fields_exists:
-            validation_results["passed"] = False
-        elif score < 20.0:  # Only fail if score is very low (critical data missing)
+        if not agricultural_fields_exists or score < 20.0:
             validation_results["passed"] = False
 
-    def _log_validation_summary(self, validation_results: Dict[str, Any]) -> None:
+    def _log_validation_summary(self, validation_results: dict[str, Any]) -> None:
         """Log a summary of validation results."""
         try:
             # Count only actual table validations, not metadata fields
@@ -1217,7 +1214,7 @@ class NLES5Validator:
             # Check data coverage by year
             try:
                 year_coverage = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         year,
                         COUNT(*) as field_count
                     FROM agricultural_fields

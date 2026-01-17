@@ -22,14 +22,20 @@ The module consists of two main components:
 
 import asyncio
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 import pandas as pd
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+USE_UTM_PROCESSING = True
 
 # Add CVR collection imports
 try:
@@ -44,6 +50,8 @@ except ImportError:
     extract_cvr_numbers_from_table = None
     save_pipeline_cvr_numbers = None
     CVR_COLLECTION_AVAILABLE = False
+import contextlib
+
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -112,23 +120,25 @@ class FVMWFSSilverConfig(BaseJobConfig):
     municipality_assignment_method: str = "spatial_with_fallback"  # or "spatial_only"
 
     # Year ranges based on FVM WFS capabilities
-    markblokke_years: List[int] = list(range(2005, 2027))  # 2005-2026 (22 years)
-    marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
-    smaabiotoper_years: List[int] = [2023, 2024, 2025]  # Special biotope layers
-    organic_areas_years: List[int] = list(range(2012, 2025))  # 2012-2024 (13 years of organic data)
-    organic_subsidies_years: List[int] = list(
+    markblokke_years: ClassVar[list[int]] = list(range(2005, 2027))  # 2005-2026 (22 years)
+    marker_years: ClassVar[list[int]] = list(range(2008, 2026))  # 2008-2025 (18 years)
+    smaabiotoper_years: ClassVar[list[int]] = [2023, 2024, 2025]  # Special biotope layers
+    organic_areas_years: ClassVar[list[int]] = list(
+        range(2012, 2025)
+    )  # 2012-2024 (13 years of organic data)
+    organic_subsidies_years: ClassVar[list[int]] = list(
         range(2019, 2025)
     )  # 2019-2024 (6 years of organic subsidies)
-    grassland_subsidies_years: List[int] = list(
+    grassland_subsidies_years: ClassVar[list[int]] = list(
         range(2019, 2025)
     )  # 2019-2024 (6 years of grassland subsidies)
-    environmental_subsidies_years: List[int] = list(
+    environmental_subsidies_years: ClassVar[list[int]] = list(
         range(2019, 2024)
     )  # 2019-2023 (5 years of environmental subsidies)
 
     # Column mapping for standardization
     # Markblokke fields
-    markblokke_column_mapping: Dict[str, str] = {
+    markblokke_column_mapping: ClassVar[dict[str, str]] = {
         "MB_NR": "block_id",
         "MARKBLOKNR": "block_id",  # Alternative column name for block ID
         "BLOKAREAL": "block_area_ha",
@@ -143,7 +153,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
 
     # Marker fields - Dynamic mapping based on field harmonization analysis
 
-    marker_column_mapping: Dict[str, str] = {
+    marker_column_mapping: ClassVar[dict[str, str]] = {
         # Core fields (present in all years)
         "Marknr": "field_id",
         "IMK_areal": "area_ha",
@@ -166,7 +176,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
     }
 
     # Smaabiotoper fields (similar to Marker but with biotope-specific fields)
-    smaabiotoper_column_mapping: Dict[str, str] = {
+    smaabiotoper_column_mapping: ClassVar[dict[str, str]] = {
         "Marknr": "field_id",
         "IMK_areal": "area_ha",
         "Journalnr": "journal_number",
@@ -184,7 +194,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
     }
 
     # Organic Areas fields (from Miljoe_og_oekologitilsagn:Oekologiske_arealer)
-    organic_areas_column_mapping: Dict[str, str] = {
+    organic_areas_column_mapping: ClassVar[dict[str, str]] = {
         "Marknr": "field_id",
         "AutNR_Iden": "authority_id",
         "Omlaegning": "conversion_date",  # DateTime when converted to organic
@@ -196,7 +206,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
 
     # Organic Subsidies fields (from Miljoe_og_oekologitilsagn:
     # Tilsagn_til_oekologiske_arealtilskud_2015-2020)
-    organic_subsidies_column_mapping: Dict[str, str] = {
+    organic_subsidies_column_mapping: ClassVar[dict[str, str]] = {
         "CVR": "cvr_number",
         "Marknr": "field_id",
         "Geometrisk": "area_ha",  # Geometric area in hectares
@@ -210,7 +220,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
 
     # Grassland Subsidies fields (from Miljoe_og_oekologitilsagn:
     # Tilsagn_til_pleje_af_graes_2015-2020)
-    grassland_subsidies_column_mapping: Dict[str, str] = {
+    grassland_subsidies_column_mapping: ClassVar[dict[str, str]] = {
         "CVR": "cvr_number",
         "Marknr": "field_id",
         "Geometrisk": "area_ha",  # Geometric area in hectares
@@ -225,7 +235,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
     }
 
     # Environmental Subsidies fields (from Miljoe_og_oekologitilsagn:Miljoetilsagn_oevrige_typer)
-    environmental_subsidies_column_mapping: Dict[str, str] = {
+    environmental_subsidies_column_mapping: ClassVar[dict[str, str]] = {
         "CVR": "cvr_number",
         "Marknr": "field_id",
         "AREAL_HA": "area_ha",  # Area in hectares (different column name than other layers)
@@ -321,9 +331,10 @@ class FVMWFSSilverConfig(BaseJobConfig):
                     years = [2023, 2024, 2025]
                 elif layer_type == FVMLayerType.organic_areas:
                     years = list(range(2012, 2025))  # 2012-2024
-                elif layer_type == FVMLayerType.organic_subsidies:
-                    years = list(range(2019, 2025))  # 2019-2024
-                elif layer_type == FVMLayerType.grassland_subsidies:
+                elif (
+                    layer_type == FVMLayerType.organic_subsidies
+                    or layer_type == FVMLayerType.grassland_subsidies
+                ):
                     years = list(range(2019, 2025))  # 2019-2024
                 elif layer_type == FVMLayerType.environmental_subsidies:
                     years = list(range(2019, 2024))  # 2019-2023
@@ -382,7 +393,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         self._kommune_boundaries_loaded = False
 
     async def extract_geojson_from_wfs_payload(
-        self, payload_json: str, column_mapping: Dict[str, str], table_suffix: str = ""
+        self, payload_json: str, column_mapping: dict[str, str], table_suffix: str = ""
     ):
         """
         Extract GeoJSON features from a raw WFS payload and convert to  using DuckDB.
@@ -481,9 +492,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         column_mappings.append(f'"{old_col}" as "{new_col}"')
 
             # Add any unmapped columns with their original names
-            for col in columns:
-                if col != "geometry" and col not in column_mapping:
-                    column_mappings.append(f'"{col}"')
+            column_mappings.extend(
+                f'"{col}"' for col in columns if col != "geometry" and col not in column_mapping
+            )
 
             # Create spatial table with transformed geometry as WKT string
             # Return DuckDB relation instead of pandas  to avoid Shapely conversion
@@ -506,13 +517,22 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS {result_query}"
             )
 
-            # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
-            validate_and_transform_geometries_duckdb(
-                self.conn,
-                f"extracted_features_{table_suffix}",
-                "fvm_wfs",
-                geometry_column="geometry",
-            )
+            # ✅ COORDINATE FIX: Apply unified geometry validation
+            # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
+            if USE_UTM_PROCESSING:
+                validate_and_normalize_to_utm(
+                    self.conn,
+                    f"extracted_features_{table_suffix}",
+                    "fvm_wfs",
+                    geometry_column="geometry",
+                )
+            else:
+                validate_and_transform_geometries_duckdb(
+                    self.conn,
+                    f"extracted_features_{table_suffix}",
+                    "fvm_wfs",
+                    geometry_column="geometry",
+                )
 
             # No need to update geometry_wkt - we use the validated geometry column directly
 
@@ -551,20 +571,19 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         points = ", ".join([f"{pt[0]} {pt[1]}" for pt in exterior if len(pt) >= 2])
                         if points:
                             return f"POLYGON(({points}))"
-            elif geom_type == "MultiPolygon":
-                if coordinates:
-                    polygons = []
-                    for polygon in coordinates:
-                        if polygon and len(polygon) > 0:
-                            exterior = polygon[0]
-                            if len(exterior) >= 4:  # Polygon must have at least 4 points (closed)
-                                points = ", ".join(
-                                    [f"{pt[0]} {pt[1]}" for pt in exterior if len(pt) >= 2]
-                                )
-                                if points:
-                                    polygons.append(f"(({points}))")
-                    if polygons:
-                        return f"MULTIPOLYGON({', '.join(polygons)})"
+            elif geom_type == "MultiPolygon" and coordinates:
+                polygons = []
+                for polygon in coordinates:
+                    if polygon and len(polygon) > 0:
+                        exterior = polygon[0]
+                        if len(exterior) >= 4:  # Polygon must have at least 4 points (closed)
+                            points = ", ".join(
+                                [f"{pt[0]} {pt[1]}" for pt in exterior if len(pt) >= 2]
+                            )
+                            if points:
+                                polygons.append(f"(({points}))")
+                if polygons:
+                    return f"MULTIPOLYGON({', '.join(polygons)})"
         except Exception as e:
             self.log.warning(f"Error converting geometry to WKT: {e}")
 
@@ -861,16 +880,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.conn.execute(f"DROP TABLE IF EXISTS {markblokke_filtered}")
 
                 return result_table
-            else:
-                # Handle case where markblokke_result is not in expected format
-                self.log.error(f"Unexpected markblokke_result format: {type(markblokke_result)}")
-                # Add empty block_id column using DuckDB
-                result_table = f"marker_with_null_block_{year}"
-                self.conn.execute(
-                    f"CREATE OR REPLACE TABLE {result_table} AS "
-                    f"SELECT *, NULL as block_id FROM {marker_table}"
-                )
-                return result_table
+            # Handle case where markblokke_result is not in expected format
+            self.log.error(f"Unexpected markblokke_result format: {type(markblokke_result)}")
+            # Add empty block_id column using DuckDB
+            result_table = f"marker_with_null_block_{year}"
+            self.conn.execute(
+                f"CREATE OR REPLACE TABLE {result_table} AS "
+                f"SELECT *, NULL as block_id FROM {marker_table}"
+            )
+            return result_table
 
         except Exception as e:
             self.log.error(f"Error adding block IDs via spatial join for {year}: {e}")
@@ -988,7 +1006,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Create column mapping for renaming
             column_renames = ", ".join(
-                [f'"{old}" as "{new}"' for old, new in zip(columns, cleaned_columns)]
+                [f'"{old}" as "{new}"' for old, new in zip(columns, cleaned_columns, strict=False)]
             )
 
             # Add metadata using DuckDB and clean column names in one query
@@ -1160,10 +1178,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     async def _process_layer_type(
         self,
         layer_type: str,
-        years: List[int],
+        years: list[int],
         bronze_dataset_name: str,
         silver_dataset_name: str,
-        bronze_data: Optional[Any] = None,
+        bronze_data: Any | None = None,
     ) -> None:
         """
         Process all years for a specific layer type.
@@ -1503,7 +1521,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Don't fail the entire pipeline if enrichment fails
             pass
 
-    async def _find_latest_gkea_data_for_year(self, year: int) -> Optional[str]:
+    async def _find_latest_gkea_data_for_year(self, year: int) -> str | None:
         """Find the latest GKEA fertilizer data for a specific year."""
         try:
             # Look for GKEA data in fertiliser silver dataset for CVR identification
@@ -1515,9 +1533,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 latest_file = sorted(files)[-1]
                 self.log.info(f"✅ Found GKEA data for {year}: {latest_file}")
                 return latest_file
-            else:
-                self.log.info(f"ℹ️  No GKEA data found for {year} using pattern {pattern}")
-                return None
+            self.log.info(f"ℹ️  No GKEA data found for {year} using pattern {pattern}")
+            return None
 
         except Exception as e:
             self.log.warning(f"Error finding GKEA data for {year}: {e}")
@@ -1826,8 +1843,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 candidates = candidates.nsmallest(max_candidates_per_fvm, "area_diff")
 
             # Add candidate pairs
-            for gkea_idx in candidates.index:
-                candidate_pairs.append((fvm_idx, gkea_idx))
+            candidate_pairs.extend((fvm_idx, gkea_idx) for gkea_idx in candidates.index)
 
         self.log.info(
             f"   Found {len(candidate_pairs):,} candidate pairs "
@@ -1926,7 +1942,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         return intersection / union if union > 0 else 0.0
 
     def _apply_cvr_updates(
-        self, marker_table: str, matches: List, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame
+        self, marker_table: str, matches: list, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame
     ) -> int:
         """Apply CVR updates to the marker table and save back to GCS"""
         fields_updated = 0
@@ -1937,7 +1953,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Build the update cases for each match
             update_cases = []
-            for fvm_idx, gkea_idx, combined_sim, crop_sim in matches:
+            for fvm_idx, gkea_idx, _combined_sim, _crop_sim in matches:
                 fvm_journal = fvm_ops_df.iloc[fvm_idx]["fvm_journal_number"]
                 identified_cvr = gkea_ops_df.iloc[gkea_idx]["cvr_number"]
 
@@ -1997,7 +2013,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
         return fields_updated
 
-    async def run_enrichment_only(self) -> Optional[Dict[str, Any]]:
+    async def run_enrichment_only(self) -> dict[str, Any] | None:
         """
         Run only the enrichment functions without processing bronze/silver data.
 
@@ -2306,7 +2322,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     )
 
             # Remove duplicates and sort
-            unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
+            unique_cvr_numbers = sorted(set(all_cvr_numbers))
 
             if unique_cvr_numbers:
                 # Get timestamp for CVR collection
@@ -2369,10 +2385,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Apply coordinate transformation to municipality boundaries
             # This ensures they are in the same coordinate system as the field data
-            # Note: DAGI pipeline now produces proper EPSG:4326 LAT/LON order, matching field data
-            validate_and_transform_geometries_duckdb(
-                self.conn, "kommune_boundaries_raw", "dagi_kommuner", geometry_column="geometry"
-            )
+            # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
+            if USE_UTM_PROCESSING:
+                validate_and_normalize_to_utm(
+                    self.conn, "kommune_boundaries_raw", "dagi_kommuner", geometry_column="geometry"
+                )
+            else:
+                validate_and_transform_geometries_duckdb(
+                    self.conn, "kommune_boundaries_raw", "dagi_kommuner", geometry_column="geometry"
+                )
 
             # Create processed kommune boundaries table
             self.conn.execute("""
@@ -2574,7 +2595,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Don't fail the entire pipeline, just log the error
             pass
 
-    async def _discover_available_fields_years(self) -> List[int]:
+    async def _discover_available_fields_years(self) -> list[int]:
         """
         Discover available years from fields data in GCS.
 
@@ -2605,7 +2626,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     if year_str.isdigit():
                         available_years.append(int(year_str))
 
-            available_years = sorted(list(set(available_years)))  # Remove duplicates and sort
+            available_years = sorted(set(available_years))  # Remove duplicates and sort
             self.log.info(f"Discovered fields data for years: {available_years}")
             return available_years
 
@@ -2782,14 +2803,12 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         except Exception as e:
             self.log.error(f"Error during CVR enrichment for year {year}: {e}")
             # Clean up on error
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.execute(f"DROP TABLE IF EXISTS fields_data_{year}")
-            except Exception:
-                pass
             # Don't fail the entire pipeline, just log the error
             pass
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """
         Execute the silver processing job for all FVM WFS data.
 

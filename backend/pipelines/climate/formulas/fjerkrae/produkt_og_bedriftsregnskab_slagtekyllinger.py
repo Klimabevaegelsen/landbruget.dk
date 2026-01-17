@@ -1,6 +1,8 @@
-from typing import List, Dict
 
-def beregn_produktaftryk_slagtekyllinger_pr_kg(co2e_total_pr_kylling: float, v_slagt_gram: float) -> float:
+
+def beregn_produktaftryk_slagtekyllinger_pr_kg(
+    co2e_total_pr_kylling: float, v_slagt_gram: float
+) -> float:
     """
     Beregner produktaftrykket for slagtekyllinger pr. kg.
 
@@ -18,9 +20,9 @@ def beregn_produktaftryk_slagtekyllinger_pr_kg(co2e_total_pr_kylling: float, v_s
     v_slagt_kg = v_slagt_gram / 1000.0
 
     # P_h = CO2e_tot / (V_slagt * 1000) - men V_slagt er allerede i gram, så vi deler med 1000 for at få kg
-    p_h = co2e_total_pr_kylling / v_slagt_kg
+    return co2e_total_pr_kylling / v_slagt_kg
 
-    return p_h
+
 
 def beregn_co2e_total_slagtekylling(
     co2e_el: float,
@@ -30,7 +32,7 @@ def beregn_co2e_total_slagtekylling(
     co2e_lager: float,
     co2e_stald: float,
     co2e_stroelse: float,
-    co2e_varme: float
+    co2e_varme: float,
 ) -> float:
     """
     Beregner den totale CO2e udledning fra alle emissionskilder for en slagtekylling.
@@ -48,20 +50,20 @@ def beregn_co2e_total_slagtekylling(
     Returns:
         Total CO2e udledning (kg CO2e).
     """
-    co2e_total = (
-        co2e_el +
-        co2e_enterisk_metan +
-        co2e_foder +
-        co2e_indkoeb_dyr +
-        co2e_lager +
-        co2e_stald +
-        co2e_stroelse +
-        co2e_varme
+    return (
+        co2e_el
+        + co2e_enterisk_metan
+        + co2e_foder
+        + co2e_indkoeb_dyr
+        + co2e_lager
+        + co2e_stald
+        + co2e_stroelse
+        + co2e_varme
     )
 
-    return co2e_total
 
-def beregn_bedriftsaftryk_slagtekyllinger(hold_data: List[Dict[str, float]]) -> float:
+
+def beregn_bedriftsaftryk_slagtekyllinger(hold_data: list[dict[str, float]]) -> float:
     """
     Beregner bedriftsaftrykket for slagtekyllinger pr. kalenderår.
 
@@ -81,9 +83,9 @@ def beregn_bedriftsaftryk_slagtekyllinger(hold_data: List[Dict[str, float]]) -> 
 
     bedriftsaftryk = 0.0
     for hold in hold_data:
-        v_slagt_kg = hold['v_slagt_gram'] / 1000.0  # Convert from gram to kg
-        produktaftryk_pr_kylling = hold['p_h'] * v_slagt_kg  # Convert from pr kg to pr bird
-        bidrag_til_bedrift = (produktaftryk_pr_kylling - hold['co2e_hjemme']) * hold['a_slagt']
+        v_slagt_kg = hold["v_slagt_gram"] / 1000.0  # Convert from gram to kg
+        produktaftryk_pr_kylling = hold["p_h"] * v_slagt_kg  # Convert from pr kg to pr bird
+        bidrag_til_bedrift = (produktaftryk_pr_kylling - hold["co2e_hjemme"]) * hold["a_slagt"]
         bedriftsaftryk += bidrag_til_bedrift
 
     return bedriftsaftryk

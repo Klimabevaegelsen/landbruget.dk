@@ -14,7 +14,11 @@ from bs4 import BeautifulSoup
 from tqdm.asyncio import tqdm
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 
@@ -78,9 +82,8 @@ class EnhancedDMACompanyDetailScraper:
 
                     logger.info(f"  ✅ Downloaded PDF: {len(content)} bytes -> {pdf_path}")
                     return str(pdf_path)
-                else:
-                    logger.warning(f"  ❌ Failed to download PDF: {response.status}")
-                    return None
+                logger.warning(f"  ❌ Failed to download PDF: {response.status}")
+                return None
         except Exception as e:
             logger.error(f"  ❌ Error downloading PDF {pdf_url}: {e}")
             return None
@@ -90,7 +93,9 @@ class EnhancedDMACompanyDetailScraper:
             html = await fetch(session, url)
             soup = BeautifulSoup(html, "html.parser")
 
-            data = {"title": soup.find("div", class_="dma-content-header").find("span").text.strip()}
+            data = {
+                "title": soup.find("div", class_="dma-content-header").find("span").text.strip()
+            }
 
             for section in [
                 "Grunddata",
@@ -102,7 +107,7 @@ class EnhancedDMACompanyDetailScraper:
                 section_div = soup.find("div", string=section)
                 if section_div:
                     section_body = section_div.find_next("div", class_="card-body")
-                    for dt, dd in zip(section_body.find_all("dt"), section_body.find_all("dd")):
+                    for dt, dd in zip(section_body.find_all("dt"), section_body.find_all("dd"), strict=False):
                         key = dt.text.strip(":")
                         value = dd.text.strip()
                         data[key] = value
@@ -118,7 +123,7 @@ class EnhancedDMACompanyDetailScraper:
 
             return data
         except Exception as e:
-            logger.error(f"Error scraping {url}: {str(e)}")
+            logger.error(f"Error scraping {url}: {e!s}")
             logger.error(traceback.format_exc())
             return {}
 
@@ -144,7 +149,7 @@ class EnhancedDMACompanyDetailScraper:
                 "chr": chr,
             }
         except Exception as e:
-            logger.error(f"Error scraping PDF URL from {url}: {str(e)}")
+            logger.error(f"Error scraping PDF URL from {url}: {e!s}")
             logger.error(traceback.format_exc())
             return None
 
@@ -167,7 +172,9 @@ class EnhancedDMACompanyDetailScraper:
                     for i, col in enumerate(cols):
                         row_data[headers[i]] = col.text.strip()
                         if col.find("a"):
-                            row_data[f"{headers[i]}_url"] = "https://dma.mst.dk" + col.find("a")["href"]
+                            row_data[f"{headers[i]}_url"] = (
+                                "https://dma.mst.dk" + col.find("a")["href"]
+                            )
                     rows.append(row_data)
 
             # Download PDFs for each row
@@ -181,7 +188,7 @@ class EnhancedDMACompanyDetailScraper:
 
             return rows
         except Exception as e:
-            logger.error(f"Error scraping table from {url}: {str(e)}")
+            logger.error(f"Error scraping table from {url}: {e!s}")
             logger.error(traceback.format_exc())
             return []
 
@@ -220,7 +227,9 @@ class EnhancedDMACompanyDetailScraper:
                 if section_data:
                     logger.info(f"  Found {len(section_data)} records in {section}")
                     # Save section data
-                    with open(company_dir / f"{section.lower()}_data.json", "w", encoding="utf-8") as f:
+                    with open(
+                        company_dir / f"{section.lower()}_data.json", "w", encoding="utf-8"
+                    ) as f:
                         json.dump(section_data, f, indent=2, ensure_ascii=False)
 
             # Save complete data
@@ -229,7 +238,7 @@ class EnhancedDMACompanyDetailScraper:
 
             return data
         except Exception as e:
-            logger.error(f"Error processing {url}: {str(e)}")
+            logger.error(f"Error processing {url}: {e!s}")
             return None
 
     async def process_miljoeaktoer_for_company_file_path(self, max_concurrent=3):
@@ -268,7 +277,9 @@ class EnhancedDMACompanyDetailScraper:
                     pbar.set_postfix(
                         {
                             "Failures": failure_count,
-                            "Rate": f"{failure_count / processed_count:.1%}" if processed_count > 0 else "0%",
+                            "Rate": f"{failure_count / processed_count:.1%}"
+                            if processed_count > 0
+                            else "0%",
                             "Consecutive": self.consecutive_failures,
                         }
                     )
@@ -289,11 +300,17 @@ class EnhancedDMACompanyDetailScraper:
         # Final failure check
         if failure_count > 0:
             failure_rate = failure_count / len(self.data)
-            logger.warning(f"⚠️  Processing completed with {failure_count} failures ({failure_rate:.1%} failure rate)")
+            logger.warning(
+                f"⚠️  Processing completed with {failure_count} failures ({failure_rate:.1%} failure rate)"
+            )
 
             if failure_rate > self.max_failure_rate:
-                logger.error(f"❌ Final failure rate {failure_rate:.1%} exceeds threshold {self.max_failure_rate:.1%}")
-                raise Exception(f"Pipeline failed: {failure_rate:.1%} failure rate exceeds {self.max_failure_rate:.1%}")
+                logger.error(
+                    f"❌ Final failure rate {failure_rate:.1%} exceeds threshold {self.max_failure_rate:.1%}"
+                )
+                raise Exception(
+                    f"Pipeline failed: {failure_rate:.1%} failure rate exceeds {self.max_failure_rate:.1%}"
+                )
 
         # Save session summary
         summary = {
@@ -318,7 +335,9 @@ class FullDMAPipeline:
     def __init__(self, output_base_dir="/tmp/dma_data", delay_seconds=1.0):  # 1 second delay
         self.output_base_dir = Path(output_base_dir)
         self.delay_seconds = delay_seconds
-        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")  # Fixed timestamp for entire pipeline
+        self.timestamp = datetime.now().strftime(
+            "%Y%m%d_%H%M%S"
+        )  # Fixed timestamp for entire pipeline
         self.session_dir = self.output_base_dir / self.timestamp
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -349,7 +368,9 @@ class FullDMAPipeline:
         """Check if we should stop due to too many failures."""
         # Check consecutive failures
         if self.consecutive_failures >= self.max_consecutive_failures:
-            logger.error(f"❌ CIRCUIT BREAKER: {self.consecutive_failures} consecutive failures. Stopping pipeline.")
+            logger.error(
+                f"❌ CIRCUIT BREAKER: {self.consecutive_failures} consecutive failures. Stopping pipeline."
+            )
             return True
 
         # Check failure rate after processing at least 100 companies
@@ -449,7 +470,9 @@ class FullDMAPipeline:
                         )
 
                         if api_failures >= max_api_failures:
-                            logger.error(f"❌ Too many API failures ({api_failures}). Stopping API fetch.")
+                            logger.error(
+                                f"❌ Too many API failures ({api_failures}). Stopping API fetch."
+                            )
                             break
 
                         # Wait longer before retry
@@ -491,10 +514,14 @@ class FullDMAPipeline:
                                 "godkendelsespligtig": miljoeaktoer["godkendelsespligtig"],
                                 "risikovirksomhed": miljoeaktoer["risikovirksomhed"],
                                 "stedfaestelse": miljoeaktoer["stedfaestelse"],
-                                "ansvarligMyndighed": miljoeaktoer["ansvarligeMyndigheder"][0]["navn"]
+                                "ansvarligMyndighed": miljoeaktoer["ansvarligeMyndigheder"][0][
+                                    "navn"
+                                ]
                                 if miljoeaktoer["ansvarligeMyndigheder"]
                                 else None,
-                                "ansvarligMyndighedKnr": miljoeaktoer["ansvarligeMyndigheder"][0]["knr"]
+                                "ansvarligMyndighedKnr": miljoeaktoer["ansvarligeMyndigheder"][0][
+                                    "knr"
+                                ]
                                 if miljoeaktoer["ansvarligeMyndigheder"]
                                 else None,
                             }
@@ -502,10 +529,14 @@ class FullDMAPipeline:
 
                             # Check if we've reached the max companies limit
                             if self.max_companies and len(all_companies) >= self.max_companies:
-                                api_pbar.set_description(f"Reached max companies limit: {self.max_companies}")
+                                api_pbar.set_description(
+                                    f"Reached max companies limit: {self.max_companies}"
+                                )
                                 break
 
-                    api_pbar.set_postfix({"Total": len(all_companies), "Page": page, "Failures": api_failures})
+                    api_pbar.set_postfix(
+                        {"Total": len(all_companies), "Page": page, "Failures": api_failures}
+                    )
                     api_pbar.update(1)
 
                     # Check if we've reached the max companies limit
@@ -514,7 +545,9 @@ class FullDMAPipeline:
 
                     # Check if we've reached the end
                     if len(companies) < 500:
-                        api_pbar.set_description(f"Reached end - page {page} had {len(companies)} companies")
+                        api_pbar.set_description(
+                            f"Reached end - page {page} had {len(companies)} companies"
+                        )
                         break
 
                     page += 1
@@ -524,7 +557,9 @@ class FullDMAPipeline:
 
             except Exception as e:
                 api_failures += 1
-                logger.error(f"Error fetching page {page}: {e} (failure {api_failures}/{max_api_failures})")
+                logger.error(
+                    f"Error fetching page {page}: {e} (failure {api_failures}/{max_api_failures})"
+                )
 
                 if api_failures >= max_api_failures:
                     logger.error(f"❌ Too many API failures ({api_failures}). Stopping API fetch.")
@@ -550,7 +585,9 @@ class FullDMAPipeline:
             "total_pages": total_pages,
             "processed_companies": processed_companies,
             "total_companies": total_companies,
-            "completion_percentage": (processed_companies / total_companies * 100) if total_companies > 0 else 0,
+            "completion_percentage": (processed_companies / total_companies * 100)
+            if total_companies > 0
+            else 0,
         }
 
         with open(self.progress_file, "w") as f:
@@ -587,7 +624,9 @@ class FullDMAPipeline:
             # Copy data to GCS bucket first - using standard bronze/dma path structure
             logger.info("📤 Uploading data to GCS...")
             gcs_path = f"gs://landbrugsdata-raw-data/bronze/dma/{self.timestamp}/"
-            subprocess.run(["gsutil", "-m", "cp", "-r", str(self.session_dir), gcs_path], check=True)
+            subprocess.run(
+                ["gsutil", "-m", "cp", "-r", str(self.session_dir), gcs_path], check=True
+            )
             logger.info(f"✅ Data uploaded to GCS successfully: {gcs_path}")
 
             # Shutdown the VM
@@ -610,7 +649,7 @@ class FullDMAPipeline:
 
                 if not companies:
                     logger.error("❌ No companies found! Exiting...")
-                    return
+                    return None
 
                 # Step 2: Process each company with detailed scraping
                 logger.info(f"🔄 Processing {len(companies)} companies with detailed scraping...")
@@ -654,8 +693,12 @@ if __name__ == "__main__":
     parser.add_argument("--start-date", type=str, help="Start date for filtering (YYYY-MM-DD)")
     parser.add_argument("--end-date", type=str, help="End date for filtering (YYYY-MM-DD)")
     parser.add_argument("--output-dir", type=str, default="/tmp/dma_data", help="Output directory")
-    parser.add_argument("--delay", type=float, default=1.0, help="Delay between requests in seconds")
-    parser.add_argument("--no-auto-shutdown", action="store_true", help="Disable automatic VM shutdown")
+    parser.add_argument(
+        "--delay", type=float, default=1.0, help="Delay between requests in seconds"
+    )
+    parser.add_argument(
+        "--no-auto-shutdown", action="store_true", help="Disable automatic VM shutdown"
+    )
 
     args = parser.parse_args()
 
@@ -703,7 +746,9 @@ if __name__ == "__main__":
         asyncio.run(pipeline.run_full_pipeline())
 
     else:
-        logger.info("ℹ️  To run the full pipeline, use: python enhanced_dma_detail_scraper.py --full-pipeline")
+        logger.info(
+            "ℹ️  To run the full pipeline, use: python enhanced_dma_detail_scraper.py --full-pipeline"
+        )
         logger.info("ℹ️  Available options:")
         logger.info("   --max-companies N     : Process only N companies")
         logger.info("   --start-date YYYY-MM-DD : Filter by start date")

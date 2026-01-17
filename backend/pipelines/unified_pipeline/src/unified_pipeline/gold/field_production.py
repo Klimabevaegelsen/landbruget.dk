@@ -8,12 +8,13 @@ comprehensive production estimates for analytics and downstream consumption.
 Migrated from pandas/geopandas to pure DuckDB approach for optimal performance.
 """
 
+import contextlib
 import gc
 import os
 import shutil
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 import psutil
 from pydantic import ConfigDict
@@ -36,13 +37,13 @@ class FieldProductionGoldConfig(BaseJobConfig):
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # NEW: Single year processing for matrix jobs
-    target_year: Optional[int] = None  # If set, process only this year
+    target_year: int | None = None  # If set, process only this year
 
     # Input silver datasets
     agricultural_fields_dataset: str = "fvm_marker"
     dst_zone_mapping_dataset: str = "dst_zone_mapping"
     # NOTE: Municipality boundaries no longer needed - handled by FVM silver pipeline
-    dst_yield_datasets: List[str] = [
+    dst_yield_datasets: ClassVar[list[str]] = [
         "hst77_processed",
         "gartn1_processed",
         "fro_processed",
@@ -198,12 +199,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 for file_path in glob.glob(os.path.join(temp_dir, "*")):
                     try:
                         file_stat = os.stat(file_path)
-                        if current_time - file_stat.st_mtime > 3600:  # 1 hour
-                            if os.path.isfile(file_path):
-                                os.remove(file_path)
-                                self.log.debug(
-                                    f"Removed old temp file: {os.path.basename(file_path)}"
-                                )
+                        if current_time - file_stat.st_mtime > 3600 and os.path.isfile(
+                            file_path
+                        ):  # 1 hour
+                            os.remove(file_path)
+                            self.log.debug(f"Removed old temp file: {os.path.basename(file_path)}")
                     except Exception as e:
                         self.log.debug(f"Could not remove temp file {file_path}: {e}")
 
@@ -344,8 +344,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 if not self._check_emergency_memory_threshold():
                     self.log.warning(f"Memory threshold exceeded before attempt {attempt + 1}")
 
-                result = processing_func(*args, **kwargs)
-                return result
+                return processing_func(*args, **kwargs)
 
             except Exception as e:
                 if "memory" in str(e).lower() or "out of memory" in str(e).lower():
@@ -365,15 +364,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                         self._emergency_resource_cleanup()
                         continue
-                    else:
-                        self.log.error(
-                            f"Memory fallback failed after {self.config.max_memory_retries} "
-                            f"attempts"
-                        )
-                        raise
-                else:
-                    # Non-memory error, re-raise immediately
+                    self.log.error(
+                        f"Memory fallback failed after {self.config.max_memory_retries} attempts"
+                    )
                     raise
+                # Non-memory error, re-raise immediately
+                raise
+        return None
 
     def _verify_spatial_join_optimization(self, query_description: str = "spatial join") -> bool:
         """Verify that spatial joins are using the SPATIAL_JOIN operator."""
@@ -394,13 +391,12 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             if "SPATIAL_JOIN" in plan_text:
                 self.log.info(f"✅ SPATIAL_JOIN operator detected for {query_description}")
                 return True
-            else:
-                self.log.warning(
-                    f"❌ SPATIAL_JOIN operator NOT detected for {query_description} - "
-                    f"check join conditions"
-                )
-                self.log.debug(f"Query plan: {plan_text}")
-                return False
+            self.log.warning(
+                f"❌ SPATIAL_JOIN operator NOT detected for {query_description} - "
+                f"check join conditions"
+            )
+            self.log.debug(f"Query plan: {plan_text}")
+            return False
 
         except Exception as e:
             self.log.warning(f"Could not verify SPATIAL_JOIN usage: {e}")
@@ -443,10 +439,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 except Exception:
                     pass
             else:
-                try:
+                with contextlib.suppress(Exception):
                     self.conn.execute(f"DROP TABLE IF EXISTS {table_pattern}")
-                except Exception:
-                    pass
 
     def _force_memory_cleanup(self):
         """Force DuckDB and Python memory cleanup with monitoring."""
@@ -489,10 +483,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             if memory_percent > 85:
                 self.log.warning("⚠️ High memory usage - reducing batch size")
                 return max(self.config.batch_size // 4, 100000)  # Reduce to 25% but keep minimum
-            elif memory_percent > 75:
+            if memory_percent > 75:
                 self.log.info("📊 Moderate memory usage - reducing batch size slightly")
                 return max(self.config.batch_size // 2, 250000)  # Reduce to 50%
-            elif memory_percent < 60:
+            if memory_percent < 60:
                 self.log.info("✅ Low memory usage - can increase batch size")
                 return min(self.config.batch_size * 2, 2000000)  # Double but cap at 2M
 
@@ -527,7 +521,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return True  # Default to allowing batch processing
 
     def _load_agricultural_fields_for_years(
-        self, years: List[int], silver_data: Optional[Dict[str, Any]]
+        self, years: list[int], silver_data: dict[str, Any] | None
     ) -> str:
         """DEPRECATED: Use _process_single_year_with_dst_yields instead for memory efficiency."""
         raise NotImplementedError("This method has been replaced by year-by-year processing")
@@ -560,7 +554,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             raise FileNotFoundError(f"No silver data found for {dataset}: {e}") from e
 
     def _load_silver_data_to_table(
-        self, dataset: str, table_name: str, silver_data: Optional[Dict[str, Any]]
+        self, dataset: str, table_name: str, silver_data: dict[str, Any] | None
     ) -> bool:
         """Load silver data into DuckDB table."""
         if silver_data and dataset in silver_data:
@@ -589,7 +583,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.error(f"Failed to load {dataset}: {e}")
             return False
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Run field production estimation gold processing with aggressive resource
         management for GitHub Actions."""
 
@@ -794,7 +788,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self._aggressive_resource_cleanup("final")
 
     def _process_single_year_with_dst_yields_optimized(
-        self, year: int, silver_data: Optional[Dict[str, Any]]
+        self, year: int, silver_data: dict[str, Any] | None
     ) -> int:
         """Process a single year with optimized resource management and streaming data loading."""
         try:
@@ -1198,10 +1192,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 "year_production_estimates",
             ]
             for table in cleanup_tables:
-                try:
+                with contextlib.suppress(Exception):
                     self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except Exception:
-                    pass
 
             # Check if this is a memory-related error that should be re-raised
             error_str = str(e).lower()
@@ -1395,7 +1387,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Apply emergency assignment for unassigned fields (like recreate_original_csv_structure.py)
         self._apply_emergency_assignments_batched(year)
 
-    def _create_year_table_optimized(self, source_table: str, year: int, column_names: List[str]):
+    def _create_year_table_optimized(self, source_table: str, year: int, column_names: list[str]):
         """Create optimized year table with minimal memory footprint."""
         # Build SELECT clause with proper column mapping
         field_id_select = "field_id" if "field_id" in column_names else "NULL as field_id"
@@ -1463,7 +1455,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self.conn.execute(f"DROP TABLE IF EXISTS {source_table}")
 
     def _create_year_table_from_file_optimized(
-        self, temp_file: str, year: int, column_names: List[str]
+        self, temp_file: str, year: int, column_names: list[str]
     ):
         """Create optimized year table directly from file with minimal memory footprint."""
         # Build SELECT clause with proper column mapping
@@ -1747,24 +1739,21 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             """)
             self.log.warning("Applied fallback assignments for all NULL values")
 
-    def _get_available_fvm_marker_years(self) -> List[int]:
+    def _get_available_fvm_marker_years(self) -> list[int]:
         """Override base method to respect target_year for matrix jobs."""
         if self.config.target_year:
             # For matrix jobs, only return the target year if it exists
             all_years = super()._get_available_fvm_marker_years()
             if self.config.target_year in all_years:
                 return [self.config.target_year]
-            else:
-                self.log.error(
-                    f"Target year {self.config.target_year} not found in available years: "
-                    f"{all_years}"
-                )
-                return []
-        else:
-            # For normal processing, return all years
-            return super()._get_available_fvm_marker_years()
+            self.log.error(
+                f"Target year {self.config.target_year} not found in available years: {all_years}"
+            )
+            return []
+        # For normal processing, return all years
+        return super()._get_available_fvm_marker_years()
 
-    def _load_dst_yield_data(self, silver_data: Optional[Dict[str, Any]] = None) -> List[str]:
+    def _load_dst_yield_data(self, silver_data: dict[str, Any] | None = None) -> list[str]:
         """Load DST yield data into DuckDB tables."""
         loaded_tables = []
 

@@ -2,11 +2,13 @@
 
 import logging
 from datetime import date, datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Import UUID utilities for deterministic TrackID generation
 try:
-    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import (
+        LandbrugsdataUUID,
+    )
 except ImportError:
     try:
         import sys
@@ -26,12 +28,16 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.utils")
 DEFAULT_CLIENT_ID = "LandbrugsData"
 
 
-def create_base_request(username: str, session_id: str = "1", track_id: str = "chr_pipeline") -> Dict[str, str]:
+def create_base_request(
+    username: str, session_id: str = "1", track_id: str = "chr_pipeline"
+) -> dict[str, str]:
     """Create the common GLRCHRWSInfoInbound structure."""
     # Generate deterministic TrackID based on username and session
     if LandbrugsdataUUID:
         request_key = f"{username}-{session_id}-{track_id}"
-        deterministic_track_id = f"{track_id}-{LandbrugsdataUUID.generate_deterministic_uuid('chr-track', request_key)}"
+        deterministic_track_id = (
+            f"{track_id}-{LandbrugsdataUUID.generate_deterministic_uuid('chr-track', request_key)}"
+        )
     else:
         # Fallback to random UUID if LandbrugsdataUUID not available
         import uuid
@@ -47,7 +53,7 @@ def create_base_request(username: str, session_id: str = "1", track_id: str = "c
     }
 
 
-def parse_date(date_str: Any) -> Optional[date]:
+def parse_date(date_str: Any) -> date | None:
     """Parse date string from CHR response."""
     if not date_str:
         return None

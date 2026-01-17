@@ -688,29 +688,38 @@ async def run_cumulative_analysis_optimized(
                             center_lat,
                             center_lon,
                             {
-                                "h3_area_ha" if "h3_area_ha" in column_names
-                                else "h3_cell_area_ha"
-                            } as h3_area_ha,
+                        "h3_area_ha" if "h3_area_ha" in column_names else "h3_cell_area_ha"
+                    } as h3_area_ha,
                             {
-                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names
-                                else "agricultural_area_ha"
-                            } as total_intersection_area_ha,
+                        "total_intersection_area_ha"
+                        if "total_intersection_area_ha" in column_names
+                        else "agricultural_area_ha"
+                    } as total_intersection_area_ha,
                             {
-                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names
-                                else "0.0"
-                            } as actual_coverage_ratio,
+                        "actual_coverage_ratio"
+                        if "actual_coverage_ratio" in column_names
+                        else "0.0"
+                    } as actual_coverage_ratio,
                             unique_field_count,
                             total_pfas_containing_active_ingredient_grams,
                             total_diquat_containing_active_ingredient_grams,
                             total_glyphosate_containing_active_ingredient_grams,
                             total_pesticide_belastning,
-                            {"total_pfas_pesticide_belastning" if "total_pfas_pesticide_belastning" in column_names
-                        else "0.0"} as total_pfas_pesticide_belastning,
-                            {"total_diquat_pesticide_belastning" if "total_diquat_pesticide_belastning" in column_names
-                        else "0.0"} as total_diquat_pesticide_belastning,
-                            {"total_glyphosate_pesticide_belastning"
+                            {
+                        "total_pfas_pesticide_belastning"
+                        if "total_pfas_pesticide_belastning" in column_names
+                        else "0.0"
+                    } as total_pfas_pesticide_belastning,
+                            {
+                        "total_diquat_pesticide_belastning"
+                        if "total_diquat_pesticide_belastning" in column_names
+                        else "0.0"
+                    } as total_diquat_pesticide_belastning,
+                            {
+                        "total_glyphosate_pesticide_belastning"
                         if "total_glyphosate_pesticide_belastning" in column_names
-                        else "0.0"} as total_glyphosate_pesticide_belastning,
+                        else "0.0"
+                    } as total_glyphosate_pesticide_belastning,
                             total_pesticide_applications,
                             pfas_containing_applications,
                             diquat_containing_applications,
@@ -720,9 +729,14 @@ async def run_cumulative_analysis_optimized(
                             pfas_containing_active_ingredient_intensity_grams_per_ha,
                             diquat_containing_active_ingredient_intensity_grams_per_ha,
                             glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                            {"pesticide_belastning_per_ha" if "pesticide_belastning_per_ha" in column_names
-                        else "pesticide_intensity"} as pesticide_belastning_per_ha,
-                            {"created_at" if "created_at" in column_names else "CURRENT_TIMESTAMP"} as created_at
+                            {
+                        "pesticide_belastning_per_ha"
+                        if "pesticide_belastning_per_ha" in column_names
+                        else "pesticide_intensity"
+                    } as pesticide_belastning_per_ha,
+                            {
+                        "created_at" if "created_at" in column_names else "CURRENT_TIMESTAMP"
+                    } as created_at
                         FROM {year_table}
                     """)
 
@@ -1182,14 +1196,13 @@ async def run_cumulative_analysis_github_actions_optimized(
                                 )
                                 logger.info(f"      🕐 Timestamp: {timestamp} (within last 24h)")
                                 break
-                            else:
-                                # Fall back to most recent file even if older
-                                if found_file is None:
-                                    found_file = most_recent_file
-                                    logger.info(
-                                        f"   ⚠️  Found older results for year {year} at resolution {resolution}: {found_file}"
-                                    )
-                                    logger.info(f"      🕐 Timestamp: {timestamp}")
+                            # Fall back to most recent file even if older
+                            if found_file is None:
+                                found_file = most_recent_file
+                                logger.info(
+                                    f"   ⚠️  Found older results for year {year} at resolution {resolution}: {found_file}"
+                                )
+                                logger.info(f"      🕐 Timestamp: {timestamp}")
                     except Exception as e:
                         logger.debug(f"   🔍 Pattern {pattern} failed: {e}")
                         continue
@@ -1270,29 +1283,38 @@ async def run_cumulative_analysis_github_actions_optimized(
                             center_lat,
                             center_lon,
                             {
-                                "h3_area_ha" if "h3_area_ha" in column_names
-                                else "h3_cell_area_ha"
-                            } as h3_area_ha,
+                        "h3_area_ha" if "h3_area_ha" in column_names else "h3_cell_area_ha"
+                    } as h3_area_ha,
                             {
-                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names
-                                else "agricultural_area_ha"
-                            } as total_intersection_area_ha,
+                        "total_intersection_area_ha"
+                        if "total_intersection_area_ha" in column_names
+                        else "agricultural_area_ha"
+                    } as total_intersection_area_ha,
                             {
-                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names
-                                else "0.0"
-                            } as actual_coverage_ratio,
+                        "actual_coverage_ratio"
+                        if "actual_coverage_ratio" in column_names
+                        else "0.0"
+                    } as actual_coverage_ratio,
                             unique_field_count,
                             total_pfas_containing_active_ingredient_grams,
                             total_diquat_containing_active_ingredient_grams,
                             total_glyphosate_containing_active_ingredient_grams,
                             total_pesticide_belastning,
-                            {"total_pfas_pesticide_belastning" if "total_pfas_pesticide_belastning" in column_names
-                        else "0.0"} as total_pfas_pesticide_belastning,
-                            {"total_diquat_pesticide_belastning" if "total_diquat_pesticide_belastning" in column_names
-                        else "0.0"} as total_diquat_pesticide_belastning,
-                            {"total_glyphosate_pesticide_belastning"
+                            {
+                        "total_pfas_pesticide_belastning"
+                        if "total_pfas_pesticide_belastning" in column_names
+                        else "0.0"
+                    } as total_pfas_pesticide_belastning,
+                            {
+                        "total_diquat_pesticide_belastning"
+                        if "total_diquat_pesticide_belastning" in column_names
+                        else "0.0"
+                    } as total_diquat_pesticide_belastning,
+                            {
+                        "total_glyphosate_pesticide_belastning"
                         if "total_glyphosate_pesticide_belastning" in column_names
-                        else "0.0"} as total_glyphosate_pesticide_belastning,
+                        else "0.0"
+                    } as total_glyphosate_pesticide_belastning,
                             total_pesticide_applications,
                             pfas_containing_applications,
                             diquat_containing_applications,
@@ -1302,9 +1324,14 @@ async def run_cumulative_analysis_github_actions_optimized(
                             pfas_containing_active_ingredient_intensity_grams_per_ha,
                             diquat_containing_active_ingredient_intensity_grams_per_ha,
                             glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                            {"pesticide_belastning_per_ha" if "pesticide_belastning_per_ha" in column_names
-                        else "pesticide_intensity"} as pesticide_belastning_per_ha,
-                            {"created_at" if "created_at" in column_names else "CURRENT_TIMESTAMP"} as created_at
+                            {
+                        "pesticide_belastning_per_ha"
+                        if "pesticide_belastning_per_ha" in column_names
+                        else "pesticide_intensity"
+                    } as pesticide_belastning_per_ha,
+                            {
+                        "created_at" if "created_at" in column_names else "CURRENT_TIMESTAMP"
+                    } as created_at
                         FROM {year_table}
                     """)
 
@@ -1857,9 +1884,8 @@ async def test_refactored_processor(test_data_dir: Path | str | None = None) -> 
         if results_table:
             logger.success("✅ Refactored processor test completed successfully")
             return True
-        else:
-            logger.error("❌ Refactored processor test failed")
-            return False
+        logger.error("❌ Refactored processor test failed")
+        return False
     except Exception as e:
         logger.error(f"❌ Error in processor test: {e}")
         return False
@@ -2086,29 +2112,38 @@ async def run_cumulative_analysis_from_artifacts(
                             center_lat,
                             center_lon,
                             {
-                                "h3_area_ha" if "h3_area_ha" in column_names
-                                else "h3_cell_area_ha"
-                            } as h3_area_ha,
+                        "h3_area_ha" if "h3_area_ha" in column_names else "h3_cell_area_ha"
+                    } as h3_area_ha,
                             {
-                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names
-                                else "agricultural_area_ha"
-                            } as total_intersection_area_ha,
+                        "total_intersection_area_ha"
+                        if "total_intersection_area_ha" in column_names
+                        else "agricultural_area_ha"
+                    } as total_intersection_area_ha,
                             {
-                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names
-                                else "0.0"
-                            } as actual_coverage_ratio,
+                        "actual_coverage_ratio"
+                        if "actual_coverage_ratio" in column_names
+                        else "0.0"
+                    } as actual_coverage_ratio,
                             unique_field_count,
                             total_pfas_containing_active_ingredient_grams,
                             total_diquat_containing_active_ingredient_grams,
                             total_glyphosate_containing_active_ingredient_grams,
                             total_pesticide_belastning,
-                            {"total_pfas_pesticide_belastning" if "total_pfas_pesticide_belastning" in column_names
-                        else "0.0"} as total_pfas_pesticide_belastning,
-                            {"total_diquat_pesticide_belastning" if "total_diquat_pesticide_belastning" in column_names
-                        else "0.0"} as total_diquat_pesticide_belastning,
-                            {"total_glyphosate_pesticide_belastning"
+                            {
+                        "total_pfas_pesticide_belastning"
+                        if "total_pfas_pesticide_belastning" in column_names
+                        else "0.0"
+                    } as total_pfas_pesticide_belastning,
+                            {
+                        "total_diquat_pesticide_belastning"
+                        if "total_diquat_pesticide_belastning" in column_names
+                        else "0.0"
+                    } as total_diquat_pesticide_belastning,
+                            {
+                        "total_glyphosate_pesticide_belastning"
                         if "total_glyphosate_pesticide_belastning" in column_names
-                        else "0.0"} as total_glyphosate_pesticide_belastning,
+                        else "0.0"
+                    } as total_glyphosate_pesticide_belastning,
                             total_pesticide_applications,
                             pfas_containing_applications,
                             diquat_containing_applications,
@@ -2118,9 +2153,14 @@ async def run_cumulative_analysis_from_artifacts(
                             pfas_containing_active_ingredient_intensity_grams_per_ha,
                             diquat_containing_active_ingredient_intensity_grams_per_ha,
                             glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                            {"pesticide_belastning_per_ha" if "pesticide_belastning_per_ha" in column_names
-                        else "pesticide_intensity"} as pesticide_belastning_per_ha,
-                            {"created_at" if "created_at" in column_names else "CURRENT_TIMESTAMP"} as created_at
+                            {
+                        "pesticide_belastning_per_ha"
+                        if "pesticide_belastning_per_ha" in column_names
+                        else "pesticide_intensity"
+                    } as pesticide_belastning_per_ha,
+                            {
+                        "created_at" if "created_at" in column_names else "CURRENT_TIMESTAMP"
+                    } as created_at
                         FROM {year_table}
                     """)
 

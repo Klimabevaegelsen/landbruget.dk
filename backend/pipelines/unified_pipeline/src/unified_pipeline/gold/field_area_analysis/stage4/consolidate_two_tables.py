@@ -14,7 +14,7 @@ Key Principles:
 - Two separate output tables eliminate record explosion issues
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
@@ -225,7 +225,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         else:
             self.log.info("  ✅ All fields already have field_uuid")
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """Execute redesigned Stage 4 consolidation with centralized area calculations."""
 
         self.log.info("🎯 REDESIGNED STAGE 4: Performing ALL area calculations from geometric data")
@@ -628,7 +628,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             f"✅ Created field_environmental_analysis_properties: {property_count:,} records"
         )
 
-    def _get_consolidation_statistics(self) -> Dict[str, Any]:
+    def _get_consolidation_statistics(self) -> dict[str, Any]:
         """Get statistics for both output tables."""
 
         # Field-level statistics
@@ -696,7 +696,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
 
         return stats
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save both redesigned output tables to GCS."""
 
         self.log.info("Saving redesigned output tables to GCS...")

@@ -69,7 +69,7 @@ def test_get_params(water_projects_bronze: WaterProjectsBronze) -> None:
 @pytest.mark.asyncio
 async def test_fetch_chunk_success(water_projects_bronze: WaterProjectsBronze) -> None:
     """Test the _fetch_chunk method successfully fetches data."""
-    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="5" numberReturned="2"><wfs:member></wfs:member></wfs:FeatureCollection>'  # noqa: E501
+    xml_response = '<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" numberMatched="5" numberReturned="2"><wfs:member></wfs:member></wfs:FeatureCollection>'
 
     mock_response = AsyncMock()
     mock_response.status = 200
@@ -108,10 +108,12 @@ async def test_fetch_chunk_http_error(water_projects_bronze: WaterProjectsBronze
     url = water_projects_bronze.config.url
 
     # Patch the retry decorator for this test to prevent retries
-    with patch("unified_pipeline.bronze.water_projects.retry", lambda **kwargs: lambda f: f):
-        with pytest.raises(Exception) as excinfo:
-            await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)
-            assert "Failed to fetch data. Status: 500" in str(excinfo.value)
+    with (
+        patch("unified_pipeline.bronze.water_projects.retry", lambda **kwargs: lambda f: f),
+        pytest.raises(Exception) as excinfo,
+    ):
+        await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)
+        assert "Failed to fetch data. Status: 500" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
@@ -130,10 +132,12 @@ async def test_fetch_chunk_xml_parse_error(water_projects_bronze: WaterProjectsB
     url = water_projects_bronze.config.url
 
     # Patch the retry decorator for this test to prevent retries
-    with patch("unified_pipeline.bronze.water_projects.retry", lambda **kwargs: lambda f: f):
-        with pytest.raises(Exception) as excinfo:
-            await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)
-            assert "Failed to parse XML response" in str(excinfo.value)
+    with (
+        patch("unified_pipeline.bronze.water_projects.retry", lambda **kwargs: lambda f: f),
+        pytest.raises(Exception) as excinfo,
+    ):
+        await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)
+        assert "Failed to parse XML response" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
@@ -276,19 +280,19 @@ async def test_fetch_wfs_data_multiple_batches(water_projects_bronze: WaterProje
     # Define responses for each chunk
     chunk_responses = [
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",  # noqa: E501
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>1</wfs:member><wfs:member>2</wfs:member></wfs:FeatureCollection>",
             "start_index": 0,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",  # noqa: E501
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=2><wfs:member>3</wfs:member><wfs:member>4</wfs:member></wfs:FeatureCollection>",
             "start_index": 2,
             "total_features": 5,
             "returned_features": 2,
         },
         {
-            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",  # noqa: E501
+            "text": "<wfs:FeatureCollection numberMatched=5 numberReturned=1><wfs:member>5</wfs:member></wfs:FeatureCollection>",
             "start_index": 4,
             "total_features": 5,
             "returned_features": 1,
@@ -794,16 +798,14 @@ async def test_url_construction_for_different_services(
     async def mock_fetch_wfs_data(session: aiohttp.ClientSession, layer: str, url: str) -> list:
         if url == water_projects_test.config.url:
             return wfs_data
-        elif url == "https://wfs2-miljoegis.mim.dk/vandprojekter/wfs":
+        if url == "https://wfs2-miljoegis.mim.dk/vandprojekter/wfs":
             return custom_wfs_data
-        else:
-            raise ValueError(f"Unexpected URL: {url}")
+        raise ValueError(f"Unexpected URL: {url}")
 
     async def mock_fetch_arcgis_data(session: aiohttp.ClientSession, layer: str, url: str) -> list:
         if "gis.nst.dk" in url:
             return arcgis_data
-        else:
-            raise ValueError(f"Unexpected URL: {url}")
+        raise ValueError(f"Unexpected URL: {url}")
 
     # Patch the fetch methods
     with (
@@ -881,5 +883,5 @@ async def test_handling_unexpected_data_structures(
     mock_response.text = AsyncMock(return_value=malformed_xml)
 
     # This should raise a ValueError when trying to convert non-numeric strings to int
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)

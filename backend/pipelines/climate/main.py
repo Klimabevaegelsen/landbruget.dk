@@ -20,16 +20,17 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
+from climate_calculator import EmissionReport, FarmClimateCalculator
 from data_loader import ClimateDataLoader
-from climate_calculator import FarmClimateCalculator, EmissionReport
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -54,9 +55,13 @@ Examples:
         """,
     )
 
-    parser.add_argument("--cvr", required=True, help="CVR number (8 digits) or 'all' to process all farms with data")
+    parser.add_argument(
+        "--cvr", required=True, help="CVR number (8 digits) or 'all' to process all farms with data"
+    )
 
-    parser.add_argument("--year", type=int, required=True, help="Year to calculate emissions for (YYYY)")
+    parser.add_argument(
+        "--year", type=int, required=True, help="Year to calculate emissions for (YYYY)"
+    )
 
     parser.add_argument(
         "--output",
@@ -66,7 +71,9 @@ Examples:
     )
 
     parser.add_argument(
-        "--dry-run", action="store_true", help="Calculate emissions but don't write output (for testing)"
+        "--dry-run",
+        action="store_true",
+        help="Calculate emissions but don't write output (for testing)",
     )
 
     parser.add_argument(
@@ -76,12 +83,16 @@ Examples:
         help="Logging level (default: INFO)",
     )
 
-    parser.add_argument("--limit", type=int, help="Limit number of CVRs to process (useful with --cvr all)")
+    parser.add_argument(
+        "--limit", type=int, help="Limit number of CVRs to process (useful with --cvr all)"
+    )
 
     return parser.parse_args()
 
 
-def get_cvr_list(loader: ClimateDataLoader, cvr_arg: str, year: int, limit: int = None) -> List[str]:
+def get_cvr_list(
+    loader: ClimateDataLoader, cvr_arg: str, year: int, limit: int | None = None
+) -> list[str]:
     """
     Get list of CVR numbers to process.
 
@@ -104,15 +115,14 @@ def get_cvr_list(loader: ClimateDataLoader, cvr_arg: str, year: int, limit: int 
 
         logger.info(f"Found {len(cvrs)} CVRs with data")
         return cvrs
-    else:
-        # Validate single CVR format
-        cvr_str = str(cvr_arg).zfill(8)
-        if len(cvr_str) != 8 or not cvr_str.isdigit():
-            raise ValueError(f"Invalid CVR format: {cvr_arg}. Must be 8 digits.")
-        return [cvr_str]
+    # Validate single CVR format
+    cvr_str = str(cvr_arg).zfill(8)
+    if len(cvr_str) != 8 or not cvr_str.isdigit():
+        raise ValueError(f"Invalid CVR format: {cvr_arg}. Must be 8 digits.")
+    return [cvr_str]
 
 
-def get_all_cvrs_with_data(loader: ClimateDataLoader, year: int) -> List[str]:
+def get_all_cvrs_with_data(loader: ClimateDataLoader, year: int) -> list[str]:
     """
     Get all CVRs that have data available for the specified year.
 
@@ -170,11 +180,13 @@ def print_emission_report(report: EmissionReport, verbose: bool = True):
     print(f"Climate Emission Report - CVR {report.cvr}, Year {report.year}")
     print(f"{'=' * 70}")
 
-    print(f"\nTotal CO2e: {report.total_co2e_kg:,.0f} kg ({report.total_co2e_kg / 1000:,.1f} tonnes)")
+    print(
+        f"\nTotal CO2e: {report.total_co2e_kg:,.0f} kg ({report.total_co2e_kg / 1000:,.1f} tonnes)"
+    )
     print(f"Data Completeness: {report.data_completeness:.1%}")
 
     if report.categories:
-        print(f"\nEmission Categories:")
+        print("\nEmission Categories:")
         print(f"{'-' * 70}")
 
         for cat in report.categories:
@@ -183,13 +195,13 @@ def print_emission_report(report: EmissionReport, verbose: bool = True):
             print(f"    Data Quality: {cat.data_quality}")
 
             if verbose and cat.sub_sources:
-                print(f"    Sub-sources:")
+                print("    Sub-sources:")
                 for source_name, source_co2e in cat.sub_sources.items():
                     pct = (source_co2e / cat.co2e_kg * 100) if cat.co2e_kg > 0 else 0
                     print(f"      - {source_name}: {source_co2e:,.0f} kg CO2e ({pct:.1f}%)")
 
     if report.intensity_metrics:
-        print(f"\nIntensity Metrics:")
+        print("\nIntensity Metrics:")
         print(f"{'-' * 70}")
         for metric_name, metric_value in report.intensity_metrics.items():
             print(f"  {metric_name}: {metric_value:.2f}")
@@ -197,7 +209,7 @@ def print_emission_report(report: EmissionReport, verbose: bool = True):
     print(f"\n{'=' * 70}\n")
 
 
-def write_output(reports: List[EmissionReport], output_mode: str):
+def write_output(reports: list[EmissionReport], output_mode: str):
     """
     Write emission reports to specified output destination.
 
@@ -227,7 +239,9 @@ def main():
     logging.getLogger().setLevel(getattr(logging, args.log_level))
 
     logger.info("Starting Climate Tool")
-    logger.info(f"CVR: {args.cvr}, Year: {args.year}, Output: {args.output}, Dry Run: {args.dry_run}")
+    logger.info(
+        f"CVR: {args.cvr}, Year: {args.year}, Output: {args.output}, Dry Run: {args.dry_run}"
+    )
 
     # Initialize components
     try:
@@ -265,7 +279,9 @@ def main():
             reports.append(report)
 
             # Print summary
-            print(f"  {cvr}: {report.total_co2e_kg:,.0f} kg CO2e ({report.data_completeness:.0%} complete)")
+            print(
+                f"  {cvr}: {report.total_co2e_kg:,.0f} kg CO2e ({report.data_completeness:.0%} complete)"
+            )
 
             successful += 1
 
@@ -276,7 +292,7 @@ def main():
 
     # Summary statistics
     print(f"\n{'=' * 70}")
-    print(f"Processing Complete")
+    print("Processing Complete")
     print(f"{'=' * 70}")
     print(f"  Successful: {successful}")
     print(f"  Failed: {failed}")
@@ -287,8 +303,10 @@ def main():
         avg_emissions = total_emissions / len(reports)
         avg_completeness = sum(r.data_completeness for r in reports) / len(reports)
 
-        print(f"\nAggregate Statistics:")
-        print(f"  Total Emissions: {total_emissions:,.0f} kg CO2e ({total_emissions / 1000:,.1f} tonnes)")
+        print("\nAggregate Statistics:")
+        print(
+            f"  Total Emissions: {total_emissions:,.0f} kg CO2e ({total_emissions / 1000:,.1f} tonnes)"
+        )
         print(f"  Average per Farm: {avg_emissions:,.0f} kg CO2e")
         print(f"  Average Completeness: {avg_completeness:.1%}")
 

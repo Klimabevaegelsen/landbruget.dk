@@ -6,7 +6,6 @@ including payload extraction, geometry validation, and data transformation.
 """
 
 import json
-from typing import Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -42,9 +41,8 @@ def silver_source(
     config: AgriculturalFieldsSilverConfig,
 ) -> AgriculturalFieldsSilver:
     """Create a silver source for testing."""
-    with patch("unified_pipeline.common.base.GCSDataAccess"):
-        with patch("duckdb.connect"):
-            return AgriculturalFieldsSilver(config)
+    with patch("unified_pipeline.common.base.GCSDataAccess"), patch("duckdb.connect"):
+        return AgriculturalFieldsSilver(config)
 
 
 @pytest.fixture
@@ -75,7 +73,7 @@ def sample_payload() -> str:
 
 
 @pytest.fixture
-def sample_dataframe() -> Dict[str, List[str]]:
+def sample_dataframe() -> dict[str, list[str]]:
     """Return a sample dataframe with payloads."""
     return {
         "payload": [
@@ -124,10 +122,10 @@ async def test_run_success(silver_source: AgriculturalFieldsSilver) -> None:
     # Act
     await silver_source.run()
 
-    # Assert - Now expects 11 calls total (6 fields years 2020-2025 + 5 blocks years 2020-2024)
-    assert silver_source._read_bronze_data.call_count == 11
-    assert silver_source._process_payloads_with_duckdb.call_count == 11
-    assert silver_source._save_data.call_count == 11
+    # Assert - Now expects 12 calls total (6 fields years 2020-2025 + 6 blocks years 2020-2025)
+    assert silver_source._read_bronze_data.call_count == 12
+    assert silver_source._process_payloads_with_duckdb.call_count == 12
+    assert silver_source._save_data.call_count == 12
 
 
 @pytest.mark.asyncio
@@ -144,8 +142,8 @@ async def test_run_read_bronze_data_failure(silver_source: AgriculturalFieldsSil
 
     await silver_source.run()
 
-    # Expects 11 calls (will fail on first one, but continues to others)
-    assert silver_source._read_bronze_data.call_count == 11
+    # Expects 12 calls (will fail on first one, but continues to others)
+    assert silver_source._read_bronze_data.call_count == 12
     # Should not be called after failure
     silver_source._process_payloads_with_duckdb.assert_not_called()
     silver_source._save_data.assert_not_called()  # Should not be called after failure
@@ -167,6 +165,6 @@ async def test_run_process_data_failure(silver_source: AgriculturalFieldsSilver)
 
     await silver_source.run()
 
-    assert silver_source._read_bronze_data.call_count == 11  # Called for all datasets/years
-    assert silver_source._process_payloads_with_duckdb.call_count == 11  # Called for all but fails
+    assert silver_source._read_bronze_data.call_count == 12  # Called for all datasets/years
+    assert silver_source._process_payloads_with_duckdb.call_count == 12  # Called for all but fails
     silver_source._save_data.assert_not_called()  # Should not be called after failure

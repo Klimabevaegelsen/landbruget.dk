@@ -16,8 +16,8 @@ This module handles:
 4. Validation against Danish CVR format
 """
 
+import contextlib
 import re
-from typing import Optional, Union
 
 # Regex pattern for valid 8-digit CVR
 CVR_PATTERN = re.compile(r"^\d{8}$")
@@ -26,7 +26,7 @@ CVR_PATTERN = re.compile(r"^\d{8}$")
 XML_HEX_PATTERN = re.compile(r"_x([0-9A-Fa-f]{4})_")
 
 
-def normalize_cvr(value: Union[str, int, float, None]) -> Optional[str]:
+def normalize_cvr(value: str | int | float | None) -> str | None:
     """
     Normalize a CVR number to 8-digit string format.
 
@@ -66,10 +66,8 @@ def normalize_cvr(value: Union[str, int, float, None]) -> Optional[str]:
 
     # Handle float conversion (e.g., "12345678.0" → "12345678")
     if "." in s:
-        try:
+        with contextlib.suppress(ValueError, OverflowError):
             s = str(int(float(s)))
-        except (ValueError, OverflowError):
-            pass
 
     # Decode XML hex encoding (e.g., "_x0034_" → "4")
     s = XML_HEX_PATTERN.sub(lambda m: chr(int(m.group(1), 16)), s)
@@ -210,7 +208,7 @@ CVR_COLUMN_ALIASES = {
 }
 
 
-def find_cvr_column(columns: list) -> Optional[str]:
+def find_cvr_column(columns: list) -> str | None:
     """
     Find the CVR column in a list of column names.
 

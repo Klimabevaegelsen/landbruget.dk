@@ -176,7 +176,7 @@ def test_bronze_specific_subfolders(test_settings: Settings, mock_drive_fetcher:
                 ]
             # Return all files if recursive
             return mock_drive_fetcher.list_folder_contents.return_value
-        elif folder_id == "folder1":
+        if folder_id == "folder1":
             return [
                 {
                     "id": "file1",
@@ -193,7 +193,7 @@ def test_bronze_specific_subfolders(test_settings: Settings, mock_drive_fetcher:
                     "parents": ["folder1"],
                 },
             ]
-        elif folder_id == "folder2":
+        if folder_id == "folder2":
             return [
                 {
                     "id": "file2",

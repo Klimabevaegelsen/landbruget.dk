@@ -1,15 +1,14 @@
-"""CHR Export functionality using DuckDB."""
+"""CHR Export functionality using vanilla DuckDB."""
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Union
 
-import ibis
+import duckdb
 
 # Try to import GCS utilities
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -17,16 +16,19 @@ except ImportError:
     GCSDataAccess = None
 
 
-def save_table(output_path: Path, data: Union[ibis.Table, str], is_geo: bool = False) -> Optional[Path]:
+def save_table(
+    output_path: Path,
+    data: duckdb.DuckDBPyRelation | str,
+    con: duckdb.DuckDBPyConnection,
+    is_geo: bool = False,
+) -> Path | None:
     """
     Save table data to parquet file using DuckDB directly.
 
-    ✅ MIGRATION: This function now uses DuckDB exclusively for saving data,
-    accepting either Ibis tables or DuckDB table names.
-
     Args:
         output_path: Path where to save the parquet file
-        data: Ibis table or DuckDB table name containing the data to save
+        data: DuckDB relation or table name string containing the data to save
+        con: DuckDB connection
         is_geo: Whether the data contains geometry (for spatial extension loading)
 
     Returns:
@@ -36,31 +38,34 @@ def save_table(output_path: Path, data: Union[ibis.Table, str], is_geo: bool = F
         # Ensure parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Load spatial extension if needed
+        if is_geo:
+            try:
+                con.execute("INSTALL spatial")
+                con.execute("LOAD spatial")
+            except Exception:
+                pass  # Extensions might already be loaded
+
         # Handle different input types
-        if isinstance(data, ibis.Table):
-            # Get the DuckDB connection from the Ibis table
-            con = data.get_backend()
-
-            # Create a temporary table name for the operation
+        if isinstance(data, duckdb.DuckDBPyRelation):
+            # Create a temporary table from the relation
             temp_table_name = f"temp_export_{output_path.stem}"
-
-            # Create temporary table
-            con.create_table(temp_table_name, data, overwrite=True)
+            con.execute(f"CREATE OR REPLACE TABLE {temp_table_name} AS SELECT * FROM data")
 
             # Use DuckDB COPY to save to parquet
-            con.con.execute(f"COPY {temp_table_name} TO '{output_path}' (FORMAT PARQUET)")
+            con.execute(f"COPY {temp_table_name} TO '{output_path}' (FORMAT PARQUET)")
 
             # Clean up temporary table
-            con.drop_table(temp_table_name, force=True)
+            con.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
 
         elif isinstance(data, str):
-            # Assume it's a table name in DuckDB
-            # We need a connection - this is a limitation of the current design
-            # For now, we'll assume the caller passes an Ibis table
-            raise ValueError("String table names not supported - please pass Ibis table directly")
+            # It's a table name in DuckDB - copy directly
+            con.execute(f"COPY {data} TO '{output_path}' (FORMAT PARQUET)")
 
         else:
-            raise ValueError(f"Unsupported data type: {type(data)}. Expected Ibis table.")
+            raise ValueError(
+                f"Unsupported data type: {type(data)}. Expected DuckDB relation or table name string."
+            )
 
         if not output_path.exists():
             logging.error(f"Failed to save table - file not created: {output_path}")
@@ -70,20 +75,20 @@ def save_table(output_path: Path, data: Union[ibis.Table, str], is_geo: bool = F
         return output_path
 
     except Exception as e:
-        logging.error(f"Error saving table to {output_path}: {str(e)}")
+        logging.error(f"Error saving table to {output_path}: {e!s}")
         return None
 
 
 def save_table_with_connection(
-    con: ibis.BaseBackend, table_name: str, output_path: Path, is_geo: bool = False
-) -> Optional[Path]:
+    con: duckdb.DuckDBPyConnection, table_name: str, output_path: Path, is_geo: bool = False
+) -> Path | None:
     """
     Save a DuckDB table to parquet file using the connection directly.
 
     This is an alternative method when you have the connection and table name.
 
     Args:
-        con: DuckDB connection (Ibis backend)
+        con: DuckDB connection
         table_name: Name of the table in DuckDB
         output_path: Path where to save the parquet file
         is_geo: Whether the data contains geometry (for spatial extension loading)
@@ -98,13 +103,13 @@ def save_table_with_connection(
         # Load spatial extension if needed
         if is_geo:
             try:
-                con.con.execute("INSTALL spatial")
-                con.con.execute("LOAD spatial")
+                con.execute("INSTALL spatial")
+                con.execute("LOAD spatial")
             except Exception:
                 pass  # Extensions might already be loaded
 
         # Use DuckDB COPY to save to parquet
-        con.con.execute(f"COPY {table_name} TO '{output_path}' (FORMAT PARQUET)")
+        con.execute(f"COPY {table_name} TO '{output_path}' (FORMAT PARQUET)")
 
         if not output_path.exists():
             logging.error(f"Failed to save table - file not created: {output_path}")
@@ -114,7 +119,7 @@ def save_table_with_connection(
         return output_path
 
     except Exception as e:
-        logging.error(f"Error saving table '{table_name}' to {output_path}: {str(e)}")
+        logging.error(f"Error saving table '{table_name}' to {output_path}: {e!s}")
         return None
 
 
@@ -157,42 +162,38 @@ def upload_silver_data_to_gcs(silver_dir: Path, export_timestamp: str) -> bool:
                 gcs_path = f"gs://{bucket_name}/silver/chr/{export_timestamp}/{parquet_file.name}"
 
                 # Upload file using streaming
-                with open(parquet_file, "rb") as src:
-                    with gcs_access.fs.open(gcs_path, "wb") as dst:
-                        import shutil
+                with open(parquet_file, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                    import shutil
 
-                        shutil.copyfileobj(src, dst)
+                    shutil.copyfileobj(src, dst)
 
-                logging.info(f"✅ Uploaded {parquet_file.name} to {gcs_path}")
+                logging.info(f"Uploaded {parquet_file.name} to {gcs_path}")
                 uploaded_count += 1
 
             except Exception as e:
-                logging.error(f"❌ Failed to upload {parquet_file.name}: {e}")
+                logging.error(f"Failed to upload {parquet_file.name}: {e}")
 
         if uploaded_count == len(parquet_files):
-            logging.info(f"✅ Successfully uploaded all {uploaded_count} silver files to GCS")
+            logging.info(f"Successfully uploaded all {uploaded_count} silver files to GCS")
             return True
-        else:
-            logging.warning(f"⚠️ Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
-            return False
+        logging.warning(f"Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
+        return False
 
     except Exception as e:
-        logging.error(f"❌ Error uploading silver data to GCS: {e}")
+        logging.error(f"Error uploading silver data to GCS: {e}")
         return False
 
 
 class CHRExporter:
     """
-    CHR data exporter using DuckDB.
-
-    ✅ MIGRATION: Updated to use DuckDB exclusively for all export operations.
+    CHR data exporter using vanilla DuckDB.
     """
 
-    def __init__(self, connection: ibis.BaseBackend):
+    def __init__(self, connection: duckdb.DuckDBPyConnection):
         """Initialize with DuckDB connection."""
         self.con = connection
 
-    def export_tables(self, table_names: list[str], output_dir: Path) -> dict[str, Optional[Path]]:
+    def export_tables(self, table_names: list[str], output_dir: Path) -> dict[str, Path | None]:
         """
         Export multiple tables to parquet files.
 

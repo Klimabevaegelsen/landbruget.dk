@@ -10,21 +10,19 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 
-def check_python_version() -> Tuple[bool, str]:
+def check_python_version() -> tuple[bool, str]:
     """Check if Python version meets requirements."""
     required_version = (3, 11)
     current_version = sys.version_info[:2]
 
     if current_version >= required_version:
         return True, f"✅ Python {sys.version.split()[0]} (meets requirement >= 3.11)"
-    else:
-        return False, f"❌ Python {sys.version.split()[0]} (requires >= 3.11)"
+    return False, f"❌ Python {sys.version.split()[0]} (requires >= 3.11)"
 
 
-def check_required_packages() -> List[Tuple[bool, str]]:
+def check_required_packages() -> list[tuple[bool, str]]:
     """Check if all required packages are installed."""
     required_packages = [
         "click",
@@ -67,7 +65,7 @@ def check_required_packages() -> List[Tuple[bool, str]]:
     return results
 
 
-def check_environment_variables() -> List[Tuple[bool, str]]:
+def check_environment_variables() -> list[tuple[bool, str]]:
     """Check if required environment variables are set."""
     required_env_vars = [
         ("GCS_BUCKET", "Google Cloud Storage bucket name"),
@@ -106,7 +104,7 @@ def check_environment_variables() -> List[Tuple[bool, str]]:
     return results
 
 
-def check_unified_pipeline_imports() -> List[Tuple[bool, str]]:
+def check_unified_pipeline_imports() -> list[tuple[bool, str]]:
     """Check if unified pipeline modules can be imported."""
     modules_to_check = [
         "unified_pipeline.app",
@@ -122,12 +120,12 @@ def check_unified_pipeline_imports() -> List[Tuple[bool, str]]:
             importlib.import_module(module)
             results.append((True, f"✅ {module}"))
         except ImportError as e:
-            results.append((False, f"❌ {module} ({str(e)})"))
+            results.append((False, f"❌ {module} ({e!s})"))
 
     return results
 
 
-def check_scheduling_configuration() -> Tuple[bool, str]:
+def check_scheduling_configuration() -> tuple[bool, str]:
     """Check if scheduling configuration is valid."""
     try:
         from unified_pipeline.model.scheduling import PIPELINE_SCHEDULES, validate_dependencies
@@ -139,17 +137,16 @@ def check_scheduling_configuration() -> Tuple[bool, str]:
                 True,
                 f"✅ Scheduling configuration valid ({pipeline_count} pipelines configured)",
             )
-        else:
-            error_summary = "; ".join(errors[:3])  # Show first 3 errors
-            if len(errors) > 3:
-                error_summary += f" (and {len(errors) - 3} more)"
-            return False, f"❌ Scheduling configuration errors: {error_summary}"
+        error_summary = "; ".join(errors[:3])  # Show first 3 errors
+        if len(errors) > 3:
+            error_summary += f" (and {len(errors) - 3} more)"
+        return False, f"❌ Scheduling configuration errors: {error_summary}"
 
     except Exception as e:
-        return False, f"❌ Failed to validate scheduling: {str(e)}"
+        return False, f"❌ Failed to validate scheduling: {e!s}"
 
 
-def check_cli_functionality() -> Tuple[bool, str]:
+def check_cli_functionality() -> tuple[bool, str]:
     """Check if CLI commands work."""
     try:
         from click.testing import CliRunner
@@ -176,10 +173,10 @@ def check_cli_functionality() -> Tuple[bool, str]:
         return True, "✅ CLI functionality working"
 
     except Exception as e:
-        return False, f"❌ CLI functionality check failed: {str(e)}"
+        return False, f"❌ CLI functionality check failed: {e!s}"
 
 
-def check_file_permissions() -> List[Tuple[bool, str]]:
+def check_file_permissions() -> list[tuple[bool, str]]:
     """Check file permissions and directory structure."""
     results = []
 
@@ -191,7 +188,7 @@ def check_file_permissions() -> List[Tuple[bool, str]]:
             tmp.write(b"test")
         results.append((True, "✅ Temporary file creation"))
     except Exception as e:
-        results.append((False, f"❌ Temporary file creation: {str(e)}"))
+        results.append((False, f"❌ Temporary file creation: {e!s}"))
 
     # Check if source directory exists and is readable
     src_dir = Path(__file__).parent / "src" / "unified_pipeline"
@@ -274,19 +271,18 @@ def main():
         print("  python -m unified_pipeline scheduling execution-order --frequency monthly")
         print("  python -m unified_pipeline run -s dst -j bronze")
         return 0
-    else:
-        print("❌ SOME CHECKS FAILED! Please fix the issues above.")
+    print("❌ SOME CHECKS FAILED! Please fix the issues above.")
 
-        if required_env_failed:
-            print("\n🔧 To fix environment variable issues:")
-            print("  1. Create a .env file in the unified_pipeline directory")
-            print("  2. Add the required environment variables")
-            print("  3. Source the .env file or restart your shell")
+    if required_env_failed:
+        print("\n🔧 To fix environment variable issues:")
+        print("  1. Create a .env file in the unified_pipeline directory")
+        print("  2. Add the required environment variables")
+        print("  3. Source the .env file or restart your shell")
 
-        print("\n📦 To install missing packages:")
-        print("  uv pip install -e .")
+    print("\n📦 To install missing packages:")
+    print("  uv pip install -e .")
 
-        return 1
+    return 1
 
 
 if __name__ == "__main__":

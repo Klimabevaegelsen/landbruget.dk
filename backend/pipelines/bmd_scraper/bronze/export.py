@@ -16,15 +16,15 @@ def _get_optimized_gcs_access() -> type | None:
     Returns GCSDataAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when unified_pipeline is properly installed
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         logging.info("✅ Successfully imported optimized GCSDataAccess")
         return GCSDataAccess
     except ImportError as e:
         logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
         logging.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed " "for optimal performance"
+            "⚠️ Falling back to basic storage - ensure common.gcs is installed "
+            "for optimal performance"
         )
         return None
 
@@ -254,7 +254,9 @@ class GCSStorage:
 
         if gcs_path is None:
             # Use the file structure from local path but with GCS prefix
-            relative_path = os.path.relpath(local_path, start=os.path.dirname(os.path.dirname(local_path)))
+            relative_path = os.path.relpath(
+                local_path, start=os.path.dirname(os.path.dirname(local_path))
+            )
             gcs_path = f"{self.prefix}/{relative_path}"
 
         try:
@@ -263,24 +265,25 @@ class GCSStorage:
                 full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
 
                 # Stream file directly without loading into memory
-                with open(local_path, "rb") as file_obj:
-                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
-                        import shutil
+                import shutil
 
-                        shutil.copyfileobj(file_obj, gcs_file)
+                with (
+                    open(local_path, "rb") as file_obj,
+                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                ):
+                    shutil.copyfileobj(file_obj, gcs_file)
 
                 logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
                 return True
-            else:
-                # Fallback to old method if optimized access failed
-                from google.cloud import storage
+            # Fallback to old method if optimized access failed
+            from google.cloud import storage
 
-                client = storage.Client()
-                bucket = client.bucket(self.bucket_name)
-                blob = bucket.blob(gcs_path)
-                blob.upload_from_filename(local_path)
-                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
-                return True
+            client = storage.Client()
+            bucket = client.bucket(self.bucket_name)
+            blob = bucket.blob(gcs_path)
+            blob.upload_from_filename(local_path)
+            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+            return True
 
         except Exception as e:
             logging.error(f"Failed to upload to GCS: {e}")

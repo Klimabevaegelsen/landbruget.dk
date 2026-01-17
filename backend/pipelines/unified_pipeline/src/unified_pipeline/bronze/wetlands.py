@@ -17,7 +17,7 @@ import asyncio
 import ssl
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
-from typing import Optional
+from typing import ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
@@ -67,7 +67,7 @@ class WetlandsBronzeConfig(BaseJobConfig):
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )
-    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
+    headers: ClassVar[dict[str, str]] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
     request_semaphore: Semaphore = Semaphore(max_concurrent)
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -187,7 +187,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
                 self.log.error(err_msg)
                 raise Exception(err_msg) from e
 
-    async def _fetch_raw_data(self) -> Optional[list[str]]:
+    async def _fetch_raw_data(self) -> list[str] | None:
         """
         Fetch all raw data from the WFS service.
 
@@ -228,9 +228,12 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
                 self.log.debug(f"Fetched {fetched_features_count} out of {total_features}")
 
                 # Create a list of tasks for all remaining chunks to fetch
-                tasks = []
-                for start_index in range(returned_features, total_features, self.config.batch_size):
-                    tasks.append(self._fetch_chunck(session, start_index))
+                tasks = [
+                    self._fetch_chunck(session, start_index)
+                    for start_index in range(
+                        returned_features, total_features, self.config.batch_size
+                    )
+                ]
 
                 # Fetch all chunks in parallel using asyncio.gather
                 results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -298,7 +301,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
 
         return "final_dataframe"
 
-    async def run(self) -> Optional[list[str]]:
+    async def run(self) -> list[str] | None:
         """
         Run the data source processing pipeline.
 

@@ -13,7 +13,7 @@ The data is fetched from the WFS endpoint using geopandas and saved as GeoParque
 for efficient storage and processing.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import ConfigDict
 
@@ -49,7 +49,10 @@ class SoilTypesBronzeConfig(BaseJobConfig):
     dataset: str = "soil_types"
     frequency: str = "monthly"
     bucket: str = "landbrugsdata-raw-data"
-    crs: str = "EPSG:4326"  # WGS84 coordinate system (preferred per README)
+    # CRS: Use server native EPSG:25832 (Danish UTM) to avoid unnecessary server-side transformation.
+    # The silver layer will transform to EPSG:4326 for storage.
+    # See docs/GEOSPATIAL_CRS_AUDIT.md for details on this decision.
+    crs: str = "EPSG:25832"
 
     model_config = ConfigDict(frozen=True)
 
@@ -80,7 +83,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
             config (SoilTypesBronzeConfig): Configuration for the data source"""
         super().__init__(config)
 
-    async def _fetch_soil_types_data(self) -> Optional[Any]:
+    async def _fetch_soil_types_data(self) -> Any | None:
         """
         Fetch soil types data from the WFS endpoint.
 
@@ -124,10 +127,10 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
                 }
 
         except Exception as e:
-            self.log.error(f"Error preparing soil types data fetch: {str(e)}")
-            raise Exception(f"Failed to prepare soil types data fetch: {str(e)}") from e
+            self.log.error(f"Error preparing soil types data fetch: {e!s}")
+            raise Exception(f"Failed to prepare soil types data fetch: {e!s}") from e
 
-    async def run(self) -> Optional[Any]:
+    async def run(self) -> Any | None:
         """
         Run the soil types data processing pipeline.
 
@@ -165,5 +168,5 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
             return soil_types_metadata
 
         except Exception as e:
-            self.log.error(f"Error in soil types bronze processing: {str(e)}")
+            self.log.error(f"Error in soil types bronze processing: {e!s}")
             raise

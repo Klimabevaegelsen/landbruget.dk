@@ -24,7 +24,6 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 # Setup logging
 logging.basicConfig(
@@ -40,7 +39,7 @@ if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 
 
-def discover_cvrs(year: int, test_limit: Optional[int] = None) -> dict:
+def discover_cvrs(year: int, test_limit: int | None = None) -> dict:
     """
     Discover all CVRs with agricultural data for a given year.
 
@@ -113,7 +112,7 @@ def discover_cvrs(year: int, test_limit: Optional[int] = None) -> dict:
         logger.warning(f"Failed to query FVM: {e}")
 
     # Convert to sorted list
-    cvr_list = sorted(list(cvr_set))
+    cvr_list = sorted(cvr_set)
 
     # Apply test limit if specified
     if test_limit and test_limit > 0:
@@ -212,21 +211,32 @@ Examples:
 
     # Mode selection
     mode_group = parser.add_mutually_exclusive_group(required=True)
-    mode_group.add_argument("--discover", action="store_true", help="Discover CVRs with agricultural data")
+    mode_group.add_argument(
+        "--discover", action="store_true", help="Discover CVRs with agricultural data"
+    )
     mode_group.add_argument("--cvr", type=str, help="Single CVR number to process")
-    mode_group.add_argument("--batch", type=int, help="Batch number (0-indexed) for parallel processing")
+    mode_group.add_argument(
+        "--batch", type=int, help="Batch number (0-indexed) for parallel processing"
+    )
 
     # Common arguments
     parser.add_argument("--year", type=int, required=True, help="Year to calculate emissions for")
     parser.add_argument("--output", type=str, help="Output file path (for discover/single modes)")
-    parser.add_argument("--output-dir", type=str, default="/tmp/climate_output", help="Output directory for batch mode")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="/tmp/climate_output",
+        help="Output directory for batch mode",
+    )
 
     # Batch mode arguments
     parser.add_argument("--batch-size", type=int, default=500, help="CVRs per batch (default: 500)")
     parser.add_argument("--cvr-file", type=str, help="Path to CVR list JSON (from discover mode)")
 
     # Testing arguments
-    parser.add_argument("--test-limit", type=int, help="Limit CVRs for testing (discover mode only)")
+    parser.add_argument(
+        "--test-limit", type=int, help="Limit CVRs for testing (discover mode only)"
+    )
 
     args = parser.parse_args()
 

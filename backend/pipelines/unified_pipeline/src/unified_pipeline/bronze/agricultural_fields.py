@@ -17,7 +17,7 @@ import asyncio
 import json
 import ssl
 from asyncio import Semaphore
-from typing import Optional
+from typing import ClassVar
 
 import aiohttp
 
@@ -61,7 +61,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     description: str = "Multi-year agricultural field data (2020-2025)"
 
     # URLs for different years - Fields (Marker)
-    fields_urls: dict[int, str] = {
+    fields_urls: ClassVar[dict[int, str]] = {
         2025: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/13/query",
         2024: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/21/query",
         2023: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/20/query",
@@ -71,7 +71,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     }
 
     # URLs for different years - Blocks (Markblokke)
-    blocks_urls: dict[int, str] = {
+    blocks_urls: ClassVar[dict[int, str]] = {
         2024: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/6/query",
         2023: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/7/query",
         2022: "https://kort.vd.dk/server/rest/services/Grunddata/Marker_og_Markblokke/MapServer/8/query",
@@ -151,13 +151,12 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
                     data = await response.json()
                     total = data.get("count", 0)
                     return int(total)
-                else:
-                    response_text = await response.text()
-                    raise Exception(
-                        f"Error getting count for {url}: {response.status} - {response_text}"
-                    )
+                response_text = await response.text()
+                raise Exception(
+                    f"Error getting count for {url}: {response.status} - {response_text}"
+                )
         except Exception as e:
-            raise Exception(f"Error getting total count for {url}: {str(e)}") from e
+            raise Exception(f"Error getting total count for {url}: {e!s}") from e
 
     @retry(
         retry=retry_if_exception_type(Exception),
@@ -265,9 +264,10 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
                 self.conn.execute(f"CREATE OR REPLACE TABLE {empty_table_name} (payload VARCHAR)")
                 return empty_table_name
 
-            tasks = []
-            for start_index in range(0, total_count, self.config.batch_size):
-                tasks.append(self._fetch_chunk(session, url, start_index))
+            tasks = [
+                self._fetch_chunk(session, url, start_index)
+                for start_index in range(0, total_count, self.config.batch_size)
+            ]
 
             raw_data = await asyncio.gather(*tasks)
             if not raw_data:
@@ -317,7 +317,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             # ✅ MIGRATION: Return table name for cleanup
             return table_name
 
-    async def run(self) -> Optional[dict]:
+    async def run(self) -> dict | None:
         """
         Run the data source processing pipeline for all available years.
 

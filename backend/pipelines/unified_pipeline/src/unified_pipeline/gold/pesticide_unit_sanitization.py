@@ -51,7 +51,6 @@ analysis that identified unit errors vs. legitimate formulation differences.
 """
 
 import logging
-from typing import Dict, Tuple
 
 import duckdb
 
@@ -169,7 +168,7 @@ class PesticideUnitSanitizer:
         self.logger.info(f"📊 Unit analysis dataset created: {total_records:,} total records")
         self.logger.info(
             f"⚠️ Unit mismatches detected: {mismatch_records:,} records "
-            f"({mismatch_records/total_records*100:.3f}%)"
+            f"({mismatch_records / total_records * 100:.3f}%)"
         )
 
     def _calculate_statistical_baselines(self) -> None:
@@ -437,7 +436,7 @@ class PesticideUnitSanitizer:
                     f"avg {row['avg_deviation_sigma']:.2f}σ (max {row['max_deviation_sigma']:.2f}σ)"
                 )
 
-    def get_sanitization_summary(self, sanitized_table: str) -> Dict:
+    def get_sanitization_summary(self, sanitized_table: str) -> dict:
         """
         Get summary statistics for the sanitization process.
 
@@ -485,7 +484,7 @@ def sanitize_pesticide_units(
     conn: duckdb.DuckDBPyConnection,
     pesticide_table: str = "pesticide_applications",
     bmd_table: str = "bmd_data",
-) -> Tuple[str, Dict]:
+) -> tuple[str, dict]:
     """
     Convenience function to sanitize pesticide units.
 

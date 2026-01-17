@@ -13,7 +13,7 @@ Output table: landbrugstoette_tilsagn_arealer
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -49,7 +49,7 @@ class TilsagnArealerGoldConfig(BaseJobConfig):
     )
 
     # Target year (optional - if not set, processes all years)
-    target_year: Optional[int] = Field(
+    target_year: int | None = Field(
         default=None,
         description="Specific year to process (if None, processes all)",
     )
@@ -82,7 +82,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
         self.conn.execute("INSTALL spatial; LOAD spatial;")
 
     @timed
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, str] | None:
         """Execute spatial subsidies gold processing."""
         self.log.info("Starting Tilsagn Arealer Gold processing")
 
@@ -114,7 +114,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
             self.log.error(f"Error in Tilsagn Arealer Gold: {e}")
             raise
 
-    async def _load_silver_data(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def _load_silver_data(self, silver_data: dict[str, Any] | None = None) -> None:
         """Load silver FVM subsidy data."""
         self.log.info("Loading silver FVM subsidy data")
 
@@ -129,7 +129,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
         )
 
     async def _load_fvm_dataset(
-        self, table_name: str, dataset: str, silver_data: Optional[Dict[str, Any]]
+        self, table_name: str, dataset: str, silver_data: dict[str, Any] | None
     ) -> None:
         """Load a single FVM silver dataset."""
         if silver_data and dataset in silver_data:
@@ -206,10 +206,10 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
             if tilsagn_type == "OEKOLOGISK":
                 key = f"OEKOLOGISK_{tilsagn_code}" if tilsagn_code else "OEKOLOGISK_36"
                 return rates.get(key, 868)  # Default to 36 rate
-            elif tilsagn_type == "GRAESPLEJE":
+            if tilsagn_type == "GRAESPLEJE":
                 key = f"GRAESPLEJE_{tilsagn_code}" if tilsagn_code else "GRAESPLEJE_67"
                 return rates.get(key, 1650)  # Default to 67 rate
-            elif tilsagn_type == "MILJOE":
+            if tilsagn_type == "MILJOE":
                 key = f"MILJOE_{tilsagn_code}" if tilsagn_code else "MILJOE_70"
                 return rates.get(key, 1200)
             return 0
@@ -347,7 +347,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
         ).fetchone()[0]
         self.log.info(f"Created CVR summary: {count:,} CVR-year combinations")
 
-    async def _validate_data(self) -> Dict[str, Any]:
+    async def _validate_data(self) -> dict[str, Any]:
         """Validate spatial subsidies data."""
         self.log.info("Validating spatial subsidies data")
 
@@ -414,7 +414,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
 
         return validation
 
-    async def _save_gold_data(self) -> Dict[str, str]:
+    async def _save_gold_data(self) -> dict[str, str]:
         """Save gold tables to GCS."""
         self.log.info("Saving spatial subsidies gold data")
 

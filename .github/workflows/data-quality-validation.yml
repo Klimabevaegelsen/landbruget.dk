@@ -1,0 +1,438 @@
+# Data Quality Validation (BLOCKING)
+# This workflow validates data accuracy before merging changes to main.
+# All checks MUST pass before merge is allowed.
+
+name: Data Quality Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/pipelines/**/*.py'
+      - 'backend/common/**/*.py'
+      - 'backend/tests/validation/**/*.py'
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      tolerance_pct:
+        description: 'Tolerance percentage for numeric comparisons'
+        required: false
+        default: '1.0'
+
+env:
+  PYTHON_VERSION: '3.11'
+  GCS_BUCKET: 'landbrugsdata-raw-data'
+
+jobs:
+  # ==========================================================================
+  # Job 1: Identifier Format Validation
+  # ==========================================================================
+  identifier-validation:
+    name: Danish Identifier Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-xdist duckdb pandas pyarrow gcsfs
+
+      - name: Run identifier validation tests
+        run: |
+          cd backend
+          export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/common:$(pwd)/pipelines/unified_pipeline/src"
+
+          echo "## Identifier Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          pytest tests/validation/test_identifier_formats.py \
+            -m "cvr_data or chr_data or bfe_data" \
+            -v \
+            --tb=short \
+            --junit-xml=identifier-results.xml \
+            2>&1 | tee pytest-output.txt
+
+          # Extract summary for PR
+          PASSED=$(grep -c "PASSED" pytest-output.txt || echo "0")
+          FAILED=$(grep -c "FAILED" pytest-output.txt || echo "0")
+
+          echo "| Status | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+          echo "| Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: identifier-validation-results
+          path: backend/identifier-results.xml
+
+  # ==========================================================================
+  # Job 2: CRS/Geospatial Validation
+  # ==========================================================================
+  geospatial-validation:
+    name: Geospatial Data Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest duckdb pandas pyarrow
+
+      - name: Run CRS validation tests
+        run: |
+          cd backend
+          export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/common:$(pwd)/pipelines/unified_pipeline/src"
+
+          echo "## CRS/Geospatial Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          pytest tests/validation/test_crs_stability.py \
+            -m "crs_validation" \
+            -v \
+            --tb=short \
+            --junit-xml=crs-results.xml \
+            2>&1 | tee crs-output.txt
+
+          # Check for failures
+          if grep -q "FAILED" crs-output.txt; then
+            echo "::error::CRS validation tests failed"
+            exit 1
+          fi
+
+          echo "All CRS validation tests passed." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: geospatial-validation-results
+          path: backend/crs-results.xml
+
+  # ==========================================================================
+  # Job 3: Area Calculation Validation
+  # ==========================================================================
+  area-validation:
+    name: Area Calculation Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest duckdb pandas pyarrow
+
+      - name: Run area validation tests
+        run: |
+          cd backend
+          export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/common:$(pwd)/pipelines/unified_pipeline/src"
+
+          echo "## Area Calculation Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          pytest tests/validation/test_area_calculations.py \
+            -m "area_calculation" \
+            -v \
+            --tb=short \
+            --junit-xml=area-results.xml \
+            2>&1 | tee area-output.txt
+
+          # Check for failures
+          if grep -q "FAILED" area-output.txt; then
+            echo "::error::Area calculation tests failed"
+            exit 1
+          fi
+
+          echo "All area calculation tests passed." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: area-validation-results
+          path: backend/area-results.xml
+
+  # ==========================================================================
+  # Job 4: CHR Data Discovery Validation
+  # ==========================================================================
+  chr-validation:
+    name: CHR Discovery Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest duckdb pandas pyarrow
+
+      - name: Run CHR validation tests
+        run: |
+          cd backend
+          export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/common:$(pwd)/pipelines/unified_pipeline/src"
+
+          echo "## CHR Discovery Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          pytest tests/validation/test_chr_discovery.py \
+            -m "chr_data" \
+            -v \
+            --tb=short \
+            --junit-xml=chr-results.xml \
+            2>&1 | tee chr-output.txt
+
+          # Check for failures
+          if grep -q "FAILED" chr-output.txt; then
+            echo "::error::CHR discovery tests failed"
+            exit 1
+          fi
+
+          echo "All CHR discovery tests passed." >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chr-validation-results
+          path: backend/chr-results.xml
+
+  # ==========================================================================
+  # Job 5: Baseline Comparison (requires GCS access)
+  # ==========================================================================
+  baseline-comparison:
+    name: Baseline Comparison
+    runs-on: ubuntu-latest
+    needs: [identifier-validation, geospatial-validation, area-validation, chr-validation]
+
+    # Only run if GCS credentials are available
+    if: ${{ vars.GCS_CREDENTIALS_AVAILABLE == 'true' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCS_CREDENTIALS }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest duckdb pandas pyarrow gcsfs google-cloud-storage
+
+      - name: Download baseline metrics from GCS
+        run: |
+          mkdir -p baselines
+          gsutil -m cp -r gs://${{ env.GCS_BUCKET }}/baselines/main/ ./baselines/ || echo "No baselines found, skipping comparison"
+
+      - name: Run baseline comparison tests
+        run: |
+          cd backend
+          export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/common:$(pwd)/pipelines/unified_pipeline/src"
+
+          TOLERANCE=${{ github.event.inputs.tolerance_pct || '1.0' }}
+
+          echo "## Baseline Comparison Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tolerance: ${TOLERANCE}%" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -d "../baselines/main" ]; then
+            pytest tests/validation/ \
+              -m "pre_merge" \
+              --baseline-path ../baselines/main \
+              --tolerance-pct $TOLERANCE \
+              -v \
+              --tb=short \
+              --junit-xml=baseline-results.xml \
+              2>&1 | tee baseline-output.txt
+
+            # Check for failures
+            if grep -q "FAILED" baseline-output.txt; then
+              echo "::error::Baseline comparison tests failed"
+              exit 1
+            fi
+
+            echo "All baseline comparisons passed within ${TOLERANCE}% tolerance." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No baseline data available. Skipping baseline comparison." >> $GITHUB_STEP_SUMMARY
+            echo "::warning::No baseline data found. Run baseline generation on main branch first."
+          fi
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: baseline-comparison-results
+          path: backend/baseline-results.xml
+
+  # ==========================================================================
+  # Job 6: Generate Validation Report
+  # ==========================================================================
+  generate-report:
+    name: Generate Validation Report
+    runs-on: ubuntu-latest
+    needs: [identifier-validation, geospatial-validation, area-validation, chr-validation]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: test-results
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install junitparser
+
+      - name: Generate summary report
+        run: |
+          echo "## Data Quality Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Check job statuses
+          if [ "${{ needs.identifier-validation.result }}" == "success" ]; then
+            echo "| Identifier Validation | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Identifier Validation | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.geospatial-validation.result }}" == "success" ]; then
+            echo "| Geospatial Validation | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Geospatial Validation | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.area-validation.result }}" == "success" ]; then
+            echo "| Area Validation | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Area Validation | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.chr-validation.result }}" == "success" ]; then
+            echo "| CHR Validation | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| CHR Validation | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Overall status
+          if [ "${{ needs.identifier-validation.result }}" == "success" ] && \
+             [ "${{ needs.geospatial-validation.result }}" == "success" ] && \
+             [ "${{ needs.area-validation.result }}" == "success" ] && \
+             [ "${{ needs.chr-validation.result }}" == "success" ]; then
+            echo "### ✅ All data quality checks passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Some data quality checks failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please fix the failing checks before merging." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Post comment to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            // Check overall status
+            const identifier = '${{ needs.identifier-validation.result }}';
+            const geospatial = '${{ needs.geospatial-validation.result }}';
+            const area = '${{ needs.area-validation.result }}';
+            const chr = '${{ needs.chr-validation.result }}';
+
+            const allPassed = identifier === 'success' &&
+                              geospatial === 'success' &&
+                              area === 'success' &&
+                              chr === 'success';
+
+            const statusEmoji = allPassed ? '✅' : '❌';
+            const statusText = allPassed ? 'All checks passed' : 'Some checks failed';
+
+            const body = `## ${statusEmoji} Data Quality Validation: ${statusText}
+
+            | Check | Status |
+            |-------|--------|
+            | Identifier Validation | ${identifier === 'success' ? '✅' : '❌'} |
+            | Geospatial Validation | ${geospatial === 'success' ? '✅' : '❌'} |
+            | Area Calculation | ${area === 'success' ? '✅' : '❌'} |
+            | CHR Discovery | ${chr === 'success' ? '✅' : '❌'} |
+
+            ${allPassed ?
+              '**This PR is safe to merge from a data quality perspective.**' :
+              '**Please fix the failing checks before merging.**\n\nRun locally to debug:\n```bash\npytest backend/tests/validation/ -m pre_merge -v\n```'}
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # ==========================================================================
+  # Final status check for branch protection
+  # ==========================================================================
+  validation-status:
+    name: Validation Status
+    runs-on: ubuntu-latest
+    needs: [identifier-validation, geospatial-validation, area-validation, chr-validation]
+    if: always()
+
+    steps:
+      - name: Check validation status
+        run: |
+          if [ "${{ needs.identifier-validation.result }}" != "success" ] || \
+             [ "${{ needs.geospatial-validation.result }}" != "success" ] || \
+             [ "${{ needs.area-validation.result }}" != "success" ] || \
+             [ "${{ needs.chr-validation.result }}" != "success" ]; then
+            echo "::error::Data quality validation failed. PR cannot be merged."
+            exit 1
+          fi
+
+          echo "All data quality validation checks passed!"

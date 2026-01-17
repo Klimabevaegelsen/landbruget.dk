@@ -38,15 +38,16 @@ OUTPUT:
 - Full audit trail of all model components and data sources
 """
 
+import contextlib
 import glob
 import json
 import os
 import re
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from unified_pipeline.common.base import BaseSource, GoldJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
@@ -104,7 +105,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             f"{config.max_memory_usage_gb}GB memory limit"
         )
 
-        self.phase_times: Dict[str, float] = {}
+        self.phase_times: dict[str, float] = {}
         self.gcs_access = GCSDataAccess()
         self.conn = self.gcs_access.duckdb_conn
         self._configure_duckdb()
@@ -187,84 +188,80 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """Delegate to memory utils if available, otherwise provide basic cleanup."""
         if hasattr(self, "memory_utils") and self.memory_utils:
             return self.memory_utils._cleanup_temp_files()
-        else:
-            # Basic cleanup implementation
-            try:
-                import glob
-                import os
-                import shutil
+        # Basic cleanup implementation
+        try:
+            import glob
+            import os
+            import shutil
 
-                # Force DuckDB to flush any pending writes
-                try:
-                    self.conn.execute("CHECKPOINT")
-                except Exception:
-                    pass  # Ignore checkpoint errors
+            # Force DuckDB to flush any pending writes
+            with contextlib.suppress(Exception):
+                self.conn.execute("CHECKPOINT")
 
-                # Clean workspace temp directories
-                temp_patterns = ["data_cache/duckdb_temp/*", "data_cache/temp/*"]
+            # Clean workspace temp directories
+            temp_patterns = ["data_cache/duckdb_temp/*", "data_cache/temp/*"]
 
-                # Add the specific temp directory for this job
-                if hasattr(self, "temp_dir") and os.path.exists(self.temp_dir):
-                    temp_patterns.append(os.path.join(self.temp_dir, "*"))
+            # Add the specific temp directory for this job
+            if hasattr(self, "temp_dir") and os.path.exists(self.temp_dir):
+                temp_patterns.append(os.path.join(self.temp_dir, "*"))
 
-                cleaned_files = 0
-                freed_bytes = 0
+            cleaned_files = 0
+            freed_bytes = 0
 
-                for pattern in temp_patterns:
-                    for file_path in glob.glob(pattern):
-                        try:
-                            if os.path.isfile(file_path):
-                                # 🔍 DIAGNOSTIC: Skip DuckDB temp files to prevent corruption
-                                filename = os.path.basename(file_path)
-                                if filename.startswith(
-                                    "duckdb_temp_storage_"
-                                ) and filename.endswith(".tmp"):
-                                    if hasattr(self, "log"):
-                                        self.log.debug(
-                                            f"🔍 CLEANUP: Skipping active DuckDB temp file: "
-                                            f"{filename}"
-                                        )
-                                    continue
+            for pattern in temp_patterns:
+                for file_path in glob.glob(pattern):
+                    try:
+                        if os.path.isfile(file_path):
+                            # 🔍 DIAGNOSTIC: Skip DuckDB temp files to prevent corruption
+                            filename = os.path.basename(file_path)
+                            if filename.startswith("duckdb_temp_storage_") and filename.endswith(
+                                ".tmp"
+                            ):
+                                if hasattr(self, "log"):
+                                    self.log.debug(
+                                        f"🔍 CLEANUP: Skipping active DuckDB temp file: {filename}"
+                                    )
+                                continue
 
-                                file_size = os.path.getsize(file_path)
-                                os.remove(file_path)
-                                freed_bytes += file_size
-                                cleaned_files += 1
-                            elif os.path.isdir(file_path):
-                                # Calculate directory size before removal
-                                dir_size = sum(
-                                    os.path.getsize(os.path.join(dirpath, filename))
-                                    for dirpath, dirnames, filenames in os.walk(file_path)
-                                    for filename in filenames
-                                )
-                                shutil.rmtree(file_path)
-                                freed_bytes += dir_size
-                                cleaned_files += 1
-                        except Exception as e:
-                            if hasattr(self, "log"):
-                                self.log.debug(f"Could not remove temp file {file_path}: {e}")
+                            file_size = os.path.getsize(file_path)
+                            os.remove(file_path)
+                            freed_bytes += file_size
+                            cleaned_files += 1
+                        elif os.path.isdir(file_path):
+                            # Calculate directory size before removal
+                            dir_size = sum(
+                                os.path.getsize(os.path.join(dirpath, filename))
+                                for dirpath, dirnames, filenames in os.walk(file_path)
+                                for filename in filenames
+                            )
+                            shutil.rmtree(file_path)
+                            freed_bytes += dir_size
+                            cleaned_files += 1
+                    except Exception as e:
+                        if hasattr(self, "log"):
+                            self.log.debug(f"Could not remove temp file {file_path}: {e}")
 
-                if hasattr(self, "log") and cleaned_files > 0:
-                    self.log.info(
-                        f"🧹 Cleaned {cleaned_files} temp files, "
-                        f"freed {freed_bytes / 1024 / 1024:.1f} MB"
-                    )
+            if hasattr(self, "log") and cleaned_files > 0:
+                self.log.info(
+                    f"🧹 Cleaned {cleaned_files} temp files, "
+                    f"freed {freed_bytes / 1024 / 1024:.1f} MB"
+                )
 
-            except Exception as e:
-                if hasattr(self, "log"):
-                    self.log.debug(f"Temp file cleanup error: {e}")
-                pass
+        except Exception as e:
+            if hasattr(self, "log"):
+                self.log.debug(f"Temp file cleanup error: {e}")
+            pass
 
-    def _get_available_fvm_marker_years(self) -> List[int]:
+    def _get_available_fvm_marker_years(self) -> list[int]:
         """Delegate to data loader."""
         return self.data_loader._get_available_fvm_marker_years()
 
-    def _read_fvm_marker_data_for_year(self, year: int) -> Optional[str]:
+    def _read_fvm_marker_data_for_year(self, year: int) -> str | None:
         """Delegate to data loader."""
         return self.data_loader._read_fvm_marker_data_for_year(year)
 
     def _prepare_crop_sequences(
-        self, agricultural_fields_table: str, loaded_tables: Dict[str, str]
+        self, agricultural_fields_table: str, loaded_tables: dict[str, str]
     ) -> str:
         """Delegate to NLES5 calculator."""
         return self.nles5_calculator._prepare_crop_sequences(
@@ -331,7 +328,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         return "fields_with_crop_classifications"
 
     @timed(name="Loading agricultural fields data")
-    def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
+    def _load_agricultural_fields_data(self, silver_data: dict[str, Any] | None) -> str:
         """Delegate to data loader."""
         return self.data_loader._load_agricultural_fields_data(silver_data)
 
@@ -346,11 +343,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         return self.field_id_validator.collect_field_ids_after_processing()
 
     @timed(name="Running comprehensive field ID validation")
-    def _run_field_id_validation(self) -> Dict[str, Any]:
+    def _run_field_id_validation(self) -> dict[str, Any]:
         """Run comprehensive field ID validation for the entire pipeline."""
         return self.field_id_validator.run_comprehensive_validation()
 
-    def _get_fertilizer_data_path(self, target_year: int = None) -> str:
+    def _get_fertilizer_data_path(self, target_year: int | None = None) -> str:
         """
         Get path to fertilizer data for the specified year, prioritizing GKEA files
         over Gødningsregnskaber.
@@ -410,7 +407,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Fall back to default method
             return self._get_latest_silver_path(self.config.fertilizer_dataset)
 
-    def _get_field_plan_data_path(self, target_year: int = None) -> str:
+    def _get_field_plan_data_path(self, target_year: int | None = None) -> str:
         """
         Get the specific path for field plan data (Markplan_med_Gødningsoplysninger)
         from fertiliser directory.
@@ -440,8 +437,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     selected_file = sorted(gkea_files)[-1]  # Get most recent timestamp
                     self.log.info(f"📋 Selected {target_year} field plan data: {selected_file}")
                     return selected_file
-                else:
-                    self.log.warning(f"⚠️ No GKEA {target_year} field plan files found.")
+                self.log.warning(f"⚠️ No GKEA {target_year} field plan files found.")
 
             # Priority 2: Historical Markplan files (try recent years in order)
             for year in [2024, 2023, 2022, 2021]:
@@ -477,9 +473,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
         except Exception as e:
             self.log.error(f"Error selecting field plan data: {e}")
-            raise ValueError(f"Cannot find field plan data: {e}")
+            raise ValueError(f"Cannot find field plan data: {e}") from e
 
-    def _get_catch_crops_data_path(self, target_year: int = None) -> str:
+    def _get_catch_crops_data_path(self, target_year: int | None = None) -> str:
         """
         Get the specific path for catch crops data (Efterafgrøder) from fertiliser directory.
 
@@ -529,7 +525,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
         except Exception as e:
             self.log.error(f"Error selecting catch crops data: {e}")
-            raise ValueError(f"Cannot find catch crops data: {e}")
+            raise ValueError(f"Cannot find catch crops data: {e}") from e
 
     def _read_silver_data_from_path(
         self, dataset_name: str, file_path: str, target_table: str
@@ -537,9 +533,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """Delegate to data loader."""
         return self.data_loader._read_silver_data_from_path(dataset_name, file_path, target_table)
 
-    def _load_required_silver_datasets(
-        self, silver_data: Optional[Dict[str, Any]]
-    ) -> Dict[str, str]:
+    def _load_required_silver_datasets(self, silver_data: dict[str, Any] | None) -> dict[str, str]:
         """Delegate to data loader."""
         return self.data_loader._load_required_silver_datasets(silver_data)
 
@@ -774,8 +768,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                             # Export to local parquet file
                             try:
                                 self.conn.execute(f"""
-                                    COPY {table_name} 
-                                    TO '{local_parquet}' 
+                                    COPY {table_name}
+                                    TO '{local_parquet}'
                                     (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000)
                                 """)
                             except Exception as copy_error:
@@ -791,11 +785,13 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                     raise
 
                             # Upload local file to GCS using streaming
-                            with open(local_parquet, "rb") as src:
-                                with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
-                                    import shutil
+                            import shutil
 
-                                    shutil.copyfileobj(src, dst)
+                            with (
+                                open(local_parquet, "rb") as src,
+                                self.gcs_access.fs.open(full_gcs_path, "wb") as dst,
+                            ):
+                                shutil.copyfileobj(src, dst)
 
                             self.log.info(
                                 f"✅ Saved {table_name} ({count:,} rows) to {full_gcs_path}"
@@ -835,15 +831,15 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             self.log.error(f"Error saving results: {e}")
             raise
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Delegate to pipeline orchestrator."""
         return await self.pipeline_orchestrator.run(silver_data)
 
-    async def _run_pipeline_batched(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def _run_pipeline_batched(self, silver_data: dict[str, Any] | None = None) -> None:
         """Delegate to pipeline orchestrator."""
         return await self.pipeline_orchestrator._run_pipeline_batched(silver_data)
 
-    async def _run_pipeline_single(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def _run_pipeline_single(self, silver_data: dict[str, Any] | None = None) -> None:
         """Delegate to pipeline orchestrator."""
         return await self.pipeline_orchestrator._run_pipeline_single(silver_data)
 
@@ -898,8 +894,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
                         # Check what columns exist in this table
                         columns = self.conn.execute(f"""
-                            SELECT column_name 
-                            FROM information_schema.columns 
+                            SELECT column_name
+                            FROM information_schema.columns
                             WHERE table_name = '{table_name}'
                         """).fetchall()
                         col_set = {col[0].lower() for col in columns}
@@ -984,7 +980,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         stats = self.conn.execute(f"""
                             SELECT
                                 COUNT(*) as total_records,
-                                COUNT(CASE WHEN {nitrogen_col} > 0 THEN 1 END) 
+                                COUNT(CASE WHEN {nitrogen_col} > 0 THEN 1 END)
                                     as positive_estimates,
                                 AVG({nitrogen_col}) as avg_nitrogen,
                                 MIN({nitrogen_col}) as min_nitrogen,
@@ -1076,11 +1072,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """Delegate to NLES5 calculator."""
         return self.nles5_calculator._prepare_nitrogen_inputs_tables()
 
-    def _comprehensive_data_validation(self) -> Dict[str, Any]:
+    def _comprehensive_data_validation(self) -> dict[str, Any]:
         """Delegate to validator."""
         return self.validator._comprehensive_data_validation()
 
-    def _validate_table_quality(self, table_name: str) -> Dict[str, Any]:
+    def _validate_table_quality(self, table_name: str) -> dict[str, Any]:
         """Validate data quality for a specific table."""
         stats = {
             "table_name": table_name,
@@ -1177,7 +1173,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
         return stats
 
-    def _validate_climate_data_quality(self, stats: Dict[str, Any]) -> None:
+    def _validate_climate_data_quality(self, stats: dict[str, Any]) -> None:
         """Validate climate data specific quality metrics."""
         try:
             # Check for required climate parameters
@@ -1219,7 +1215,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         except Exception as e:
             stats["issues"].append(f"Climate data validation failed: {e}")
 
-    def _validate_field_data_quality(self, stats: Dict[str, Any]) -> None:
+    def _validate_field_data_quality(self, stats: dict[str, Any]) -> None:
         """Validate agricultural fields data quality."""
         try:
             # Check for required field attributes
@@ -1251,7 +1247,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         except Exception as e:
             stats["issues"].append(f"Field data validation failed: {e}")
 
-    def _validate_soil_data_quality(self, stats: Dict[str, Any]) -> None:
+    def _validate_soil_data_quality(self, stats: dict[str, Any]) -> None:
         """Validate soil types data quality."""
         try:
             soil_stats = self.conn.execute("""
@@ -1279,7 +1275,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         except Exception as e:
             stats["issues"].append(f"Soil data validation failed: {e}")
 
-    def _generate_validation_recommendations(self, validation_results: Dict[str, Any]) -> None:
+    def _generate_validation_recommendations(self, validation_results: dict[str, Any]) -> None:
         """Generate actionable recommendations based on validation results - NO FALLBACK DATA."""
         score = validation_results["data_quality_score"]
 
@@ -1328,7 +1324,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     )
                     validation_results["passed"] = False
 
-    def _log_validation_summary(self, validation_results: Dict[str, Any]) -> None:
+    def _log_validation_summary(self, validation_results: dict[str, Any]) -> None:
         """Log comprehensive validation summary."""
         self.log.info("📊 DATA VALIDATION SUMMARY:")
         self.log.info(f"   Overall Quality Score: {validation_results['data_quality_score']:.1f}%")
@@ -1368,7 +1364,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """Delegate to climate processor."""
         return self.climate_processor._join_climate_fields_by_year()
 
-    def _load_climate_data_for_years(self, years: List[int]) -> str:
+    def _load_climate_data_for_years(self, years: list[int]) -> str:
         """Delegate to climate processor."""
         return self.climate_processor._load_climate_data_for_years(years)
 
@@ -1381,8 +1377,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         return self.climate_processor._create_year_tessellation(climate_table, year)
 
     def _calculate_required_data_years(
-        self, target_calculation_years: List[int], available_years: List[int]
-    ) -> List[int]:
+        self, target_calculation_years: list[int], available_years: list[int]
+    ) -> list[int]:
         """
         Calculate minimum years needed for NLES5 calculations based on 3-year temporal requirements.
 
@@ -1438,7 +1434,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     )
 
             # Convert to sorted list
-            final_years = sorted(list(required_years))
+            final_years = sorted(required_years)
 
             # Calculate memory savings
             total_available = len(available_years)
@@ -1469,12 +1465,12 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             raise
 
     @timed(name="Target-year-by-target-year NLES5 processing")
-    def _process_nles5_target_year_by_target_year(self, loaded_tables: Dict[str, Any]) -> str:
+    def _process_nles5_target_year_by_target_year(self, loaded_tables: dict[str, Any]) -> str:
         """Delegate to NLES5 calculator."""
         return self.nles5_calculator._process_nles5_target_year_by_target_year(loaded_tables)
 
     def _process_single_target_year(
-        self, target_year: int, required_years: List[int], loaded_tables: Dict[str, Any]
+        self, target_year: int, required_years: list[int], loaded_tables: dict[str, Any]
     ) -> str:
         """Delegate to pipeline orchestrator."""
         return self.pipeline_orchestrator._process_single_target_year(
@@ -1485,7 +1481,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """Delegate to memory utils."""
         return self.memory_utils._aggressive_cleanup_target_year()
 
-    def _load_agricultural_fields_for_years(self, years: List[int], table_name: str):
+    def _load_agricultural_fields_for_years(self, years: list[int], table_name: str):
         """Load agricultural fields data for specific years only."""
         try:
             # Prefer already-prepared spatial table to ensure CRS/validity alignment
@@ -1586,7 +1582,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # 🔍 DIAGNOSTIC LOG: Check if soil_types_prepared table exists and has expected schema
             try:
                 soil_table_check = self.conn.execute("""
-                    SELECT COUNT(*) as count, 
+                    SELECT COUNT(*) as count,
                            COUNT(CASE WHEN soil_code IS NOT NULL THEN 1 END) as has_soil_code,
                            COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as has_geom
                     FROM soil_types_prepared
@@ -1597,13 +1593,13 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 )
             except Exception as e:
                 self.log.error(f"🔍 soil_types_prepared table check failed: {e}")
-                raise ValueError(f"soil_types_prepared table is not accessible: {e}")
+                raise ValueError(f"soil_types_prepared table is not accessible: {e}") from e
 
             # 🔍 DIAGNOSTIC LOG: Check actual schema of fields_climate_table
             try:
                 schema_info = self.conn.execute(f"""
-                    SELECT column_name, data_type 
-                    FROM information_schema.columns 
+                    SELECT column_name, data_type
+                    FROM information_schema.columns
                     WHERE table_name = '{fields_climate_table}'
                     ORDER BY ordinal_position
                 """).fetchall()
@@ -1633,16 +1629,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             # 🔧 MEMORY: Apply temporary DuckDB mitigations to reduce peak memory
             # during heavy spatial join
-            try:
-                # Log memory before join
+            # Log memory before join
+            with contextlib.suppress(Exception):
                 self._monitor_memory_usage("Before target-year soil join")
-            except Exception:
-                pass
 
             # 🔍 DIAGNOSTIC: Log soil table complexity and geometry statistics
             try:
                 soil_stats = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_rows,
                         COUNT(DISTINCT soil_code) as unique_soil_codes,
                         COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as geoms_present,
@@ -1715,7 +1709,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # 🔍 DIAGNOSTIC: Check field and soil geometry characteristics
             try:
                 field_geom_stats = self.conn.execute(f"""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_fields,
                         COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as has_geometry,
                         COUNT(CASE WHEN ST_IsValid(geom) THEN 1 END) as valid_geometry,
@@ -1741,7 +1735,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 )
 
                 soil_geom_stats = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_polygons,
                         MIN(ST_XMin(geom)) as min_x,
                         MAX(ST_XMax(geom)) as max_x,
@@ -1847,10 +1841,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 """)
 
                 # Force checkpoint after each batch to prevent memory accumulation
-                try:
+                with contextlib.suppress(Exception):
                     self.conn.execute("CHECKPOINT")
-                except Exception:
-                    pass  # Continue even if checkpoint fails
 
                 # Progress update every 5 batches (reduced from 10 for tighter memory control)
                 if (batch_idx + 1) % 5 == 0:
@@ -1868,11 +1860,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Log intermediate table size for diagnostics
             try:
                 match_stats = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_matches,
                         COUNT(DISTINCT field_uuid) as unique_fields,
                         COUNT(*) FILTER (WHERE soil_code IS NOT NULL) as fields_with_soil,
-                        AVG(CASE WHEN soil_code IS NOT NULL THEN 1 ELSE 0 END) * 
+                        AVG(CASE WHEN soil_code IS NOT NULL THEN 1 ELSE 0 END) *
                             COUNT(DISTINCT field_uuid) as matched_fields
                     FROM field_soil_matches_temp
                 """).fetchone()
@@ -1907,7 +1899,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             self.conn.execute("""
                 CREATE TEMPORARY TABLE closest_soil_temp AS
-                SELECT 
+                SELECT
                     field_uuid,
                     soil_code,
                     soil_description,
@@ -1915,8 +1907,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     CASE WHEN soil_code IS NOT NULL THEN true ELSE false END as has_soil_data
                 FROM field_soil_matches_temp
                 QUALIFY ROW_NUMBER() OVER (
-                    PARTITION BY field_uuid 
-                    ORDER BY 
+                    PARTITION BY field_uuid
+                    ORDER BY
                         CASE WHEN soil_code IS NULL THEN 1 ELSE 0 END,
                         overlap_area DESC NULLS LAST
                 ) = 1
@@ -1964,26 +1956,26 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     # This helps small fields and edge cases near polygon boundaries
                     self.conn.execute(f"""
                         CREATE TEMPORARY TABLE nearest_soil_fallback AS
-                        SELECT 
+                        SELECT
                             field_uuid,
                             soil_code,
                             soil_description,
                             clay_content,
                             distance
                         FROM (
-                            SELECT 
+                            SELECT
                                 u.field_uuid,
                                 s.soil_code,
                                 s.soil_description,
                                 s.clay_content,
                                 ST_Distance(
-                                    ST_Centroid(f.geom), 
+                                    ST_Centroid(f.geom),
                                     ST_Centroid(s.geom)
                                 ) as distance,
                                 ROW_NUMBER() OVER (
-                                    PARTITION BY u.field_uuid 
+                                    PARTITION BY u.field_uuid
                                     ORDER BY ST_Distance(
-                                        ST_Centroid(f.geom), 
+                                        ST_Centroid(f.geom),
                                         ST_Centroid(s.geom)
                                     )
                                 ) as rn
@@ -1992,7 +1984,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                             CROSS JOIN soil_types_prepared s
                             WHERE u.soil_code IS NULL
                         ) subquery
-                        WHERE rn = 1 
+                        WHERE rn = 1
                           AND distance <= 0.001  -- ~100m in degrees at Denmark's latitude
                     """)
 
@@ -2012,7 +2004,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         # Update closest_soil_temp with nearest neighbor matches
                         self.conn.execute("""
                             UPDATE closest_soil_temp
-                            SET 
+                            SET
                                 soil_code = n.soil_code,
                                 soil_description = n.soil_description,
                                 clay_content = n.clay_content,
@@ -2099,8 +2091,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             # 🔍 DIAGNOSTIC LOG: Verify deduplication worked
             fields_after = self.conn.execute(f"""
-                SELECT 
-                    COUNT(*) as total, 
+                SELECT
+                    COUNT(*) as total,
                     COUNT(DISTINCT field_uuid) as unique_uuids,
                     COUNT(*) - COUNT(DISTINCT field_uuid) as duplicate_rows
                 FROM {result_table}
@@ -2121,7 +2113,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # 🔍 ENHANCED DIAGNOSTIC: Track soil code assignment statistics
             try:
                 soil_stats = self.conn.execute(f"""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_fields,
                         COUNT(CASE WHEN soil_code != '5' THEN 1 END) as real_soil_codes,
                         COUNT(CASE WHEN soil_code = '5' THEN 1 END) as default_codes,
@@ -2215,21 +2207,21 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             percolation_table, target_year
         )
 
-    def _determine_all_target_years(self) -> List[int]:
+    def _determine_all_target_years(self) -> list[int]:
         """Delegate to pipeline orchestrator."""
         return self.pipeline_orchestrator._determine_all_target_years()
 
-    def _create_target_year_batches(self, target_years: List[int]) -> List[List[int]]:
+    def _create_target_year_batches(self, target_years: list[int]) -> list[list[int]]:
         """Delegate to pipeline orchestrator."""
         return self.pipeline_orchestrator._create_target_year_batches(target_years)
 
     async def _run_pipeline_for_batch(
-        self, batch_years: List[int], silver_data: Optional[Dict[str, Any]] = None
+        self, batch_years: list[int], silver_data: dict[str, Any] | None = None
     ) -> int:
         """Delegate to pipeline orchestrator."""
         return await self.pipeline_orchestrator._run_pipeline_for_batch(batch_years, silver_data)
 
-    def _diagnose_missing_data(self, batch_years: List[int], original_error: Exception) -> str:
+    def _diagnose_missing_data(self, batch_years: list[int], original_error: Exception) -> str:
         """
         Diagnose exactly what real data is missing to provide clear error messages.
         NO FALLBACK DATA IS CREATED - this method only identifies missing data.
@@ -2311,7 +2303,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 missing_data_issues.append(f"Cannot access climate percolation: {e}")
 
             # Add the original error context
-            missing_data_issues.append(f"Original error: {str(original_error)}")
+            missing_data_issues.append(f"Original error: {original_error!s}")
 
         except Exception as e:
             missing_data_issues.append(f"Data diagnosis failed: {e}")
@@ -2410,7 +2402,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     f"{final_count:,} records..."
                 )
                 self.conn.execute("""
-                    CREATE TABLE nles5_nitrogen_estimates_gold AS 
+                    CREATE TABLE nles5_nitrogen_estimates_gold AS
                     SELECT * FROM nles5_estimates_final_batched
                 """)
                 self.log.info("🔍 AFTER CREATE TABLE: Materialization successful")
@@ -2519,8 +2511,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
                 try:
                     self.conn.execute(f"""
-                        COPY nles5_nitrogen_estimates_gold 
-                        TO '{local_parquet}' 
+                        COPY nles5_nitrogen_estimates_gold
+                        TO '{local_parquet}'
                         (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000)
                     """)
                 except Exception as copy_error:
@@ -2545,11 +2537,13 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
                 # Upload local file to GCS using streaming
                 self.log.info(f"☁️ Uploading to GCS: {full_gcs_path}")
-                with open(local_parquet, "rb") as src:
-                    with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
-                        import shutil
+                import shutil
 
-                        shutil.copyfileobj(src, dst)
+                with (
+                    open(local_parquet, "rb") as src,
+                    self.gcs_access.fs.open(full_gcs_path, "wb") as dst,
+                ):
+                    shutil.copyfileobj(src, dst)
 
                 self.log.info(f"✅ Saved batched results to {full_gcs_path}")
             finally:
@@ -2638,16 +2632,16 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             raise
 
     def _load_required_silver_datasets_for_batch(
-        self, silver_data: Optional[Dict[str, Any]], batch_years: List[int]
-    ) -> Dict[str, str]:
+        self, silver_data: dict[str, Any] | None, batch_years: list[int]
+    ) -> dict[str, str]:
         """Delegate to data loader."""
         return self.data_loader._load_required_silver_datasets_for_batch(silver_data, batch_years)
 
     def _load_agricultural_fields_data_for_batch(
         self,
-        silver_data: Optional[Dict[str, Any]],
-        batch_years: List[int],
-        loaded_tables: Dict[str, str],
+        silver_data: dict[str, Any] | None,
+        batch_years: list[int],
+        loaded_tables: dict[str, str],
     ) -> str:
         """Load agricultural fields data for specific batch years."""
         try:
@@ -2660,18 +2654,18 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             raise
 
     def _process_nles5_target_year_by_target_year_for_batch(
-        self, loaded_tables: Dict[str, Any], batch_years: List[int]
+        self, loaded_tables: dict[str, Any], batch_years: list[int]
     ) -> str:
         """Delegate to pipeline orchestrator."""
         return self.pipeline_orchestrator._process_nles5_target_year_by_target_year_for_batch(
             loaded_tables, batch_years
         )
 
-    def _combine_yearly_fvm_data(self, yearly_tables: Dict[int, str]) -> str:
+    def _combine_yearly_fvm_data(self, yearly_tables: dict[int, str]) -> str:
         """Delegate to data loader."""
         return self.data_loader._combine_yearly_fvm_data(yearly_tables)
 
-    def _load_farm_data(self) -> Optional[str]:
+    def _load_farm_data(self) -> str | None:
         """Load farm-level gødningsregnskab data for enhanced NLES5 calculations."""
         # Determine years needed for farm data
         if self.config.target_years:
@@ -2687,12 +2681,10 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         # Delegate to data loader with required years
         return self.data_loader._load_farm_data(target_years)
 
-    def _load_required_silver_datasets(
-        self, silver_data: Optional[Dict[str, Any]]
-    ) -> Dict[str, str]:
+    def _load_required_silver_datasets(self, silver_data: dict[str, Any] | None) -> dict[str, str]:
         """Delegate to data loader."""
         return self.data_loader._load_required_silver_datasets(silver_data)
 
-    def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
+    def _load_agricultural_fields_data(self, silver_data: dict[str, Any] | None) -> str:
         """Delegate to data loader."""
         return self.data_loader._load_agricultural_fields_data(silver_data)

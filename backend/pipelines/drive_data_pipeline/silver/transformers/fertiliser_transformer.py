@@ -5,21 +5,25 @@ This transformer handles the harmonization of Danish fertiliser data from multip
 - Efterafgrøder (cover crops)
 - GKEA markplan files
 - Gødningsregnskaber (fertilizer accounts)
+
+Refactored to use vanilla DuckDB instead of pandas.
 """
 
+import contextlib
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import duckdb
-import pandas as pd
 
 from ..models.schema import ColumnSchema, DataType, TableSchema
 from .base import BaseTransformer, TransformResult
 
 # Handle imports for both standalone and package usage
 try:
-    from unified_pipeline.util.gcs_access import get_duckdb_with_gcs
+    from common.gcs import get_duckdb_with_gcs
 except ImportError:
     # Fallback for standalone usage
     def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
@@ -36,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class FertiliserTransformer(BaseTransformer):
-    """Transformer for fertiliser parquet files."""
+    """Transformer for fertiliser parquet files using vanilla DuckDB."""
 
     def __init__(self) -> None:
         """Initialize the fertiliser transformer."""
@@ -143,128 +147,181 @@ class FertiliserTransformer(BaseTransformer):
             # Read the file based on its extension
             file_suffix = file_path.suffix.lower()
 
-            if file_suffix == ".xlsx" or file_suffix == ".xls":
-                # Read Excel file - try all sheets and combine if multiple
-                try:
-                    excel_file = pd.ExcelFile(file_path)
-                    all_sheets_data = []
-
-                    logger.info(
-                        f"Found {len(excel_file.sheet_names)} sheets in {file_path.name}: "
-                        f"{excel_file.sheet_names}"
-                    )
-
-                    for sheet_name in excel_file.sheet_names:
-                        try:
-                            sheet_df = pd.read_excel(
-                                excel_file,
-                                sheet_name=sheet_name,
-                                dtype=str,  # Read as strings to avoid type inference issues
-                                na_filter=False,  # Don't convert empty strings to NaN
-                            )
-
-                            if not sheet_df.empty:
-                                # Add sheet name as a column for tracking
-                                sheet_df["source_sheet"] = sheet_name
-                                all_sheets_data.append(sheet_df)
-                                logger.debug(f"Read sheet '{sheet_name}' with {len(sheet_df)} rows")
-                            else:
-                                logger.debug(f"Skipping empty sheet: {sheet_name}")
-
-                        except Exception as sheet_e:
-                            logger.warning(
-                                f"Failed to read sheet '{sheet_name}' from {file_path.name}: "
-                                f"{str(sheet_e)}"
-                            )
-                            continue
-
-                    if not all_sheets_data:
-                        return TransformResult(
-                            success=False, error="No readable sheets found in Excel file"
-                        )
-
-                    # Combine all sheets into one DataFrame
-                    if len(all_sheets_data) == 1:
-                        df = all_sheets_data[0]
-                    else:
-                        # Try to combine sheets - find common columns
-                        common_cols = set(all_sheets_data[0].columns)
-                        for sheet_df in all_sheets_data[1:]:
-                            common_cols &= set(sheet_df.columns)
-
-                        if common_cols:
-                            # Combine using common columns
-                            combined_sheets = []
-                            for sheet_df in all_sheets_data:
-                                combined_sheets.append(sheet_df[list(common_cols)])
-                            df = pd.concat(combined_sheets, ignore_index=True)
-                            logger.info(
-                                f"Combined {len(all_sheets_data)} sheets using "
-                                f"{len(common_cols)} common columns"
-                            )
-                        else:
-                            # No common columns, just use the first sheet
-                            df = all_sheets_data[0]
-                            logger.warning(
-                                f"No common columns found, using only first sheet from "
-                                f"{file_path.name}"
-                            )
-
-                except Exception as excel_e:
-                    logger.error(f"Failed to read Excel file {file_path.name}: {str(excel_e)}")
-                    return TransformResult(
-                        success=False, error=f"Failed to read Excel file: {str(excel_e)}"
-                    )
-
+            if file_suffix in (".xlsx", ".xls"):
+                # Read Excel file using DuckDB with spatial extension for xlsx support
+                table_name = self._read_excel_to_table(file_path)
+                if table_name is None:
+                    return TransformResult(success=False, error="Failed to read Excel file")
             elif file_suffix == ".parquet":
-                # Read parquet file
-                df = self.conn.execute(f"SELECT * FROM read_parquet('{file_path}')").df()
+                # Read parquet file directly into DuckDB
+                table_name = f"fertiliser_raw_{id(self)}"
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name} AS
+                    SELECT * FROM read_parquet('{file_path}')
+                """)
             else:
                 return TransformResult(
                     success=False,
                     error=f"Unsupported file type for fertiliser transformer: {file_suffix}",
                 )
 
-            if df.empty:
+            # Check if table is empty
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            if row_count == 0:
+                self._drop_table(table_name)
                 return TransformResult(success=False, error="Empty data file")
 
-            # Determine the type of fertiliser file
+            # Determine the type of fertiliser file and harmonize
             filename = file_path.name
-            harmonized_df = self._harmonize_fertiliser_data(df, filename)
+            harmonized_table = self._harmonize_fertiliser_data(table_name, filename)
 
-            if harmonized_df is None or harmonized_df.empty:
+            if harmonized_table is None:
+                self._drop_table(table_name)
+                return TransformResult(success=False, error="No valid data after harmonization")
+
+            # Get row count from harmonized table
+            harmonized_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {harmonized_table}"
+            ).fetchone()[0]
+
+            if harmonized_count == 0:
+                self._drop_table(table_name)
+                self._drop_table(harmonized_table)
                 return TransformResult(success=False, error="No valid data after harmonization")
 
             # Create output path
             output_path = output_dir / f"{file_path.stem}_harmonized.parquet"
 
-            # Save harmonized data
-            harmonized_df.to_parquet(output_path, index=False)
+            # Ensure output directory exists
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save harmonized data using DuckDB COPY
+            self.conn.execute(f"""
+                COPY {harmonized_table} TO '{output_path}' (FORMAT PARQUET)
+            """)
+
+            # Get column names for metadata
+            columns_info = self.conn.execute(f"DESCRIBE {harmonized_table}").fetchall()
+            harmonized_columns = [col[0] for col in columns_info]
 
             logger.info(
                 f"Successfully transformed fertiliser data to: {output_path} "
-                f"({len(harmonized_df)} rows)"
+                f"({harmonized_count} rows)"
             )
+
+            # Cleanup tables
+            self._drop_table(table_name)
+            self._drop_table(harmonized_table)
 
             return TransformResult(
                 success=True,
                 output_path=output_path,
-                rows_processed=len(harmonized_df),
+                row_count=harmonized_count,
                 metadata={
                     "original_filename": filename,
-                    "harmonized_columns": list(harmonized_df.columns),
+                    "harmonized_columns": harmonized_columns,
                     "data_source": self._get_data_source(filename),
                     "data_type": self._get_data_type(filename),
                 },
             )
 
         except Exception as e:
-            logger.error(f"Failed to transform fertiliser file {file_path}: {str(e)}")
+            logger.error(f"Failed to transform fertiliser file {file_path}: {e!s}")
             return TransformResult(success=False, error=str(e))
+
+    def _read_excel_to_table(self, file_path: Path) -> str | None:
+        """Read Excel file into a DuckDB table.
+
+        Uses DuckDB's spatial extension for xlsx reading, with fallback to
+        temporary CSV conversion.
+
+        Args:
+            file_path: Path to the Excel file
+
+        Returns:
+            Table name or None if failed
+        """
+        table_name = f"excel_raw_{id(self)}"
+
+        try:
+            # Try using DuckDB's spatial extension st_read for xlsx
+            # This requires the spatial extension
+            self.conn.execute("INSTALL spatial; LOAD spatial;")
+            self.conn.execute(f"""
+                CREATE TABLE {table_name} AS
+                SELECT * FROM st_read('{file_path}')
+            """)
+            logger.info(f"Read Excel file using DuckDB spatial extension: {file_path.name}")
+            return table_name
+        except Exception as spatial_e:
+            logger.debug(f"Spatial extension xlsx read failed: {spatial_e}")
+
+        # Fallback: Use Python's openpyxl to read and convert to CSV, then load
+        try:
+            import openpyxl
+
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            all_data = []
+
+            for sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+                rows = list(sheet.iter_rows(values_only=True))
+
+                if not rows:
+                    continue
+
+                # First row as headers
+                headers = [str(h) if h is not None else f"col_{i}" for i, h in enumerate(rows[0])]
+
+                for row in rows[1:]:
+                    row_dict = {
+                        headers[i]: str(v) if v is not None else "" for i, v in enumerate(row)
+                    }
+                    row_dict["source_sheet"] = sheet_name
+                    all_data.append(row_dict)
+
+            wb.close()
+
+            if not all_data:
+                logger.warning(f"No data found in Excel file: {file_path.name}")
+                return None
+
+            # Get all unique columns
+            all_columns = set()
+            for row in all_data:
+                all_columns.update(row.keys())
+            all_columns = sorted(all_columns)
+
+            # Create table with all columns as VARCHAR
+            columns_def = ", ".join([f'"{col}" VARCHAR' for col in all_columns])
+            self.conn.execute(f"CREATE TABLE {table_name} ({columns_def})")
+
+            # Insert data row by row
+            for row in all_data:
+                values = []
+                for col in all_columns:
+                    val = row.get(col, "")
+                    # Escape single quotes
+                    val = str(val).replace("'", "''")
+                    values.append(f"'{val}'")
+                values_str = ", ".join(values)
+                self.conn.execute(f"INSERT INTO {table_name} VALUES ({values_str})")
+
+            logger.info(
+                f"Read Excel file using openpyxl fallback: {file_path.name} ({len(all_data)} rows)"
+            )
+            return table_name
+
+        except ImportError:
+            logger.error("openpyxl not installed - cannot read Excel files")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to read Excel file {file_path.name}: {e!s}")
+            return None
 
     def transform_from_content(
         self, content: bytes, filename: str, metadata: dict[str, Any]
-    ) -> pd.DataFrame | None:
+    ) -> Any:
         """
         Transform fertiliser data from file content.
 
@@ -274,13 +331,9 @@ class FertiliserTransformer(BaseTransformer):
             metadata: File metadata
 
         Returns:
-            Harmonized DataFrame or None if transformation failed
+            DataFrame with harmonized data or None if transformation failed
         """
         try:
-            import os
-            import tempfile
-            from pathlib import Path
-
             # Get the original file extension
             file_suffix = Path(filename).suffix.lower()
 
@@ -288,255 +341,203 @@ class FertiliserTransformer(BaseTransformer):
             with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
                 tmp.write(content)
                 tmp.flush()
+                tmp_path = tmp.name
 
-                try:
-                    # Read the file based on its extension
-                    if file_suffix == ".xlsx" or file_suffix == ".xls":
-                        # Read Excel file - try all sheets and combine if multiple
-                        try:
-                            excel_file = pd.ExcelFile(tmp.name)
-                            all_sheets_data = []
-
-                            logger.info(
-                                f"Found {len(excel_file.sheet_names)} sheets in {filename}: "
-                                f"{excel_file.sheet_names}"
-                            )
-
-                            for sheet_name in excel_file.sheet_names:
-                                try:
-                                    sheet_df = pd.read_excel(
-                                        excel_file,
-                                        sheet_name=sheet_name,
-                                        dtype=str,  # Read as strings to avoid type inference issues
-                                        na_filter=False,  # Don't convert empty strings to NaN
-                                    )
-
-                                    if not sheet_df.empty:
-                                        # Add sheet name as a column for tracking
-                                        sheet_df["source_sheet"] = sheet_name
-                                        all_sheets_data.append(sheet_df)
-                                        logger.debug(
-                                            f"Read sheet '{sheet_name}' with {len(sheet_df)} rows"
-                                        )
-                                    else:
-                                        logger.debug(f"Skipping empty sheet: {sheet_name}")
-
-                                except Exception as sheet_e:
-                                    logger.warning(
-                                        f"Failed to read sheet '{sheet_name}' from {filename}: "
-                                        f"{str(sheet_e)}"
-                                    )
-                                    continue
-
-                            if not all_sheets_data:
-                                logger.warning(
-                                    f"No readable sheets found in Excel file: {filename}"
-                                )
-                                return None
-
-                            # Combine all sheets into one DataFrame
-                            if len(all_sheets_data) == 1:
-                                df = all_sheets_data[0]
-                            else:
-                                # Try to combine sheets - find common columns
-                                common_cols = set(all_sheets_data[0].columns)
-                                for sheet_df in all_sheets_data[1:]:
-                                    common_cols &= set(sheet_df.columns)
-
-                                if common_cols:
-                                    # Combine using common columns
-                                    combined_sheets = []
-                                    for sheet_df in all_sheets_data:
-                                        combined_sheets.append(sheet_df[list(common_cols)])
-                                    df = pd.concat(combined_sheets, ignore_index=True)
-                                    logger.info(
-                                        f"Combined {len(all_sheets_data)} sheets using "
-                                        f"{len(common_cols)} common columns"
-                                    )
-                                else:
-                                    # No common columns, just use the first sheet
-                                    df = all_sheets_data[0]
-                                    logger.warning(
-                                        f"No common columns found, using only first sheet from "
-                                        f"{filename}"
-                                    )
-
-                        except Exception as excel_e:
-                            logger.error(f"Failed to read Excel file {filename}: {str(excel_e)}")
-                            return None
-
-                    elif file_suffix == ".parquet":
-                        # Read parquet file
-                        df = self.conn.execute(f"SELECT * FROM read_parquet('{tmp.name}')").df()
-                    else:
-                        logger.error(
-                            f"Unsupported file type for fertiliser transformer: {file_suffix}"
-                        )
+            try:
+                # Read the file based on its extension
+                if file_suffix in (".xlsx", ".xls"):
+                    table_name = self._read_excel_to_table(Path(tmp_path))
+                    if table_name is None:
+                        logger.warning(f"No readable sheets found in Excel file: {filename}")
                         return None
+                elif file_suffix == ".parquet":
+                    table_name = f"fertiliser_content_{id(self)}"
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name} AS
+                        SELECT * FROM read_parquet('{tmp_path}')
+                    """)
+                else:
+                    logger.error(f"Unsupported file type for fertiliser transformer: {file_suffix}")
+                    return None
 
-                    if df.empty:
-                        logger.warning(f"Empty data file: {filename}")
-                        return None
+                # Check if empty
+                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                if row_count == 0:
+                    logger.warning(f"Empty data file: {filename}")
+                    self._drop_table(table_name)
+                    return None
 
-                    # Harmonize the data
-                    harmonized_df = self._harmonize_fertiliser_data(df, filename)
+                # Harmonize the data
+                harmonized_table = self._harmonize_fertiliser_data(table_name, filename)
 
-                    if harmonized_df is not None and not harmonized_df.empty:
-                        logger.info(
-                            f"Successfully harmonized fertiliser data from: {filename} "
-                            f"({len(harmonized_df)} rows)"
-                        )
-                    else:
-                        logger.warning(f"No data after harmonization for: {filename}")
+                if harmonized_table is None:
+                    logger.warning(f"No data after harmonization for: {filename}")
+                    self._drop_table(table_name)
+                    return None
 
-                    return harmonized_df
+                harmonized_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {harmonized_table}"
+                ).fetchone()[0]
 
-                finally:
-                    # Clean up temporary file
-                    if os.path.exists(tmp.name):
-                        os.unlink(tmp.name)
+                if harmonized_count > 0:
+                    logger.info(
+                        f"Successfully harmonized fertiliser data from: {filename} "
+                        f"({harmonized_count} rows)"
+                    )
+                    # Return as DataFrame for compatibility with existing code
+                    result_df = self.conn.execute(f"SELECT * FROM {harmonized_table}").df()
+                    self._drop_table(table_name)
+                    self._drop_table(harmonized_table)
+                    return result_df
+
+                logger.warning(f"No data after harmonization for: {filename}")
+                self._drop_table(table_name)
+                self._drop_table(harmonized_table)
+                return None
+
+            finally:
+                # Clean up temporary file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
 
         except Exception as e:
-            logger.error(f"Failed to transform fertiliser content from {filename}: {str(e)}")
+            logger.error(f"Failed to transform fertiliser content from {filename}: {e!s}")
             return None
 
-    def _harmonize_fertiliser_data(self, df: pd.DataFrame, filename: str) -> pd.DataFrame | None:
+    def _drop_table(self, table_name: str) -> None:
+        """Safely drop a table if it exists."""
+        with contextlib.suppress(Exception):
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+    def _harmonize_fertiliser_data(self, table_name: str, filename: str) -> str | None:
         """
         Harmonize fertiliser data based on the file type.
 
         Args:
-            df: Raw DataFrame
+            table_name: Name of the DuckDB table with raw data
             filename: Source filename to determine processing type
 
         Returns:
-            Harmonized DataFrame
+            Name of harmonized table or None if failed
         """
         try:
             filename_lower = filename.lower()
 
             if "efterafgrøder" in filename_lower or "efterafgroeder" in filename_lower:
-                return self._process_efterafgroeder(df, filename)
-            elif "gkea" in filename_lower:
-                return self._process_gkea(df, filename)
-            elif (
+                return self._process_efterafgroeder(table_name, filename)
+            if "gkea" in filename_lower:
+                return self._process_gkea(table_name, filename)
+            if (
                 "gødningsregnskaber" in filename_lower
                 or "goedningsregnskaber" in filename_lower
                 or any(
                     pattern in filename_lower for pattern in ["b_", "v_", "erklrk", "lg_company"]
                 )
             ):
-                return self._process_goedningsregnskaber(df, filename)
-            else:
-                logger.warning(f"Unknown fertiliser file type: {filename}")
-                return self._process_generic_fertiliser(df, filename)
+                return self._process_goedningsregnskaber(table_name, filename)
+            logger.warning(f"Unknown fertiliser file type: {filename}")
+            return self._process_generic_fertiliser(table_name, filename)
 
         except Exception as e:
-            logger.error(f"Failed to harmonize fertiliser data from {filename}: {str(e)}")
+            logger.error(f"Failed to harmonize fertiliser data from {filename}: {e!s}")
             return None
 
-    def _process_efterafgroeder(self, df: pd.DataFrame, filename: str) -> pd.DataFrame:
-        """Process Efterafgrøder (cover crops) files."""
+    def _get_column_if_exists(self, table_name: str, column_name: str) -> str:
+        """Return column reference or NULL if column doesn't exist."""
+        columns = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+        column_names = [col[0] for col in columns]
+        if column_name in column_names:
+            return f'"{column_name}"'
+        return "NULL"
+
+    def _process_efterafgroeder(self, table_name: str, filename: str) -> str:
+        """Process Efterafgrøder (cover crops) files using DuckDB."""
         logger.info(f"Processing Efterafgrøder file: {filename}")
 
-        # If DataFrame is empty, return empty harmonized DataFrame
-        if df.empty:
-            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+        harmonized_table = f"harmonized_efterafgroeder_{id(self)}"
 
-        # Create standardized DataFrame using actual column mappings from the data
-        harmonized_data = {
-            "data_source": ["efterafgroeder"] * len(df),
-            "year": df["PROD_AAR"].astype(str)
-            if "PROD_AAR" in df.columns
-            else pd.Series([pd.NA] * len(df)),
-            "cvr_number": df["CVR"].astype(str)
-            if "CVR" in df.columns
-            else pd.Series([pd.NA] * len(df)),
-            "capnumber": df["CapNumber"]
-            if "CapNumber" in df.columns
-            else pd.Series([pd.NA] * len(df)),
-            "markbloknummer": df["MARKBLOKNUMMER"]
-            if "MARKBLOKNUMMER" in df.columns
-            else pd.Series([pd.NA] * len(df)),
-            "marknummer": df["MARKNUMMER"]
-            if "MARKNUMMER" in df.columns
-            else pd.Series([pd.NA] * len(df)),
-            "indberet_alternativ": pd.Series([pd.NA] * len(df)),
-            "faktisk_areal_ha": pd.Series([pd.NA] * len(df)),
-            "omregnet_areal_ha": pd.Series([pd.NA] * len(df)),
-            "journal_nummer": pd.Series([pd.NA] * len(df)),
-            "total_n_kvote": pd.Series([pd.NA] * len(df)),
-            "fosfortal": pd.Series([pd.NA] * len(df)),
-            "data_type": ["Efterafgrøder"] * len(df),
-            "data_source_file": [filename] * len(df),
-        }
+        # Get available columns
+        columns = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+        column_names = [col[0] for col in columns]
 
-        # Map year-specific columns for Efterafgrøder using actual column names
-        if "A19_INDBERETEFTERAFGALTERNATIV" in df.columns:
-            # 2023 format (based on inspection)
-            harmonized_data["indberet_alternativ"] = df["A19_INDBERETEFTERAFGALTERNATIV"]
-            harmonized_data["faktisk_areal_ha"] = (
-                pd.to_numeric(
-                    df["A20_FAKTISKHAUDLAGTEAALTERNATIV"].astype(str).str.replace(",", "."),
-                    errors="coerce",
-                )
-                if "A20_FAKTISKHAUDLAGTEAALTERNATIV" in df.columns
-                else pd.Series([pd.NA] * len(df))
-            )
-            harmonized_data["omregnet_areal_ha"] = (
-                pd.to_numeric(
-                    df["A23_OMREGNETHAMEDEA"].astype(str).str.replace(",", "."), errors="coerce"
-                )
-                if "A23_OMREGNETHAMEDEA" in df.columns
-                else pd.Series([pd.NA] * len(df))
-            )
-        elif "A18_INDBERETEFTERAFGALTERNATIV" in df.columns:
+        # Build dynamic column selections based on what's available
+        year_col = self._get_column_if_exists(table_name, "PROD_AAR")
+        cvr_col = self._get_column_if_exists(table_name, "CVR")
+        cap_col = self._get_column_if_exists(table_name, "CapNumber")
+        markblok_col = self._get_column_if_exists(table_name, "MARKBLOKNUMMER")
+        marknr_col = self._get_column_if_exists(table_name, "MARKNUMMER")
+
+        # Determine which year format we have for alternativ columns
+        indberet_col = "NULL"
+        faktisk_col = "NULL"
+        omregnet_col = "NULL"
+
+        # Check for different year formats
+        if "A19_INDBERETEFTERAFGALTERNATIV" in column_names:
+            # 2023 format
+            indberet_col = '"A19_INDBERETEFTERAFGALTERNATIV"'
+            if "A20_FAKTISKHAUDLAGTEAALTERNATIV" in column_names:
+                faktisk_col = """TRY_CAST(
+                    REPLACE(CAST("A20_FAKTISKHAUDLAGTEAALTERNATIV" AS VARCHAR), ',', '.')
+                    AS DOUBLE)"""
+            if "A23_OMREGNETHAMEDEA" in column_names:
+                omregnet_col = """TRY_CAST(
+                    REPLACE(CAST("A23_OMREGNETHAMEDEA" AS VARCHAR), ',', '.')
+                    AS DOUBLE)"""
+        elif "A18_INDBERETEFTERAFGALTERNATIV" in column_names:
             # 2020 format
-            harmonized_data["indberet_alternativ"] = df["A18_INDBERETEFTERAFGALTERNATIV"]
-            harmonized_data["faktisk_areal_ha"] = (
-                pd.to_numeric(
-                    df["A19_FAKTISKHAUDLAGTEAALTERNATIV"].astype(str).str.replace(",", "."),
-                    errors="coerce",
-                )
-                if "A19_FAKTISKHAUDLAGTEAALTERNATIV" in df.columns
-                else pd.Series([pd.NA] * len(df))
-            )
-            harmonized_data["omregnet_areal_ha"] = (
-                pd.to_numeric(
-                    df["A20_OMREGNETHAMEDEA"].astype(str).str.replace(",", "."), errors="coerce"
-                )
-                if "A20_OMREGNETHAMEDEA" in df.columns
-                else pd.Series([pd.NA] * len(df))
-            )
-        elif "A20_INDBERETEFTERAFGALTERNATIV" in df.columns:
+            indberet_col = '"A18_INDBERETEFTERAFGALTERNATIV"'
+            if "A19_FAKTISKHAUDLAGTEAALTERNATIV" in column_names:
+                faktisk_col = """TRY_CAST(
+                    REPLACE(CAST("A19_FAKTISKHAUDLAGTEAALTERNATIV" AS VARCHAR), ',', '.')
+                    AS DOUBLE)"""
+            if "A20_OMREGNETHAMEDEA" in column_names:
+                omregnet_col = """TRY_CAST(
+                    REPLACE(CAST("A20_OMREGNETHAMEDEA" AS VARCHAR), ',', '.')
+                    AS DOUBLE)"""
+        elif "A20_INDBERETEFTERAFGALTERNATIV" in column_names:
             # 2022 format
-            harmonized_data["indberet_alternativ"] = df["A20_INDBERETEFTERAFGALTERNATIV"]
-            harmonized_data["faktisk_areal_ha"] = (
-                pd.to_numeric(
-                    df["A21_FAKTISKHAUDLAGTEAALTERNATIV"].astype(str).str.replace(",", "."),
-                    errors="coerce",
-                )
-                if "A21_FAKTISKHAUDLAGTEAALTERNATIV" in df.columns
-                else pd.Series([pd.NA] * len(df))
-            )
-            harmonized_data["omregnet_areal_ha"] = (
-                pd.to_numeric(
-                    df["A24_OMREGNETHAMEDEA"].astype(str).str.replace(",", "."), errors="coerce"
-                )
-                if "A24_OMREGNETHAMEDEA" in df.columns
-                else pd.Series([pd.NA] * len(df))
-            )
+            indberet_col = '"A20_INDBERETEFTERAFGALTERNATIV"'
+            if "A21_FAKTISKHAUDLAGTEAALTERNATIV" in column_names:
+                faktisk_col = """TRY_CAST(
+                    REPLACE(CAST("A21_FAKTISKHAUDLAGTEAALTERNATIV" AS VARCHAR), ',', '.')
+                    AS DOUBLE)"""
+            if "A24_OMREGNETHAMEDEA" in column_names:
+                omregnet_col = """TRY_CAST(
+                    REPLACE(CAST("A24_OMREGNETHAMEDEA" AS VARCHAR), ',', '.')
+                    AS DOUBLE)"""
 
-        return pd.DataFrame(harmonized_data)
+        # Escape filename for SQL
+        escaped_filename = filename.replace("'", "''")
 
-    def _process_gkea(self, df: pd.DataFrame, filename: str) -> pd.DataFrame:
-        """Process GKEA markplan files."""
+        self.conn.execute(f"""
+            CREATE TABLE {harmonized_table} AS
+            SELECT
+                'efterafgroeder' AS data_source,
+                CAST({year_col} AS VARCHAR) AS year,
+                CAST({cvr_col} AS VARCHAR) AS cvr_number,
+                CAST({cap_col} AS VARCHAR) AS capnumber,
+                CAST({markblok_col} AS VARCHAR) AS markbloknummer,
+                CAST({marknr_col} AS VARCHAR) AS marknummer,
+                CAST({indberet_col} AS VARCHAR) AS indberet_alternativ,
+                {faktisk_col} AS faktisk_areal_ha,
+                {omregnet_col} AS omregnet_areal_ha,
+                NULL AS journal_nummer,
+                NULL::DOUBLE AS total_n_kvote,
+                NULL::DOUBLE AS fosfortal,
+                'Efterafgrøder' AS data_type,
+                '{escaped_filename}' AS data_source_file
+            FROM {table_name}
+        """)
+
+        return harmonized_table
+
+    def _process_gkea(self, table_name: str, filename: str) -> str:
+        """Process GKEA markplan files using DuckDB."""
         logger.info(f"Processing GKEA file: {filename}")
 
-        # If DataFrame is empty, return empty harmonized DataFrame
-        if df.empty:
-            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+        harmonized_table = f"harmonized_gkea_{id(self)}"
 
-        # GKEA files have different column structures by year
         # Extract year from filename
         year = None
         for yr in ["2021", "2022", "2023", "2024"]:
@@ -544,114 +545,130 @@ class FertiliserTransformer(BaseTransformer):
                 year = yr
                 break
 
-        # Map GKEA columns based on expected patterns
-        # Skip header rows if they exist - be more careful about this
-        df_data = df.copy()
+        # Get column info
+        columns = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+        num_cols = len(columns)
 
-        # Check if first few rows look like headers (contain mostly strings/NaN)
-        if len(df) > 2:
-            # Look at first row to see if it looks like a header
-            first_row = df.iloc[0]
-            if first_row.isna().sum() > len(first_row) * 0.8:  # More than 80% NaN
-                df_data = df.iloc[2:].copy()  # Skip 2 header rows
-                df_data = df_data.reset_index(drop=True)  # Reset index to avoid mismatch
-            elif (
-                first_row.astype(str)
-                .str.contains("GKEA|Markplan|Gødning", case=False, na=False)
-                .any()
-            ):
-                df_data = df.iloc[2:].copy()  # Skip 2 header rows
-                df_data = df_data.reset_index(drop=True)  # Reset index to avoid mismatch
+        # Escape filename for SQL
+        escaped_filename = filename.replace("'", "''")
 
-        # If processed DataFrame is empty, return empty harmonized DataFrame
-        if df_data.empty:
-            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+        # GKEA files typically have positional columns
+        # Create the harmonized table based on column positions
+        if num_cols >= 2:
+            # Build column references by position (0-indexed)
+            # First, rename columns to positional names for easier access
+            select_parts = []
+            for i, col in enumerate(columns):
+                col_name = col[0]
+                escaped_name = col_name.replace('"', '""')
+                select_parts.append(f'"{escaped_name}" AS column{i}')
 
-        # Create base harmonized structure using the PROCESSED DataFrame length
-        num_rows = len(df_data)
-        harmonized_data = {
-            "data_source": ["gkea"] * num_rows,
-            "year": [year] * num_rows,
-            "cvr_number": pd.Series([pd.NA] * num_rows),
-            "capnumber": pd.Series([pd.NA] * num_rows),
-            "markbloknummer": pd.Series([pd.NA] * num_rows),
-            "marknummer": pd.Series([pd.NA] * num_rows),
-            "indberet_alternativ": pd.Series([pd.NA] * num_rows),
-            "faktisk_areal_ha": pd.Series([pd.NA] * num_rows),
-            "omregnet_areal_ha": pd.Series([pd.NA] * num_rows),
-            "journal_nummer": pd.Series([pd.NA] * num_rows),
-            "total_n_kvote": pd.Series([pd.NA] * num_rows),
-            "fosfortal": pd.Series([pd.NA] * num_rows),
-            "data_type": ["GKEA Markplan"] * num_rows,
-            "data_source_file": [filename] * num_rows,
-        }
+            positional_table = f"gkea_positional_{id(self)}"
+            self.conn.execute(f"""
+                CREATE TABLE {positional_table} AS
+                SELECT {", ".join(select_parts)}
+                FROM {table_name}
+            """)
 
-        # Try to map columns based on common GKEA patterns using the processed data
-        cols = df_data.columns.tolist()
+            # Now create harmonized table based on year-specific mappings
+            journal_col = "column0" if num_cols > 0 else "NULL"
+            cvr_col = "column1" if num_cols > 1 else "NULL"
 
-        if len(cols) > 1:
-            harmonized_data["journal_nummer"] = df_data.iloc[:, 0]  # First column usually journal
-            harmonized_data["cvr_number"] = df_data.iloc[:, 1]  # Second column usually CVR
-
-        # Map other columns based on year-specific patterns
-        if year == "2021" and len(cols) > 14:
-            harmonized_data["marknummer"] = df_data.iloc[:, 5]
-            harmonized_data["faktisk_areal_ha"] = pd.to_numeric(
-                df_data.iloc[:, 6].astype(str).str.replace(",", "."), errors="coerce"
-            )
-            harmonized_data["omregnet_areal_ha"] = pd.to_numeric(
-                df_data.iloc[:, 10].astype(str).str.replace(",", "."), errors="coerce"
-            )
-            harmonized_data["indberet_alternativ"] = df_data.iloc[:, 14]
-            if len(cols) > 19:
-                harmonized_data["fosfortal"] = pd.to_numeric(
-                    df_data.iloc[:, 19].astype(str).str.replace(",", "."), errors="coerce"
+            if year == "2021" and num_cols > 14:
+                marknr_col = "column5"
+                faktisk_col = "TRY_CAST(REPLACE(CAST(column6 AS VARCHAR), ',', '.') AS DOUBLE)"
+                omregnet_col = "TRY_CAST(REPLACE(CAST(column10 AS VARCHAR), ',', '.') AS DOUBLE)"
+                indberet_col = "column14"
+                fosfor_col = (
+                    "TRY_CAST(REPLACE(CAST(column19 AS VARCHAR), ',', '.') AS DOUBLE)"
+                    if num_cols > 19
+                    else "NULL"
                 )
-        elif year == "2022" and len(cols) > 12:
-            harmonized_data["marknummer"] = df_data.iloc[:, 3]
-            harmonized_data["faktisk_areal_ha"] = pd.to_numeric(
-                df_data.iloc[:, 4].astype(str).str.replace(",", "."), errors="coerce"
-            )
-            harmonized_data["omregnet_areal_ha"] = pd.to_numeric(
-                df_data.iloc[:, 8].astype(str).str.replace(",", "."), errors="coerce"
-            )
-            harmonized_data["indberet_alternativ"] = df_data.iloc[:, 12]
-            if len(cols) > 17:
-                harmonized_data["fosfortal"] = pd.to_numeric(
-                    df_data.iloc[:, 17].astype(str).str.replace(",", "."), errors="coerce"
+            elif year == "2022" and num_cols > 12:
+                marknr_col = "column3"
+                faktisk_col = "TRY_CAST(REPLACE(CAST(column4 AS VARCHAR), ',', '.') AS DOUBLE)"
+                omregnet_col = "TRY_CAST(REPLACE(CAST(column8 AS VARCHAR), ',', '.') AS DOUBLE)"
+                indberet_col = "column12"
+                fosfor_col = (
+                    "TRY_CAST(REPLACE(CAST(column17 AS VARCHAR), ',', '.') AS DOUBLE)"
+                    if num_cols > 17
+                    else "NULL"
                 )
-        elif year in ["2023", "2024"] and len(cols) > 10:
-            harmonized_data["marknummer"] = df_data.iloc[:, 3]
-            harmonized_data["faktisk_areal_ha"] = pd.to_numeric(
-                df_data.iloc[:, 4].astype(str).str.replace(",", "."), errors="coerce"
-            )
-            harmonized_data["omregnet_areal_ha"] = pd.to_numeric(
-                df_data.iloc[:, 6].astype(str).str.replace(",", "."), errors="coerce"
-            )
-            harmonized_data["indberet_alternativ"] = df_data.iloc[:, 10]
-            if len(cols) > 19:
-                harmonized_data["total_n_kvote"] = pd.to_numeric(
-                    df_data.iloc[:, 19].astype(str).str.replace(",", "."), errors="coerce"
-                )
+            elif year in ["2023", "2024"] and num_cols > 10:
+                marknr_col = "column3"
+                faktisk_col = "TRY_CAST(REPLACE(CAST(column4 AS VARCHAR), ',', '.') AS DOUBLE)"
+                omregnet_col = "TRY_CAST(REPLACE(CAST(column6 AS VARCHAR), ',', '.') AS DOUBLE)"
+                indberet_col = "column10"
+                fosfor_col = "NULL"
+            else:
+                marknr_col = "NULL"
+                faktisk_col = "NULL"
+                omregnet_col = "NULL"
+                indberet_col = "NULL"
+                fosfor_col = "NULL"
 
-        return pd.DataFrame(harmonized_data)
+            year_val = f"'{year}'" if year else "NULL"
 
-    def _process_goedningsregnskaber(self, df: pd.DataFrame, filename: str) -> pd.DataFrame:
-        """Process Gødningsregnskaber (fertilizer accounts) files and In-depth files."""
+            self.conn.execute(f"""
+                CREATE TABLE {harmonized_table} AS
+                SELECT
+                    'gkea' AS data_source,
+                    {year_val} AS year,
+                    CAST({cvr_col} AS VARCHAR) AS cvr_number,
+                    NULL AS capnumber,
+                    NULL AS markbloknummer,
+                    CAST({marknr_col} AS VARCHAR) AS marknummer,
+                    CAST({indberet_col} AS VARCHAR) AS indberet_alternativ,
+                    {faktisk_col} AS faktisk_areal_ha,
+                    {omregnet_col} AS omregnet_areal_ha,
+                    CAST({journal_col} AS VARCHAR) AS journal_nummer,
+                    NULL::DOUBLE AS total_n_kvote,
+                    {fosfor_col} AS fosfortal,
+                    'GKEA Markplan' AS data_type,
+                    '{escaped_filename}' AS data_source_file
+                FROM {positional_table}
+            """)
+
+            # Clean up positional table
+            self._drop_table(positional_table)
+        else:
+            # Not enough columns, create empty harmonized table
+            self.conn.execute(f"""
+                CREATE TABLE {harmonized_table} AS
+                SELECT
+                    'gkea' AS data_source,
+                    NULL AS year,
+                    NULL AS cvr_number,
+                    NULL AS capnumber,
+                    NULL AS markbloknummer,
+                    NULL AS marknummer,
+                    NULL AS indberet_alternativ,
+                    NULL::DOUBLE AS faktisk_areal_ha,
+                    NULL::DOUBLE AS omregnet_areal_ha,
+                    NULL AS journal_nummer,
+                    NULL::DOUBLE AS total_n_kvote,
+                    NULL::DOUBLE AS fosfortal,
+                    'GKEA Markplan' AS data_type,
+                    '{escaped_filename}' AS data_source_file
+                WHERE 1=0
+            """)
+
+        return harmonized_table
+
+    def _process_goedningsregnskaber(self, table_name: str, filename: str) -> str:
+        """Process Gødningsregnskaber (fertilizer accounts) files using DuckDB."""
         logger.info(f"Processing Gødningsregnskaber/In-depth file: {filename}")
 
-        # If DataFrame is empty, return empty harmonized DataFrame
-        if df.empty:
-            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+        harmonized_table = f"harmonized_goedning_{id(self)}"
 
-        # Extract year from filename or folder structure
+        # Extract year from filename
         year = None
         for yr in ["2018", "2019", "2020", "2021", "2022", "2023", "2024"]:
             if yr in filename:
                 year = yr
                 break
 
-        # Determine data source and type based on filename
+        # Determine data source and type
         filename_lower = filename.lower()
         if "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
             data_source = "goedningsregnskaber"
@@ -666,60 +683,70 @@ class FertiliserTransformer(BaseTransformer):
             data_source = "goedningsregnskaber_other"
             data_type = "Gødningsregnskaber Other"
 
-        # Create standardized DataFrame using actual column mappings from the data
-        harmonized_data = {
-            "data_source": [data_source] * len(df),
-            "year": [year] * len(df),
-            "cvr_number": df["CVR"].astype(str)
-            if "CVR" in df.columns
-            else pd.Series([pd.NA] * len(df)),
-            "capnumber": pd.Series([pd.NA] * len(df)),
-            "markbloknummer": pd.Series([pd.NA] * len(df)),
-            "marknummer": pd.Series([pd.NA] * len(df)),
-            "indberet_alternativ": pd.Series([pd.NA] * len(df)),
-            "faktisk_areal_ha": pd.Series([pd.NA] * len(df)),
-            "omregnet_areal_ha": pd.Series([pd.NA] * len(df)),
-            "journal_nummer": df["NUMMER"]
-            if "NUMMER" in df.columns
-            else pd.Series([pd.NA] * len(df)),
-            "total_n_kvote": pd.Series([pd.NA] * len(df)),
-            "fosfortal": pd.Series([pd.NA] * len(df)),
-            "data_type": [data_type] * len(df),
-            "data_source_file": [filename] * len(df),
-        }
+        # Get column mapping
+        cvr_col = self._get_column_if_exists(table_name, "CVR")
+        nummer_col = self._get_column_if_exists(table_name, "NUMMER")
 
-        return pd.DataFrame(harmonized_data)
+        year_val = f"'{year}'" if year else "NULL"
 
-    def _process_generic_fertiliser(self, df: pd.DataFrame, filename: str) -> pd.DataFrame:
-        """Process generic fertiliser files."""
+        # Escape filename for SQL
+        escaped_filename = filename.replace("'", "''")
+
+        self.conn.execute(f"""
+            CREATE TABLE {harmonized_table} AS
+            SELECT
+                '{data_source}' AS data_source,
+                {year_val} AS year,
+                CAST({cvr_col} AS VARCHAR) AS cvr_number,
+                NULL AS capnumber,
+                NULL AS markbloknummer,
+                NULL AS marknummer,
+                NULL AS indberet_alternativ,
+                NULL::DOUBLE AS faktisk_areal_ha,
+                NULL::DOUBLE AS omregnet_areal_ha,
+                CAST({nummer_col} AS VARCHAR) AS journal_nummer,
+                NULL::DOUBLE AS total_n_kvote,
+                NULL::DOUBLE AS fosfortal,
+                '{data_type}' AS data_type,
+                '{escaped_filename}' AS data_source_file
+            FROM {table_name}
+        """)
+
+        return harmonized_table
+
+    def _process_generic_fertiliser(self, table_name: str, filename: str) -> str:
+        """Process generic fertiliser files using DuckDB."""
         logger.info(f"Processing generic fertiliser file: {filename}")
 
-        # If DataFrame is empty, return empty harmonized DataFrame
-        if df.empty:
-            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+        harmonized_table = f"harmonized_generic_{id(self)}"
 
-        # Create minimal harmonized structure using DataFrame length as index
-        num_rows = len(df)
-        harmonized_data = {
-            "data_source": ["generic"] * num_rows,
-            "year": pd.Series([pd.NA] * num_rows),
-            "cvr_number": df.get("cvr_number", pd.Series([pd.NA] * num_rows)).reset_index(
-                drop=True
-            ),
-            "capnumber": pd.Series([pd.NA] * num_rows),
-            "markbloknummer": pd.Series([pd.NA] * num_rows),
-            "marknummer": pd.Series([pd.NA] * num_rows),
-            "indberet_alternativ": pd.Series([pd.NA] * num_rows),
-            "faktisk_areal_ha": pd.Series([pd.NA] * num_rows),
-            "omregnet_areal_ha": pd.Series([pd.NA] * num_rows),
-            "journal_nummer": pd.Series([pd.NA] * num_rows),
-            "total_n_kvote": pd.Series([pd.NA] * num_rows),
-            "fosfortal": pd.Series([pd.NA] * num_rows),
-            "data_type": ["Generic Fertiliser"] * num_rows,
-            "data_source_file": [filename] * num_rows,
-        }
+        # Check for cvr_number column
+        cvr_col = self._get_column_if_exists(table_name, "cvr_number")
 
-        return pd.DataFrame(harmonized_data)
+        # Escape filename for SQL
+        escaped_filename = filename.replace("'", "''")
+
+        self.conn.execute(f"""
+            CREATE TABLE {harmonized_table} AS
+            SELECT
+                'generic' AS data_source,
+                NULL AS year,
+                CAST({cvr_col} AS VARCHAR) AS cvr_number,
+                NULL AS capnumber,
+                NULL AS markbloknummer,
+                NULL AS marknummer,
+                NULL AS indberet_alternativ,
+                NULL::DOUBLE AS faktisk_areal_ha,
+                NULL::DOUBLE AS omregnet_areal_ha,
+                NULL AS journal_nummer,
+                NULL::DOUBLE AS total_n_kvote,
+                NULL::DOUBLE AS fosfortal,
+                'Generic Fertiliser' AS data_type,
+                '{escaped_filename}' AS data_source_file
+            FROM {table_name}
+        """)
+
+        return harmonized_table
 
     def _get_data_source(self, filename: str) -> str:
         """Determine data source from filename."""
@@ -727,16 +754,15 @@ class FertiliserTransformer(BaseTransformer):
 
         if "efterafgrøder" in filename_lower or "efterafgroeder" in filename_lower:
             return "efterafgroeder"
-        elif "gkea" in filename_lower:
+        if "gkea" in filename_lower:
             return "gkea"
-        elif "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
+        if "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
             return "goedningsregnskaber"
-        elif "b_" in filename_lower:
+        if "b_" in filename_lower:
             return "goedningsregnskaber_blok"
-        elif "v_" in filename_lower:
+        if "v_" in filename_lower:
             return "goedningsregnskaber_vurdering"
-        else:
-            return "generic"
+        return "generic"
 
     def _get_data_type(self, filename: str) -> str:
         """Determine data type from filename."""
@@ -744,16 +770,15 @@ class FertiliserTransformer(BaseTransformer):
 
         if "efterafgrøder" in filename_lower or "efterafgroeder" in filename_lower:
             return "Efterafgrøder"
-        elif "gkea" in filename_lower:
+        if "gkea" in filename_lower:
             return "GKEA Markplan"
-        elif "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
+        if "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
             return "Gødningsregnskaber"
-        elif "b_" in filename_lower:
+        if "b_" in filename_lower:
             return "Gødningsregnskaber Blok"
-        elif "v_" in filename_lower:
+        if "v_" in filename_lower:
             return "Gødningsregnskaber Vurdering"
-        else:
-            return "Generic Fertiliser"
+        return "Generic Fertiliser"
 
     def get_expected_schema(self) -> TableSchema | None:
         """

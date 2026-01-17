@@ -8,29 +8,37 @@ Based on:
 - Table 33: Manure composition (N content, VS)
 """
 
-from typing import Dict, Optional
-from pathlib import Path
 import json
+from pathlib import Path
 
 # GWP factors (IPCC AR6, 2021)
-GWP_CH4 = 27   # Biogenic methane
+GWP_CH4 = 27  # Biogenic methane
 GWP_N2O = 273
 
 # Molecular weight conversion factor (N2O-N to N2O)
 N2O_TO_N2O_N = 44.0 / 28.0
 
 
-def load_reference_values() -> tuple[Dict, Dict, Dict]:
+def load_reference_values() -> tuple[dict, dict, dict]:
     """Load reference values from JSON tables."""
     base_path = Path(__file__).parent.parent.parent / "reference_values"
 
-    with open(base_path / "tabel_11_emissionsfaktorer_for_ammoniak_og_lattergas_til_beregning_af_emissioner_i_stalden_fra_gylle.json") as f:
+    with open(
+        base_path
+        / "tabel_11_emissionsfaktorer_for_ammoniak_og_lattergas_til_beregning_af_emissioner_i_stalden_fra_gylle.json"
+    ) as f:
         table_11 = json.load(f)
 
-    with open(base_path / "tabel_13_mcf_for_gylle_og_dybstrøelse_samt_reduktionen_i_mcf_hvis_der_anvendes_staldforsuring_eller_.json") as f:
+    with open(
+        base_path
+        / "tabel_13_mcf_for_gylle_og_dybstrøelse_samt_reduktionen_i_mcf_hvis_der_anvendes_staldforsuring_eller_.json"
+    ) as f:
         table_13 = json.load(f)
 
-    with open(base_path / "tabel_33_normtal_for_kvælstof_tons_gødning_og_ts_kulstofbalancen_i_jorden_side_102.json") as f:
+    with open(
+        base_path
+        / "tabel_33_normtal_for_kvælstof_tons_gødning_og_ts_kulstofbalancen_i_jorden_side_102.json"
+    ) as f:
         table_33 = json.load(f)
 
     # Parse Table 11 - Housing emission factors
@@ -50,7 +58,7 @@ def load_reference_values() -> tuple[Dict, Dict, Dict]:
         system_type = row["Type"]
         mcf_val = row["MCF"]
         mcf_values[system_type.lower()] = {
-            "mcf": mcf_val if isinstance(mcf_val, (int, float)) else None,
+            "mcf": mcf_val if isinstance(mcf_val, int | float) else None,
             "days_in_barn": row.get("Antal_dage_i_stalden"),
         }
 
@@ -84,10 +92,10 @@ def calculate_manure_ch4(
     antal_dyr: float,
     average_body_weight_kg: float,
     housing_system: str = "gylle",
-    days_in_barn: Optional[float] = None,
+    days_in_barn: float | None = None,
     use_acidification: bool = False,
     use_biogas: bool = False,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate CH4 emissions from pig manure management.
 
@@ -121,7 +129,9 @@ def calculate_manure_ch4(
     # Get MCF for housing system
     system_key = housing_system.lower()
     if system_key not in MCF_VALUES:
-        raise ValueError(f"Unknown housing system: {housing_system}. Must be one of: {list(MCF_VALUES.keys())}")
+        raise ValueError(
+            f"Unknown housing system: {housing_system}. Must be one of: {list(MCF_VALUES.keys())}"
+        )
 
     mcf_data = MCF_VALUES[system_key]
     mcf_pct = mcf_data["mcf"]
@@ -148,7 +158,12 @@ def calculate_manure_ch4(
     # Calculate CH4 emissions (IPCC 2006)
     # CH4 = VS × (MCF/100) × B0 × (days_in_barn/365) × 0.67
     # Note: 0.67 converts m³ CH4 to kg CH4 (density)
-    ch4_m3 = total_vs_kg * (mcf_pct / 100) * IPCC_PIG_DEFAULTS["b0_m3_ch4_per_kg_vs"] * (days_in_barn / 365)
+    ch4_m3 = (
+        total_vs_kg
+        * (mcf_pct / 100)
+        * IPCC_PIG_DEFAULTS["b0_m3_ch4_per_kg_vs"]
+        * (days_in_barn / 365)
+    )
     ch4_kg = ch4_m3 * 0.67  # Convert m³ to kg
 
     # Convert to CO2e
@@ -167,7 +182,7 @@ def calculate_manure_n2o(
     n_excretion_kg_per_animal: float,
     housing_type: str = "Bindestald med riste",
     system_type: str = "gylle",
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate N2O emissions from pig manure in housing.
 
@@ -234,12 +249,12 @@ def calculate_manure_n2o(
 def calculate_manure_emissions_svin(
     antal_dyr: float,
     average_body_weight_kg: float,
-    n_excretion_kg_per_animal: Optional[float] = None,
+    n_excretion_kg_per_animal: float | None = None,
     housing_system: str = "gylle",
     housing_type: str = "Bindestald med riste",
     use_acidification: bool = False,
     use_biogas: bool = False,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate total manure emissions (CH4 + N2O) for pigs.
 
@@ -271,7 +286,9 @@ def calculate_manure_emissions_svin(
 
     # Estimate N excretion if not provided (IPCC default)
     if n_excretion_kg_per_animal is None:
-        n_excretion_kg_per_animal = average_body_weight_kg * IPCC_PIG_DEFAULTS["n_excretion_kg_per_kg_bw"]
+        n_excretion_kg_per_animal = (
+            average_body_weight_kg * IPCC_PIG_DEFAULTS["n_excretion_kg_per_kg_bw"]
+        )
 
     # Calculate N2O emissions
     system_type = "dybstrøelse" if housing_system.lower() == "dybstrøelse" else "gylle"
@@ -306,7 +323,7 @@ if __name__ == "__main__":
     print(f"  CH4: {result['ch4_co2e_kg']:.2f} kg CO2e/year")
     print(f"  N2O: {result['n2o_co2e_kg']:.2f} kg CO2e/year")
     print(f"  Total: {result['total_co2e_kg']:.2f} kg CO2e/year")
-    print(f"  Per pig: {result['total_co2e_kg']/1000:.2f} kg CO2e/year\n")
+    print(f"  Per pig: {result['total_co2e_kg'] / 1000:.2f} kg CO2e/year\n")
 
     # Test 2: Sows in deep litter
     result = calculate_manure_emissions_svin(
@@ -319,7 +336,7 @@ if __name__ == "__main__":
     print(f"  CH4: {result['ch4_co2e_kg']:.2f} kg CO2e/year")
     print(f"  N2O: {result['n2o_co2e_kg']:.2f} kg CO2e/year")
     print(f"  Total: {result['total_co2e_kg']:.2f} kg CO2e/year")
-    print(f"  Per sow: {result['total_co2e_kg']/200:.2f} kg CO2e/year\n")
+    print(f"  Per sow: {result['total_co2e_kg'] / 200:.2f} kg CO2e/year\n")
 
     # Test 3: With acidification technology
     result = calculate_manure_emissions_svin(
@@ -332,4 +349,4 @@ if __name__ == "__main__":
     print(f"  CH4: {result['ch4_co2e_kg']:.2f} kg CO2e/year")
     print(f"  N2O: {result['n2o_co2e_kg']:.2f} kg CO2e/year")
     print(f"  Total: {result['total_co2e_kg']:.2f} kg CO2e/year")
-    print(f"  Per pig: {result['total_co2e_kg']/1000:.2f} kg CO2e/year")
+    print(f"  Per pig: {result['total_co2e_kg'] / 1000:.2f} kg CO2e/year")

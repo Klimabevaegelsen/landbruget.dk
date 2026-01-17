@@ -1,6 +1,5 @@
 """Configuration for PMTiles Generator Gold Pipeline."""
 
-from typing import List, Optional
 
 from pydantic import Field
 
@@ -59,10 +58,10 @@ class PMTilesGeneratorConfig(BaseJobConfig):
     )
 
     # Year filtering (optional - if not provided, will auto-detect)
-    target_years: Optional[List[int]] = Field(
+    target_years: list[int] | None = Field(
         default=None, description="Specific years to process (auto-detect if None)"
     )
-    exclude_years: List[int] = Field(
+    exclude_years: list[int] = Field(
         default_factory=list, description="Years to exclude from processing"
     )
 

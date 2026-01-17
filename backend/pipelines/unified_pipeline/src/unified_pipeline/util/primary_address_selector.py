@@ -6,7 +6,7 @@ while keeping all addresses in the separate address table.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class AddressType(Enum):
@@ -27,8 +27,8 @@ class CoordinateQuality(Enum):
 
 
 def select_primary_address_for_company_table(
-    addresses: List[Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
+    addresses: list[dict[str, Any]],
+) -> dict[str, Any] | None:
     """
     Select the primary address for the main company table.
 
@@ -69,7 +69,7 @@ def select_primary_address_for_company_table(
         return None
 
     # Step 2: Score each address and select the best one
-    def calculate_address_score(addr: Dict[str, Any]) -> tuple:
+    def calculate_address_score(addr: dict[str, Any]) -> tuple:
         """Calculate score for address prioritization (lower is better)."""
 
         # Address type priority (lower is better)
@@ -132,7 +132,7 @@ def select_primary_address_for_company_table(
     return sorted_addresses[0]
 
 
-def create_primary_address_geometry(primary_address: Dict[str, Any]) -> Dict[str, Any]:
+def create_primary_address_geometry(primary_address: dict[str, Any]) -> dict[str, Any]:
     """
     Create primary address geometry object for company table.
 
@@ -157,7 +157,7 @@ def create_primary_address_geometry(primary_address: Dict[str, Any]) -> Dict[str
     }
 
 
-def enhance_company_data_with_primary_address(company_data: Dict[str, Any]) -> Dict[str, Any]:
+def enhance_company_data_with_primary_address(company_data: dict[str, Any]) -> dict[str, Any]:
     """
     Enhance company data with intelligently selected primary address.
 
@@ -198,7 +198,7 @@ def enhance_company_data_with_primary_address(company_data: Dict[str, Any]) -> D
     return company_data
 
 
-def analyze_address_selection_impact(addresses: List[Dict[str, Any]]) -> Dict[str, Any]:
+def analyze_address_selection_impact(addresses: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Analyze the impact of different address selection methods.
 

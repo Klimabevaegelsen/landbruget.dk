@@ -727,6 +727,25 @@ wheels = [
 ]
 
 [[package]]
+name = "landbruget-common"
+version = "0.1.0"
+source = { editable = "../../common" }
+dependencies = [
+    { name = "duckdb" },
+    { name = "gcsfs" },
+    { name = "google-cloud-storage" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb", specifier = ">=1.0" },
+    { name = "gcsfs", specifier = ">=2023.0" },
+    { name = "google-cloud-storage", specifier = ">=2.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
+
+[[package]]
 name = "loguru"
 version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1884,6 +1903,7 @@ dependencies = [
     { name = "gcsfs" },
     { name = "google-cloud-storage" },
     { name = "ibis-framework", extra = ["duckdb", "geospatial"] },
+    { name = "landbruget-common" },
     { name = "loguru" },
     { name = "lxml" },
     { name = "psutil" },
@@ -1920,6 +1940,7 @@ requires-dist = [
     { name = "gcsfs", specifier = ">=2025.3.2" },
     { name = "google-cloud-storage", specifier = ">=3.1.0" },
     { name = "ibis-framework", extras = ["duckdb", "geospatial"], specifier = ">=10.5.0" },
+    { name = "landbruget-common", editable = "../../common" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "lxml", specifier = ">=5.4.0" },
     { name = "psutil", specifier = ">=6.1.0" },

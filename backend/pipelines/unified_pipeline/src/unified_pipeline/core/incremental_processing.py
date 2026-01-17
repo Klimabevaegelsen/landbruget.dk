@@ -17,7 +17,7 @@ Date: 2025-09-14
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .gcs_data_access import GCSDataAccess
 
@@ -31,9 +31,9 @@ class ProcessingRun:
     pipeline_name: str
     bronze_timestamp: str
     processing_mode: str  # 'full', 'incremental', 'backfill'
-    data_period_start: Optional[date] = None
-    data_period_end: Optional[date] = None
-    months_processed: Optional[int] = None
+    data_period_start: date | None = None
+    data_period_end: date | None = None
+    months_processed: int | None = None
 
 
 @dataclass
@@ -44,8 +44,8 @@ class DataFreshness:
     has_main_data: bool = False
     has_movement_data: bool = False
     has_vetstat_data: bool = False
-    data_coverage_start: Optional[date] = None
-    data_coverage_end: Optional[date] = None
+    data_coverage_start: date | None = None
+    data_coverage_end: date | None = None
     months_covered: int = 0
 
 
@@ -60,7 +60,7 @@ class IncrementalProcessor:
     - Tracking data freshness and completeness
     """
 
-    def __init__(self, gcs_access: Optional[GCSDataAccess] = None, supabase_client=None):
+    def __init__(self, gcs_access: GCSDataAccess | None = None, supabase_client=None):
         """Initialize the incremental processor."""
         self.gcs_access = gcs_access or GCSDataAccess()
         self.supabase = supabase_client
@@ -68,11 +68,11 @@ class IncrementalProcessor:
 
     def merge_parquet_files(
         self,
-        source_paths: List[str],
+        source_paths: list[str],
         output_path: str,
-        deduplication_columns: Optional[List[str]] = None,
-        partition_columns: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        deduplication_columns: list[str] | None = None,
+        partition_columns: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Merge multiple parquet files into a single output file with deduplication.
 
@@ -110,7 +110,7 @@ class IncrementalProcessor:
                 count_result = self.duckdb_conn.execute(count_query).fetchone()
                 if count_result:
                     merge_stats["total_input_records"] += count_result[0]
-                    logger.debug(f"Source {i+1}: {count_result[0]:,} records from {source_path}")
+                    logger.debug(f"Source {i + 1}: {count_result[0]:,} records from {source_path}")
 
                 union_queries.append(f"SELECT * FROM read_parquet('{source_path}')")
 
@@ -193,7 +193,7 @@ class IncrementalProcessor:
 
     def get_processing_recommendation(
         self, pipeline_name: str, bronze_timestamp: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Simple processing recommendation - defaults to incremental (3 months).
 
@@ -217,8 +217,8 @@ class IncrementalProcessor:
         self,
         processing_run: ProcessingRun,
         status: str = "running",
-        error_message: Optional[str] = None,
-        performance_metrics: Optional[Dict] = None,
+        error_message: str | None = None,
+        performance_metrics: dict | None = None,
     ) -> str:
         """
         Track a processing run using simple upsert.
@@ -257,9 +257,8 @@ class IncrementalProcessor:
                 run_id = result.data[0]["id"]
                 logger.info(f"📊 Tracked processing run: {run_id}")
                 return run_id
-            else:
-                logger.warning("No data returned from processing run tracking")
-                return "unknown"
+            logger.warning("No data returned from processing run tracking")
+            return "unknown"
 
         except Exception as e:
             logger.error(f"❌ Error tracking processing run: {e}")
@@ -303,15 +302,14 @@ class IncrementalProcessor:
             if result.data:
                 logger.info(f"📊 Updated data freshness for {bronze_timestamp}")
                 return True
-            else:
-                logger.warning("No data returned from freshness update")
-                return False
+            logger.warning("No data returned from freshness update")
+            return False
 
         except Exception as e:
             logger.error(f"❌ Error updating data freshness: {e}")
             return False
 
-    def _get_pipeline_state(self, pipeline_name: str) -> Dict[str, Any]:
+    def _get_pipeline_state(self, pipeline_name: str) -> dict[str, Any]:
         """Get current pipeline state from Supabase."""
         if not self.supabase:
             return {}
@@ -326,8 +324,7 @@ class IncrementalProcessor:
 
             if result.data:
                 return result.data[0]
-            else:
-                return {}
+            return {}
         except Exception as e:
             logger.warning(f"Could not get pipeline state: {e}")
             return {}
@@ -375,10 +372,10 @@ class IncrementalProcessor:
     def _make_processing_decision(
         self,
         pipeline_name: str,
-        current_state: Dict[str, Any],
+        current_state: dict[str, Any],
         freshness_info: DataFreshness,
-        available_timestamps: List[str],
-    ) -> Dict[str, Any]:
+        available_timestamps: list[str],
+    ) -> dict[str, Any]:
         """Make processing mode decision based on current state and data freshness."""
 
         # Default configuration
@@ -400,13 +397,12 @@ class IncrementalProcessor:
                     "recommended_timestamp": best_monthly_timestamp,
                     "estimated_processing_time_minutes": 180,  # 3 hours for backfill
                 }
-            else:
-                return {
-                    "recommended_mode": "full",
-                    "reason": "No previous processing - full processing required",
-                    "recommended_timestamp": latest_timestamp,
-                    "estimated_processing_time_minutes": 240,  # 4 hours for full
-                }
+            return {
+                "recommended_mode": "full",
+                "reason": "No previous processing - full processing required",
+                "recommended_timestamp": latest_timestamp,
+                "estimated_processing_time_minutes": 240,  # 4 hours for full
+            }
 
         # Calculate time since last processing
         last_processing_timestamp = last_incremental_timestamp or last_full_timestamp
@@ -427,20 +423,19 @@ class IncrementalProcessor:
                     "recommended_timestamp": latest_timestamp,
                     "estimated_processing_time_minutes": 30,  # 30 minutes for incremental
                 }
-            elif months_since_last <= backfill_threshold_months:
+            if months_since_last <= backfill_threshold_months:
                 return {
                     "recommended_mode": "backfill",
                     "reason": f"Moderate gap ({months_since_last:.1f} months) - backfill needed",
                     "recommended_timestamp": latest_timestamp,
                     "estimated_processing_time_minutes": 120,  # 2 hours for backfill
                 }
-            else:
-                return {
-                    "recommended_mode": "full",
-                    "reason": f"Large gap ({months_since_last:.1f} months) - full needed",
-                    "recommended_timestamp": latest_timestamp,
-                    "estimated_processing_time_minutes": 240,  # 4 hours for full
-                }
+            return {
+                "recommended_mode": "full",
+                "reason": f"Large gap ({months_since_last:.1f} months) - full needed",
+                "recommended_timestamp": latest_timestamp,
+                "estimated_processing_time_minutes": 240,  # 4 hours for full
+            }
 
         except Exception as e:
             logger.warning(f"Could not calculate time gaps: {e}")
@@ -451,7 +446,7 @@ class IncrementalProcessor:
                 "estimated_processing_time_minutes": 30,
             }
 
-    def _find_best_monthly_timestamp(self, timestamps: List[str]) -> Optional[str]:
+    def _find_best_monthly_timestamp(self, timestamps: list[str]) -> str | None:
         """Find the timestamp with the best monthly coverage."""
         monthly_timestamps = [t for t in timestamps if t.count("_") == 2]
         if not monthly_timestamps:
@@ -484,8 +479,8 @@ def get_incremental_processor(supabase_client=None) -> IncrementalProcessor:
 
 
 def merge_chr_parquet_files(
-    source_paths: List[str], output_path: str, remove_duplicates: bool = True
-) -> Dict[str, Any]:
+    source_paths: list[str], output_path: str, remove_duplicates: bool = True
+) -> dict[str, Any]:
     """
     Convenience function to merge CHR parquet files with standard deduplication.
 
@@ -507,8 +502,8 @@ def merge_chr_parquet_files(
 
 
 def merge_vetstat_parquet_files(
-    source_paths: List[str], output_path: str, remove_duplicates: bool = True
-) -> Dict[str, Any]:
+    source_paths: list[str], output_path: str, remove_duplicates: bool = True
+) -> dict[str, Any]:
     """
     Convenience function to merge VetStat parquet files with standard deduplication.
 

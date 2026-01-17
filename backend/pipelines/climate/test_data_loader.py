@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+
 from data_loader import ClimateDataLoader
 
 
@@ -36,11 +37,12 @@ def test_loader(cvr: str = "31373077", year: int = 2024):
     # Test 2: Load livestock data
     print("\n[TEST 2] Loading livestock data:")
     print("-" * 40)
-    livestock_df = loader.load_livestock(cvr=cvr, year=year)
-    if not livestock_df.empty:
+    livestock_rel = loader.load_livestock(cvr=cvr, year=year)
+    if livestock_rel is not None:
+        livestock_df = livestock_rel.df()
         print(f"✅ Loaded {len(livestock_df)} livestock records")
         print(f"Columns: {livestock_df.columns.tolist()}")
-        print(f"\nFirst few rows:")
+        print("\nFirst few rows:")
         print(livestock_df.head())
     else:
         print("⚠️  No livestock data found")
@@ -48,11 +50,12 @@ def test_loader(cvr: str = "31373077", year: int = 2024):
     # Test 3: Load field data
     print("\n[TEST 3] Loading field data:")
     print("-" * 40)
-    fields_df = loader.load_fields(cvr=cvr, year=year)
-    if not fields_df.empty:
+    fields_rel = loader.load_fields(cvr=cvr, year=year)
+    if fields_rel is not None:
+        fields_df = fields_rel.df()
         print(f"✅ Loaded {len(fields_df)} field records")
         print(f"Columns: {fields_df.columns.tolist()}")
-        print(f"\nFirst few rows:")
+        print("\nFirst few rows:")
         print(fields_df.head())
 
         # Summary statistics
@@ -66,11 +69,12 @@ def test_loader(cvr: str = "31373077", year: int = 2024):
     # Test 4: Load fertilizer data
     print("\n[TEST 4] Loading fertilizer data:")
     print("-" * 40)
-    fertilizer_df = loader.load_fertilizer(cvr=cvr, year=year)
-    if not fertilizer_df.empty:
+    fertilizer_rel = loader.load_fertilizer(cvr=cvr, year=year)
+    if fertilizer_rel is not None:
+        fertilizer_df = fertilizer_rel.df()
         print(f"✅ Loaded {len(fertilizer_df)} fertilizer records")
         print(f"Columns: {fertilizer_df.columns.tolist()}")
-        print(f"\nFirst few rows:")
+        print("\nFirst few rows:")
         print(fertilizer_df.head())
     else:
         print("⚠️  No fertilizer data found (may not be available)")
@@ -78,8 +82,9 @@ def test_loader(cvr: str = "31373077", year: int = 2024):
     # Test 5: Load climate data (optional)
     print("\n[TEST 5] Loading climate data (optional):")
     print("-" * 40)
-    climate_df = loader.load_climate_data(cvr=cvr, year=year)
-    if not climate_df.empty:
+    climate_rel = loader.load_climate_data(cvr=cvr, year=year)
+    if climate_rel is not None:
+        climate_df = climate_rel.df()
         print(f"✅ Loaded {len(climate_df)} climate records")
         print(f"Columns: {climate_df.columns.tolist()}")
     else:

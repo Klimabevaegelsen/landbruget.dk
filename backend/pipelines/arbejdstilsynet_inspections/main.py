@@ -4,19 +4,15 @@ import os
 import sys
 from datetime import datetime
 
-import bronze.export
-import silver.transform
 from dotenv import load_dotenv
 
-# Import pipeline metadata system for data tracing
-try:
-    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+import bronze.export
+import silver.transform
 
-    PIPELINE_METADATA_AVAILABLE = True
-except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
-    PipelineMetadataManager = None
-    PIPELINE_METADATA_AVAILABLE = False
+# Import pipeline metadata system for data tracing
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+PIPELINE_METADATA_AVAILABLE = True
 
 PIPELINE_ROOT = os.path.dirname(os.path.abspath(__file__))
 print("[DEBUG] DISPLAY =", os.environ.get("DISPLAY"))
@@ -165,7 +161,8 @@ if __name__ == "__main__":
             from pathlib import Path
 
             metadata_path = pipeline_metadata_manager.save_metadata(
-                arbejdstilsynet_metadata, Path(metadata_dir) / "arbejdstilsynet_inspections_metadata.json"
+                arbejdstilsynet_metadata,
+                Path(metadata_dir) / "arbejdstilsynet_inspections_metadata.json",
             )
             logger.info(f"✅ Arbejdstilsynet inspections metadata saved to {metadata_path}")
 

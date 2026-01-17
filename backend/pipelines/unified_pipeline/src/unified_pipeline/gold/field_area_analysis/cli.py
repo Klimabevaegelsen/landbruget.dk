@@ -13,7 +13,7 @@ import argparse
 import asyncio
 import sys
 import time
-from typing import Any, Dict
+from typing import Any
 
 from unified_pipeline.util.log_util import Logger
 
@@ -72,7 +72,7 @@ STAGE_JOBS = {
 }
 
 
-async def run_stage_job(stage: int, job: str, config: FieldAnalysisStageConfig) -> Dict[str, Any]:
+async def run_stage_job(stage: int, job: str, config: FieldAnalysisStageConfig) -> dict[str, Any]:
     """Run a specific stage job."""
     if stage not in STAGE_JOBS:
         raise ValueError(f"Invalid stage: {stage}. Valid stages: {list(STAGE_JOBS.keys())}")
@@ -103,7 +103,7 @@ async def run_stage_job(stage: int, job: str, config: FieldAnalysisStageConfig) 
         raise
 
 
-async def run_stage_all_jobs(stage: int, config: FieldAnalysisStageConfig) -> Dict[str, Any]:
+async def run_stage_all_jobs(stage: int, config: FieldAnalysisStageConfig) -> dict[str, Any]:
     """Run all jobs in a stage sequentially."""
     stage_results = {}
     stage_start_time = time.time()
@@ -129,7 +129,7 @@ async def run_stage_all_jobs(stage: int, config: FieldAnalysisStageConfig) -> Di
     return {"stage": stage, "total_time": total_time, "job_results": stage_results}
 
 
-async def run_all_stages(config: FieldAnalysisStageConfig) -> Dict[str, Any]:
+async def run_all_stages(config: FieldAnalysisStageConfig) -> dict[str, Any]:
     """Run all stages sequentially."""
     pipeline_start_time = time.time()
     all_results = {}

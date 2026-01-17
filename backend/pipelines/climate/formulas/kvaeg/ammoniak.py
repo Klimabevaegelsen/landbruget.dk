@@ -15,12 +15,11 @@ Source Attribution:
 - Methodology: Danish GHG inventory aligned with IPCC guidelines
 """
 
-from typing import Dict
-from pathlib import Path
 import json
+from pathlib import Path
 
 
-def load_nh3_factors() -> Dict[str, Dict[str, float]]:
+def load_nh3_factors() -> dict[str, dict[str, float]]:
     """
     Load NH3 emission factors from SR671 2023 national data.
 
@@ -34,11 +33,7 @@ def load_nh3_factors() -> Dict[str, Dict[str, float]]:
         data = json.load(f)
 
     # Extract cattle factors
-    cattle_factors = {}
-    for cattle_type, factor_data in data["data"]["kvæg"].items():
-        cattle_factors[cattle_type] = factor_data
-
-    return cattle_factors
+    return dict(data["data"]["kvæg"].items())
 
 
 # Load constants once at module import
@@ -48,7 +43,7 @@ NH3_FACTORS = load_nh3_factors()
 def calculate_nh3_emissions_kvaeg(
     cattle_type: str,
     antal_dyr: float,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate NH3 emissions from cattle manure management.
 
@@ -132,7 +127,9 @@ def calculate_nh3_emissions_kvaeg(
     standard_type = type_mapping.get(cattle_type_clean, cattle_type_clean)
 
     if standard_type not in NH3_FACTORS:
-        raise ValueError(f"Unknown cattle type: {cattle_type}. Available: {list(NH3_FACTORS.keys())}")
+        raise ValueError(
+            f"Unknown cattle type: {cattle_type}. Available: {list(NH3_FACTORS.keys())}"
+        )
 
     factor_data = NH3_FACTORS[standard_type]
 
@@ -161,8 +158,8 @@ def calculate_nh3_emissions_kvaeg(
 
 
 def calculate_all_cattle_nh3(
-    livestock_data: Dict[str, Dict[str, float]],
-) -> Dict[str, Dict]:
+    livestock_data: dict[str, dict[str, float]],
+) -> dict[str, dict]:
     """
     Calculate NH3 emissions for all cattle types in a farm.
 
@@ -211,7 +208,7 @@ if __name__ == "__main__":
 
     # Test 1: Dairy cows (årsdyr)
     result = calculate_nh3_emissions_kvaeg("malkekøer", 100)
-    print(f"100 dairy cows (årsdyr):")
+    print("100 dairy cows (årsdyr):")
     print(f"  NH3 emissions: {result['nh3_kg']:.2f} kg NH3/year")
     print(f"  Per cow: {result['nh3_per_animal']:.2f} kg NH3/year")
     print(f"  Source: {result['source']}")
@@ -219,7 +216,7 @@ if __name__ == "__main__":
 
     # Test 2: Heifers 0-6 months (årsdyr)
     result = calculate_nh3_emissions_kvaeg("opdræt_0_6_mdr", 30)
-    print(f"30 heifers 0-6 months (årsdyr):")
+    print("30 heifers 0-6 months (årsdyr):")
     print(f"  NH3 emissions: {result['nh3_kg']:.2f} kg NH3/year")
     print(f"  Per heifer: {result['nh3_per_animal']:.3f} kg NH3/year")
     print(f"  Source: {result['source']}")
@@ -227,7 +224,7 @@ if __name__ == "__main__":
 
     # Test 3: Heifers 6+ months (årsdyr)
     result = calculate_nh3_emissions_kvaeg("opdræt_6_mdr_kælvning", 50)
-    print(f"50 heifers 6+ months (årsdyr):")
+    print("50 heifers 6+ months (årsdyr):")
     print(f"  NH3 emissions: {result['nh3_kg']:.2f} kg NH3/year")
     print(f"  Per heifer: {result['nh3_per_animal']:.3f} kg NH3/year")
     print(f"  Source: {result['source']}")
@@ -235,7 +232,7 @@ if __name__ == "__main__":
 
     # Test 4: Bulls 6 months to slaughter (produceret dyr)
     result = calculate_nh3_emissions_kvaeg("tyre_6_mdr_slagtning", 30)
-    print(f"30 bulls 6 months to slaughter (produceret dyr):")
+    print("30 bulls 6 months to slaughter (produceret dyr):")
     print(f"  NH3 emissions: {result['nh3_kg']:.2f} kg NH3")
     print(f"  Per bull: {result['nh3_per_animal']:.3f} kg NH3")
     print(f"  Source: {result['source']}")
@@ -251,7 +248,7 @@ if __name__ == "__main__":
     print("Full farm (100 dairy cows, 50 heifers, 30 bulls):")
     print(f"  Total NH3 emissions: {results['total']['nh3_kg']:.2f} kg NH3/year")
     total_animals = 100 + 50 + 30
-    print(f"  Per animal (average): {results['total']['nh3_kg']/total_animals:.2f} kg NH3")
+    print(f"  Per animal (average): {results['total']['nh3_kg'] / total_animals:.2f} kg NH3")
     print()
 
     print("Environmental Impact:")

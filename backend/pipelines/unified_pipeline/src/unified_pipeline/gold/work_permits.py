@@ -12,7 +12,7 @@ The processor handles:
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -66,7 +66,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
         self.conn.execute("SET s3_region = 'europe-west1'")
 
     @timed
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, str] | None:
         """Execute work permits gold layer processing."""
 
         self.log.info("🚀 Starting Work Permits Gold processing")
@@ -88,7 +88,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             self.log.error(f"❌ Error in Work Permits Gold processing: {e}")
             raise
 
-    async def _load_work_permits_data(self, silver_data: Optional[Dict[str, Any]] = None):
+    async def _load_work_permits_data(self, silver_data: dict[str, Any] | None = None):
         """Load work permits data from drive pipeline silver output."""
 
         self.log.info("📥 Loading work permits data from drive pipeline silver layer")
@@ -278,7 +278,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
                 final_count = self.conn.execute("SELECT COUNT(*) FROM work_permits").fetchone()[0]
                 self.log.info(f"✅ Data validation complete: {final_count:,} clean records")
 
-    async def _save_gold_data(self) -> Dict[str, str]:
+    async def _save_gold_data(self) -> dict[str, str]:
         """Save gold layer work permits data."""
 
         self.log.info("💾 Saving work permits gold data")

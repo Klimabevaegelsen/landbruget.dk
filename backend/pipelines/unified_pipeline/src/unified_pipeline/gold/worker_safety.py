@@ -12,7 +12,7 @@ The processor handles:
 """
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import ConfigDict, Field
 
@@ -63,7 +63,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         self.conn.execute("SET temp_directory = '/tmp'")
 
     @timed
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, str] | None:
         """Execute worker safety gold layer processing."""
 
         self.log.info("🚀 Starting Worker Safety Gold processing")
@@ -85,7 +85,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             self.log.error(f"❌ Worker Safety Gold processing failed: {e}")
             raise
 
-    async def _load_silver_data(self, silver_data: Optional[Dict[str, Any]]) -> None:
+    async def _load_silver_data(self, silver_data: dict[str, Any] | None) -> None:
         """Load worker safety silver data from GCS."""
 
         if silver_data:
@@ -278,8 +278,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             "WHERE injury_type != 'TOTAL'"
         ).fetchone()[0]
         total_only_cvrs = self.conn.execute(
-            "SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean "
-            "WHERE injury_type = 'TOTAL'"
+            "SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean WHERE injury_type = 'TOTAL'"
         ).fetchone()[0]
         privacy_records = self.conn.execute(
             f"SELECT COUNT(*) FROM worker_safety_clean "
@@ -297,7 +296,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             f"('{self.config.privacy_value_replacement}'): {privacy_records}"
         )
 
-    async def _save_gold_data(self) -> Dict[str, str]:
+    async def _save_gold_data(self) -> dict[str, str]:
         """Save clean worker safety data to gold layer."""
 
         self.log.info("💾 Saving clean worker safety data...")
@@ -322,7 +321,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
 
         self.log.info(f"✅ Saved {table_name} to {full_gcs_path}")
 
-    def _get_latest_silver_path(self, dataset: str) -> Optional[str]:
+    def _get_latest_silver_path(self, dataset: str) -> str | None:
         """Get the latest silver data directory path for a dataset."""
         try:
             # Look for the specific worker safety files

@@ -1,4 +1,6 @@
-def beregn_co2e_hoens_til_slagtning(s_slagt: float, t_slagt: float, s_aeg: float, a_aeg: float, a_hoene: float, co2e_tot: float) -> float:
+def beregn_co2e_hoens_til_slagtning(
+    s_slagt: float, t_slagt: float, s_aeg: float, a_aeg: float, a_hoene: float, co2e_tot: float
+) -> float:
     """
     Beregner CO2e fra høner til slagtning.
 
@@ -26,8 +28,7 @@ def beregn_co2e_hoens_til_slagtning(s_slagt: float, t_slagt: float, s_aeg: float
     # This is confusing. I will stick to the formula as written in the markdown: (S_slagt * T_slagt) / (S_aeg * A_aeg * A_hoene) * CO2e_tot
     # If A_hoene is 1 (for a single hen's lifecycle), it matches the C# test structure more closely if CO2e_tot is per hen.
 
-    if s_aeg == 0 or a_aeg == 0 or a_hoene == 0: # Prevent division by zero
+    if s_aeg == 0 or a_aeg == 0 or a_hoene == 0:  # Prevent division by zero
         return 0.0
 
-    co2e_slagt = (s_slagt * t_slagt) / (s_aeg * a_aeg * a_hoene) * co2e_tot
-    return co2e_slagt
+    return (s_slagt * t_slagt) / (s_aeg * a_aeg * a_hoene) * co2e_tot

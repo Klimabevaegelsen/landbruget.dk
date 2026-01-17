@@ -12,10 +12,11 @@ Memory Efficiency:
 - Defers all parsing/enrichment to separate steps
 """
 
+import contextlib
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -61,7 +62,7 @@ class CompanyFetchingConfig(BaseJobConfig):
         "(should be False - handled in Address Geocoding step)",
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
@@ -242,7 +243,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             # Continue processing even if cleanup fails
 
     @timed(name="Company fetching processing")
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> str:
         """
         Run the company fetching process with memory-safe batching.
 
@@ -301,7 +302,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             raise
 
     @timed(name="Loading all CVR numbers")
-    def _load_all_cvr_numbers(self) -> List[str]:
+    def _load_all_cvr_numbers(self) -> list[str]:
         """
         Load all CVR numbers from collection step output.
 
@@ -386,7 +387,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             raise
 
     @timed(name="Creating memory-safe batches")
-    def _create_memory_safe_batches(self, all_cvr_numbers: List[str]) -> List[List[str]]:
+    def _create_memory_safe_batches(self, all_cvr_numbers: list[str]) -> list[list[str]]:
         """
         Split CVR numbers into memory-safe batches.
 
@@ -521,7 +522,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         return table_name
 
     @timed(name="Processing all batches")
-    async def _process_all_batches(self, cvr_batches: List[List[str]]) -> Dict[str, Any]:
+    async def _process_all_batches(self, cvr_batches: list[list[str]]) -> dict[str, Any]:
         """
         Process all CVR batches sequentially with memory management.
 
@@ -578,8 +579,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
     @timed(name="Processing single batch")
     async def _process_single_batch(
-        self, cvr_batch: List[str], batch_idx: int, total_batches: int
-    ) -> Dict[str, Any]:
+        self, cvr_batch: list[str], batch_idx: int, total_batches: int
+    ) -> dict[str, Any]:
         """
         Process a single batch of CVR numbers and immediately save to GCS.
 
@@ -604,7 +605,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             "api_calls": company_data.get("summary", {}).get("api_calls", 0),
         }
 
-    def _append_batch_to_tables(self, processed_data: Dict[str, Any], table_name: str) -> None:
+    def _append_batch_to_tables(self, processed_data: dict[str, Any], table_name: str) -> None:
         """
         Append batch data to existing tables.
 
@@ -777,7 +778,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
     @timed(name="Saving raw batch to GCS")
     def _save_raw_batch_to_gcs(
-        self, company_data: Dict[str, Any], batch_idx: int, total_batches: int
+        self, company_data: dict[str, Any], batch_idx: int, total_batches: int
     ) -> None:
         """
         Save raw API response data immediately to GCS with minimal processing.
@@ -857,12 +858,10 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         finally:
             # Clean up batch table immediately
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.execute(f"DROP TABLE IF EXISTS {batch_table_name}")
-            except Exception:
-                pass  # Ignore cleanup errors
 
-    def _create_batch_companies_table(self, json_strings: List[str], table_name: str) -> None:
+    def _create_batch_companies_table(self, json_strings: list[str], table_name: str) -> None:
         """Create companies table for a single batch."""
         self.conn.execute(
             f"""
@@ -926,7 +925,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             [json_strings],
         )
 
-    def _create_batch_persons_table(self, json_strings: List[str], table_name: str) -> None:
+    def _create_batch_persons_table(self, json_strings: list[str], table_name: str) -> None:
         """Create persons table for a single batch."""
         self.conn.execute(
             f"""
@@ -954,7 +953,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             [json_strings],
         )
 
-    def _create_batch_employment_table(self, json_strings: List[str], table_name: str) -> None:
+    def _create_batch_employment_table(self, json_strings: list[str], table_name: str) -> None:
         """Create employment table for a single batch."""
         self.conn.execute(
             f"""
@@ -985,7 +984,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         )
 
     @timed(name="Consolidating raw batch files")
-    def _consolidate_batch_files(self, total_batches: int, total_stats: Dict[str, Any]) -> str:
+    def _consolidate_batch_files(self, total_batches: int, total_stats: dict[str, Any]) -> str:
         """
         Consolidate all raw batch files into a single raw data file.
 
@@ -1249,7 +1248,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info("Ownership table creation completed")
 
     @timed(name="Finalizing data and artifacts")
-    def _finalize_data_and_artifacts(self, table_name: str, total_stats: Dict[str, Any]) -> None:
+    def _finalize_data_and_artifacts(self, table_name: str, total_stats: dict[str, Any]) -> None:
         """
         Save final data to GCS and create GitHub Actions artifacts.
 
@@ -1299,7 +1298,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Save summary data
         self._save_summary_data(total_stats)
 
-    def _append_persons_batch(self, json_strings: List[str]) -> None:
+    def _append_persons_batch(self, json_strings: list[str]) -> None:
         """Append persons data from a batch to the persons table."""
         self.conn.execute(
             """
@@ -1434,7 +1433,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             [json_strings],
         )
 
-    def _append_employment_batch(self, json_strings: List[str]) -> None:
+    def _append_employment_batch(self, json_strings: list[str]) -> None:
         """Append employment data from a batch to the employment table."""
         self.conn.execute(
             """
@@ -1776,19 +1775,18 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             [json_strings],
         )
 
-    def _load_batch_details(self) -> Dict[str, Any]:
+    def _load_batch_details(self) -> dict[str, Any]:
         """Load batch details from collection step."""
         batch_details_path = f"gs://{self.config.bucket}/gold/cvr_enrichment_collection/{self.date_pattern}/batch_details.json"
 
         try:
-            batch_details = self.gcs_access.download_json(batch_details_path)
-            return batch_details
+            return self.gcs_access.download_json(batch_details_path)
         except Exception as e:
             self.log.error(f"Failed to load batch details from {batch_details_path}: {e}")
             raise
 
     @timed(name="Fetching company data")
-    async def _fetch_company_data(self, cvr_batch: List[str]) -> Dict[str, Any]:
+    async def _fetch_company_data(self, cvr_batch: list[str]) -> dict[str, Any]:
         """
         Fetch company data from CVR register.
 
@@ -1826,7 +1824,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         return company_results
 
     @timed(name="Processing company data")
-    def _process_company_data(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _process_company_data(self, company_data: dict[str, Any]) -> dict[str, Any]:
         """
         Process and structure company data.
 
@@ -1843,7 +1841,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Process each company's data
         processed_companies = []
 
-        for cvr_number, company_info in company_results.items():
+        for company_info in company_results.values():
             if company_info:
                 # Add processing metadata
                 company_info["processing_timestamp"] = datetime.now().isoformat()
@@ -1885,7 +1883,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         return processed_data
 
-    def _save_summary_data(self, total_stats: Dict[str, Any]) -> None:
+    def _save_summary_data(self, total_stats: dict[str, Any]) -> None:
         """Save processing summary data."""
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/company_summary.json"
 
@@ -1897,7 +1895,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
     # Legacy method - replaced by batched processing
     @timed(name="Saving company data")
-    def _save_company_data_legacy(self, processed_data: Dict[str, Any]) -> str:
+    def _save_company_data_legacy(self, processed_data: dict[str, Any]) -> str:
         """
         Save processed company data to GCS.
 
@@ -2046,7 +2044,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         return table_name
 
-    def _create_persons_table(self, json_strings: List[str]) -> None:
+    def _create_persons_table(self, json_strings: list[str]) -> None:
         """Create normalized persons table from leadership data."""
 
         self.log.info("Creating normalized persons table from leadership data")
@@ -2206,7 +2204,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info(f"Created persons table with {person_count} person-company relationships")
         self.log.info(f"Representing {unique_persons} unique persons")
 
-    def _create_ownership_table(self, json_strings: List[str]) -> None:
+    def _create_ownership_table(self, json_strings: list[str]) -> None:
         """Create normalized ownership table from ownership data."""
 
         self.log.info("Creating normalized ownership table from ownership data")
@@ -2346,7 +2344,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             stage="gold",
         )
 
-    def _create_employment_table(self, json_strings: List[str]) -> None:
+    def _create_employment_table(self, json_strings: list[str]) -> None:
         """Create normalized employment table from employment data."""
         self.log.info("Creating normalized employment table from employment data")
 

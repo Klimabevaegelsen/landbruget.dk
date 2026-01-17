@@ -1,5 +1,6 @@
 # Code Quality Checks
 # This workflow runs linting, formatting, and basic tests on pull requests
+# All checks are BLOCKING - PRs will fail if code quality standards are not met
 
 name: Code Quality
 
@@ -69,16 +70,16 @@ jobs:
     - name: Install ruff
       run: pip install ruff==0.8.0
 
-    - name: Check formatting (informational only)
+    - name: Check formatting
       run: |
         echo "## Formatting Check Results" >> $GITHUB_STEP_SUMMARY
         if ruff format --check --diff .; then
           echo "✅ All files are properly formatted" >> $GITHUB_STEP_SUMMARY
         else
-          echo "ℹ️ Some files could benefit from formatting, but this doesn't block the PR" >> $GITHUB_STEP_SUMMARY
+          echo "❌ Formatting issues found - PR blocked" >> $GITHUB_STEP_SUMMARY
           echo "Run \`ruff format .\` locally to auto-format" >> $GITHUB_STEP_SUMMARY
+          exit 1
         fi
-      continue-on-error: true
 
   import-check:
     name: Import Organization
@@ -103,10 +104,10 @@ jobs:
         if ruff check . --select I --output-format github; then
           echo "✅ Import organization looks good" >> $GITHUB_STEP_SUMMARY
         else
-          echo "ℹ️ Some import organization issues found" >> $GITHUB_STEP_SUMMARY
-          echo "These don't block the PR but improve code organization" >> $GITHUB_STEP_SUMMARY
+          echo "❌ Import organization issues found - PR blocked" >> $GITHUB_STEP_SUMMARY
+          echo "Run \`ruff check . --select I --fix\` locally to fix imports" >> $GITHUB_STEP_SUMMARY
+          exit 1
         fi
-      continue-on-error: true
 
   pipeline-specific:
     name: Pipeline-Specific Checks

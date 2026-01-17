@@ -10,9 +10,8 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-import pandas as pd
+import duckdb
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -45,11 +44,15 @@ class BatchProcessor:
         self._loader = None
         self._calculator = None
 
+        # Create a DuckDB connection for batch processing
+        self._duckdb_conn = duckdb.connect()
+
     @property
     def loader(self):
         """Lazy-load the data loader."""
         if self._loader is None:
             from data_loader import ClimateDataLoader
+
             self._loader = ClimateDataLoader()
         return self._loader
 
@@ -58,6 +61,7 @@ class BatchProcessor:
         """Lazy-load the calculator."""
         if self._calculator is None:
             from climate_calculator import FarmClimateCalculator
+
             self._calculator = FarmClimateCalculator(self.loader)
         return self._calculator
 
@@ -81,7 +85,7 @@ class BatchProcessor:
             Summary dict with processing statistics
         """
         # Load CVR list
-        with open(cvr_file, "r") as f:
+        with open(cvr_file) as f:
             discovery_data = json.load(f)
 
         cvr_list = discovery_data["cvr_numbers"]
@@ -99,7 +103,9 @@ class BatchProcessor:
             }
 
         batch_cvrs = cvr_list[start_idx:end_idx]
-        logger.info(f"Processing batch {batch_number}: CVRs {start_idx}-{end_idx} ({len(batch_cvrs)} CVRs)")
+        logger.info(
+            f"Processing batch {batch_number}: CVRs {start_idx}-{end_idx} ({len(batch_cvrs)} CVRs)"
+        )
 
         # Process each CVR
         results = []
@@ -117,35 +123,36 @@ class BatchProcessor:
 
             except Exception as e:
                 logger.warning(f"Failed to process CVR {cvr}: {e}")
-                errors.append({
-                    "cvr_number": cvr,
-                    "year": year,
-                    "error_message": str(e),
-                })
+                errors.append(
+                    {
+                        "cvr_number": cvr,
+                        "year": year,
+                        "error_message": str(e),
+                    }
+                )
                 # Add error row to results
-                results.append({
-                    "cvr_number": cvr,
-                    "year": year,
-                    "total_co2e_kg": None,
-                    "cattle_emissions_kg": None,
-                    "pig_emissions_kg": None,
-                    "field_emissions_kg": None,
-                    "nh3_emissions_kg": None,
-                    "data_completeness_score": None,
-                    "processing_timestamp": datetime.utcnow().isoformat(),
-                    "error_message": str(e),
-                })
+                results.append(
+                    {
+                        "cvr_number": cvr,
+                        "year": year,
+                        "total_co2e_kg": None,
+                        "cattle_emissions_kg": None,
+                        "pig_emissions_kg": None,
+                        "field_emissions_kg": None,
+                        "nh3_emissions_kg": None,
+                        "data_completeness_score": None,
+                        "processing_timestamp": datetime.utcnow().isoformat(),
+                        "error_message": str(e),
+                    }
+                )
 
         end_time = datetime.utcnow()
         duration_seconds = (end_time - start_time).total_seconds()
 
-        # Convert to DataFrame
-        df = pd.DataFrame(results)
-
-        # Write to parquet
+        # Create DuckDB table from results and write to parquet
         output_file = self.output_dir / f"batch_{batch_number:03d}.parquet"
-        df.to_parquet(output_file, index=False)
-        logger.info(f"Wrote {len(df)} rows to {output_file}")
+        self._write_results_to_parquet(results, output_file)
+        logger.info(f"Wrote {len(results)} rows to {output_file}")
 
         # Return summary
         successful = len([r for r in results if r.get("error_message") is None])
@@ -159,6 +166,79 @@ class BatchProcessor:
             "output_file": str(output_file),
             "errors": errors[:10] if errors else [],  # Include first 10 errors
         }
+
+    def _write_results_to_parquet(self, results: list[dict], output_file: Path) -> None:
+        """
+        Write results to parquet using DuckDB.
+
+        Args:
+            results: List of result dictionaries
+            output_file: Path to output parquet file
+        """
+        if not results:
+            # Write empty parquet with schema
+            self._duckdb_conn.execute(f"""
+                COPY (
+                    SELECT
+                        NULL::VARCHAR as cvr_number,
+                        NULL::INTEGER as year,
+                        NULL::DOUBLE as total_co2e_kg,
+                        NULL::DOUBLE as cattle_emissions_kg,
+                        NULL::DOUBLE as pig_emissions_kg,
+                        NULL::DOUBLE as field_emissions_kg,
+                        NULL::DOUBLE as nh3_emissions_kg,
+                        NULL::DOUBLE as data_completeness_score,
+                        NULL::VARCHAR as processing_timestamp,
+                        NULL::VARCHAR as error_message
+                    WHERE FALSE
+                ) TO '{output_file}' (FORMAT PARQUET, COMPRESSION ZSTD)
+            """)
+            return
+
+        # Create a temporary table with the results
+        self._duckdb_conn.execute("DROP TABLE IF EXISTS batch_results_temp")
+        self._duckdb_conn.execute("""
+            CREATE TABLE batch_results_temp (
+                cvr_number VARCHAR,
+                year INTEGER,
+                total_co2e_kg DOUBLE,
+                cattle_emissions_kg DOUBLE,
+                pig_emissions_kg DOUBLE,
+                field_emissions_kg DOUBLE,
+                nh3_emissions_kg DOUBLE,
+                data_completeness_score DOUBLE,
+                processing_timestamp VARCHAR,
+                error_message VARCHAR
+            )
+        """)
+
+        # Insert results row by row
+        for row in results:
+            self._duckdb_conn.execute(
+                """
+                INSERT INTO batch_results_temp VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+                [
+                    row.get("cvr_number"),
+                    row.get("year"),
+                    row.get("total_co2e_kg"),
+                    row.get("cattle_emissions_kg"),
+                    row.get("pig_emissions_kg"),
+                    row.get("field_emissions_kg"),
+                    row.get("nh3_emissions_kg"),
+                    row.get("data_completeness_score"),
+                    row.get("processing_timestamp"),
+                    row.get("error_message"),
+                ],
+            )
+
+        # Write to parquet
+        self._duckdb_conn.execute(f"""
+            COPY batch_results_temp TO '{output_file}' (FORMAT PARQUET, COMPRESSION ZSTD)
+        """)
+
+        # Cleanup
+        self._duckdb_conn.execute("DROP TABLE IF EXISTS batch_results_temp")
 
     def _report_to_row(self, report) -> dict:
         """
@@ -200,7 +280,7 @@ class BatchProcessor:
         self,
         year: int,
         batch_count: int,
-        gcs_output_path: Optional[str] = None,
+        gcs_output_path: str | None = None,
         cleanup: bool = True,
     ) -> dict:
         """
@@ -235,29 +315,62 @@ class BatchProcessor:
                 "reason": "no batch files found",
             }
 
-        # Read and concatenate all batch files
+        # Read and concatenate all batch files using DuckDB
         logger.info(f"Consolidating {len(batch_files)} batch files...")
-        dfs = [pd.read_parquet(f) for f in batch_files]
-        consolidated_df = pd.concat(dfs, ignore_index=True)
+
+        # Build UNION ALL query for all batch files
+        file_paths = [str(f) for f in batch_files]
+        union_query = " UNION ALL ".join(
+            [f"SELECT * FROM read_parquet('{fp}')" for fp in file_paths]
+        )
+
+        # Create consolidated table
+        self._duckdb_conn.execute("DROP TABLE IF EXISTS consolidated_temp")
+        self._duckdb_conn.execute(f"""
+            CREATE TABLE consolidated_temp AS
+            {union_query}
+        """)
+
+        # Get row count
+        row_count = self._duckdb_conn.execute("SELECT COUNT(*) FROM consolidated_temp").fetchone()[
+            0
+        ]
 
         # Write consolidated file locally
         consolidated_file = self.output_dir / "data.parquet"
-        consolidated_df.to_parquet(consolidated_file, index=False)
-        logger.info(f"Wrote consolidated file: {consolidated_file} ({len(consolidated_df)} rows)")
+        self._duckdb_conn.execute(f"""
+            COPY consolidated_temp TO '{consolidated_file}' (FORMAT PARQUET, COMPRESSION ZSTD)
+        """)
+        logger.info(f"Wrote consolidated file: {consolidated_file} ({row_count} rows)")
 
-        # Generate summary statistics
-        successful_count = consolidated_df[consolidated_df["error_message"].isna()].shape[0]
-        failed_count = consolidated_df[consolidated_df["error_message"].notna()].shape[0]
-        total_co2e = consolidated_df["total_co2e_kg"].sum()
+        # Generate summary statistics using DuckDB
+        stats = self._duckdb_conn.execute("""
+            SELECT
+                COUNT(*) as total_cvrs,
+                COUNT(CASE WHEN error_message IS NULL THEN 1 END) as successful,
+                COUNT(CASE WHEN error_message IS NOT NULL THEN 1 END) as failed,
+                SUM(total_co2e_kg) as total_co2e,
+                AVG(total_co2e_kg) as avg_co2e
+            FROM consolidated_temp
+        """).fetchone()
+
+        total_cvrs = stats[0]
+        successful_count = stats[1]
+        failed_count = stats[2]
+        total_co2e = stats[3] if stats[3] else 0.0
+        avg_co2e = stats[4] if stats[4] else 0.0
+
+        # Cleanup temp table
+        self._duckdb_conn.execute("DROP TABLE IF EXISTS consolidated_temp")
 
         summary = {
             "year": year,
-            "total_cvrs": len(consolidated_df),
+            "total_cvrs": total_cvrs,
             "successful": successful_count,
             "failed": failed_count,
-            "total_co2e_kg": float(total_co2e) if pd.notna(total_co2e) else 0.0,
-            "total_co2e_tonnes": float(total_co2e / 1000) if pd.notna(total_co2e) else 0.0,
-            "avg_co2e_per_cvr_kg": float(consolidated_df["total_co2e_kg"].mean()) if successful_count > 0 else 0.0,
+            "total_co2e_kg": float(total_co2e),
+            "total_co2e_tonnes": float(total_co2e / 1000) if total_co2e else 0.0,
+            "avg_co2e_per_cvr_kg": float(avg_co2e) if successful_count > 0 else 0.0,
             "consolidated_at": datetime.utcnow().isoformat(),
         }
 
@@ -310,6 +423,14 @@ class BatchProcessor:
         except Exception as e:
             logger.error(f"Failed to upload {local_file} to GCS: {e}")
             raise
+
+    def __del__(self):
+        """Cleanup DuckDB connection on deletion."""
+        try:
+            if hasattr(self, "_duckdb_conn") and self._duckdb_conn:
+                self._duckdb_conn.close()
+        except Exception:
+            pass
 
 
 def consolidate_main():

@@ -119,7 +119,7 @@ def log_exception(
         context: Additional context information
     """
     log_func = logger.error if level == "ERROR" else logger.critical
-    message = f"Exception: {type(exception).__name__}: {str(exception)}"
+    message = f"Exception: {type(exception).__name__}: {exception!s}"
 
     if context:
         context_str = ", ".join([f"{k}={v}" for k, v in context.items()])

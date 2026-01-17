@@ -19,7 +19,7 @@ Architectural Benefits:
 - Creates clean input for Stage 4 calculations
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
@@ -81,7 +81,7 @@ class FinalGrukosAnalysis(FieldAnalysisStageBase):
             "grukos_count": grukos_count,
         }
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Stage 3C: Create property-level grukos geometries using existing Stage 2C data.
 
@@ -139,7 +139,7 @@ class FinalGrukosAnalysis(FieldAnalysisStageBase):
             "unique_properties": unique_properties,
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save property × grukos intersection table to GCS."""
         self._save_stage_output("property_grukos_intersections", "property_grukos_intersections")
 

@@ -19,7 +19,7 @@ with proper error handling and retry logic for robustness.
 
 import ssl
 from asyncio import Semaphore
-from typing import Dict, List, Optional
+from typing import ClassVar
 
 import aiohttp
 
@@ -88,13 +88,17 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
 
     # Year ranges based on FVM WFS capabilities analysis
-    markblokke_years: List[int] = list(range(2005, 2027))  # 2005-2026 (22 years)
-    marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
-    smaabiotoper_years: List[int] = [2023, 2024, 2025]  # Special biotope layers
-    organic_areas_years: List[int] = list(range(2012, 2025))  # 2012-2024 (13 years of organic data)
-    organic_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years)
-    grassland_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years)
-    environmental_subsidies_years: List[int] = list(range(2019, 2024))  # 2019-2023 (5 years)
+    markblokke_years: ClassVar[list[int]] = list(range(2005, 2027))  # 2005-2026 (22 years)
+    marker_years: ClassVar[list[int]] = list(range(2008, 2026))  # 2008-2025 (18 years)
+    smaabiotoper_years: ClassVar[list[int]] = [2023, 2024, 2025]  # Special biotope layers
+    organic_areas_years: ClassVar[list[int]] = list(
+        range(2012, 2025)
+    )  # 2012-2024 (13 years of organic data)
+    organic_subsidies_years: ClassVar[list[int]] = list(range(2019, 2025))  # 2019-2024 (6 years)
+    grassland_subsidies_years: ClassVar[list[int]] = list(range(2019, 2025))  # 2019-2024 (6 years)
+    environmental_subsidies_years: ClassVar[list[int]] = list(
+        range(2019, 2024)
+    )  # 2019-2023 (5 years)
 
     # Request configuration - optimized for full dataset downloads
     # Testing showed full downloads are optimal (no chunking needed)
@@ -151,9 +155,10 @@ class FVMWFSBronzeConfig(BaseJobConfig):
                     years = [2023, 2024, 2025]
                 elif layer_type == FVMLayerType.organic_areas:
                     years = list(range(2012, 2025))  # 2012-2024
-                elif layer_type == FVMLayerType.organic_subsidies:
-                    years = list(range(2019, 2025))  # 2019-2024
-                elif layer_type == FVMLayerType.grassland_subsidies:
+                elif (
+                    layer_type == FVMLayerType.organic_subsidies
+                    or layer_type == FVMLayerType.grassland_subsidies
+                ):
                     years = list(range(2019, 2025))  # 2019-2024
                 elif layer_type == FVMLayerType.environmental_subsidies:
                     years = list(range(2019, 2024))  # 2019-2023
@@ -227,22 +232,21 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         """
         if layer_type == "Smaabiotoper":
             return f"Marker:Smaabiotoper_{year}"
-        elif layer_type == "OrganicAreas":
+        if layer_type == "OrganicAreas":
             return f"Miljoe_og_oekologitilsagn:Oekologiske_arealer_{year}"
-        elif layer_type == "OrganicSubsidies":
+        if layer_type == "OrganicSubsidies":
             return (
                 f"Miljoe_og_oekologitilsagn:Tilsagn_til_oekologiske_arealtilskud_2015-2020_{year}"
             )
-        elif layer_type == "GrasslandSubsidies":
+        if layer_type == "GrasslandSubsidies":
             return f"Miljoe_og_oekologitilsagn:Tilsagn_til_pleje_af_graes_2015-2020_{year}"
-        elif layer_type == "EnvironmentalSubsidies":
+        if layer_type == "EnvironmentalSubsidies":
             return f"Miljoe_og_oekologitilsagn:Miljoetilsagn_oevrige_typer_{year}"
-        else:
-            return f"{layer_type}:{layer_type}_{year}"
+        return f"{layer_type}:{layer_type}_{year}"
 
     def _get_wfs_params(
         self, layer_name: str, get_count_only: bool = False, start_index: int = 0
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Get WFS GetFeature request parameters.
 
@@ -321,7 +325,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
                         f"{response_text[:500]}"
                     )
         except Exception as e:
-            self.log.error(f"Error getting total count for {layer_name}: {str(e)}")
+            self.log.error(f"Error getting total count for {layer_name}: {e!s}")
             raise
 
     @retry(
@@ -331,7 +335,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
     )
     async def _fetch_layer_data(
         self, session: aiohttp.ClientSession, layer_name: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Fetch complete layer data with retry logic.
 
@@ -360,16 +364,15 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
                     data = await response.text()
                     self.log.info(f"Successfully fetched {layer_name} ({len(data)} characters)")
                     return data
-                else:
-                    response_text = await response.text()
-                    err_msg = (
-                        f"Error response {response.status} for {layer_name}. "
-                        f"Response: {response_text[:500]}..."
-                    )
-                    self.log.error(err_msg)
-                    raise Exception(err_msg)
+                response_text = await response.text()
+                err_msg = (
+                    f"Error response {response.status} for {layer_name}. "
+                    f"Response: {response_text[:500]}..."
+                )
+                self.log.error(err_msg)
+                raise Exception(err_msg)
 
-    def create_dataframe(self, raw_data: List[str], layer_type: str, year: int):
+    def create_dataframe(self, raw_data: list[str], layer_type: str, year: int):
         """
         Create a  from the raw WFS data using DuckDB.
 
@@ -413,8 +416,8 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         return "final_dataframe"
 
     async def _process_layer_type(
-        self, session: aiohttp.ClientSession, layer_type: str, years: List[int], dataset_name: str
-    ) -> Dict[int, str]:
+        self, session: aiohttp.ClientSession, layer_type: str, years: list[int], dataset_name: str
+    ) -> dict[int, str]:
         """
         Process all years for a specific layer type.
 
@@ -472,7 +475,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
 
         return layer_data
 
-    async def run(self) -> Optional[Dict]:
+    async def run(self) -> dict | None:
         """
         Run the FVM WFS data source processing pipeline for all available layers.
 

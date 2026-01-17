@@ -5,8 +5,8 @@ This module defines common configuration classes and utilities used across
 all CVR enrichment pipeline steps to ensure consistency and maintainability.
 """
 
+from datetime import UTC
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -93,7 +93,7 @@ class CVREnrichmentSharedConfig(BaseModel):
     )
 
     # Testing configuration
-    test_limit: Optional[int] = Field(
+    test_limit: int | None = Field(
         default=None,
         description="Limit number of CVR numbers to process for testing (None = no limit)",
     )
@@ -104,15 +104,15 @@ class CVREnrichmentSharedConfig(BaseModel):
     )
 
     # Step execution configuration
-    current_step: Optional[CVREnrichmentStep] = Field(
+    current_step: CVREnrichmentStep | None = Field(
         default=None, description="Current pipeline step being executed"
     )
 
-    batch_number: Optional[int] = Field(
+    batch_number: int | None = Field(
         default=None, description="Current batch number for parallel processing"
     )
 
-    total_batches: Optional[int] = Field(
+    total_batches: int | None = Field(
         default=None, description="Total number of batches in the current step"
     )
 
@@ -145,7 +145,7 @@ class CVREnrichmentSharedConfig(BaseModel):
 def get_step_output_path(
     step: CVREnrichmentStep,
     date_pattern: str,
-    batch_number: Optional[int] = None,
+    batch_number: int | None = None,
     bucket: str = "landbrugsdata-raw-data",
 ) -> str:
     """
@@ -164,14 +164,13 @@ def get_step_output_path(
 
     if batch_number is not None:
         return f"{base_path}/{step.value}_batch_{batch_number:03d}.parquet"
-    else:
-        return f"{base_path}/{step.value}.parquet"
+    return f"{base_path}/{step.value}.parquet"
 
 
 def get_step_input_paths(
     step: CVREnrichmentStep,
     date_pattern: str,
-    total_batches: Optional[int] = None,
+    total_batches: int | None = None,
     bucket: str = "landbrugsdata-raw-data",
     enable_independent_execution: bool = True,
     max_days_back: int = 30,
@@ -235,7 +234,7 @@ def _get_latest_input_paths_from_gcs(
     Returns:
         List of GCS paths for the latest available inputs
     """
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     try:
         gcs_access = GCSDataAccess()
@@ -246,31 +245,31 @@ def _get_latest_input_paths_from_gcs(
             # Collection step has no inputs (reads from all pipeline CVR collections)
             return []
 
-        elif step == CVREnrichmentStep.COMPANY_FETCHING:
+        if step == CVREnrichmentStep.COMPANY_FETCHING:
             # Company fetching depends on collection step
             pattern = f"gs://{bucket}/gold/cvr_enrichment_collection/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
-        elif step == CVREnrichmentStep.DATA_PARSING:
+        if step == CVREnrichmentStep.DATA_PARSING:
             # Data parsing depends on raw company fetching (Bronze layer)
             pattern = f"gs://{bucket}/bronze/cvr_raw_companies/*/consolidated.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
-        elif step == CVREnrichmentStep.PNUMBER_FETCHING:
+        if step == CVREnrichmentStep.PNUMBER_FETCHING:
             # P-number fetching depends on parsed company data (Silver layer)
             pattern = f"gs://{bucket}/silver/cvr_companies/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
-        elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
+        if step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
             # Financial documents depend on company fetching
             pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
-        elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
+        if step == CVREnrichmentStep.ADDRESS_GEOCODING:
             # Address geocoding depends on both company and P-number data
             company_pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
             pnumber_pattern = f"gs://{bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
@@ -289,7 +288,7 @@ def _get_latest_input_paths_from_gcs(
                 inputs.append(latest_pnumber)
             return inputs
 
-        elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
+        if step == CVREnrichmentStep.DATA_CONSOLIDATION:
             # Data consolidation depends on all previous steps
             patterns = [
                 f"{base_pattern}/*/company_fetching.parquet",
@@ -306,8 +305,7 @@ def _get_latest_input_paths_from_gcs(
                     inputs.append(latest_file)
             return inputs
 
-        else:
-            return []
+        return []
 
     except Exception as e:
         from unified_pipeline.util.log_util import Logger
@@ -317,7 +315,7 @@ def _get_latest_input_paths_from_gcs(
         return []
 
 
-def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
+def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int) -> str | None:
     """
     Find the latest file matching a pattern that contains company data
     (has company_data_json column).
@@ -348,19 +346,16 @@ def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int)
                 # Handle timezone-aware vs timezone-naive comparison
                 if timestamp.tzinfo is not None:
                     # timestamp is timezone-aware, make cutoff_date timezone-aware too
-                    from datetime import timezone
 
                     if cutoff_date.tzinfo is None:
-                        cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+                        cutoff_date = cutoff_date.replace(tzinfo=UTC)
                 else:
                     # timestamp is timezone-naive, ensure cutoff_date is timezone-naive
                     if cutoff_date.tzinfo is not None:
                         cutoff_date = cutoff_date.replace(tzinfo=None)
 
-                if timestamp >= cutoff_date:
-                    # Check if this file contains company data
-                    if _has_company_data(gcs_access, filepath):
-                        company_files.append((filepath, timestamp))
+                if timestamp >= cutoff_date and _has_company_data(gcs_access, filepath):
+                    company_files.append((filepath, timestamp))
             except Exception as e:
                 from unified_pipeline.util.log_util import Logger
 
@@ -428,7 +423,7 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
         return False
 
 
-def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
+def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int) -> str | None:
     """
     Find the latest file matching a pattern using the existing GCS utility.
 
@@ -457,10 +452,9 @@ def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int)
                 # Handle timezone-aware vs timezone-naive comparison
                 if timestamp.tzinfo is not None:
                     # timestamp is timezone-aware, make cutoff_date timezone-aware too
-                    from datetime import timezone
 
                     if cutoff_date.tzinfo is None:
-                        cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+                        cutoff_date = cutoff_date.replace(tzinfo=UTC)
                 else:
                     # timestamp is timezone-naive, ensure cutoff_date is timezone-naive
                     if cutoff_date.tzinfo is not None:
@@ -526,10 +520,7 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
             pnumber_artifact_exists = os.path.exists("/tmp/cvr_pnumber_data.parquet")
 
             # Only return True if BOTH required artifacts exist
-            if company_artifact_exists and pnumber_artifact_exists:
-                return True
-            else:
-                return False  # Missing artifacts, use independent execution
+            return company_artifact_exists and pnumber_artifact_exists
 
         # For other steps, check for any matching artifact
         for pipeline_path in pipeline_paths:
@@ -586,29 +577,29 @@ def _get_traditional_input_paths(
         # Collection step has no inputs (reads from all pipeline CVR collections)
         return []
 
-    elif step == CVREnrichmentStep.COMPANY_FETCHING:
+    if step == CVREnrichmentStep.COMPANY_FETCHING:
         # Company fetching depends on collection step
         return [f"{base_path}/collection.parquet"]
 
-    elif step == CVREnrichmentStep.DATA_PARSING:
+    if step == CVREnrichmentStep.DATA_PARSING:
         # Data parsing depends on raw company fetching (Bronze layer)
         return [f"{base_path}/company_fetching.parquet"]
 
-    elif step == CVREnrichmentStep.PNUMBER_FETCHING:
+    if step == CVREnrichmentStep.PNUMBER_FETCHING:
         # P-number fetching depends on parsed data (Silver layer)
         return [f"{base_path}/data_parsing.parquet"]
 
-    elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
+    if step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
         # Financial documents depend on company fetching (no batching)
         return [f"{base_path}/company_fetching.parquet"]
 
-    elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
+    if step == CVREnrichmentStep.ADDRESS_GEOCODING:
         # Address geocoding depends on both company and P-number data (no batching)
         # Note: These paths are for pipeline dependencies only -
         # independent execution uses different paths
         return [f"{base_path}/company_fetching.parquet", f"{base_path}/pnumber_fetching.parquet"]
 
-    elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
+    if step == CVREnrichmentStep.DATA_CONSOLIDATION:
         # Data consolidation depends on all previous steps (no batching)
         return [
             f"{base_path}/company_fetching.parquet",
@@ -618,5 +609,4 @@ def _get_traditional_input_paths(
             f"{base_path}/address_geocoding.parquet",
         ]
 
-    else:
-        return []
+    return []

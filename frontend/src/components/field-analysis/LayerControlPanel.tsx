@@ -112,26 +112,27 @@ export function LayerControlPanelEnhanced({
   ];
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-4 p-4" data-testid="layer-control-panel">
       {/* Layer Visibility Controls */}
-      <Card>
+      <Card data-testid="layer-visibility-card">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Eye className="h-4 w-4" />
             Lag Synlighed
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4" data-testid="layer-visibility-controls">
           {layerConfigs.map((layer) => {
             const Icon = layer.icon;
             const isVisible = layerVisibility[layer.key];
 
             return (
-              <div key={layer.key} className="flex items-start space-x-3">
+              <div key={layer.key} className="flex items-start space-x-3" data-testid={`layer-toggle-${layer.key}`}>
                 <Switch
                   id={layer.key}
                   checked={isVisible}
                   onCheckedChange={() => onLayerToggle(layer.key)}
+                  data-testid={`layer-switch-${layer.key}`}
                 />
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
@@ -145,6 +146,7 @@ export function LayerControlPanelEnhanced({
                     <Badge
                       variant="outline"
                       className={`text-xs ${layer.color}`}
+                      data-testid={`layer-badge-${layer.key}`}
                     >
                       {layer.count}
                     </Badge>
@@ -160,16 +162,16 @@ export function LayerControlPanelEnhanced({
       </Card>
 
       {/* Visualization Controls */}
-      <Card>
+      <Card data-testid="visualization-card">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Palette className="h-4 w-4" />
             Visualisering
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4" data-testid="visualization-controls">
           {/* Visualization Mode */}
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="visualization-mode">
             <Label className="text-sm font-medium">Visualiseringsmode</Label>
             <Select
               value={filterState.visualizationMode}
@@ -179,7 +181,7 @@ export function LayerControlPanelEnhanced({
                 })
               }
             >
-              <SelectTrigger>
+              <SelectTrigger data-testid="visualization-mode-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -199,7 +201,7 @@ export function LayerControlPanelEnhanced({
           </div>
 
           {/* Color Unit Toggle */}
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="color-unit-toggle">
             <Label className="text-sm font-medium">Farveenhed</Label>
             <ToggleGroup
               type="single"
@@ -208,24 +210,26 @@ export function LayerControlPanelEnhanced({
                 value && onFilterChange({ colorUnit: value as ColorUnit })
               }
               className="justify-start"
+              data-testid="color-unit-group"
             >
-              <ToggleGroupItem value="belastning" aria-label="Belastning">
+              <ToggleGroupItem value="belastning" aria-label="Belastning" data-testid="color-unit-belastning">
                 Belastning
               </ToggleGroupItem>
-              <ToggleGroupItem value="dosage" aria-label="Dosering">
+              <ToggleGroupItem value="dosage" aria-label="Dosering" data-testid="color-unit-dosage">
                 Dosering
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
 
           {/* Organic Filter */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3" data-testid="organic-filter">
             <Switch
               id="organic-only"
               checked={filterState.organicOnly}
               onCheckedChange={(checked) =>
                 onFilterChange({ organicOnly: checked })
               }
+              data-testid="organic-only-switch"
             />
             <Label
               htmlFor="organic-only"
@@ -237,13 +241,14 @@ export function LayerControlPanelEnhanced({
           </div>
 
           {/* Decile Coloring */}
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3" data-testid="decile-coloring-filter">
             <Switch
               id="decile-coloring"
               checked={filterState.useDecileColoring}
               onCheckedChange={(checked) =>
                 onFilterChange({ useDecileColoring: checked })
               }
+              data-testid="decile-coloring-switch"
             />
             <Label htmlFor="decile-coloring" className="cursor-pointer">
               Brug decil-farvning
@@ -253,14 +258,14 @@ export function LayerControlPanelEnhanced({
       </Card>
 
       {/* Quick Stats */}
-      <Card>
+      <Card data-testid="stats-card">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Calendar className="h-4 w-4" />
             Datastatistik
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent data-testid="stats-content">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="space-y-1">
               <div className="text-muted-foreground">Synlige lag:</div>
@@ -290,14 +295,14 @@ export function LayerControlPanelEnhanced({
       </Card>
 
       {/* CSV Download */}
-      <Card>
+      <Card data-testid="download-card">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Download className="h-4 w-4" />
             Eksporter Data
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent data-testid="download-controls">
           <div className="space-y-3">
             <p className="text-muted-foreground text-xs">
               Download synlige marker som CSV-fil. Kræver zoom niveau 10+ for at
@@ -310,13 +315,14 @@ export function LayerControlPanelEnhanced({
                 disabled={!isDownloadEnabled}
                 size="sm"
                 className="flex-1"
+                data-testid="download-csv-button"
               >
                 <Download className="mr-2 h-4 w-4" />
                 Download CSV
               </Button>
             </div>
 
-            <div className="text-muted-foreground text-xs">
+            <div className="text-muted-foreground text-xs" data-testid="zoom-level-info">
               Zoom niveau: {currentZoom.toFixed(1)}
               {currentZoom < 10 && ' (zoom ind for at aktivere)'}
             </div>

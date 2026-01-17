@@ -8,8 +8,8 @@ import duckdb
 
 # Handle imports for both standalone and package usage
 try:
-    # Use unified pipeline's optimized DuckDB connection
-    from unified_pipeline.util.gcs_access import get_duckdb_with_gcs
+    # Use common GCS module's optimized DuckDB connection
+    from common.gcs import get_duckdb_with_gcs
 
     from ..utils.logging import get_logger
 
@@ -214,7 +214,7 @@ class DuckDBProcessor:
                     self.conn.execute(f"DROP VIEW IF EXISTS {table_name}")
                     logger.debug(f"Dropped view: {table_name}")
                 except Exception:
-                    logger.warning(f"Failed to drop table/view {table_name}: {str(e)}")
+                    logger.warning(f"Failed to drop table/view {table_name}: {e!s}")
                     # Don't raise exception since this is cleanup
 
     def close(self) -> None:

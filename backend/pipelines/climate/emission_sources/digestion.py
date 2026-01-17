@@ -1,6 +1,7 @@
 from ..utils.conversions import ch4_to_co2e
 from .base_source import EmissionSource
 
+
 class CattleEntericFermentation(EmissionSource):
     """
     Calculates CH4 emissions from cattle enteric fermentation.
@@ -41,25 +42,23 @@ class CattleEntericFermentation(EmissionSource):
                 continue
 
             # Get feed intake and composition data
-            feed_intake = self.farm_data.get_animal_input(cow_type, 'feed_intake_kg_dm_day')
-            fatty_acid = self.farm_data.get_animal_input(cow_type, 'fatty_acid_g_kg_dm')
-            ndf = self.farm_data.get_animal_input(cow_type, 'ndf_g_kg_dm')
+            feed_intake = self.farm_data.get_animal_input(cow_type, "feed_intake_kg_dm_day")
+            fatty_acid = self.farm_data.get_animal_input(cow_type, "fatty_acid_g_kg_dm")
+            ndf = self.farm_data.get_animal_input(cow_type, "ndf_g_kg_dm")
 
             # Get NorFor coefficients from config
-            cow_params = self.config.get_factor('enteric_fermentation_cattle', cow_type)
-            norfor = cow_params['norfor_coeffs']
+            cow_params = self.config.get_factor("enteric_fermentation_cattle", cow_type)
+            norfor = cow_params["norfor_coeffs"]
 
             # Apply NorFor equation
             ch4_lactating_daily_kg = (
-                norfor['c1'] * feed_intake -
-                norfor['c2'] * fatty_acid +
-                norfor['c3'] * ndf
-            ) / norfor['divisor']
+                norfor["c1"] * feed_intake - norfor["c2"] * fatty_acid + norfor["c3"] * ndf
+            ) / norfor["divisor"]
 
             # Calculate annual emissions per cow
             ch4_annual_kg_per_cow = (
-                ch4_lactating_daily_kg * norfor['lactating_days'] +
-                norfor['gold_period_ch4_daily_kg'] * norfor['gold_period_days']
+                ch4_lactating_daily_kg * norfor["lactating_days"]
+                + norfor["gold_period_ch4_daily_kg"] * norfor["gold_period_days"]
             )
 
             total_ch4_kg += num_cows * ch4_annual_kg_per_cow
@@ -77,8 +76,7 @@ class CattleEntericFermentation(EmissionSource):
 
         # Get standard CH4 values for young stock
         std_ch4_values = self.config.get_factor(
-            'enteric_fermentation_cattle',
-            'young_stock_standard_ch4_kg_period'
+            "enteric_fermentation_cattle", "young_stock_standard_ch4_kg_period"
         )
 
         # Calculate for each young stock type

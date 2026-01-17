@@ -1,14 +1,15 @@
-from typing import List, Dict, Any
 import json
 from pathlib import Path
+from typing import Any
 
 # Utility function to load data from JSON files
-if 'load_json_data' not in globals():
+if "load_json_data" not in globals():
+
     def load_json_data(file_path: str) -> Any:
         base_path = Path(__file__).resolve().parent.parent / "reference_values"
         full_path = base_path / file_path
         try:
-            with open(full_path, 'r', encoding='utf-8') as f:
+            with open(full_path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             print(f"Error: JSON file not found at {full_path}")
@@ -17,22 +18,30 @@ if 'load_json_data' not in globals():
             print(f"Error: Could not decode JSON from {full_path}")
             raise
 
+
 # Attempt to load O_SCOPE1_DIESEL, similar to kvaeg_diesel.py
 # In a real application, this would be a shared constant or loaded once.
-if 'O_SCOPE1_DIESEL' not in globals():
+if "O_SCOPE1_DIESEL" not in globals():
     try:
-        diesel_ef_data = load_json_data("tabel_36_emissioner_fra_transportsektoren_er_baseret_på_følgende_værdier_baseret_på_den_nationale_op.json")
+        diesel_ef_data = load_json_data(
+            "tabel_36_emissioner_fra_transportsektoren_er_baseret_på_følgende_værdier_baseret_på_den_nationale_op.json"
+        )
         o_scope1_diesel_val = 0.0
-        for item in diesel_ef_data.get('data_l_fuel', []):
+        for item in diesel_ef_data.get("data_l_fuel", []):
             if item.get("Brændstoftype") == "Diesel":
                 o_scope1_diesel_val = float(item.get("CO2_kg_l_fuel", 0.0))
                 break
         O_SCOPE1_DIESEL = o_scope1_diesel_val
         if O_SCOPE1_DIESEL == 0.0:
-             print("Warning: O_SCOPE1_DIESEL loaded as 0.0 from tabel_36 in import_diesel_maskinarbejde.py")
+            print(
+                "Warning: O_SCOPE1_DIESEL loaded as 0.0 from tabel_36 in import_diesel_maskinarbejde.py"
+            )
     except Exception as e:
-        print(f"Error loading O_SCOPE1_DIESEL in import_diesel_maskinarbejde.py: {e}. Defaulting to 0.0")
-        O_SCOPE1_DIESEL = 0.0 # Fallback
+        print(
+            f"Error loading O_SCOPE1_DIESEL in import_diesel_maskinarbejde.py: {e}. Defaulting to 0.0"
+        )
+        O_SCOPE1_DIESEL = 0.0  # Fallback
+
 
 def beregn_diesel_fra_maskinarbejde(p_k_kr: float, p_s_kr: float, theta_m_l_pr_kr: float) -> float:
     """
@@ -46,8 +55,8 @@ def beregn_diesel_fra_maskinarbejde(p_k_kr: float, p_s_kr: float, theta_m_l_pr_k
     Returns:
         Mængden af diesel fra maskinarbejde (L). Kan være negativ hvis mere er solgt.
     """
-    m = (p_k_kr * theta_m_l_pr_kr) - (p_s_kr * theta_m_l_pr_kr)
-    return m
+    return (p_k_kr * theta_m_l_pr_kr) - (p_s_kr * theta_m_l_pr_kr)
+
 
 def beregn_co2e_diesel_scope1(d_total_liter_bedrift: float, m_maskinarbejde_liter: float) -> float:
     """
@@ -61,10 +70,12 @@ def beregn_co2e_diesel_scope1(d_total_liter_bedrift: float, m_maskinarbejde_lite
     Returns:
         CO2e fra diesel scope 1 (kg CO2e).
     """
-    d_scope1 = (d_total_liter_bedrift + m_maskinarbejde_liter) * O_SCOPE1_DIESEL
-    return d_scope1
+    return (d_total_liter_bedrift + m_maskinarbejde_liter) * O_SCOPE1_DIESEL
 
-def beregn_co2e_diesel_scope3(d_total_liter_bedrift: float, m_maskinarbejde_liter: float, theta_d3_kg_co2e_pr_l: float) -> float:
+
+def beregn_co2e_diesel_scope3(
+    d_total_liter_bedrift: float, m_maskinarbejde_liter: float, theta_d3_kg_co2e_pr_l: float
+) -> float:
     """
     Beregner CO2e fra dieselproduktion (Scope 3).
 
@@ -76,13 +87,16 @@ def beregn_co2e_diesel_scope3(d_total_liter_bedrift: float, m_maskinarbejde_lite
     Returns:
         CO2e fra diesel scope 3 (kg CO2e).
     """
-    d_scope3 = (d_total_liter_bedrift + m_maskinarbejde_liter) * theta_d3_kg_co2e_pr_l
-    return d_scope3
+    return (d_total_liter_bedrift + m_maskinarbejde_liter) * theta_d3_kg_co2e_pr_l
 
-def beregn_produktaftryk_diesel_afgroede(h_a_hektar: float, t_a_typetal_diesel_pr_ha: float,
-                                         alle_afgroeder_data: List[Dict[str, float]],
-                                         d_total_liter_bedrift_korrigeret: float,
-                                         theta_d_total_kg_co2e_pr_l: float) -> float:
+
+def beregn_produktaftryk_diesel_afgroede(
+    h_a_hektar: float,
+    t_a_typetal_diesel_pr_ha: float,
+    alle_afgroeder_data: list[dict[str, float]],
+    d_total_liter_bedrift_korrigeret: float,
+    theta_d_total_kg_co2e_pr_l: float,
+) -> float:
     """
     Beregner produktaftrykket for diesel for en specifik afgrøde.
     P_a_diesel = (H_a * T_a) / sum(H_i * T_i) * (D_total_korrigeret) * theta_D_total
@@ -102,12 +116,13 @@ def beregn_produktaftryk_diesel_afgroede(h_a_hektar: float, t_a_typetal_diesel_p
     """
     sum_h_i_t_i = 0
     for afgroede in alle_afgroeder_data:
-        sum_h_i_t_i += afgroede['h_i_hektar'] * afgroede['t_i_typetal_diesel_pr_ha']
+        sum_h_i_t_i += afgroede["h_i_hektar"] * afgroede["t_i_typetal_diesel_pr_ha"]
 
-    if sum_h_i_t_i == 0: # Prevent division by zero
+    if sum_h_i_t_i == 0:  # Prevent division by zero
         return 0.0
 
     fordelingsnoegle = (h_a_hektar * t_a_typetal_diesel_pr_ha) / sum_h_i_t_i
 
-    p_a_diesel_co2e = fordelingsnoegle * d_total_liter_bedrift_korrigeret * theta_d_total_kg_co2e_pr_l
-    return p_a_diesel_co2e
+    return (
+        fordelingsnoegle * d_total_liter_bedrift_korrigeret * theta_d_total_kg_co2e_pr_l
+    )

@@ -46,10 +46,11 @@ CRITICAL: This implementation preserves the exact logic from the original pipeli
 without any "enhancements" that could break the proven 92% coverage approach.
 """
 
+import contextlib
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import duckdb
 from pydantic import ConfigDict, Field
@@ -106,7 +107,7 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     pesticide_applications_dataset: str = "pesticides"
 
     # Year filtering for matrix jobs (process single year instead of all years)
-    pesticide_year: Optional[int] = Field(
+    pesticide_year: int | None = Field(
         default=None,
         description="Specific pesticide year to process (if None, processes all available years)",
     )
@@ -195,7 +196,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         # Cache for organic field IDs to avoid repeated lookups
         # Organic fields are excluded from some matching strategies
-        self._organic_marker_field_ids: Set[str] = set()
+        self._organic_marker_field_ids: set[str] = set()
 
         # Validation tracking - tracks pesticide amounts at each step
         self._validation_data = {
@@ -217,9 +218,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         import shutil
 
         gcs_path = f"gs://{bucket_name}/{destination_blob_name}"
-        with open(source_file_path, "rb") as src:
-            with self.gcs_access.fs.open(gcs_path, "wb") as dst:
-                shutil.copyfileobj(src, dst)
+        with open(source_file_path, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
     def _validate_strategy_results(self, strategy_name: str, processed_count: int) -> None:
         """
@@ -399,7 +399,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         except Exception as e:
             self.log.error(f"❌ VALIDATION ERROR: Failed final integrity check: {e}")
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         print("🚨 PESTICIDE DISAGGREGATION RUN METHOD: Starting execution")
         print(f"🚨 CONFIG: pesticide_year = {self.config.pesticide_year}")
         """
@@ -602,16 +602,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         )
 
         # Only fail if we had years to process but ALL failed
-        if failed_years > 0 and successful_years == 0 and len(pesticide_field_pairs) > 0:
-            # This indicates a systematic processing failure, not just missing data
-            if total_disaggregated_records == 0:
-                self.log.warning(
-                    f"⚠️ WARNING: All {failed_years} years failed to process - this may "
-                    f"indicate systematic issues with column mapping, data schema, or "
-                    f"processing logic"
-                )
-                # Note: We don't fail here because this might be due to data quality issues
-                # rather than code bugs
+        # This indicates a systematic processing failure, not just missing data
+        if (
+            failed_years > 0
+            and successful_years == 0
+            and len(pesticide_field_pairs) > 0
+            and total_disaggregated_records == 0
+        ):
+            self.log.warning(
+                f"⚠️ WARNING: All {failed_years} years failed to process - this may "
+                f"indicate systematic issues with column mapping, data schema, or "
+                f"processing logic"
+            )
+            # Note: We don't fail here because this might be due to data quality issues
+            # rather than code bugs
 
         self.log.info("🎉 Pesticide disaggregation completed successfully!")
         self.log.info("📊 Final Statistics:")
@@ -670,9 +674,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.duckdb_conn.execute(f"DROP TABLE {table_name}")
 
                 return True
-            else:
-                self.log.warning(f"⚠️ No results to save for year {year}")
-                return False
+            self.log.warning(f"⚠️ No results to save for year {year}")
+            return False
 
         except Exception as e:
             self.log.error(f"❌ Failed to save results for year {year}: {e}")
@@ -731,7 +734,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 os.unlink(temp_path)
             raise
 
-    def _save_year_results(self, year_results: List[Dict[str, Any]], year: int) -> bool:
+    def _save_year_results(self, year_results: list[dict[str, Any]], year: int) -> bool:
         """
         Legacy method for saving results from Python list (deprecated).
         Use _save_year_results_direct() instead for better performance.
@@ -742,7 +745,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         )
         return self._save_year_results_direct(year)
 
-    def _get_pesticide_field_year_pairs(self) -> List[Tuple[int, int]]:
+    def _get_pesticide_field_year_pairs(self) -> list[tuple[int, int]]:
         """
         Discover which years of data we can process by finding matching pesticide and field data.
 
@@ -820,7 +823,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info(f"🎯 Created {len(pairs)} valid pesticide-field year pairs")
         return sorted(pairs)
 
-    def _get_available_pesticide_years(self) -> Set[int]:
+    def _get_available_pesticide_years(self) -> set[int]:
         """Extract available pesticide years from GCS storage."""
         try:
             # Use list_files with recursive pattern to find all parquet files
@@ -841,11 +844,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error discovering pesticide years: {e}")
             return set()
 
-    def _get_available_field_years(self) -> Set[int]:
+    def _get_available_field_years(self) -> set[int]:
         """Extract available field years from GCS storage."""
         return set(self._get_available_fvm_marker_years())
 
-    def _get_available_fvm_marker_years(self) -> List[int]:
+    def _get_available_fvm_marker_years(self) -> list[int]:
         """Override base method to look for the correct FVM marker file pattern."""
         try:
             # Use list_files with recursive pattern to find all parquet files
@@ -860,14 +863,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     year = int(match.group(1))
                     years.add(year)
 
-            return sorted(list(years))
+            return sorted(years)
         except Exception as e:
             self.log.error(f"Error discovering FVM marker years: {e}")
             return []
 
     def _load_silver_data_for_years(
-        self, pesticide_year: int, field_year: int, silver_data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, pesticide_year: int, field_year: int, silver_data: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Load silver data for specific pesticide and field years."""
         self.log.info(
             f"📥 Loading silver data: pesticide year {pesticide_year}, field year {field_year}"
@@ -923,7 +926,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         return datasets
 
-    def _read_pesticide_data_for_year(self, year: int) -> Optional[str]:
+    def _read_pesticide_data_for_year(self, year: int) -> str | None:
         """Read pesticide data for a specific year.
 
         Uses GCS file modification timestamps for deterministic file selection,
@@ -957,7 +960,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error reading pesticide data for year {year}: {e}")
             return None
 
-    def _read_fields_data_for_year(self, year: int) -> Optional[str]:
+    def _read_fields_data_for_year(self, year: int) -> str | None:
         """Read agricultural fields data for a specific year.
 
         Uses GCS file modification timestamps for deterministic file selection,
@@ -991,7 +994,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     async def _apply_agricultural_pattern_matching_to_fertilizer(self) -> None:
         """
         Apply agricultural pattern matching to enhance GKEA-FVM field matching for better fertilizer allocation.
-        
+
         This method integrates the agricultural pattern matcher into the fertilizer disaggregation pipeline
         to improve field-level matching accuracy. It creates enhanced mappings that can be used to better
         allocate fertilizer applications to specific fields.
@@ -1003,59 +1006,63 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             try:
                 # Look for any GKEA or field plan data that might be loaded
                 gkea_tables = self.duckdb_conn.execute("""
-                    SELECT table_name 
-                    FROM information_schema.tables 
+                    SELECT table_name
+                    FROM information_schema.tables
                     WHERE table_name LIKE '%field_plan%' OR table_name LIKE '%gkea%'
                 """).fetchall()
-                
+
                 gkea_available = len(gkea_tables) > 0
                 if gkea_available:
                     gkea_table = gkea_tables[0][0]
                     self.log.info(f"   Found GKEA table: {gkea_table}")
                 else:
-                    self.log.info("   No GKEA field plan data found - pattern matching requires GKEA data")
-                    
+                    self.log.info(
+                        "   No GKEA field plan data found - pattern matching requires GKEA data"
+                    )
+
             except Exception as e:
                 self.log.warning(f"   Could not check for GKEA data: {e}")
                 gkea_available = False
-            
+
             if not gkea_available:
                 self.log.info("   Skipping agricultural pattern matching - no GKEA data available")
                 return
-            
+
             # Import the agricultural pattern matcher
             from unified_pipeline.gold.agricultural_pattern_matcher import (
                 AgriculturalPatternMatcherConfig,
                 run_agricultural_pattern_matching,
             )
-            
+
             # Configure for fertilizer disaggregation use (conservative settings for production)
             config = AgriculturalPatternMatcherConfig(
                 min_pattern_score=0.85,  # Higher threshold for fertilizer allocation
-                min_field_score=0.75,    # Conservative field matching
-                max_operations_to_process=1000  # Reasonable limit for performance
+                min_field_score=0.75,  # Conservative field matching
+                max_operations_to_process=1000,  # Reasonable limit for performance
             )
-            
+
             self.log.info("   Running agricultural pattern matching with marker table")
             self.log.info(f"   Pattern score threshold: {config.min_pattern_score}")
             self.log.info(f"   Field score threshold: {config.min_field_score}")
-            
+
             # Run the pattern matching using the marker table we just created
             results = await run_agricultural_pattern_matching(
-                config=config, 
+                config=config,
                 db_connection=self.duckdb_conn,
-                fvm_table_name="marker"  # Use the marker table we created
+                fvm_table_name="marker",  # Use the marker table we created
             )
-            
-            if results.get('matches_found', 0) > 0:
-                matches_found = results['matches_found']
-                self.log.info(f"✅ Agricultural pattern matching found {matches_found:,} additional field matches")
-                
+
+            if results.get("matches_found", 0) > 0:
+                matches_found = results["matches_found"]
+                self.log.info(
+                    f"✅ Agricultural pattern matching found {matches_found:,} additional field matches"
+                )
+
                 # Create enhanced field mappings for fertilizer disaggregation use
                 try:
                     self.duckdb_conn.execute("""
                         CREATE OR REPLACE TABLE fertilizer_enhanced_field_mappings AS
-                        SELECT 
+                        SELECT
                             gkea_field_id,
                             fvm_field_id,
                             'agricultural_pattern' as match_method,
@@ -1069,40 +1076,48 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         FROM enhanced_gkea_fvm_matches
                         WHERE field_similarity_score >= 0.75
                     """)
-                    
+
                     enhanced_count = self.duckdb_conn.execute(
                         "SELECT COUNT(*) FROM fertilizer_enhanced_field_mappings"
                     ).fetchone()[0]
-                    
-                    self.log.info(f"   Created {enhanced_count:,} enhanced field mappings for fertilizer allocation")
-                    
+
+                    self.log.info(
+                        f"   Created {enhanced_count:,} enhanced field mappings for fertilizer allocation"
+                    )
+
                     # Log some sample mappings for verification
                     sample_mappings = self.duckdb_conn.execute("""
                         SELECT gkea_field_id, fvm_field_id, confidence_score, match_method
-                        FROM fertilizer_enhanced_field_mappings 
-                        ORDER BY confidence_score DESC 
+                        FROM fertilizer_enhanced_field_mappings
+                        ORDER BY confidence_score DESC
                         LIMIT 5
                     """).fetchall()
-                    
+
                     self.log.info("   Sample enhanced mappings:")
                     for mapping in sample_mappings:
-                        self.log.info(f"     GKEA {mapping[0]} → FVM {mapping[1]} (confidence: {mapping[2]:.3f})")
-                    
+                        self.log.info(
+                            f"     GKEA {mapping[0]} → FVM {mapping[1]} (confidence: {mapping[2]:.3f})"
+                        )
+
                     # Create company-to-field bridge table to leverage enhanced mappings
                     self._create_company_field_bridge()
-                        
+
                 except Exception as mapping_error:
-                    self.log.warning(f"   Could not create enhanced mappings table: {mapping_error}")
-                    
+                    self.log.warning(
+                        f"   Could not create enhanced mappings table: {mapping_error}"
+                    )
+
             else:
-                self.log.info("   No additional field matches found via agricultural pattern matching")
-                
+                self.log.info(
+                    "   No additional field matches found via agricultural pattern matching"
+                )
+
         except ImportError as e:
             self.log.warning(f"   Could not import agricultural pattern matcher: {e}")
             self.log.warning("   Make sure the unified pipeline backend is accessible")
-            
+
         except Exception as e:
-            self.log.warning(f"   Agricultural pattern matching failed: {str(e)}")
+            self.log.warning(f"   Agricultural pattern matching failed: {e!s}")
             # Don't raise - this is an enhancement, not a requirement
             pass
 
@@ -1112,7 +1127,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         field_year: int,
         agricultural_fields_path: str,
         pesticide_applications_path: str,
-    ) -> Optional[int]:
+    ) -> int | None:
         """
         Process a single year of pesticide disaggregation - this is where the core magic happens!
 
@@ -1323,9 +1338,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             if result_count > 0:
                 self._save_year_results_direct(pesticide_year)
                 return result_count  # Return count instead of full results
-            else:
-                self.log.warning(f"⚠️ No results to save for year {pesticide_year}")
-                return 0
+            self.log.warning(f"⚠️ No results to save for year {pesticide_year}")
+            return 0
 
         except Exception as e:
             self.log.error(f"❌ Error processing year pair {pesticide_year}-{field_year}: {e}")
@@ -1499,7 +1513,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # Handle municipality column - check if municipality exists in FVM data
         if "municipality" in temp_column_names:
             municipality_column = "municipality"
-            self.log.info("✅ Found municipality column in FVM data - municipality will be included")
+            self.log.info(
+                "✅ Found municipality column in FVM data - municipality will be included"
+            )
         else:
             municipality_column = "NULL as municipality"
             self.log.warning(
@@ -1555,15 +1571,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # Drop the temporary table
         self.duckdb_conn.execute("DROP TABLE marker_temp")
         self.log.info("✅ Marker table created successfully")
-        
+
         # ENHANCEMENT: Apply agricultural pattern matching to improve field coverage
         # ========================================================================
         # This enhances GKEA-FVM field matching which can improve fertilizer allocation accuracy
         try:
-            self.log.info("🌾 Attempting to enhance field matching with agricultural pattern matching...")
+            self.log.info(
+                "🌾 Attempting to enhance field matching with agricultural pattern matching..."
+            )
             await self._apply_agricultural_pattern_matching_to_fertilizer()
         except Exception as e:
-            self.log.warning(f"⚠️ Agricultural pattern matching failed: {str(e)}")
+            self.log.warning(f"⚠️ Agricultural pattern matching failed: {e!s}")
             self.log.warning("   Continuing with standard field matching...")
 
         self.log.info(f"🏗️ Creating pesticide table from {pesticide_applications_path}")
@@ -1772,11 +1790,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             return has_matches
 
         except Exception as e:
-            self.log.error(f"Error checking CVR matches: {str(e)}")
+            self.log.error(f"Error checking CVR matches: {e!s}")
             # If we can't check, assume matches exist to be safe
             return True
 
-    def _get_organic_marker_field_ids(self) -> Set[str]:
+    def _get_organic_marker_field_ids(self) -> set[str]:
         """
         Identifies marker field UUIDs that are considered organic.
 
@@ -1819,7 +1837,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self._organic_marker_field_ids = set()
             return self._organic_marker_field_ids
 
-    def _get_mixed_farming_combinations(self) -> Set[tuple]:
+    def _get_mixed_farming_combinations(self) -> set[tuple]:
         """
         🌟 ETHICAL ENHANCEMENT: Identify CVR+crop combinations with organic fields
 
@@ -1854,7 +1872,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.warning("Falling back to empty set - will use sequential processing")
             return set()
 
-    def _process_mixed_farming_best_match(self, mixed_combinations: Set[tuple]) -> int:
+    def _process_mixed_farming_best_match(self, mixed_combinations: set[tuple]) -> int:
         """
         🌟 ETHICAL ENHANCEMENT: Process mixed farming applications with best-match logic
 
@@ -2342,7 +2360,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             return processed_count
 
         except Exception as e:
-            self.log.error(f"Error in original marker match strategy: {str(e)}")
+            self.log.error(f"Error in original marker match strategy: {e!s}")
             return 0
 
     def _disaggregate_by_marker_non_organic_match(self) -> int:
@@ -2457,7 +2475,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             return processed_count
 
         except Exception as e:
-            self.log.error(f"Error in marker non-organic match strategy: {str(e)}")
+            self.log.error(f"Error in marker non-organic match strategy: {e!s}")
             return 0
 
     def _disaggregate_by_partial_field_coverage(self) -> int:
@@ -2580,7 +2598,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             return processed_count
 
         except Exception as e:
-            self.log.error(f"Error in partial field coverage strategy: {str(e)}")
+            self.log.error(f"Error in partial field coverage strategy: {e!s}")
             return 0
 
     def _disaggregate_by_adjacent_fields_single_cluster_removed(self) -> int:
@@ -2733,7 +2751,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
                 except Exception as e:
                     self.log.error(
-                        f"Error in spatial clustering chunk {chunks_processed + 1}: {str(e)}"
+                        f"Error in spatial clustering chunk {chunks_processed + 1}: {e!s}"
                     )
                     if "Out of Memory" in str(e) or "memory" in str(e).lower():
                         self.log.warning(
@@ -2755,7 +2773,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             return total_processed
 
         except Exception as e:
-            self.log.error(f"Error in spatial clustering strategy: {str(e)}")
+            self.log.error(f"Error in spatial clustering strategy: {e!s}")
             self.log.error("Spatial clustering failed - skipping this strategy")
             return 0
 
@@ -2769,10 +2787,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Drop any temporary tables that might exist
             temp_tables = ["temp_spatial_adjacency", "temp_clusters", "temp_allocations"]
             for table in temp_tables:
-                try:
+                with contextlib.suppress(Exception):
                     self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except Exception:
-                    pass
 
         except Exception:
             # Don't fail on cleanup errors
@@ -2794,7 +2810,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pass
 
     def _process_spatial_chunk(
-        self, cvr_crop_chunk: List[tuple], chunk_num: int, total_combinations: int
+        self, cvr_crop_chunk: list[tuple], chunk_num: int, total_combinations: int
     ) -> int:
         """Process a single chunk of CVR+crop combinations for spatial clustering."""
         try:
@@ -2828,10 +2844,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     + "(this shouldn't happen with optimized filtering)"
                 )
                 return 0
-            else:
-                self.log.info(
-                    f"✅ Chunk {chunk_num}: Processing {pending_for_chunk} pending records"
-                )
+            self.log.info(f"✅ Chunk {chunk_num}: Processing {pending_for_chunk} pending records")
 
             # CHUNKED MEMORY-OPTIMIZED: Process only this chunk of CVR+crop combinations
             insert_query = f"""
@@ -3059,7 +3072,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             return chunk_processed
 
         except Exception as e:
-            self.log.error(f"Error in spatial clustering chunk {chunk_num}: {str(e)}")
+            self.log.error(f"Error in spatial clustering chunk {chunk_num}: {e!s}")
             return 0
 
     def _finalize_spatial_clustering(self) -> None:
@@ -3076,9 +3089,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             """)
             self.log.info("🧹 Cleaned up processed records from pending table")
         except Exception as e:
-            self.log.error(f"Error cleaning up processed records: {str(e)}")
+            self.log.error(f"Error cleaning up processed records: {e!s}")
 
-    def _get_results(self) -> List[Dict[str, Any]]:
+    def _get_results(self) -> list[dict[str, Any]]:
         """Get the disaggregated results."""
         try:
             results = self.duckdb_conn.execute(
@@ -3086,22 +3099,22 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             ).fetchall()
             # Convert to list of dictionaries
             columns = [desc[0] for desc in self.duckdb_conn.description]
-            return [dict(zip(columns, row)) for row in results]
+            return [dict(zip(columns, row, strict=False)) for row in results]
         except Exception as e:
-            self.log.error(f"Error getting results: {str(e)}")
+            self.log.error(f"Error getting results: {e!s}")
             return []
-    
+
     def _create_company_field_bridge(self) -> None:
         """Create bridge table to connect company-level fertilizer data with field-level enhanced mappings."""
         self.log.info("🌉 Creating company-to-field bridge for enhanced matching...")
-        
+
         try:
             # Create a bridge table that connects CVR+crop combinations to enhanced field mappings
             self.duckdb_conn.execute("""
                 CREATE OR REPLACE TABLE company_field_bridge AS
                 WITH enhanced_field_company_mapping AS (
                     -- Get company info for enhanced field mappings
-                    SELECT 
+                    SELECT
                         efm.gkea_field_id,
                         efm.fvm_field_id,
                         efm.confidence_score,
@@ -3117,7 +3130,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 company_crop_enhanced_summary AS (
                     -- Aggregate enhanced mappings by company and crop
-                    SELECT 
+                    SELECT
                         cvr_number,
                         crop_code,
                         COUNT(*) as enhanced_field_count,
@@ -3130,7 +3143,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 standard_company_crop_summary AS (
                     -- Get standard company-crop summaries for comparison
-                    SELECT 
+                    SELECT
                         cvr_number,
                         crop_code,
                         COUNT(*) as total_field_count,
@@ -3139,7 +3152,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     WHERE cvr_number IS NOT NULL AND crop_code IS NOT NULL
                     GROUP BY cvr_number, crop_code
                 )
-                SELECT 
+                SELECT
                     s.cvr_number,
                     s.crop_code,
                     s.total_field_count,
@@ -3150,36 +3163,44 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     COALESCE(e.pattern_matched_fields, 0) as pattern_matched_fields,
                     COALESCE(e.field_list, '') as enhanced_field_list,
                     -- Calculate enhancement coverage
-                    CASE 
-                        WHEN e.enhanced_field_count > 0 THEN 
+                    CASE
+                        WHEN e.enhanced_field_count > 0 THEN
                             ROUND(e.total_enhanced_area / s.total_area * 100, 2)
-                        ELSE 0.0 
+                        ELSE 0.0
                     END as enhancement_coverage_pct,
                     -- Determine if company-crop should use enhanced matching
-                    CASE 
+                    CASE
                         WHEN e.enhanced_field_count > 0 AND e.avg_confidence >= 0.8 THEN TRUE
-                        ELSE FALSE 
+                        ELSE FALSE
                     END as use_enhanced_matching
                 FROM standard_company_crop_summary s
                 LEFT JOIN company_crop_enhanced_summary e ON s.cvr_number = e.cvr_number AND s.crop_code = e.crop_code
             """)
-            
+
             # Log bridge statistics
             bridge_stats = self.duckdb_conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_company_crops,
                     COUNT(CASE WHEN use_enhanced_matching THEN 1 END) as enhanced_company_crops,
                     SUM(enhanced_field_count) as total_enhanced_fields,
                     AVG(enhancement_coverage_pct) as avg_coverage_pct
                 FROM company_field_bridge
             """).fetchone()
-            
+
             if bridge_stats:
-                total_combinations, enhanced_combinations, enhanced_fields, avg_coverage = bridge_stats
-                self.log.info(f"   Bridge created: {enhanced_combinations:,}/{total_combinations:,} company-crop combinations can use enhanced matching")
-                self.log.info(f"   Enhanced fields: {enhanced_fields:,} fields with improved matching")
-                self.log.info(f"   Average coverage: {avg_coverage:.1f}% of area covered by enhanced mappings")
-            
+                total_combinations, enhanced_combinations, enhanced_fields, avg_coverage = (
+                    bridge_stats
+                )
+                self.log.info(
+                    f"   Bridge created: {enhanced_combinations:,}/{total_combinations:,} company-crop combinations can use enhanced matching"
+                )
+                self.log.info(
+                    f"   Enhanced fields: {enhanced_fields:,} fields with improved matching"
+                )
+                self.log.info(
+                    f"   Average coverage: {avg_coverage:.1f}% of area covered by enhanced mappings"
+                )
+
         except Exception as e:
             self.log.warning(f"   Failed to create company-field bridge: {e}")
             self.log.warning("   Enhanced matching will not be available for disaggregation")

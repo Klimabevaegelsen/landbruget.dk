@@ -15,7 +15,7 @@ Key responsibilities:
 """
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class NLES5PipelineOrchestrator:
@@ -29,7 +29,7 @@ class NLES5PipelineOrchestrator:
         self.conn = processor.conn
         self.gcs_access = processor.gcs_access
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Run production-optimized NLES5 nitrogen estimation with real climate data."""
         import time
 
@@ -72,7 +72,7 @@ class NLES5PipelineOrchestrator:
             total_time = time.time() - start_time
             self.log.info(f"🏁 NLES5 pipeline completed in {total_time:.1f} seconds")
 
-    async def _run_pipeline_batched(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def _run_pipeline_batched(self, silver_data: dict[str, Any] | None = None) -> None:
         """Run pipeline with batching around target years for maximum memory efficiency."""
         import time
 
@@ -103,7 +103,7 @@ class NLES5PipelineOrchestrator:
             CREATE TABLE nles5_estimates_final_batched (
                 field_id VARCHAR,
                 field_uuid VARCHAR,  -- Preserved from source agricultural fields data
-                block_id VARCHAR, 
+                block_id VARCHAR,
                 cvr_number VARCHAR,
                 year INTEGER,
                 area_ha DECIMAL(10,4),  -- Support up to 999,999.9999 hectares
@@ -114,7 +114,7 @@ class NLES5PipelineOrchestrator:
                 nitrogen_washout_kg_ha DOUBLE,
                 percolation_mm DOUBLE,
                 percolation_april_august DOUBLE,
-                percolation_sept_march DOUBLE, 
+                percolation_sept_march DOUBLE,
                 percolation_april_august_prev DOUBLE,
                 percolation_sept_march_prev DOUBLE,
                 uncertainty_pct DOUBLE,
@@ -217,7 +217,7 @@ class NLES5PipelineOrchestrator:
         except Exception as e:
             self.log.warning(f"⚠️ Batched pipeline field ID validation encountered issues: {e}")
 
-    async def _run_pipeline_single(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def _run_pipeline_single(self, silver_data: dict[str, Any] | None = None) -> None:
         """Run single pipeline execution for all target years (original approach)."""
         import time
 
@@ -411,7 +411,7 @@ class NLES5PipelineOrchestrator:
         self.log.info(f"💾 Final memory usage: {final_memory:.1f}GB")
 
     async def _run_pipeline_for_batch(
-        self, batch_years: List[int], silver_data: Optional[Dict[str, Any]] = None
+        self, batch_years: list[int], silver_data: dict[str, Any] | None = None
     ) -> int:
         """Run complete pipeline for a single batch of target years."""
         import time
@@ -509,7 +509,7 @@ class NLES5PipelineOrchestrator:
 
                     # DEBUG: Log area_ha statistics to validate fix
                     area_stats = self.conn.execute(f"""
-                        SELECT 
+                        SELECT
                             MIN(area_ha) as min_area,
                             MAX(area_ha) as max_area,
                             AVG(area_ha) as avg_area,
@@ -525,7 +525,7 @@ class NLES5PipelineOrchestrator:
 
                     # 🔍 DIAGNOSTIC LOG: Check source table for duplicates before INSERT
                     source_stats = self.conn.execute(f"""
-                        SELECT 
+                        SELECT
                             COUNT(*) as total_rows,
                             COUNT(DISTINCT field_uuid) as unique_uuids,
                             COUNT(*) - COUNT(DISTINCT field_uuid) as duplicate_rows
@@ -548,7 +548,7 @@ class NLES5PipelineOrchestrator:
 
                     # 🔍 DIAGNOSTIC LOG: Check final table before INSERT
                     before_stats = self.conn.execute("""
-                        SELECT 
+                        SELECT
                             COUNT(*) as total_rows,
                             COUNT(DISTINCT field_uuid) as unique_uuids
                         FROM nles5_estimates_final_batched
@@ -562,7 +562,7 @@ class NLES5PipelineOrchestrator:
                     # Note: field_uuid is now preserved throughout pipeline from source data
                     self.conn.execute(f"""
                         INSERT INTO nles5_estimates_final_batched
-                        SELECT 
+                        SELECT
                             field_id,
                             field_uuid,  -- Preserved from source agricultural fields data
                             block_id,
@@ -577,7 +577,7 @@ class NLES5PipelineOrchestrator:
                             nitrogen_washout_kg_ha,
                             percolation_mm,
                             percolation_april_august,
-                            percolation_sept_march, 
+                            percolation_sept_march,
                             percolation_april_august_prev,
                             percolation_sept_march_prev,
                             uncertainty_pct,
@@ -590,7 +590,7 @@ class NLES5PipelineOrchestrator:
 
                     # 🔍 DIAGNOSTIC LOG: Check final table after INSERT
                     after_stats = self.conn.execute("""
-                        SELECT 
+                        SELECT
                             COUNT(*) as total_rows,
                             COUNT(DISTINCT field_uuid) as unique_uuids,
                             COUNT(*) - COUNT(DISTINCT field_uuid) as duplicate_rows
@@ -623,12 +623,10 @@ class NLES5PipelineOrchestrator:
                     self.processor._validate_field_ids_after_processing()
 
                     return result_count
-                else:
-                    self.log.warning(f"⚠️ Batch {batch_years} produced empty results table")
-                    return 0
-            else:
-                self.log.warning(f"⚠️ Batch {batch_years} failed to create estimates table")
+                self.log.warning(f"⚠️ Batch {batch_years} produced empty results table")
                 return 0
+            self.log.warning(f"⚠️ Batch {batch_years} failed to create estimates table")
+            return 0
 
         except Exception as e:
             self.log.error(f"❌ Batch {batch_years} failed: {e}")
@@ -643,7 +641,7 @@ class NLES5PipelineOrchestrator:
             return 0
 
     def _process_single_target_year(
-        self, target_year: int, required_years: List[int], loaded_tables: Dict[str, Any]
+        self, target_year: int, required_years: list[int], loaded_tables: dict[str, Any]
     ) -> str:
         """
         Process complete NLES5 calculations for a single target year using
@@ -692,30 +690,30 @@ class NLES5PipelineOrchestrator:
 
                 # DEBUG LOGGING: Detailed spatial join percolation statistics
                 spatial_join_stats = self.conn.execute(f"""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_joined_fields,
                         COUNT(CASE WHEN total_percolation IS NOT NULL
                             THEN 1 END) as fields_with_percolation,
                         COUNT(CASE WHEN total_percolation > 0
                             THEN 1 END) as fields_with_positive_percolation,
-                        
+
                         MIN(total_percolation) as min_percolation,
                         MAX(total_percolation) as max_percolation,
                         AVG(total_percolation) as avg_percolation,
                         STDDEV(total_percolation) as stddev_percolation,
-                        
+
                         MIN(perco_apr_aug_current) as min_apr_aug,
                         MAX(perco_apr_aug_current) as max_apr_aug,
                         AVG(perco_apr_aug_current) as avg_apr_aug,
-                        
+
                         MIN(perco_sep_mar_current) as min_sep_mar,
                         MAX(perco_sep_mar_current) as max_sep_mar,
                         AVG(perco_sep_mar_current) as avg_sep_mar,
-                        
+
                         AVG(distance_to_climate) as avg_climate_distance,
                         MIN(distance_to_climate) as min_climate_distance,
                         MAX(distance_to_climate) as max_climate_distance,
-                        
+
                         COUNT(CASE WHEN sufficient_climate_data = true
                             THEN 1 END) as sufficient_climate_fields
                     FROM {fields_climate_table}
@@ -823,7 +821,7 @@ class NLES5PipelineOrchestrator:
             self.log.error(f"Error processing single target year {target_year}: {e}")
             raise
 
-    def _determine_all_target_years(self) -> List[int]:
+    def _determine_all_target_years(self) -> list[int]:
         """Determine all target years to be processed (without loading data)."""
         if self.config.target_years:
             target_years = self.config.target_years
@@ -844,7 +842,7 @@ class NLES5PipelineOrchestrator:
 
         return sorted(target_years)
 
-    def _create_target_year_batches(self, target_years: List[int]) -> List[List[int]]:
+    def _create_target_year_batches(self, target_years: list[int]) -> list[list[int]]:
         """Split target years into batches for pipeline-level processing."""
         batch_size = self.config.target_year_batch_size
         batches = []
@@ -856,7 +854,7 @@ class NLES5PipelineOrchestrator:
         return batches
 
     def _process_nles5_target_year_by_target_year_for_batch(
-        self, loaded_tables: Dict[str, Any], batch_years: List[int]
+        self, loaded_tables: dict[str, Any], batch_years: list[int]
     ) -> str:
         """Process NLES5 target year by target year for a specific batch."""
         try:
@@ -881,7 +879,7 @@ class NLES5PipelineOrchestrator:
                     nitrogen_washout_kg_ha DOUBLE,
                     percolation_mm DOUBLE,
                     percolation_april_august DOUBLE,
-                    percolation_sept_march DOUBLE, 
+                    percolation_sept_march DOUBLE,
                     percolation_april_august_prev DOUBLE,
                     percolation_sept_march_prev DOUBLE,
                     uncertainty_pct DOUBLE,

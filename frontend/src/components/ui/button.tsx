@@ -48,9 +48,15 @@ function Button({
   }) {
   const Comp = asChild ? Slot : 'button';
 
+  // Generate a data-testid from aria-label or children if not explicitly provided
+  const dataTestId = props['data-testid'] || (typeof props['aria-label'] === 'string'
+    ? `button-${props['aria-label'].toLowerCase().replace(/\s+/g, '-')}`
+    : undefined);
+
   return (
     <Comp
       data-slot="button"
+      data-testid={dataTestId}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

@@ -222,7 +222,7 @@ class BronzeStorageManager:
             return file_path
 
         except Exception as e:
-            error_msg = f"Failed to save file {filename}: {str(e)}"
+            error_msg = f"Failed to save file {filename}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
@@ -250,7 +250,7 @@ class BronzeStorageManager:
             return metadata_path
 
         except Exception as e:
-            error_msg = f"Failed to save metadata for {file_path}: {str(e)}"
+            error_msg = f"Failed to save metadata for {file_path}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 

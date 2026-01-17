@@ -53,7 +53,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import vertexai
 from dotenv import load_dotenv
@@ -73,7 +72,9 @@ try:
     logger.info("🔧 PyPDF2 available - will extract first 2 pages for cost optimization")
 except ImportError:
     PDF_AVAILABLE = False
-    logger.warning("⚠️ PyPDF2 not available - will send full PDFs (higher costs). Install with: pip install PyPDF2")
+    logger.warning(
+        "⚠️ PyPDF2 not available - will send full PDFs (higher costs). Install with: pip install PyPDF2"
+    )
 
 
 @dataclass
@@ -84,7 +85,7 @@ class DocumentInfo:
     company_name: str
     document_type: str
     document_path: str
-    file_size: Optional[int] = None
+    file_size: int | None = None
 
 
 class DMAPermitAnalyzer:
@@ -99,13 +100,18 @@ class DMAPermitAnalyzer:
 
         self.model = GenerativeModel("gemini-2.5-flash")
 
-        logger.info(f"🤖 Initialized DMA Permit Analyzer with Vertex AI Gemini 2.5 Flash (Project: {project_id})")
+        logger.info(
+            f"🤖 Initialized DMA Permit Analyzer with Vertex AI Gemini 2.5 Flash (Project: {project_id})"
+        )
 
     def _get_project_id(self) -> str:
         """Get the current project ID from gcloud config"""
         try:
             result = subprocess.run(
-                ["gcloud", "config", "get-value", "project"], capture_output=True, text=True, check=True
+                ["gcloud", "config", "get-value", "project"],
+                capture_output=True,
+                text=True,
+                check=True,
             )
             project_id = result.stdout.strip()
             if not project_id:
@@ -116,22 +122,28 @@ class DMAPermitAnalyzer:
             # Fallback to landbrugsdata-1 if that's your project
             return "landbrugsdata-1"
 
-    def discover_all_afgoerelser_pdfs(self, cvr: str, base_gcs_path: str) -> List[str]:
+    def discover_all_afgoerelser_pdfs(self, cvr: str, base_gcs_path: str) -> list[str]:
         """
         Discover all afgørelser PDF files for a given CVR across multiple possible folder structures
         """
         all_afgoerelser_files = []
 
         try:
-            logger.info(f"🔍 Discovering afgørelser PDFs for CVR {cvr} (checking multiple folder structures)")
+            logger.info(
+                f"🔍 Discovering afgørelser PDFs for CVR {cvr} (checking multiple folder structures)"
+            )
 
             # Method 1: Try direct CVR folder
             direct_path = f"{base_gcs_path}/{cvr}/pdfs/"
             try:
-                result = subprocess.run(["gsutil", "ls", direct_path], capture_output=True, text=True, check=True)
+                result = subprocess.run(
+                    ["gsutil", "ls", direct_path], capture_output=True, text=True, check=True
+                )
                 if result.returncode == 0:
                     files = result.stdout.strip().split("\n")
-                    direct_afgoerelser = [f for f in files if "afgoerelser_" in f and f.endswith(".pdf")]
+                    direct_afgoerelser = [
+                        f for f in files if "afgoerelser_" in f and f.endswith(".pdf")
+                    ]
                     all_afgoerelser_files.extend(direct_afgoerelser)
                     logger.info(f"📁 Direct path {direct_path}: {len(direct_afgoerelser)} files")
             except subprocess.CalledProcessError:
@@ -141,12 +153,17 @@ class DMAPermitAnalyzer:
             try:
                 # List all subdirectories in base path
                 result = subprocess.run(
-                    ["gsutil", "ls", f"{base_gcs_path}/"], capture_output=True, text=True, check=True
+                    ["gsutil", "ls", f"{base_gcs_path}/"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
                 )
 
                 if result.returncode == 0:
                     subdirectories = [
-                        line.strip() for line in result.stdout.strip().split("\n") if line.strip().endswith("/")
+                        line.strip()
+                        for line in result.stdout.strip().split("\n")
+                        if line.strip().endswith("/")
                     ]
 
                     # Check each subdirectory for CVR folders
@@ -155,23 +172,36 @@ class DMAPermitAnalyzer:
                             try:
                                 # Look for pdfs folder in this subdirectory
                                 potential_path = (
-                                    f"{subdir}{cvr}/pdfs/" if not subdir.endswith(f"{cvr}/") else f"{subdir}pdfs/"
+                                    f"{subdir}{cvr}/pdfs/"
+                                    if not subdir.endswith(f"{cvr}/")
+                                    else f"{subdir}pdfs/"
                                 )
 
                                 subdir_result = subprocess.run(
-                                    ["gsutil", "ls", potential_path], capture_output=True, text=True, check=True
+                                    ["gsutil", "ls", potential_path],
+                                    capture_output=True,
+                                    text=True,
+                                    check=True,
                                 )
 
                                 if subdir_result.returncode == 0:
                                     files = subdir_result.stdout.strip().split("\n")
                                     subdir_afgoerelser = [
-                                        f for f in files if "afgoerelser_" in f and f.endswith(".pdf")
+                                        f
+                                        for f in files
+                                        if "afgoerelser_" in f and f.endswith(".pdf")
                                     ]
                                     # Avoid duplicates
-                                    new_files = [f for f in subdir_afgoerelser if f not in all_afgoerelser_files]
+                                    new_files = [
+                                        f
+                                        for f in subdir_afgoerelser
+                                        if f not in all_afgoerelser_files
+                                    ]
                                     all_afgoerelser_files.extend(new_files)
                                     if new_files:
-                                        logger.info(f"📁 Alternative path {potential_path}: {len(new_files)} new files")
+                                        logger.info(
+                                            f"📁 Alternative path {potential_path}: {len(new_files)} new files"
+                                        )
 
                             except subprocess.CalledProcessError:
                                 continue  # This subdirectory doesn't have the expected structure
@@ -180,9 +210,11 @@ class DMAPermitAnalyzer:
                 logger.warning(f"Could not list subdirectories in {base_gcs_path}")
 
             # Remove duplicates and sort
-            all_afgoerelser_files = sorted(list(set(all_afgoerelser_files)))
+            all_afgoerelser_files = sorted(set(all_afgoerelser_files))
 
-            logger.info(f"📄 Total afgørelser PDFs found for CVR {cvr}: {len(all_afgoerelser_files)}")
+            logger.info(
+                f"📄 Total afgørelser PDFs found for CVR {cvr}: {len(all_afgoerelser_files)}"
+            )
 
             return all_afgoerelser_files
 
@@ -198,12 +230,16 @@ class DMAPermitAnalyzer:
         """
         if not PDF_AVAILABLE:
             # Fallback: return full PDF if PyPDF2 not available
-            logger.warning(f"📄 PyPDF2 not available - sending full PDF for {pdf_path.split('/')[-1]} (higher cost)")
+            logger.warning(
+                f"📄 PyPDF2 not available - sending full PDF for {pdf_path.split('/')[-1]} (higher cost)"
+            )
             with open(pdf_path, "rb") as f:
                 return f.read()
 
         try:
-            logger.debug(f"📄 Extracting first {num_pages} pages from {pdf_path.split('/')[-1]} for cost optimization")
+            logger.debug(
+                f"📄 Extracting first {num_pages} pages from {pdf_path.split('/')[-1]} for cost optimization"
+            )
 
             with open(pdf_path, "rb") as file:
                 reader = PyPDF2.PdfReader(file)
@@ -216,12 +252,10 @@ class DMAPermitAnalyzer:
                     writer.add_page(reader.pages[i])
 
                 # Write to bytes
-                output_stream = tempfile.NamedTemporaryFile()
-                writer.write(output_stream)
-                output_stream.seek(0)
-
-                first_pages_bytes = output_stream.read()
-                output_stream.close()
+                with tempfile.NamedTemporaryFile() as output_stream:
+                    writer.write(output_stream)
+                    output_stream.seek(0)
+                    first_pages_bytes = output_stream.read()
 
                 # Log savings
                 original_size = os.path.getsize(pdf_path)
@@ -236,7 +270,9 @@ class DMAPermitAnalyzer:
                 return first_pages_bytes
 
         except Exception as e:
-            logger.warning(f"⚠️ Error extracting pages from {pdf_path.split('/')[-1]}: {e}. Using full PDF.")
+            logger.warning(
+                f"⚠️ Error extracting pages from {pdf_path.split('/')[-1]}: {e}. Using full PDF."
+            )
             # Fallback to full PDF if extraction fails
             with open(pdf_path, "rb") as f:
                 return f.read()
@@ -244,25 +280,25 @@ class DMAPermitAnalyzer:
     def download_pdf_temporarily(self, gcs_path: str) -> str:
         """Download a PDF from GCS to a temporary file"""
         try:
-            temp_file = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-            temp_path = temp_file.name
-            temp_file.close()
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
+                temp_path = temp_file.name
 
             # Download using gsutil
-            result = subprocess.run(["gsutil", "cp", gcs_path, temp_path], capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                ["gsutil", "cp", gcs_path, temp_path], capture_output=True, text=True, check=True
+            )
 
             if result.returncode == 0:
                 logger.info(f"📥 Downloaded {gcs_path} to {temp_path}")
                 return temp_path
-            else:
-                logger.error(f"Failed to download {gcs_path}: {result.stderr}")
-                return None
+            logger.error(f"Failed to download {gcs_path}: {result.stderr}")
+            return None
 
         except Exception as e:
             logger.error(f"Error downloading PDF: {e}")
             return None
 
-    def analyze_first_pages_for_permit_check(self, pdf_path: str, doc_info: DocumentInfo) -> Dict:
+    def analyze_first_pages_for_permit_check(self, pdf_path: str, doc_info: DocumentInfo) -> dict:
         """
         Analyze first 2 pages to check if this is an environmental permit (COST OPTIMIZED)
         """
@@ -328,7 +364,9 @@ miljøafgørelser - begge indeholder værdifulde miljødata.
 
             analysis = json.loads(response_text)
 
-            logger.info(f"✅ Permit check complete - Is permit: {analysis.get('is_environmental_permit', False)}")
+            logger.info(
+                f"✅ Permit check complete - Is permit: {analysis.get('is_environmental_permit', False)}"
+            )
 
             return {
                 "status": "permit_check_complete",
@@ -357,7 +395,9 @@ miljøafgørelser - begge indeholder værdifulde miljødata.
                 },
             }
 
-    def analyze_full_document_for_data_extraction(self, pdf_path: str, doc_info: DocumentInfo) -> Dict:
+    def analyze_full_document_for_data_extraction(
+        self, pdf_path: str, doc_info: DocumentInfo
+    ) -> dict:
         """
         Analyze full document to extract detailed environmental permit data
         """
@@ -365,7 +405,8 @@ miljøafgørelser - begge indeholder værdifulde miljødata.
             logger.info(f"📊 Extracting detailed data from environmental permit: {doc_info.cvr}")
 
             # Create PDF part for Vertex AI
-            pdf_part = Part.from_data(data=open(pdf_path, "rb").read(), mime_type="application/pdf")
+            with open(pdf_path, "rb") as pdf_file:
+                pdf_part = Part.from_data(data=pdf_file.read(), mime_type="application/pdf")
 
             extraction_prompt = """# ROLLE OG OPGAVE
 Du er ekspert i danske miljøtilladelser og skal ekstraktere strukturerede data fra dette miljøtilladelsesdokument.
@@ -509,14 +550,14 @@ Returner kun JSON i følgende præcise format:
             }
 
     def parallel_permit_checks(
-        self, pdf_paths: List[str], doc_info_template: DocumentInfo, max_workers: int = 5
-    ) -> List[Dict]:
+        self, pdf_paths: list[str], doc_info_template: DocumentInfo, max_workers: int = 5
+    ) -> list[dict]:
         """
         Perform parallel permit checks on multiple PDFs
         """
         results = []
 
-        def check_single_permit(pdf_path: str) -> Dict:
+        def check_single_permit(pdf_path: str) -> dict:
             """Check a single PDF for environmental permit"""
             doc_info = DocumentInfo(
                 cvr=doc_info_template.cvr,
@@ -546,7 +587,9 @@ Returner kun JSON i følgende præcise format:
 
         # Execute permit checks in parallel
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_pdf = {executor.submit(check_single_permit, pdf_path): pdf_path for pdf_path in pdf_paths}
+            future_to_pdf = {
+                executor.submit(check_single_permit, pdf_path): pdf_path for pdf_path in pdf_paths
+            }
 
             for future in as_completed(future_to_pdf):
                 pdf_path = future_to_pdf[future]
@@ -560,7 +603,7 @@ Returner kun JSON i følgende præcise format:
 
         return results
 
-    def smart_group_addresses(self, addresses: List[str]) -> Dict[str, List[str]]:
+    def smart_group_addresses(self, addresses: list[str]) -> dict[str, list[str]]:
         """
         Use Gemini Flash to intelligently group similar addresses that represent the same facility
         """
@@ -647,7 +690,7 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
             # Fallback to individual grouping
             return {addr: [addr] for addr in addresses}
 
-    def group_documents_by_facility(self, permit_results: List[Dict]) -> Dict[str, List[Dict]]:
+    def group_documents_by_facility(self, permit_results: list[dict]) -> dict[str, list[dict]]:
         """
         Group documents by facility address with SMART ADDRESS GROUPING
         (extracted during permit check) and sort by date (newest first)
@@ -660,12 +703,16 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
         for result in permit_results:
             permit_check = result.get("permit_check", {})
             if permit_check.get("status") != "permit_check_complete":
-                logger.warning(f"Skipping document due to failed permit check: {result.get('pdf_path', 'unknown')}")
+                logger.warning(
+                    f"Skipping document due to failed permit check: {result.get('pdf_path', 'unknown')}"
+                )
                 continue
 
             analysis = permit_check.get("analysis", {})
             if not analysis.get("is_environmental_permit", False):
-                logger.info(f"Skipping non-environmental permit: {result.get('pdf_path', 'unknown')}")
+                logger.info(
+                    f"Skipping non-environmental permit: {result.get('pdf_path', 'unknown')}"
+                )
                 continue
 
             # Extract facility information (address was fetched during first permit check call)
@@ -679,7 +726,9 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
                 pdf_name = result.get("pdf_path", "").split("/")[-1]
                 facility_address = f"Unknown Address #{unknown_address_counter} ({pdf_name})"
                 unknown_address_counter += 1
-                logger.warning(f"No facility address found in {pdf_name}, using fallback: {facility_address}")
+                logger.warning(
+                    f"No facility address found in {pdf_name}, using fallback: {facility_address}"
+                )
 
             # Add metadata for better grouping
             result["parsed_date"] = self._parse_date(document_date)
@@ -691,7 +740,9 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
                 all_addresses.append(facility_address)
 
         # Step 2: Use Gemini to intelligently group similar addresses
-        logger.info(f"🏠 Applying smart address grouping to {len(all_addresses)} unique addresses...")
+        logger.info(
+            f"🏠 Applying smart address grouping to {len(all_addresses)} unique addresses..."
+        )
         address_groups = self.smart_group_addresses(all_addresses)
 
         # Step 3: Create mapping from original address to canonical address
@@ -721,11 +772,17 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
             documents.sort(key=lambda x: x.get("parsed_date", datetime.min), reverse=True)
 
             # Show original address variants for this group
-            original_variants = list(set([doc["original_facility_address"] for doc in documents]))
-            variant_info = f" (grouped from: {', '.join(original_variants)})" if len(original_variants) > 1 else ""
+            original_variants = list({doc["original_facility_address"] for doc in documents})
+            variant_info = (
+                f" (grouped from: {', '.join(original_variants)})"
+                if len(original_variants) > 1
+                else ""
+            )
 
             newest_date = documents[0].get("parsed_date", datetime.min)
-            date_str = newest_date.strftime("%Y-%m-%d") if newest_date != datetime.min else "unknown date"
+            date_str = (
+                newest_date.strftime("%Y-%m-%d") if newest_date != datetime.min else "unknown date"
+            )
 
             logger.info(
                 f"🏭 Canonical facility '{canonical_address}': {len(documents)} documents "
@@ -748,8 +805,8 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
                 return datetime.min
 
     def analyze_facility_documents(
-        self, facility_address: str, documents: List[Dict], doc_info_template: DocumentInfo
-    ) -> Dict:
+        self, facility_address: str, documents: list[dict], doc_info_template: DocumentInfo
+    ) -> dict:
         """
         Analyze all documents for a single facility with proper temporal logic
         """
@@ -896,13 +953,13 @@ Returner kun JSON i følgende præcise format:
 
         try:
             # Send all PDFs to Gemini at once
-            pdf_parts = []
-            for i, pdf_content in enumerate(pdf_contents):
-                pdf_part = Part.from_data(data=pdf_content, mime_type="application/pdf")
-                pdf_parts.append(pdf_part)
+            pdf_parts = [
+                Part.from_data(data=pdf_content, mime_type="application/pdf")
+                for pdf_content in pdf_contents
+            ]
 
             # Combine prompt and all PDFs
-            content_parts = [aggregate_prompt] + pdf_parts
+            content_parts = [aggregate_prompt, *pdf_parts]
 
             response = self.model.generate_content(content_parts)
 
@@ -934,7 +991,9 @@ Returner kun JSON i følgende præcise format:
                 "documents_processed": len(documents),
             }
 
-    def analyze_dma_permits_for_company(self, cvr: str, company_name: str, base_gcs_path: str) -> Dict:
+    def analyze_dma_permits_for_company(
+        self, cvr: str, company_name: str, base_gcs_path: str
+    ) -> dict:
         """
         Analyze ALL afgørelser PDFs for a company with parallel processing and facility grouping
         """
@@ -971,12 +1030,16 @@ Returner kun JSON i følgende præcise format:
             if r.get("permit_check", {}).get("analysis", {}).get("is_environmental_permit", False)
         )
         logger.info(
-            f"✅ Permit checks complete: {valid_permits}/{len(permit_results)} " f"confirmed environmental permits"
+            f"✅ Permit checks complete: {valid_permits}/{len(permit_results)} "
+            f"confirmed environmental permits"
         )
 
         # Step 2: Group documents by facility address with SMART ADDRESS GROUPING
         # (using addresses extracted during permit checks)
-        logger.info(f"🏭 Intelligently grouping {valid_permits} environmental permits " f"by facility address...")
+        logger.info(
+            f"🏭 Intelligently grouping {valid_permits} environmental permits "
+            f"by facility address..."
+        )
         facility_groups = self.group_documents_by_facility(permit_results)
 
         if not facility_groups:
@@ -992,19 +1055,25 @@ Returner kun JSON i følgende præcise format:
         facility_results = {}
         total_permits = sum(len(docs) for docs in facility_groups.values())
 
-        logger.info(f"🎯 Found {len(facility_groups)} facilities with {total_permits} environmental permits")
+        logger.info(
+            f"🎯 Found {len(facility_groups)} facilities with {total_permits} environmental permits"
+        )
 
         for facility_address, documents in facility_groups.items():
             logger.info(f"🏭 Processing facility: {facility_address} ({len(documents)} documents)")
 
             # Aggregate analysis for this facility
-            facility_result = self.analyze_facility_documents(facility_address, documents, doc_info_template)
+            facility_result = self.analyze_facility_documents(
+                facility_address, documents, doc_info_template
+            )
             facility_results[facility_address] = facility_result
 
             # Log key findings
             if facility_result.get("status") == "facility_analysis_complete":
                 extraction_data = facility_result.get("extraction_data", {})
-                confidence = extraction_data.get("extraction_confidence", {}).get("overall_confidence", 0)
+                confidence = extraction_data.get("extraction_confidence", {}).get(
+                    "overall_confidence", 0
+                )
                 nh3_emission = extraction_data.get("ammonia_emission", {}).get("nh3_kg_per_year")
 
                 logger.info(f"    ✅ Facility analysis complete (confidence: {confidence:.2f})")
@@ -1023,7 +1092,9 @@ Returner kun JSON i følgende præcise format:
             "analyzed_at": datetime.now().isoformat(),
         }
 
-        logger.info(f"✅ Company analysis complete: {len(facility_groups)} facilities, {total_permits} permits")
+        logger.info(
+            f"✅ Company analysis complete: {len(facility_groups)} facilities, {total_permits} permits"
+        )
 
         return company_results
 
@@ -1065,8 +1136,12 @@ def main():
             for facility_address, facility_result in result.get("facilities", {}).items():
                 if facility_result.get("status") == "facility_analysis_complete":
                     extraction_data = facility_result.get("extraction_data", {})
-                    confidence = extraction_data.get("extraction_confidence", {}).get("overall_confidence", 0)
-                    nh3_emission = extraction_data.get("ammonia_emission", {}).get("nh3_kg_per_year")
+                    confidence = extraction_data.get("extraction_confidence", {}).get(
+                        "overall_confidence", 0
+                    )
+                    nh3_emission = extraction_data.get("ammonia_emission", {}).get(
+                        "nh3_kg_per_year"
+                    )
 
                     if nh3_emission:
                         logger.info(
@@ -1081,7 +1156,15 @@ def main():
 
         except Exception as e:
             logger.error(f"Error analyzing {name}: {e}")
-            results.append({"cvr": cvr, "company_name": name, "total_documents": 0, "error": str(e), "documents": []})
+            results.append(
+                {
+                    "cvr": cvr,
+                    "company_name": name,
+                    "total_documents": 0,
+                    "error": str(e),
+                    "documents": [],
+                }
+            )
 
     # Save results (prototype output directory)
     output_dir = Path("prototypes_output")
@@ -1116,7 +1199,9 @@ def main():
     if total_documents > 0:
         logger.info(f"    Permit success rate: {total_permits / total_documents * 100:.1f}%")
     if total_facilities > 0:
-        logger.info(f"    Facility analysis success rate: {successful_facilities / total_facilities * 100:.1f}%")
+        logger.info(
+            f"    Facility analysis success rate: {successful_facilities / total_facilities * 100:.1f}%"
+        )
 
 
 if __name__ == "__main__":

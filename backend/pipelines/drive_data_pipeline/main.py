@@ -31,7 +31,7 @@ try:
         extract_cvr_numbers_from_table,
         save_pipeline_cvr_numbers,
     )
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     CVR_COLLECTION_AVAILABLE = True
     print("✅ CVR collection utilities imported successfully")
@@ -257,7 +257,7 @@ def _save_discovered_cvr_numbers(
                 logger.warning(f"   • {file_display_name}: Error extracting CVR numbers - {e}")
 
         # Remove duplicates and sort
-        unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
+        unique_cvr_numbers = sorted(set(all_cvr_numbers))
 
         if unique_cvr_numbers:
             # Initialize GCS access for saving if not already done
@@ -609,9 +609,11 @@ def main() -> int:
                         for dataset_dir in bronze_base_path.iterdir():
                             if dataset_dir.is_dir():
                                 # Look for timestamp directories within each dataset
-                                for timestamp_dir in dataset_dir.iterdir():
-                                    if timestamp_dir.is_dir():
-                                        bronze_runs.append(timestamp_dir)
+                                bronze_runs.extend(
+                                    timestamp_dir
+                                    for timestamp_dir in dataset_dir.iterdir()
+                                    if timestamp_dir.is_dir()
+                                )
 
                 # Sort by modification time and get the latest
                 bronze_runs = sorted(
@@ -649,7 +651,7 @@ def main() -> int:
                 # Apply filtering if specified
                 if file_types or subfolders:
                     filtered_count = 0
-                    for _file_key, file_info in file_data.items():
+                    for file_info in file_data.values():
                         # Filter by file type if specified
                         if file_types:
                             file_extension = Path(file_info["original_filename"]).suffix.lstrip(".")

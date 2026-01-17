@@ -8,7 +8,7 @@ import secrets
 import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import requests
 from cryptography.hazmat.primitives import hashes
@@ -23,7 +23,9 @@ from .export import save_raw_data
 
 # Import UUID utilities for deterministic TrackID generation
 try:
-    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import (
+        LandbrugsdataUUID,
+    )
 except ImportError:
     try:
         import sys
@@ -81,7 +83,7 @@ NAMESPACES = {
 # --- Credential Handling ---
 
 
-def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
+def get_vetstat_credentials() -> tuple[str, str, Any, Any]:
     """Get FVM username, password, VetStat certificate, and private key."""
     # Load environment variables from .env file if it exists
     load_dotenv()
@@ -129,11 +131,15 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         # Try to get certificate data from base64 string first
         if cert_base64:
             try:
-                logger.debug("Using base64 certificate from VETSTAT_CERTIFICATE environment variable")
+                logger.debug(
+                    "Using base64 certificate from VETSTAT_CERTIFICATE environment variable"
+                )
                 p12_data = base64.b64decode(cert_base64)
-                logger.debug(f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes")
+                logger.debug(
+                    f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes"
+                )
             except Exception as decode_error:
-                logger.error(f"Failed to decode base64 certificate: {str(decode_error)}")
+                logger.error(f"Failed to decode base64 certificate: {decode_error!s}")
                 p12_data = None
 
         # If base64 decoding failed or wasn't provided, try reading from file
@@ -144,18 +150,24 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
                     p12_data = f.read()
                 logger.debug(f"Successfully read certificate file. Length: {len(p12_data)} bytes")
             except Exception as file_error:
-                logger.error(f"Failed to read certificate file {cert_path}: {str(file_error)}")
-                raise ValueError(f"Failed to read certificate file: {str(file_error)}") from file_error
+                logger.error(f"Failed to read certificate file {cert_path}: {file_error!s}")
+                raise ValueError(
+                    f"Failed to read certificate file: {file_error!s}"
+                ) from file_error
 
         if not p12_data:
-            raise ValueError("No valid certificate data found from either environment variable or file")
+            raise ValueError(
+                "No valid certificate data found from either environment variable or file"
+            )
 
         # Load the certificate and private key from the data
         try:
-            private_key, certificate, _ = load_key_and_certificates(p12_data, cert_password.encode("utf-8"))
+            private_key, certificate, _ = load_key_and_certificates(
+                p12_data, cert_password.encode("utf-8")
+            )
             logger.debug("Successfully loaded private key and certificate from PKCS12 data")
         except Exception as cert_error:
-            logger.error(f"Failed to load certificate with provided password: {str(cert_error)}")
+            logger.error(f"Failed to load certificate with provided password: {cert_error!s}")
             raise ValueError("Failed to load certificate with provided password") from cert_error
 
         if not private_key or not certificate:
@@ -164,19 +176,23 @@ def get_vetstat_credentials() -> Tuple[str, str, Any, Any]:
         return username, password, certificate, private_key
 
     except Exception as e:
-        logger.error(f"Failed to load VetStat certificate/key: {str(e)}")
+        logger.error(f"Failed to load VetStat certificate/key: {e!s}")
         raise
 
 
 # --- XML Helper Functions (Adapted from fetch_chr_details.py) ---
 
 
-def compute_digest(element: etree._Element, inclusive_prefixes: List[str]) -> str:
+def compute_digest(element: etree._Element, inclusive_prefixes: list[str]) -> str:
     """Canonicalize (C14N) the element and compute its SHA-256 digest in Base64."""
     # Ensure the element is detached if necessary or use a copy
     try:
         c14n_bytes = etree.tostring(
-            element, method="c14n", exclusive=True, inclusive_ns_prefixes=inclusive_prefixes, with_comments=False
+            element,
+            method="c14n",
+            exclusive=True,
+            inclusive_ns_prefixes=inclusive_prefixes,
+            with_comments=False,
         )
         sha256_hash = hashlib.sha256(c14n_bytes).digest()
         return base64.b64encode(sha256_hash).decode()
@@ -187,7 +203,7 @@ def compute_digest(element: etree._Element, inclusive_prefixes: List[str]) -> st
         raise
 
 
-def get_element_prefixes(element_type: str) -> List[str]:
+def get_element_prefixes(element_type: str) -> list[str]:
     """Get the appropriate namespace prefixes based on element type for C14N."""
     # These prefixes were likely determined by observing successful requests
     # or documentation for the VetStat WS-Security profile.
@@ -217,9 +233,8 @@ def generate_deterministic_track_id(species_code: str, periode_fra: str, periode
         request_key = f"{species_code}-{periode_fra}-{periode_til}"
         track_uuid = LandbrugsdataUUID.generate_deterministic_uuid("vetstat-request", request_key)
         return f"vetstat_request-{track_uuid}"
-    else:
-        # Fallback to random UUID if LandbrugsdataUUID not available
-        return generate_uuid_id("vetstat_request-")
+    # Fallback to random UUID if LandbrugsdataUUID not available
+    return generate_uuid_id("vetstat_request-")
 
 
 def update_security_elements(root: etree._Element, username: str, password: str, certificate: Any):
@@ -285,14 +300,18 @@ def update_references_and_digests(root: etree._Element):
 
         id_value = uri.lstrip("#")
         # Search for the element by its wsu:Id or Id attribute
-        referenced_element = root.xpath(f"//*[@wsu:Id='{id_value}' or @Id='{id_value}']", namespaces=NAMESPACES)
+        referenced_element = root.xpath(
+            f"//*[@wsu:Id='{id_value}' or @Id='{id_value}']", namespaces=NAMESPACES
+        )
 
         if referenced_element:
             element = referenced_element[0]
             # Extract local name for prefix lookup
             element_type = etree.QName(element.tag).localname
             prefixes = get_element_prefixes(element_type)
-            logger.debug(f"Calculating digest for URI {uri} ({element.tag}) using prefixes: {prefixes}")
+            logger.debug(
+                f"Calculating digest for URI {uri} ({element.tag}) using prefixes: {prefixes}"
+            )
             try:
                 new_digest = compute_digest(element, prefixes)
                 digest_value_el = ref.find("./ds:DigestValue", NAMESPACES)
@@ -300,7 +319,9 @@ def update_references_and_digests(root: etree._Element):
                     digest_value_el.text = new_digest
                     logger.debug(f"Updated DigestValue for {uri} to: {new_digest[:10]}...")
                 else:
-                    logger.warning(f"ds:DigestValue element not found within reference for URI: {uri}")
+                    logger.warning(
+                        f"ds:DigestValue element not found within reference for URI: {uri}"
+                    )
             except Exception as e:
                 logger.error(f"Failed to compute or set digest for URI {uri}: {e}")
         else:
@@ -324,7 +345,11 @@ def sign_document(root: etree._Element, private_key: Any):
         # Use the specific inclusive prefixes required for SignedInfo canonicalization
         signed_info_prefixes = get_element_prefixes("SignedInfo")
         signed_info_c14n = etree.tostring(
-            signed_info, method="c14n", exclusive=True, inclusive_ns_prefixes=signed_info_prefixes, with_comments=False
+            signed_info,
+            method="c14n",
+            exclusive=True,
+            inclusive_ns_prefixes=signed_info_prefixes,
+            with_comments=False,
         )
 
         # VetStat uses RSA-SHA1 for the signature
@@ -452,8 +477,7 @@ def create_soap_envelope_template(
     try:
         # Remove insignificant whitespace during parsing to avoid issues with C14N
         parser = etree.XMLParser(remove_blank_text=True)
-        root = etree.fromstring(xml_template.encode("utf-8"), parser=parser)
-        return root
+        return etree.fromstring(xml_template.encode("utf-8"), parser=parser)
     except etree.XMLSyntaxError as e:
         logger.error(f"XML Syntax Error in template: {e}")
         logger.error(f"Template content:\n{xml_template}")
@@ -463,7 +487,9 @@ def create_soap_envelope_template(
 # --- Main Loading Function ---
 
 
-def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
+def load_vetstat_antibiotics(
+    chr_number: int, species_code: int, period_from: date, period_to: date
+) -> str | None:
     """Fetch raw antibiotics data XML from VetStat for a given CHR, species, and period."""
     logger.info(
         f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, Period: {period_from} to {period_to}"
@@ -515,11 +541,16 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                 root = etree.fromstring(raw_xml_response.encode("utf-8"))
 
                 # Define the namespaces used in the XML
-                ns = {"soap": "http://schemas.xmlsoap.org/soap/envelope/", "ns2": "http://vetstat.fvst.dk/ekstern"}
+                ns = {
+                    "soap": "http://schemas.xmlsoap.org/soap/envelope/",
+                    "ns2": "http://vetstat.fvst.dk/ekstern",
+                }
 
                 # Extract the data from the XML
                 data_elements = root.xpath("//ns2:Data", namespaces=ns)
-                logger.info(f"Found {len(data_elements)} data elements in XML response for CHR {chr_number}")
+                logger.info(
+                    f"Found {len(data_elements)} data elements in XML response for CHR {chr_number}"
+                )
 
                 if data_elements:
                     # Convert the XML elements to JSON objects
@@ -562,9 +593,13 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                             identifier=f"{chr_number}_{species_code}_json",
                         )
 
-                    logger.info(f"Parsed {len(json_data)} antibiotic usage records from XML response")
+                    logger.info(
+                        f"Parsed {len(json_data)} antibiotic usage records from XML response"
+                    )
                 else:
-                    logger.debug(f"No antibiotic usage data found in XML response for CHR {chr_number}")
+                    logger.debug(
+                        f"No antibiotic usage data found in XML response for CHR {chr_number}"
+                    )
                     # Save just the raw XML immediately
                     save_raw_data(
                         raw_response=raw_xml_response,
@@ -581,14 +616,15 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
                 )
 
             return raw_xml_response
-        elif response.status_code == 500:
+        if response.status_code == 500:
             # This is a normal response when there's no data
             logger.error(f"VetStat request failed for CHR {chr_number}: HTTP 500")
             return None
-        else:
-            logger.error(f"Unexpected response from VetStat API for CHR {chr_number}: {response.status_code}")
-            logger.error(f"Response content:\n{response.text}")
-            return None
+        logger.error(
+            f"Unexpected response from VetStat API for CHR {chr_number}: {response.status_code}"
+        )
+        logger.error(f"Response content:\n{response.text}")
+        return None
 
     except Exception as e:
         logger.error(f"Failed to execute VetStat request for CHR {chr_number}: {e}")

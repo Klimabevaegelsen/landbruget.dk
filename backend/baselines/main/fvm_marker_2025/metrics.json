@@ -1,0 +1,36 @@
+{
+  "dataset_name": "fvm_marker_2025",
+  "source_path": "gs://landbrugsdata-raw-data/silver/fvm_marker_2025/20260117_000228/data.parquet",
+  "generated_at": "2026-01-17T11:10:39.447530",
+  "record_count": 615788,
+  "total_area_m2": 2648861.990000026,
+  "unique_identifiers": {
+    "field_id": 28381,
+    "cvr_number": 26911
+  },
+  "geometry_bounds": {
+    "min_x": 54.55982897607929,
+    "max_x": 57.74516914270037,
+    "min_y": 8.08248006645151,
+    "max_y": 15.155224668788486
+  },
+  "detected_crs": "EPSG:4326",
+  "column_null_counts": {
+    "field_id": 0,
+    "area_ha": 0,
+    "cvr_number": 0,
+    "crop_code": 0,
+    "crop_name": 0,
+    "grundbetaling_area_ha": 0,
+    "grundbetaling_eligible": 0,
+    "journal_number": 0,
+    "block_id": 0,
+    "geometry": 0,
+    "year": 0,
+    "layer_type": 0,
+    "processed_at": 0,
+    "field_uuid": 0,
+    "municipality": 0,
+    "municipality_assignment_method": 0
+  }
+}

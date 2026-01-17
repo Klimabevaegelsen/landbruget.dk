@@ -9,6 +9,7 @@ M_C = 12.01  # g/mol
 # Standardtal for forbrug af kalk (CaCO3) pr. ha/år
 S_CACO3_PER_HA = 170.0  # kg/ha/år
 
+
 def calculate_co2_kalkning_bedrift(a_total_kalket_areal: float) -> float:
     """
     Beregner kg CO2 fra kalkning for hele bedriften pr år.
@@ -22,10 +23,8 @@ def calculate_co2_kalkning_bedrift(a_total_kalket_areal: float) -> float:
     Returns:
         float: CO2_bedrift i kg CO2 pr år
     """
-    co2_bedrift = (
-        a_total_kalket_areal * S_CACO3_PER_HA / M_CACO3
-    ) * M_C * (44.0 / 12.0)
-    return co2_bedrift
+    return (a_total_kalket_areal * S_CACO3_PER_HA / M_CACO3) * M_C * (44.0 / 12.0)
+
 
 def calculate_co2_kalkning_mark(
     co2_bedrift: float, a_mark_areal: float, a_total_kalket_areal: float
@@ -54,8 +53,7 @@ def calculate_co2_kalkning_mark(
     # The formula in formulas.md states CO2_mark = CO2_bedrift * (A / A_total)
     # where A_total is "summen af arealet for alle kalkede marker"
     # This implies the distribution should be over the *kalkede* areal, not total farm area.
-    co2_mark = co2_bedrift * (a_mark_areal / a_total_kalket_areal)
-    return co2_mark
+    return co2_bedrift * (a_mark_areal / a_total_kalket_areal)
 
 
 # Testcases

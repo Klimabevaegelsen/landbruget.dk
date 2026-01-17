@@ -3,11 +3,11 @@
 import json
 import logging
 from datetime import date, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # Import GCS access for persistent storage
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -23,11 +23,11 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.herd_discovery
 def discover_herd_volumes_for_year(
     chr_dyr_client,
     username: str,
-    herd_list: List[int],
+    herd_list: list[int],
     year: int,
     sample_weeks: int = 3,
     sample_strategy: str = "seasonal",
-) -> Tuple[List[Dict], List[int]]:
+) -> tuple[list[dict], list[int]]:
     """
     Phase 1: Lightweight discovery to identify large herds before full processing.
 
@@ -65,7 +65,9 @@ def discover_herd_volumes_for_year(
 
             # Check if already known as high-volume
             if is_high_volume_herd(herd_number):
-                logger.info(f"🐄 Herd {herd_number} already configured as high-volume, skipping discovery")
+                logger.info(
+                    f"🐄 Herd {herd_number} already configured as high-volume, skipping discovery"
+                )
                 large_herds.append(
                     {
                         "herd": herd_number,
@@ -85,7 +87,9 @@ def discover_herd_volumes_for_year(
 
             for period_start, period_end in sample_periods:
                 try:
-                    sample_count = sample_herd_period(chr_dyr_client, username, herd_number, period_start, period_end)
+                    sample_count = sample_herd_period(
+                        chr_dyr_client, username, herd_number, period_start, period_end
+                    )
                     if sample_count > 0:
                         days_in_period = (period_end - period_start).days + 1
                         total_sample_animals += sample_count
@@ -113,7 +117,9 @@ def discover_herd_volumes_for_year(
             estimated_yearly = animals_per_day * 365
 
             # Determine processing strategy
-            herd_info = classify_herd_volume(herd_number, estimated_yearly, sample_weeks, total_sample_animals)
+            herd_info = classify_herd_volume(
+                herd_number, estimated_yearly, sample_weeks, total_sample_animals
+            )
 
             if herd_info["is_large"]:
                 large_herds.append(herd_info)
@@ -126,7 +132,9 @@ def discover_herd_volumes_for_year(
                 )
             else:
                 normal_herds.append(herd_number)
-                logger.debug(f"  ➡️ Herd {herd_number}: Normal volume (~{estimated_yearly:,.0f} animals/year)")
+                logger.debug(
+                    f"  ➡️ Herd {herd_number}: Normal volume (~{estimated_yearly:,.0f} animals/year)"
+                )
 
         except Exception as e:
             logger.error(f"❌ Discovery failed for herd {herd_number}: {e}")
@@ -148,7 +156,7 @@ def discover_herd_volumes_for_year(
     return large_herds, normal_herds
 
 
-def get_sample_periods(year: int, sample_weeks: int, strategy: str) -> List[Tuple[date, date]]:
+def get_sample_periods(year: int, sample_weeks: int, strategy: str) -> list[tuple[date, date]]:
     """Get optimal sampling periods based on strategy."""
 
     if strategy == "seasonal":
@@ -175,9 +183,8 @@ def get_sample_periods(year: int, sample_weeks: int, strategy: str) -> List[Tupl
 
     # Convert to actual date ranges, limiting by sample_weeks
     periods = []
-    weeks_used = 0
 
-    for start_date, days in base_periods:
+    for weeks_used, (start_date, days) in enumerate(base_periods):
         if weeks_used >= sample_weeks:
             break
 
@@ -186,12 +193,13 @@ def get_sample_periods(year: int, sample_weeks: int, strategy: str) -> List[Tupl
         actual_end = min(start_date + timedelta(days=days - 1), year_end)
 
         periods.append((start_date, actual_end))
-        weeks_used += 1
 
     return periods[:sample_weeks]
 
 
-def sample_herd_period(chr_dyr_client, username: str, herd_number: int, start_date: date, end_date: date) -> int:
+def sample_herd_period(
+    chr_dyr_client, username: str, herd_number: int, start_date: date, end_date: date
+) -> int:
     """Sample a single herd for a specific time period to estimate volume."""
 
     try:
@@ -199,7 +207,9 @@ def sample_herd_period(chr_dyr_client, username: str, herd_number: int, start_da
         glr_chr_ws_info_inbound_factory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
         common_header = glr_chr_ws_info_inbound_factory(**create_base_request(username))
 
-        chr_dyr_chr_bes_liste_request_type_factory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+        chr_dyr_chr_bes_liste_request_type_factory = chr_dyr_client.get_type(
+            "ns0:CHR_dyrChrBesListeRequestType"
+        )
         request_params = chr_dyr_chr_bes_liste_request_type_factory(
             **{"BesaetningsNummer": herd_number, "PeriodeFra": start_date, "PeriodeTil": end_date}
         )
@@ -210,16 +220,17 @@ def sample_herd_period(chr_dyr_client, username: str, herd_number: int, start_da
         response = chr_dyr_client.service.besListAktOms(CHR_dyrChrBesListeRequest=payload_content)
 
         if response and hasattr(response, "Response") and response.Response:
-            resp = response.Response[0] if isinstance(response.Response, list) else response.Response
+            resp = (
+                response.Response[0] if isinstance(response.Response, list) else response.Response
+            )
             animals = getattr(resp, "Enkeltdyrsoplysninger", [])
 
             # Handle both count-only responses and actual data
             if isinstance(animals, int):
                 return animals
-            elif animals:
+            if animals:
                 return len(animals) if hasattr(animals, "__len__") else 0
-            else:
-                return 0
+            return 0
 
         return 0
 
@@ -230,7 +241,7 @@ def sample_herd_period(chr_dyr_client, username: str, herd_number: int, start_da
 
 def classify_herd_volume(
     herd_number: int, estimated_yearly: float, sample_weeks: int, total_sample: int
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Classify herd volume and determine processing strategy."""
 
     # Volume thresholds
@@ -279,7 +290,9 @@ def classify_herd_volume(
     }
 
 
-def save_discovery_results(year: int, large_herds: List[Dict], normal_herds: List[int], stats: Dict) -> None:
+def save_discovery_results(
+    year: int, large_herds: list[dict], normal_herds: list[int], stats: dict
+) -> None:
     """Save discovery results for future reference and optimization."""
 
     discovery_data = {
@@ -321,7 +334,7 @@ def save_discovery_results(year: int, large_herds: List[Dict], normal_herds: Lis
         logger.warning(f"Failed to save local discovery results: {e}")
 
 
-def load_previous_discovery_results(year: int) -> Optional[Tuple[List[Dict], List[int]]]:
+def load_previous_discovery_results(year: int) -> tuple[list[dict], list[int]] | None:
     """Load previous discovery results to avoid re-sampling."""
 
     if GCS_AVAILABLE:
@@ -338,14 +351,17 @@ def load_previous_discovery_results(year: int) -> Optional[Tuple[List[Dict], Lis
                 # Check if results are recent (within last 30 days)
                 from datetime import datetime
 
-                discovery_date = datetime.fromisoformat(discovery_data.get("discovery_timestamp", "1970-01-01"))
+                discovery_date = datetime.fromisoformat(
+                    discovery_data.get("discovery_timestamp", "1970-01-01")
+                )
                 age_days = (datetime.now() - discovery_date).days
 
                 if age_days <= 30:
-                    logger.info(f"📋 Using cached discovery results from {discovery_date.date()} ({age_days} days old)")
+                    logger.info(
+                        f"📋 Using cached discovery results from {discovery_date.date()} ({age_days} days old)"
+                    )
                     return discovery_data["large_herds"], discovery_data["normal_herds"]
-                else:
-                    logger.info(f"📋 Discovery cache is {age_days} days old, will re-discover")
+                logger.info(f"📋 Discovery cache is {age_days} days old, will re-discover")
 
         except Exception as e:
             logger.warning(f"Failed to load discovery results from GCS: {e}")

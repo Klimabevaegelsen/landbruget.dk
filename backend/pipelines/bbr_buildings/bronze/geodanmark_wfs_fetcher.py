@@ -86,7 +86,7 @@ class GeoDanmarkWFSFetcher:
         output_dir: Path,
         building_ids: list,
         return_data: bool = False,
-        pipeline_start_time: datetime = None,
+        pipeline_start_time: datetime | None = None,
     ) -> None:
         """
         Fetch building geometries from GeoDanmark WFS for specific building IDs using
@@ -308,7 +308,9 @@ class GeoDanmarkWFSFetcher:
 
         return None
 
-    def _fetch_building_batch_geometries(self, building_ids: list, batch_size: int = None) -> list:
+    def _fetch_building_batch_geometries(
+        self, building_ids: list, batch_size: int | None = None
+    ) -> list:
         """
         Fetch geometries for a batch of building IDs using POST request to avoid URI length limits.
 
@@ -338,7 +340,7 @@ class GeoDanmarkWFSFetcher:
             "request": "GetFeature",
             "typeName": "gdk60:Bygning",
             "CQL_FILTER": ids_filter,
-            "srsName": "EPSG:4326",
+            "srsName": "EPSG:25832",  # Request in Danish UTM (native CRS) for processing
         }
 
         # Add authentication credentials
@@ -366,7 +368,7 @@ class GeoDanmarkWFSFetcher:
                     "request": "GetFeature",
                     "typeName": "gdk60:Bygning",
                     "CQL_FILTER": ids_filter,
-                    "srsName": "EPSG:4326",
+                    "srsName": "EPSG:25832",  # Request in Danish UTM (native CRS) for processing
                 }
 
                 url = self.settings.geodanmark_wfs_url
@@ -403,7 +405,7 @@ class GeoDanmarkWFSFetcher:
                     f"URI Too Long error - batch size too large ({len(building_ids)} IDs)"
                 )
                 return None
-            elif response.status_code == 429:
+            if response.status_code == 429:
                 self.logger.warning(f"Rate limited - batch with {len(building_ids)} IDs")
                 time.sleep(1)  # Brief pause for rate limiting
                 return None
@@ -421,53 +423,45 @@ class GeoDanmarkWFSFetcher:
                     # Add small delay between requests to be respectful to the server
                     time.sleep(0.1)
                     return geojson_data["features"]
-                else:
-                    self.logger.warning(
-                        f"No features returned for batch of {len(building_ids)} IDs"
-                    )
-                    return []
-            else:
-                # Handle GML or other XML format
-                self.logger.debug(f"Received non-JSON response: {response.text[:200]}...")
+                self.logger.warning(f"No features returned for batch of {len(building_ids)} IDs")
+                return []
+            # Handle GML or other XML format
+            self.logger.debug(f"Received non-JSON response: {response.text[:200]}...")
 
-                # Save a sample GML response for debugging
-                if len(building_ids) <= 10:  # Only for small test batches
-                    debug_path = Path("debug_gml_response.xml")
-                    with open(debug_path, "w", encoding="utf-8") as f:
-                        f.write(response.text)
-                    self.logger.debug(f"Saved sample GML response to {debug_path}")
+            # Save a sample GML response for debugging
+            if len(building_ids) <= 10:  # Only for small test batches
+                debug_path = Path("debug_gml_response.xml")
+                with open(debug_path, "w", encoding="utf-8") as f:
+                    f.write(response.text)
+                self.logger.debug(f"Saved sample GML response to {debug_path}")
 
-                # Parse GML response to extract building geometries
-                gml_data = self._parse_gml_response(response.content, "gdk60:Bygning")
-                if "error" in gml_data:
-                    self.logger.error(f"GML parsing error: {gml_data['error']}")
-                    return []
+            # Parse GML response to extract building geometries
+            gml_data = self._parse_gml_response(response.content, "gdk60:Bygning")
+            if "error" in gml_data:
+                self.logger.error(f"GML parsing error: {gml_data['error']}")
+                return []
 
-                feature_count = gml_data.get("feature_count", 0)
-                self.logger.info(
-                    f"Successfully parsed GML response: {feature_count} building features"
-                )
+            feature_count = gml_data.get("feature_count", 0)
+            self.logger.info(f"Successfully parsed GML response: {feature_count} building features")
 
-                # For now, return a placeholder structure indicating success
-                # TODO: Extract actual geometry coordinates from GML if needed
-                if feature_count > 0:
-                    # Create placeholder features to indicate successful geometry fetch
-                    features = []
-                    for _i in range(feature_count):
-                        features.append(
-                            {
-                                "type": "Feature",
-                                "properties": {"source": "GeoDanmark_WFS", "parsed_from": "GML"},
-                                "geometry": {"type": "Polygon", "coordinates": []},  # Placeholder
-                            }
-                        )
+            # For now, return a placeholder structure indicating success
+            # TODO: Extract actual geometry coordinates from GML if needed
+            if feature_count > 0:
+                # Create placeholder features to indicate successful geometry fetch
+                features = [
+                    {
+                        "type": "Feature",
+                        "properties": {"source": "GeoDanmark_WFS", "parsed_from": "GML"},
+                        "geometry": {"type": "Polygon", "coordinates": []},  # Placeholder
+                    }
+                    for _i in range(feature_count)
+                ]
 
-                    # Add small delay between requests to be respectful to the server
-                    time.sleep(0.1)
-                    return features
-                else:
-                    self.logger.warning("No building features found in GML response")
-                    return []
+                # Add small delay between requests to be respectful to the server
+                time.sleep(0.1)
+                return features
+            self.logger.warning("No building features found in GML response")
+            return []
 
         except requests.exceptions.HTTPError as e:
             # Log the actual error response for debugging
@@ -504,10 +498,11 @@ class GeoDanmarkWFSFetcher:
             retrieved_geometries: List of successfully retrieved geometries
         """
         # Extract retrieved IDs from geometries
-        retrieved_ids = []
-        for feature in retrieved_geometries:
-            if "properties" in feature and "BBRUUID" in feature["properties"]:
-                retrieved_ids.append(feature["properties"]["BBRUUID"])
+        retrieved_ids = [
+            feature["properties"]["BBRUUID"]
+            for feature in retrieved_geometries
+            if "properties" in feature and "BBRUUID" in feature["properties"]
+        ]
 
         metadata = {
             "timestamp": pipeline_start_time.isoformat(),

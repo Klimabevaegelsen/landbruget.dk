@@ -197,7 +197,7 @@ class SilverStorageManager(DuckDBProcessor):
 
         except Exception as e:
             # Fallback to CSV if Parquet fails
-            logger.warning(f"Failed to save as Parquet: {str(e)}, falling back to CSV")
+            logger.warning(f"Failed to save as Parquet: {e!s}, falling back to CSV")
             try:
                 csv_path = output_dir / f"{filename}.csv"
                 csv_path = self._convert_to_snake_case(csv_path)
@@ -219,8 +219,8 @@ class SilverStorageManager(DuckDBProcessor):
 
             except Exception as csv_error:
                 error_msg = (
-                    f"Failed to save file {filename}: Parquet failed ({str(e)}), "
-                    f"CSV failed ({str(csv_error)})"
+                    f"Failed to save file {filename}: Parquet failed ({e!s}), "
+                    f"CSV failed ({csv_error!s})"
                 )
                 logger.error(error_msg)
                 raise StorageError(error_msg) from csv_error
@@ -267,7 +267,7 @@ class SilverStorageManager(DuckDBProcessor):
             return file_path
 
         except Exception as e:
-            error_msg = f"Failed to save GeoParquet file {filename}: {str(e)}"
+            error_msg = f"Failed to save GeoParquet file {filename}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 

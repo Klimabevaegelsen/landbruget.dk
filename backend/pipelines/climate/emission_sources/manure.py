@@ -1,6 +1,7 @@
 from ..utils.conversions import ch4_to_co2e, n2o_to_co2e, nh3_to_indirect_co2e
 from .base_source import EmissionSource
 
+
 class CattleManureHousingStorage(EmissionSource):
     """
     Calculates emissions from cattle manure in housing and storage.
@@ -53,25 +54,25 @@ class CattleManureHousingStorage(EmissionSource):
                 continue
 
             # Get VS excretion rate (kg VS/animal/year)
-            vs_excretion = self.farm_data.get_animal_input(cattle_type, 'vs_excretion_kg_year')
+            vs_excretion = self.farm_data.get_animal_input(cattle_type, "vs_excretion_kg_year")
 
             # Get storage system type and duration
             storage_system = self.farm_data.get_manure_storage_system(cattle_type)
             storage_days = self.farm_data.get_manure_storage_days(cattle_type)
 
             # Get MCF based on storage system
-            mcf = self.config.get_factor('manure_factors', f'storage.mcf.{storage_system}')
+            mcf = self.config.get_factor("manure_factors", f"storage.mcf.{storage_system}")
 
             # Get B0 (default from IPCC)
-            b0 = self.config.get_factor('manure_factors', 'storage.b0')
+            b0 = self.config.get_factor("manure_factors", "storage.b0")
 
             # Calculate CH4 emissions for this cattle type
             ch4_kg = (
-                num_animals *
-                vs_excretion *
-                mcf *
-                b0 *
-                (storage_days / 365.0)  # Adjust for storage duration
+                num_animals
+                * vs_excretion
+                * mcf
+                * b0
+                * (storage_days / 365.0)  # Adjust for storage duration
             )
 
             total_ch4_kg += ch4_kg
@@ -97,13 +98,15 @@ class CattleManureHousingStorage(EmissionSource):
                 continue
 
             # Get N excretion rate (kg N/animal/year)
-            n_excretion = self.farm_data.get_animal_input(cattle_type, 'n_excretion_kg_year')
+            n_excretion = self.farm_data.get_animal_input(cattle_type, "n_excretion_kg_year")
 
             # Get storage system type
             storage_system = self.farm_data.get_manure_storage_system(cattle_type)
 
             # Get EF based on storage system
-            ef = self.config.get_factor('manure_factors', f'storage.n2o_emission_factors.{storage_system}')
+            ef = self.config.get_factor(
+                "manure_factors", f"storage.n2o_emission_factors.{storage_system}"
+            )
 
             # Calculate N2O emissions for this cattle type
             n2o_kg = num_animals * n_excretion * ef
@@ -130,19 +133,22 @@ class CattleManureHousingStorage(EmissionSource):
                 continue
 
             # Get TAN excretion rate (kg TAN/animal/year)
-            tan_excretion = self.farm_data.get_animal_input(cattle_type, 'tan_excretion_kg_year')
+            tan_excretion = self.farm_data.get_animal_input(cattle_type, "tan_excretion_kg_year")
 
             # Get storage system type
             storage_system = self.farm_data.get_manure_storage_system(cattle_type)
 
             # Get EF based on storage system
-            ef = self.config.get_factor('manure_factors', f'storage.nh3_emission_factors.{storage_system}')
+            ef = self.config.get_factor(
+                "manure_factors", f"storage.nh3_emission_factors.{storage_system}"
+            )
 
             # Calculate NH3 emissions for this cattle type
             nh3_kg = num_animals * tan_excretion * ef
             total_nh3_kg += nh3_kg
 
         return total_nh3_kg
+
 
 class ManureFieldApplication(EmissionSource):
     def calculate_co2e(self):
@@ -160,25 +166,33 @@ class ManureFieldApplication(EmissionSource):
 
         for application in manure_applications:
             # Get application details
-            application_method = application['method']  # e.g., 'injection', 'broadcast'
-            season = application['season']  # e.g., 'spring', 'summer'
-            n_applied = application['n_applied']  # kg N/ha
+            application_method = application["method"]  # e.g., 'injection', 'broadcast'
+            season = application["season"]  # e.g., 'spring', 'summer'
+            n_applied = application["n_applied"]  # kg N/ha
 
             # Calculate direct N2O emissions
-            n2o_ef = self.config.get_factor('manure_factors', f'field_application.n2o_emission_factors.{season}')
+            n2o_ef = self.config.get_factor(
+                "manure_factors", f"field_application.n2o_emission_factors.{season}"
+            )
             direct_n2o_n = n_applied * n2o_ef
             direct_n2o = direct_n2o_n * (44.0 / 28.0)  # Convert N2O-N to N2O
             direct_co2e = n2o_to_co2e(direct_n2o)
 
             # Calculate indirect N2O from NH3 volatilization
-            nh3_ef = self.config.get_factor('manure_factors', f'field_application.nh3_emission_factors.{application_method}')
+            nh3_ef = self.config.get_factor(
+                "manure_factors", f"field_application.nh3_emission_factors.{application_method}"
+            )
             nh3_n = n_applied * nh3_ef
             indirect_n2o_from_nh3 = nh3_to_indirect_co2e(nh3_n)
 
             # Calculate indirect N2O from leaching
-            leaching_fraction = self.config.get_factor('manure_factors', f'field_application.n_leaching_fractions.{season}')
+            leaching_fraction = self.config.get_factor(
+                "manure_factors", f"field_application.n_leaching_fractions.{season}"
+            )
             n_leached = n_applied * leaching_fraction
-            indirect_n2o_from_leaching = n_leached * 0.0075 * (44.0 / 28.0)  # IPCC EF for N2O from leaching
+            indirect_n2o_from_leaching = (
+                n_leached * 0.0075 * (44.0 / 28.0)
+            )  # IPCC EF for N2O from leaching
             indirect_co2e_from_leaching = n2o_to_co2e(indirect_n2o_from_leaching)
 
             # Sum up all emissions for this application

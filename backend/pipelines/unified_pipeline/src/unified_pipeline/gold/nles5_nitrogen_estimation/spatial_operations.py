@@ -8,7 +8,13 @@ This module handles all spatial operations including:
 - Table optimization for production performance
 """
 
+import sys
 import time
+from pathlib import Path
+
+# Add common utilities to path for CRS constants
+sys.path.insert(0, str(Path(__file__).resolve().parents[6]))
+from common.crs_utils import DANISH_UTM, WGS84
 
 from unified_pipeline.util.timing import timed
 
@@ -78,11 +84,11 @@ class NLES5SpatialOperations:
                 # to ensure no data loss. This triggers DuckDB's spatial indexing
                 # while maintaining result consistency. Denmark max width ~400km,
                 # so 100km radius should cover all reasonable cases
-                self.conn.execute("""
+                self.conn.execute(f"""
                     CREATE OR REPLACE TABLE fields_climate_candidates AS
-                    SELECT 
-                        f.field_id, f.geom, f.geometry, f.area_ha, f.crop_code, f.crop_name, 
-                        f.cvr_number, f.year, f.block_id, f.journal_number, 
+                    SELECT
+                        f.field_id, f.geom, f.geometry, f.area_ha, f.crop_code, f.crop_name,
+                        f.cvr_number, f.year, f.block_id, f.journal_number,
                         f.layer_type, f.processed_at, f.reported_area_ha, f.GB, f.field_area_m2,
                         c.year as climate_year,
                         c.geometry as climate_point,
@@ -94,7 +100,8 @@ class NLES5SpatialOperations:
                         ABS(f.year - c.year) as year_diff
                     FROM agricultural_fields_spatial f
                     JOIN climate_percolation c ON ST_Intersects(
-                        ST_Centroid(f.geom), ST_Buffer(c.geometry, 100000)
+                        ST_Centroid(f.geom),
+                        ST_Buffer(c.geometry, 100000)
                     )
                     WHERE ABS(f.year - c.year) <= 2
                 """)
@@ -105,14 +112,14 @@ class NLES5SpatialOperations:
                     WITH ranked_climate AS (
                         SELECT *,
                             ROW_NUMBER() OVER (
-                                PARTITION BY field_id, year 
+                                PARTITION BY field_id, year
                                 ORDER BY year_diff, distance_to_climate
                             ) as rn
                         FROM fields_climate_candidates
                     )
-                    SELECT 
+                    SELECT
                         field_id, geom, geometry, area_ha, crop_code, crop_name, cvr_number, year,
-                        block_id, journal_number, layer_type, processed_at, 
+                        block_id, journal_number, layer_type, processed_at,
                         reported_area_ha, GB, field_area_m2,
                         climate_year, climate_point,
                         perco_apr_aug_current, perco_sep_mar_current,
@@ -120,7 +127,7 @@ class NLES5SpatialOperations:
                         total_percolation, avg_precipitation, avg_evaporation,
                         sufficient_climate_data,
                         distance_to_climate,
-                        CASE 
+                        CASE
                             WHEN distance_to_climate <= 5000 THEN 'excellent'
                             WHEN distance_to_climate <= 10000 THEN 'good'
                             WHEN distance_to_climate <= 20000 THEN 'fair'
@@ -148,7 +155,7 @@ class NLES5SpatialOperations:
 
             # Log quality statistics
             quality_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total,
                     COUNT(CASE WHEN climate_data_quality = 'excellent' THEN 1 END) as excellent,
                     COUNT(CASE WHEN climate_data_quality = 'good' THEN 1 END) as good,
@@ -168,7 +175,7 @@ class NLES5SpatialOperations:
 
             # DIAGNOSTIC: Check for spatial join issues that could cause constant values
             spatial_join_debug = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(DISTINCT total_percolation) as unique_percolation,
                     COUNT(DISTINCT climate_point) as unique_climate_points,
                     AVG(total_percolation) as avg_percolation,
@@ -220,7 +227,7 @@ class NLES5SpatialOperations:
         except Exception as e:
             raise ValueError(
                 f"Spatial join with climate data failed: {e}. Real climate data is required."
-            )
+            ) from e
 
     @timed(name="Joining with soil data")
     def _join_with_soil_data(self) -> str:
@@ -245,7 +252,7 @@ class NLES5SpatialOperations:
         except Exception as e:
             raise ValueError(
                 f"Sequential spatial joins failed: {e}. Real data for all stages is required."
-            )
+            ) from e
 
     def _join_fields_with_soil(self, input_table: str) -> str:
         """Join fields with soil type data."""
@@ -258,7 +265,7 @@ class NLES5SpatialOperations:
                 if soil_count == 0:
                     raise ValueError("soil_types_prepared table is empty - no soil data available")
             except Exception as e:
-                raise ValueError(f"soil_types_prepared table not available: {e}")
+                raise ValueError(f"soil_types_prepared table not available: {e}") from e
 
             self.log.info(f"Joining fields with {soil_count:,} soil type records")
 
@@ -271,7 +278,7 @@ class NLES5SpatialOperations:
 
             # 🔍 DIAGNOSTIC LOG: Check for field_uuid column existence before join
             has_uuid = self.conn.execute(f"""
-                SELECT COUNT(*) FROM information_schema.columns 
+                SELECT COUNT(*) FROM information_schema.columns
                 WHERE table_name = '{input_table}' AND column_name = 'field_uuid'
             """).fetchone()[0]
 
@@ -294,7 +301,7 @@ class NLES5SpatialOperations:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_with_soil AS
                 WITH ranked_soil_matches AS (
-                    SELECT 
+                    SELECT
                         f.field_id,
                         f.field_uuid,
                         f.block_id,
@@ -318,33 +325,33 @@ class NLES5SpatialOperations:
                         f.avg_evaporation,
                         f.sufficient_climate_data,
                         f.distance_to_climate,
-                        s.soil_type, 
+                        s.soil_type,
                         s.soil_code,
                         s.clay_content,
-                        COALESCE(s.soil_description, 'Unknown soil') 
+                        COALESCE(s.soil_description, 'Unknown soil')
                             as soil_description,
-                        ST_Distance(ST_Centroid(f.geom), ST_Centroid(s.geom)) 
+                        ST_Distance(ST_Centroid(f.geom), ST_Centroid(s.geom))
                             as distance_to_soil_sample,
-                        CASE 
-                            WHEN s.soil_code IS NOT NULL THEN true 
-                            ELSE false 
+                        CASE
+                            WHEN s.soil_code IS NOT NULL THEN true
+                            ELSE false
                         END as has_soil_data,
                         ROW_NUMBER() OVER (
-                            PARTITION BY f.field_uuid 
-                            ORDER BY 
+                            PARTITION BY f.field_uuid
+                            ORDER BY
                                 -- Prioritize non-null soil matches
                                 CASE WHEN s.soil_code IS NULL THEN 1 ELSE 0 END,
                                 -- Then select closest
                                 ST_Distance(ST_Centroid(f.geom), ST_Centroid(s.geom))
                         ) as soil_rank
                     FROM {input_table} f  -- Large table on left (2.3M+ records)
-                    LEFT JOIN soil_types_prepared s 
+                    LEFT JOIN soil_types_prepared s
                         ON ST_Intersects(ST_Centroid(f.geom), s.geom)
                         -- Small table on right (~13K records)
                 )
-                SELECT 
+                SELECT
                     f.*,
-                    s.soil_type, 
+                    s.soil_type,
                     s.soil_code,  -- FIXED: Include soil_code in the join
                     s.clay_content,  -- FIXED: Include clay_content from our mapping
                     COALESCE(s.soil_description, 'Unknown soil') as soil_description,
@@ -357,10 +364,10 @@ class NLES5SpatialOperations:
             # 🔍 DIAGNOSTIC LOG: Verify deduplication worked
             if has_uuid:
                 fields_after = self.conn.execute("""
-                    SELECT 
-                        COUNT(*) as total, 
+                    SELECT
+                        COUNT(*) as total,
                         COUNT(DISTINCT field_uuid) as unique_uuids,
-                        COUNT(*) - COUNT(DISTINCT field_uuid) 
+                        COUNT(*) - COUNT(DISTINCT field_uuid)
                             as duplicate_rows
                     FROM fields_with_soil
                 """).fetchone()
@@ -379,9 +386,9 @@ class NLES5SpatialOperations:
 
             # Validate results with enhanced logging
             join_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
-                    COUNT(CASE WHEN soil_code IS NOT NULL THEN 1 END) 
+                    COUNT(CASE WHEN soil_code IS NOT NULL THEN 1 END)
                         as fields_with_soil,
                     COUNT(DISTINCT soil_code) as unique_soil_codes,
                     COUNT(DISTINCT clay_content) as unique_clay_values,
@@ -409,12 +416,11 @@ class NLES5SpatialOperations:
 
             self.log.info(f"✅ Soil join completed: {total:,} fields processed")
             self.log.info("📊 Soil join quality:")
-            self.log.info(f"   Fields with soil data: {with_soil:,} " f"({with_soil / total:.1%})")
+            self.log.info(f"   Fields with soil data: {with_soil:,} ({with_soil / total:.1%})")
             self.log.info(f"   Unique soil codes: {unique_codes:,}")
             self.log.info(f"   Clay content variation: {unique_clay:,} unique values")
             self.log.info(
-                f"   Clay content range: {min_clay:.1f}% - {max_clay:.1f}% "
-                f"(avg: {avg_clay:.1f}%)"
+                f"   Clay content range: {min_clay:.1f}% - {max_clay:.1f}% (avg: {avg_clay:.1f}%)"
             )
             self.log.info(
                 f"   Average distance to soil sample: {avg_dist:.1f}m"
@@ -424,10 +430,10 @@ class NLES5SpatialOperations:
 
             # Log sample results for verification
             sample_results = self.conn.execute("""
-                SELECT 
-                    field_id, soil_code, clay_content, 
+                SELECT
+                    field_id, soil_code, clay_content,
                     distance_to_soil_sample
-                FROM fields_with_soil 
+                FROM fields_with_soil
                 WHERE soil_code IS NOT NULL
                 ORDER BY RANDOM()
                 LIMIT 5
@@ -456,15 +462,15 @@ class NLES5SpatialOperations:
             # This step mainly validates and enriches crop data
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE fields_with_crops AS
-                SELECT 
+                SELECT
                     f.*,
-                    CASE 
-                        WHEN f.crop_code IS NOT NULL AND f.crop_code != '' 
+                    CASE
+                        WHEN f.crop_code IS NOT NULL AND f.crop_code != ''
                             THEN f.crop_code
                         ELSE 'UNKNOWN'
                     END as validated_crop_code,
-                    CASE 
-                        WHEN f.crop_name IS NOT NULL AND f.crop_name != '' 
+                    CASE
+                        WHEN f.crop_name IS NOT NULL AND f.crop_name != ''
                             THEN f.crop_name
                         ELSE 'Unknown Crop'
                     END as validated_crop_name
@@ -473,9 +479,9 @@ class NLES5SpatialOperations:
 
             # Validate crop data quality
             crop_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
-                    COUNT(CASE WHEN validated_crop_code != 'UNKNOWN' THEN 1 END) 
+                    COUNT(CASE WHEN validated_crop_code != 'UNKNOWN' THEN 1 END)
                         as fields_with_crops,
                     COUNT(DISTINCT validated_crop_code) as unique_crops
                 FROM fields_with_crops
@@ -494,7 +500,7 @@ class NLES5SpatialOperations:
             raise ValueError(
                 f"Crop classification join failed: {e}. Pipeline requires "
                 f"actual crop data, not defaults."
-            )
+            ) from e
 
     @timed(name="Joining with nitrogen data using NLES5 distribution algorithm")
     def _join_fields_with_nitrogen(self, input_table: str) -> str:
@@ -539,7 +545,7 @@ class NLES5SpatialOperations:
                     # Rename to standard name for pipeline compatibility
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE fields_with_fertilizer AS
-                        SELECT 
+                        SELECT
                             *,
                             'nles5_distributed' as nitrogen_data_source
                         FROM {distributed_table}
@@ -547,7 +553,7 @@ class NLES5SpatialOperations:
 
                     # Log fertilizer distribution results
                     distribution_count = self.conn.execute("""
-                        SELECT COUNT(*) FROM fields_with_fertilizer 
+                        SELECT COUNT(*) FROM fields_with_fertilizer
                         WHERE nitrogen_data_source = 'nles5_distributed'
                     """).fetchone()[0]
                     self.log.info(
@@ -561,19 +567,19 @@ class NLES5SpatialOperations:
 
                     # Log distribution statistics
                     stats = self.conn.execute("""
-                        SELECT 
+                        SELECT
                             COUNT(*) as total_fields,
-                            COUNT(CASE 
-                                WHEN fertilizer_allocation_method != 'no_fertilizer_data' 
-                                THEN 1 
+                            COUNT(CASE
+                                WHEN fertilizer_allocation_method != 'no_fertilizer_data'
+                                THEN 1
                             END) as fields_with_fertilizer,
-                            COUNT(CASE 
-                                WHEN fertilizer_allocation_method = 'proportional' 
-                                THEN 1 
+                            COUNT(CASE
+                                WHEN fertilizer_allocation_method = 'proportional'
+                                THEN 1
                             END) as proportional_allocations,
-                            COUNT(CASE 
-                                WHEN fertilizer_allocation_method = 'priority_based' 
-                                THEN 1 
+                            COUNT(CASE
+                                WHEN fertilizer_allocation_method = 'priority_based'
+                                THEN 1
                             END) as priority_allocations,
                             AVG(organic_quota_fraction) as avg_organic_fraction
                         FROM fields_with_fertilizer
@@ -592,7 +598,7 @@ class NLES5SpatialOperations:
                 # Fallback to simple approach
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE fields_with_fertilizer AS
-                    SELECT 
+                    SELECT
                         *,
                         0.0 as organic_n_hus,
                         0.0 as mineral_n_foraar,
@@ -613,7 +619,7 @@ class NLES5SpatialOperations:
                     0
                 ]
                 if field_plan_count > 0:
-                    self.log.info(f"Supplementing with {field_plan_count:,} " f"field plan records")
+                    self.log.info(f"Supplementing with {field_plan_count:,} field plan records")
 
                     # Check if enhanced GKEA-FVM mappings are available
                     # (try year-specific tables first)
@@ -622,8 +628,8 @@ class NLES5SpatialOperations:
                     try:
                         # First try to find year-specific enhanced mappings tables
                         tables = self.conn.execute("""
-                            SELECT table_name 
-                            FROM information_schema.tables 
+                            SELECT table_name
+                            FROM information_schema.tables
                             WHERE table_name LIKE 'gkea_fvm_enhanced_mappings%'
                             ORDER BY table_name DESC
                             LIMIT 1
@@ -647,28 +653,28 @@ class NLES5SpatialOperations:
                         # Use enhanced mappings for better field plan data integration
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE fields_with_field_plan AS
-                            SELECT 
+                            SELECT
                                 f.*,
-                                COALESCE(f.tn_t_ha, fp.total_n_kg_ha) 
+                                COALESCE(f.tn_t_ha, fp.total_n_kg_ha)
                                     as final_total_n,
-                                COALESCE(f.mineral_n_foraar, fp.mineral_n_spring) 
+                                COALESCE(f.mineral_n_foraar, fp.mineral_n_spring)
                                     as final_mineral_n_spring,
-                                COALESCE(f.organic_n_hus, fp.organic_n_total) 
+                                COALESCE(f.organic_n_hus, fp.organic_n_total)
                                     as final_organic_n,
-                                CASE 
-                                    WHEN f.nitrogen_data_source IS NOT NULL 
+                                CASE
+                                    WHEN f.nitrogen_data_source IS NOT NULL
                                         THEN f.nitrogen_data_source
-                                    WHEN em.match_method = 'agricultural_pattern' 
+                                    WHEN em.match_method = 'agricultural_pattern'
                                         THEN 'field_plan_enhanced'
                                     ELSE 'field_plan'
                                 END as final_nitrogen_source,
-                                COALESCE(em.confidence_score, 1.0) 
+                                COALESCE(em.confidence_score, 1.0)
                                     as field_plan_match_confidence
                             FROM {field_plan_table} f
-                            LEFT JOIN {enhanced_mappings_table} em 
+                            LEFT JOIN {enhanced_mappings_table} em
                                 ON f.field_id = em.fvm_field_id
-                            LEFT JOIN field_plan fp 
-                                ON em.gkea_field_id = fp.field_id 
+                            LEFT JOIN field_plan fp
+                                ON em.gkea_field_id = fp.field_id
                                 AND f.year = fp.year
                         """)
                     else:
@@ -678,16 +684,16 @@ class NLES5SpatialOperations:
                         )
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE fields_with_field_plan AS
-                            SELECT 
+                            SELECT
                                 f.*,
-                                COALESCE(f.tn_t_ha, fp.total_n_kg_ha) 
+                                COALESCE(f.tn_t_ha, fp.total_n_kg_ha)
                                     as final_total_n,
-                                COALESCE(f.mineral_n_foraar, fp.mineral_n_spring) 
+                                COALESCE(f.mineral_n_foraar, fp.mineral_n_spring)
                                     as final_mineral_n_spring,
-                                COALESCE(f.organic_n_hus, fp.organic_n_total) 
+                                COALESCE(f.organic_n_hus, fp.organic_n_total)
                                     as final_organic_n,
-                                CASE 
-                                    WHEN f.nitrogen_data_source IS NOT NULL 
+                                CASE
+                                    WHEN f.nitrogen_data_source IS NOT NULL
                                         THEN f.nitrogen_data_source
                                     ELSE 'field_plan'
                                 END as final_nitrogen_source,
@@ -712,7 +718,7 @@ class NLES5SpatialOperations:
 
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
-                        SELECT 
+                        SELECT
                             f.*,
                             cc.catch_crop_type, cc.catch_crop_area_ha,
                             cc.n_reduction_effect
@@ -725,7 +731,7 @@ class NLES5SpatialOperations:
                     # Create the final table without catch crops data
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
-                        SELECT 
+                        SELECT
                             f.*,
                             'none' as catch_crop_type,
                             0.0 as catch_crop_area_ha,
@@ -738,7 +744,7 @@ class NLES5SpatialOperations:
                 # Create the final table without catch crops data
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE fields_with_climate_soil_crops AS
-                    SELECT 
+                    SELECT
                         f.*,
                         'none' as catch_crop_type,
                         0.0 as catch_crop_area_ha,
@@ -749,13 +755,13 @@ class NLES5SpatialOperations:
 
             # Step 5: Validate nitrogen data quality
             nitrogen_stats = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
-                    COUNT(CASE WHEN final_total_n IS NOT NULL THEN 1 END) 
+                    COUNT(CASE WHEN final_total_n IS NOT NULL THEN 1 END)
                         as with_total_n,
-                    COUNT(CASE WHEN final_mineral_n_spring IS NOT NULL THEN 1 END) 
+                    COUNT(CASE WHEN final_mineral_n_spring IS NOT NULL THEN 1 END)
                         as with_mineral_n,
-                    COUNT(CASE WHEN final_organic_n IS NOT NULL THEN 1 END) 
+                    COUNT(CASE WHEN final_organic_n IS NOT NULL THEN 1 END)
                         as with_organic_n,
                     AVG(final_total_n) as avg_total_n
                 FROM {final_table}
@@ -765,12 +771,8 @@ class NLES5SpatialOperations:
             self.log.info("✅ Nitrogen data integration completed:")
             self.log.info(f"   Total fields: {total:,}")
             self.log.info(f"   With total N: {with_total_n:,} ({with_total_n / total:.1%})")
-            self.log.info(
-                f"   With mineral N: {with_mineral_n:,} " f"({with_mineral_n / total:.1%})"
-            )
-            self.log.info(
-                f"   With organic N: {with_organic_n:,} " f"({with_organic_n / total:.1%})"
-            )
+            self.log.info(f"   With mineral N: {with_mineral_n:,} ({with_mineral_n / total:.1%})")
+            self.log.info(f"   With organic N: {with_organic_n:,} ({with_organic_n / total:.1%})")
             if avg_total_n:
                 self.log.info(f"   Average total N: {avg_total_n:.1f} kg/ha")
 
@@ -788,13 +790,13 @@ class NLES5SpatialOperations:
             raise ValueError(
                 f"Nitrogen data join failed: {e}. Pipeline requires actual "
                 f"nitrogen data, not defaults."
-            )
+            ) from e
 
     def _log_spatial_join_summary(self, final_table: str):
         """Log comprehensive spatial join summary statistics."""
         try:
             stats = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
                     COUNT(CASE WHEN total_percolation IS NOT NULL THEN 1 END) as with_climate,
                     COUNT(CASE WHEN soil_type IS NOT NULL THEN 1 END) as with_soil,
@@ -821,8 +823,7 @@ class NLES5SpatialOperations:
 
             if total_count <= chunk_size:
                 self.log.info(
-                    f"Table {table_name} has {total_count:,} records - "
-                    f"processing in single batch"
+                    f"Table {table_name} has {total_count:,} records - processing in single batch"
                 )
                 return total_count
 
@@ -921,37 +922,38 @@ class NLES5SpatialOperations:
                 """)
 
                 # SPATIAL_JOIN optimized join for this batch
+                # Data is already in EPSG:25832 - buffer operations work directly in meters
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {batch_table} AS
                     WITH batch_climate_candidates AS (
-                        SELECT 
+                        SELECT
                             f.*,
                             c.year as climate_year,
                             c.geometry as climate_point,
                             c.perco_apr_aug_current, c.perco_sep_mar_current,
                             c.perco_apr_aug_previous, c.perco_sep_mar_previous,
-                            c.total_percolation, c.avg_precipitation, 
+                            c.total_percolation, c.avg_precipitation,
                             c.avg_evaporation, c.sufficient_climate_data,
-                            ST_Distance(ST_Centroid(f.geom), c.geometry) 
+                            ST_Distance(ST_Centroid(f.geom), c.geometry)
                                 as distance_to_climate,
                             ABS(f.year - c.year) as year_diff,
                             ROW_NUMBER() OVER (
-                                PARTITION BY f.field_id, f.year 
-                                ORDER BY 
-                                    ABS(f.year - c.year), 
+                                PARTITION BY f.field_id, f.year
+                                ORDER BY
+                                    ABS(f.year - c.year),
                                     ST_Distance(ST_Centroid(f.geom), c.geometry)
                             ) as rn
                         FROM fields_batch f
-                        JOIN climate_percolation c 
+                        JOIN climate_percolation c
                             ON ST_Intersects(
-                                ST_Centroid(f.geom), 
+                                ST_Centroid(f.geom),
                                 ST_Buffer(c.geometry, 20000)
                             )
                         WHERE ABS(f.year - c.year) <= 2
                     )
-                    SELECT 
+                    SELECT
                         field_id, geom, geometry, area_ha, crop_code, crop_name, cvr_number, year,
-                        block_id, journal_number, layer_type, processed_at, 
+                        block_id, journal_number, layer_type, processed_at,
                         reported_area_ha, GB, field_area_m2,
                         climate_year, climate_point,
                         perco_apr_aug_current, perco_sep_mar_current,
@@ -959,7 +961,7 @@ class NLES5SpatialOperations:
                         total_percolation, avg_precipitation, avg_evaporation,
                         sufficient_climate_data,
                         distance_to_climate,
-                        CASE 
+                        CASE
                             WHEN distance_to_climate <= 5000 THEN 'excellent'
                             WHEN distance_to_climate <= 10000 THEN 'good'
                             WHEN distance_to_climate <= 20000 THEN 'fair'
@@ -1046,11 +1048,15 @@ class NLES5SpatialOperations:
             self.log.info("Verifying SPATIAL_JOIN operator compliance (PR #545)")
 
             # Test query using PR #545 compliant pattern
+            # Data is already in EPSG:25832 - buffer operations work directly in meters
             explain_result = self.conn.execute("""
-                EXPLAIN SELECT COUNT(*) 
+                EXPLAIN SELECT COUNT(*)
                 FROM agricultural_fields_spatial f
-                JOIN climate_percolation c 
-                    ON ST_Intersects(ST_Centroid(f.geom), ST_Buffer(c.geometry, 10000))
+                JOIN climate_percolation c
+                    ON ST_Intersects(
+                        ST_Centroid(f.geom),
+                        ST_Buffer(c.geometry, 10000)
+                    )
                 LIMIT 1
             """).fetchall()
 
@@ -1069,11 +1075,15 @@ class NLES5SpatialOperations:
             # Additional verification: test the specific pattern we're using
             self.log.info("Testing SPATIAL_JOIN pattern compliance...")
             try:
+                # Data is already in EPSG:25832 - buffer operations work directly in meters
                 test_result = self.conn.execute("""
-                    EXPLAIN ANALYZE SELECT COUNT(*) 
+                    EXPLAIN ANALYZE SELECT COUNT(*)
                     FROM agricultural_fields_spatial f
-                    JOIN climate_percolation c 
-                        ON ST_Intersects(ST_Centroid(f.geom), ST_Buffer(c.geometry, 20000))
+                    JOIN climate_percolation c
+                        ON ST_Intersects(
+                            ST_Centroid(f.geom),
+                            ST_Buffer(c.geometry, 20000)
+                        )
                     WHERE ABS(f.year - c.year) <= 2
                     LIMIT 10
                 """).fetchall()
@@ -1118,11 +1128,15 @@ class NLES5SpatialOperations:
 
             # Check 2: Spatial predicate in JOIN ON clause
             try:
+                # Data is already in EPSG:25832 - buffer operations work directly in meters
                 self.conn.execute("""
                     SELECT COUNT(*) FROM (
                         SELECT 1 FROM agricultural_fields_spatial f
-                        JOIN climate_percolation c 
-                            ON ST_Intersects(ST_Centroid(f.geom), ST_Buffer(c.geometry, 1000))
+                        JOIN climate_percolation c
+                            ON ST_Intersects(
+                                ST_Centroid(f.geom),
+                                ST_Buffer(c.geometry, 1000)
+                            )
                         LIMIT 1
                     ) test
                 """).fetchone()
@@ -1167,7 +1181,7 @@ class NLES5SpatialOperations:
 
             # Ensure geometries are valid
             invalid_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {table_name} 
+                SELECT COUNT(*) FROM {table_name}
                 WHERE geom IS NOT NULL AND NOT ST_IsValid(geom)
             """).fetchone()[0]
 
@@ -1175,8 +1189,8 @@ class NLES5SpatialOperations:
                 self.log.warning(f"Found {invalid_count} invalid geometries in {table_name}")
                 # Fix invalid geometries
                 self.conn.execute(f"""
-                    UPDATE {table_name} 
-                    SET geom = ST_MakeValid(geom) 
+                    UPDATE {table_name}
+                    SET geom = ST_MakeValid(geom)
                     WHERE geom IS NOT NULL AND NOT ST_IsValid(geom)
                 """)
                 self.log.info(f"✅ Fixed {invalid_count} invalid geometries")
@@ -1222,13 +1236,48 @@ class NLES5SpatialOperations:
 
                 # Create a simplified spatial table without complex transformations
                 # to avoid performance issues
-                # NOTE: Agricultural fields data already has geometry in the correct format
-                self.log.info("Creating spatial table with COORDINATE SYSTEM FIX...")
-                self.log.info(
-                    "🔧 APPLYING COORDINATE SWAP FIX: Fields have X/Y coordinates swapped"
-                )
-                self.log.info("   Original: X=latitude, Y=longitude (INCORRECT)")
-                self.log.info("   Fixed: X=longitude, Y=latitude (WGS84 STANDARD)")
+                # NOTE: Agricultural fields data is now in EPSG:25832 (Danish UTM) from silver layer
+                # Buffer/distance operations work directly in meters - no CRS transformation needed
+                self.log.info("Creating spatial table from EPSG:25832 data...")
+                self.log.info("   CRS: EPSG:25832 (Danish UTM Zone 32N)")
+                self.log.info("   Units: meters (buffer/distance work directly)")
+
+                # Validate data is in EPSG:25832 (Danish UTM) coordinate range
+                # X (Easting): 400,000 - 900,000 meters
+                # Y (Northing): 6,000,000 - 6,500,000 meters
+                try:
+                    bounds = self.conn.execute("""
+                        SELECT
+                            MIN(ST_X(ST_Centroid(geometry))) as min_x,
+                            MAX(ST_X(ST_Centroid(geometry))) as max_x,
+                            MIN(ST_Y(ST_Centroid(geometry))) as min_y,
+                            MAX(ST_Y(ST_Centroid(geometry))) as max_y,
+                            COUNT(*) as total_count
+                        FROM agricultural_fields
+                        WHERE geometry IS NOT NULL AND ST_IsValid(geometry)
+                    """).fetchone()
+
+                    min_x, max_x, min_y, max_y, total_count = bounds
+                    is_utm = (
+                        400000 <= min_x <= 900000
+                        and 400000 <= max_x <= 900000
+                        and 6000000 <= min_y <= 6500000
+                        and 6000000 <= max_y <= 6500000
+                    )
+
+                    if is_utm:
+                        self.log.info(
+                            f"✅ CRS VALIDATED: {total_count:,} fields in EPSG:25832 "
+                            f"(X: {min_x:.0f}-{max_x:.0f}, Y: {min_y:.0f}-{max_y:.0f})"
+                        )
+                    else:
+                        self.log.warning(
+                            f"⚠️ CRS WARNING: Coordinates may not be EPSG:25832! "
+                            f"(X: {min_x:.2f}-{max_x:.2f}, Y: {min_y:.2f}-{max_y:.2f}). "
+                            f"Expected UTM bounds: X(400k-900k), Y(6M-6.5M)"
+                        )
+                except Exception as e:
+                    self.log.warning(f"Failed to validate CRS bounds: {e}")
 
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE agricultural_fields_spatial AS
@@ -1246,23 +1295,9 @@ class NLES5SpatialOperations:
                         CURRENT_TIMESTAMP as processed_at,
                         area_ha as reported_area_ha,
                         false as grundbetaling_eligible,
-                        -- COORDINATE SYSTEM FIX: Swap X/Y coordinates to correct WGS84 standard
-                        -- Agricultural fields incorrectly have X=latitude, Y=longitude
-                        -- WGS84 standard: X=longitude (8-15°), Y=latitude (54-58°)
-                        CASE 
-                            WHEN geometry IS NOT NULL AND ST_IsValid(geometry) THEN
-                                -- Check if coordinates are swapped
-                                -- (X > 50 indicates latitude in X position)
-                                CASE 
-                                    WHEN ST_X(ST_Centroid(geometry)) > 50.0 THEN
-                                        -- Coordinates are swapped - fix by swapping X and Y
-                                        ST_FlipCoordinates(geometry)
-                                    ELSE
-                                        -- Coordinates are already correct
-                                        geometry
-                                END
-                            ELSE geometry
-                        END as geom,
+                        -- Geometry is already in EPSG:25832 (Danish UTM) from silver layer
+                        -- No coordinate transformation needed - buffer/distance work directly in meters
+                        geometry as geom,
                         geometry as original_geometry,  -- Keep original for debugging
                         -- Convert hectares to square meters (simple calculation)
                         area_ha * 10000 as field_area_m2
@@ -1281,19 +1316,17 @@ class NLES5SpatialOperations:
                         "all geometries invalid or missing"
                     )
 
-                # Diagnostic: Check coordinate fix results
-                coordinate_fix_stats = self.conn.execute("""
-                    SELECT 
+                # Diagnostic: Validate coordinates are in EPSG:25832 (Danish UTM) range
+                coordinate_stats = self.conn.execute("""
+                    SELECT
                         COUNT(*) as total_fields,
-                        COUNT(CASE WHEN ST_X(ST_Centroid(original_geometry)) > 50.0 
-                            THEN 1 END) as fields_with_swapped_coords,
-                        COUNT(CASE WHEN ST_X(ST_Centroid(geom)) BETWEEN 8.0 AND 15.0 
-                            AND ST_Y(ST_Centroid(geom)) BETWEEN 54.0 AND 58.0 
-                            THEN 1 END) as fields_with_correct_coords,
-                        MIN(ST_X(ST_Centroid(geom))) as min_longitude,
-                        MAX(ST_X(ST_Centroid(geom))) as max_longitude,
-                        MIN(ST_Y(ST_Centroid(geom))) as min_latitude,
-                        MAX(ST_Y(ST_Centroid(geom))) as max_latitude
+                        COUNT(CASE WHEN ST_X(ST_Centroid(geom)) BETWEEN 400000 AND 900000
+                            AND ST_Y(ST_Centroid(geom)) BETWEEN 6000000 AND 6500000
+                            THEN 1 END) as fields_in_utm_range,
+                        MIN(ST_X(ST_Centroid(geom))) as min_easting,
+                        MAX(ST_X(ST_Centroid(geom))) as max_easting,
+                        MIN(ST_Y(ST_Centroid(geom))) as min_northing,
+                        MAX(ST_Y(ST_Centroid(geom))) as max_northing
                     FROM agricultural_fields_spatial
                 """).fetchone()
 
@@ -1301,41 +1334,34 @@ class NLES5SpatialOperations:
                     f"✅ Created agricultural_fields_spatial: "
                     f"{spatial_count:,} records with valid geometries"
                 )
-                self.log.info("📍 COORDINATE FIX RESULTS:")
-                self.log.info(f"   Total fields: {coordinate_fix_stats[0]:,}")
+                self.log.info("📍 COORDINATE VALIDATION (EPSG:25832 UTM):")
+                self.log.info(f"   Total fields: {coordinate_stats[0]:,}")
+                self.log.info(f"   Fields in valid UTM range: {coordinate_stats[1]:,}")
+                self.log.info("   Coordinate ranges:")
                 self.log.info(
-                    f"   Fields with swapped coordinates (fixed): {coordinate_fix_stats[1]:,}"
+                    f"     Easting (X): {coordinate_stats[2]:,.0f}m to {coordinate_stats[3]:,.0f}m"
                 )
                 self.log.info(
-                    f"   Fields with correct WGS84 coordinates: {coordinate_fix_stats[2]:,}"
-                )
-                self.log.info("   Final coordinate ranges:")
-                self.log.info(
-                    f"     Longitude: "
-                    f"{coordinate_fix_stats[3]:.3f}° to {coordinate_fix_stats[4]:.3f}°"
-                )
-                self.log.info(
-                    f"     Latitude: "
-                    f"{coordinate_fix_stats[5]:.3f}° to {coordinate_fix_stats[6]:.3f}°"
+                    f"     Northing (Y): {coordinate_stats[4]:,.0f}m to {coordinate_stats[5]:,.0f}m"
                 )
 
                 if (
-                    coordinate_fix_stats[2] < coordinate_fix_stats[0] * 0.8
-                ):  # Less than 80% have correct coordinates
+                    coordinate_stats[1] < coordinate_stats[0] * 0.8
+                ):  # Less than 80% have valid UTM coordinates
                     self.log.error(
-                        f"🚨 COORDINATE FIX ISSUE: Only "
-                        f"{coordinate_fix_stats[2]:,}/{coordinate_fix_stats[0]:,} "
-                        f"fields have correct WGS84 coordinates!"
+                        f"🚨 COORDINATE ISSUE: Only "
+                        f"{coordinate_stats[1]:,}/{coordinate_stats[0]:,} "
+                        f"fields have valid EPSG:25832 UTM coordinates!"
                     )
                 else:
                     self.log.info(
-                        f"✅ COORDINATE FIX SUCCESSFUL: "
-                        f"{coordinate_fix_stats[2]:,}/{coordinate_fix_stats[0]:,} "
-                        f"fields now have correct WGS84 coordinates"
+                        f"✅ COORDINATE VALIDATION PASSED: "
+                        f"{coordinate_stats[1]:,}/{coordinate_stats[0]:,} "
+                        f"fields have valid EPSG:25832 UTM coordinates"
                     )
 
             except Exception as e:
-                raise ValueError(f"Failed to create agricultural_fields_spatial: {e}")
+                raise ValueError(f"Failed to create agricultural_fields_spatial: {e}") from e
 
             # Step 2: Create dmi_climate_prepared from climate_percolation
             try:
@@ -1379,7 +1405,7 @@ class NLES5SpatialOperations:
                 )
 
             except Exception as e:
-                raise ValueError(f"Failed to create dmi_climate_prepared: {e}")
+                raise ValueError(f"Failed to create dmi_climate_prepared: {e}") from e
 
             # Step 3: Create soil_types_prepared from soil_types
             try:
@@ -1393,7 +1419,7 @@ class NLES5SpatialOperations:
 
                 # DIAGNOSTIC: Check original soil geometry coordinates before transformation
                 original_coord_check = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         MIN(ST_X(ST_Centroid(geometry))) as min_x,
                         MAX(ST_X(ST_Centroid(geometry))) as max_x,
                         MIN(ST_Y(ST_Centroid(geometry))) as min_y,
@@ -1402,12 +1428,12 @@ class NLES5SpatialOperations:
                     WHERE geometry IS NOT NULL
                 """).fetchone()
 
-                self.log.info("🔍 ORIGINAL soil geometry coordinates (before fix):")
+                self.log.info("🔍 Soil geometry coordinate ranges (EPSG:25832 UTM):")
                 self.log.info(
-                    f"   X range: {original_coord_check[0]:.2f}° to {original_coord_check[1]:.2f}°"
+                    f"   Easting (X): {original_coord_check[0]:,.0f}m to {original_coord_check[1]:,.0f}m"
                 )
                 self.log.info(
-                    f"   Y range: {original_coord_check[2]:.2f}° to {original_coord_check[3]:.2f}°"
+                    f"   Northing (Y): {original_coord_check[2]:,.0f}m to {original_coord_check[3]:,.0f}m"
                 )
 
                 self.conn.execute("""
@@ -1418,87 +1444,85 @@ class NLES5SpatialOperations:
                         COALESCE(soil_description, 'Unknown soil type') as soil_description,
                         -- FIXED: Use real Danish soil classification data to derive clay content
                         -- Based on actual Danish soil science and the government soil descriptions
-                        CASE 
+                        CASE
                             -- Heavy clay soils based on Danish descriptions
-                            WHEN COALESCE(soil_description, '') ILIKE '%svær ler%' 
-                                OR COALESCE(soil_description, '') ILIKE '%heavy clay%' 
-                                THEN 35.0  
+                            WHEN COALESCE(soil_description, '') ILIKE '%svær ler%'
+                                OR COALESCE(soil_description, '') ILIKE '%heavy clay%'
+                                THEN 35.0
                                 -- Heavy clay: 35% clay content (Danish standard)
-                            WHEN COALESCE(soil_description, '') ILIKE '%lerjord%' 
-                                OR COALESCE(soil_description, '') ILIKE '%ler"' 
-                                THEN 28.0  
+                            WHEN COALESCE(soil_description, '') ILIKE '%lerjord%'
+                                OR COALESCE(soil_description, '') ILIKE '%ler"'
+                                THEN 28.0
                                 -- Clay soil: 28% clay content (Danish standard)
-                            
+
                             -- Sandy clay and mixed soils based on Danish descriptions
-                            WHEN COALESCE(soil_description, '') ILIKE '%lerblandet sand%' 
-                                OR COALESCE(soil_description, '') ILIKE '%sandy clay%' 
-                                THEN 18.0  
+                            WHEN COALESCE(soil_description, '') ILIKE '%lerblandet sand%'
+                                OR COALESCE(soil_description, '') ILIKE '%sandy clay%'
+                                THEN 18.0
                                 -- Sandy clay: 18% clay content (Danish standard)
-                            WHEN COALESCE(soil_description, '') ILIKE '%sandler%' 
-                                OR COALESCE(soil_description, '') ILIKE '%clay sand%' 
-                                THEN 22.0  
+                            WHEN COALESCE(soil_description, '') ILIKE '%sandler%'
+                                OR COALESCE(soil_description, '') ILIKE '%clay sand%'
+                                THEN 22.0
                                 -- Clay sand: 22% clay content (Danish standard)
-                            
+
                             -- Sandy soils based on Danish descriptions
-                            WHEN COALESCE(soil_description, '') ILIKE '%sandjord%' 
-                                OR COALESCE(soil_description, '') ILIKE '%sand"' 
-                                THEN 8.0   
+                            WHEN COALESCE(soil_description, '') ILIKE '%sandjord%'
+                                OR COALESCE(soil_description, '') ILIKE '%sand"'
+                                THEN 8.0
                                 -- Sandy soil: 8% clay content (Danish standard)
-                            WHEN COALESCE(soil_description, '') ILIKE '%grov sand%' 
-                                OR COALESCE(soil_description, '') ILIKE '%coarse sand%' 
-                                THEN 5.0   
+                            WHEN COALESCE(soil_description, '') ILIKE '%grov sand%'
+                                OR COALESCE(soil_description, '') ILIKE '%coarse sand%'
+                                THEN 5.0
                                 -- Coarse sand: 5% clay content (Danish standard)
-                            
+
                             -- Loamy soils based on Danish descriptions
-                            WHEN COALESCE(soil_description, '') ILIKE '%muldjord%' 
-                                OR COALESCE(soil_description, '') ILIKE '%loam%' THEN 
+                            WHEN COALESCE(soil_description, '') ILIKE '%muldjord%'
+                                OR COALESCE(soil_description, '') ILIKE '%loam%' THEN
                                 15.0  -- Loamy soil: 15% clay content (Danish standard)
-                            WHEN COALESCE(soil_description, '') ILIKE '%silt%' 
-                                OR COALESCE(soil_description, '') ILIKE '%silty%' 
-                                THEN 12.0  
+                            WHEN COALESCE(soil_description, '') ILIKE '%silt%'
+                                OR COALESCE(soil_description, '') ILIKE '%silty%'
+                                THEN 12.0
                                 -- Silty soil: 12% clay content (Danish standard)
-                            
+
                             -- Organic soils based on Danish descriptions
-                            WHEN COALESCE(soil_description, '') ILIKE '%tørv%' 
-                                OR COALESCE(soil_description, '') ILIKE '%peat%' 
-                                THEN 10.0  
+                            WHEN COALESCE(soil_description, '') ILIKE '%tørv%'
+                                OR COALESCE(soil_description, '') ILIKE '%peat%'
+                                THEN 10.0
                                 -- Peat soil: 10% clay content (Danish standard)
-                            WHEN COALESCE(soil_description, '') ILIKE '%organisk%' 
-                                OR COALESCE(soil_description, '') ILIKE '%organic%' 
-                                THEN 13.0  
+                            WHEN COALESCE(soil_description, '') ILIKE '%organisk%'
+                                OR COALESCE(soil_description, '') ILIKE '%organic%'
+                                THEN 13.0
                                 -- Organic soil: 13% clay content (Danish standard)
-                            
+
                             -- Fallback: Use soil_code patterns if no description match
-                            WHEN CAST(soil_code AS VARCHAR) LIKE '1%' 
-                                OR CAST(soil_code AS VARCHAR) LIKE '2%' 
-                                THEN 30.0  
+                            WHEN CAST(soil_code AS VARCHAR) LIKE '1%'
+                                OR CAST(soil_code AS VARCHAR) LIKE '2%'
+                                THEN 30.0
                                 -- Clay soil codes: 30% clay content
-                            WHEN CAST(soil_code AS VARCHAR) LIKE '3%' 
-                                OR CAST(soil_code AS VARCHAR) LIKE '4%' 
-                                THEN 20.0  
+                            WHEN CAST(soil_code AS VARCHAR) LIKE '3%'
+                                OR CAST(soil_code AS VARCHAR) LIKE '4%'
+                                THEN 20.0
                                 -- Mixed soil codes: 20% clay content
-                            WHEN CAST(soil_code AS VARCHAR) LIKE '5%' 
-                                OR CAST(soil_code AS VARCHAR) LIKE '6%' 
-                                THEN 15.0  
+                            WHEN CAST(soil_code AS VARCHAR) LIKE '5%'
+                                OR CAST(soil_code AS VARCHAR) LIKE '6%'
+                                THEN 15.0
                                 -- Medium soil codes: 15% clay content
-                            WHEN CAST(soil_code AS VARCHAR) LIKE '7%' 
-                                OR CAST(soil_code AS VARCHAR) LIKE '8%' THEN 
+                            WHEN CAST(soil_code AS VARCHAR) LIKE '7%'
+                                OR CAST(soil_code AS VARCHAR) LIKE '8%' THEN
                                 10.0  -- Sandy soil codes: 10% clay content
-                            
+
                             -- Final fallback based on realistic Danish soil average
                             ELSE 16.0  -- Danish national average clay content: 16%
                         END as clay_content,
                         -- Static value as required by NLES5 model
                         150.0 as total_soil_n_mg_ha,
-                        -- FIXED: Soil data has lat/lon swapped
-                        -- flip coordinates to match WGS84 (lon, lat) order
+                        -- Geometry is already in EPSG:25832 (Danish UTM) from silver layer
+                        -- No coordinate transformation needed
                         UNNEST(ST_Dump(
-                            ST_FlipCoordinates(
-                                CASE 
-                                    WHEN ST_IsValid(geometry) THEN geometry
-                                    ELSE ST_MakeValid(geometry)
-                                END
-                            )
+                            CASE
+                                WHEN ST_IsValid(geometry) THEN geometry
+                                ELSE ST_MakeValid(geometry)
+                            END
                         )).geom as geom
                     FROM soil_types
                     WHERE geometry IS NOT NULL
@@ -1511,9 +1535,9 @@ class NLES5SpatialOperations:
                 if soil_prepared_count == 0:
                     raise ValueError("soil_types_prepared is empty after processing soil_types")
 
-                # Validate coordinates are now in correct order (lon, lat)
+                # Validate coordinates are in EPSG:25832 UTM range (easting, northing)
                 coord_check = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         MIN(ST_X(ST_Centroid(geom))) as min_x,
                         MAX(ST_X(ST_Centroid(geom))) as max_x,
                         MIN(ST_Y(ST_Centroid(geom))) as min_y,
@@ -1521,29 +1545,31 @@ class NLES5SpatialOperations:
                     FROM soil_types_prepared
                 """).fetchone()
 
-                self.log.info("✅ Soil geometry coordinates after ST_FlipCoordinates fix:")
+                self.log.info("✅ Soil geometry coordinates (EPSG:25832 UTM):")
                 self.log.info(
-                    f"   X (longitude) range: {coord_check[0]:.2f}° to {coord_check[1]:.2f}° "
-                    f"(should be 8-15°E)"
+                    f"   Easting (X): {coord_check[0]:,.0f}m to {coord_check[1]:,.0f}m "
+                    f"(should be 400k-900k)"
                 )
                 self.log.info(
-                    f"   Y (latitude) range: {coord_check[2]:.2f}° to {coord_check[3]:.2f}° "
-                    f"(should be 54-58°N)"
+                    f"   Northing (Y): {coord_check[2]:,.0f}m to {coord_check[3]:,.0f}m "
+                    f"(should be 6M-6.5M)"
                 )
 
-                # Warn if coordinates still look wrong
-                if not (8 <= coord_check[0] <= 15 and 8 <= coord_check[1] <= 15):
+                # Warn if coordinates are outside expected UTM range
+                if not (400000 <= coord_check[0] <= 900000 and 400000 <= coord_check[1] <= 900000):
                     self.log.warning(
-                        "⚠️  X coordinates are outside expected Denmark longitude range (8-15°E)"
+                        "⚠️  X coordinates are outside expected Denmark UTM easting range (400k-900k)"
                     )
-                if not (54 <= coord_check[2] <= 58 and 54 <= coord_check[3] <= 58):
+                if not (
+                    6000000 <= coord_check[2] <= 6500000 and 6000000 <= coord_check[3] <= 6500000
+                ):
                     self.log.warning(
-                        "⚠️  Y coordinates are outside expected Denmark latitude range (54-58°N)"
+                        "⚠️  Y coordinates are outside expected Denmark UTM northing range (6M-6.5M)"
                     )
 
                 # Log clay content variation to confirm real data mapping is working
                 clay_stats = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(DISTINCT soil_code) as unique_codes,
                         COUNT(DISTINCT clay_content) as unique_clay_values,
                         MIN(clay_content) as min_clay,
@@ -1554,11 +1580,11 @@ class NLES5SpatialOperations:
 
                 # Validate real data usage by checking soil descriptions
                 real_data_stats = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as total_records,
-                        COUNT(CASE WHEN soil_description ILIKE '%lerjord%' 
+                        COUNT(CASE WHEN soil_description ILIKE '%lerjord%'
                             THEN 1 END) as clay_soils,
-                        COUNT(CASE WHEN soil_description ILIKE '%sand%' 
+                        COUNT(CASE WHEN soil_description ILIKE '%sand%'
                             THEN 1 END) as sandy_soils,
                         COUNT(DISTINCT soil_description) as unique_descriptions
                     FROM soil_types_prepared
@@ -1585,10 +1611,10 @@ class NLES5SpatialOperations:
 
                 # Sample real soil types for verification
                 sample_real_soil = self.conn.execute("""
-                    SELECT soil_code, soil_description, clay_content 
-                    FROM soil_types_prepared 
+                    SELECT soil_code, soil_description, clay_content
+                    FROM soil_types_prepared
                     WHERE soil_description IS NOT NULL
-                    ORDER BY RANDOM() 
+                    ORDER BY RANDOM()
                     LIMIT 5
                 """).fetchall()
 
@@ -1610,7 +1636,7 @@ class NLES5SpatialOperations:
                         raise ValueError(f"{table} is empty - no processed climate data available")
                     self.log.info(f"✅ {table}: {count:,} records")
                 except Exception as e:
-                    raise ValueError(f"Required table {table} not available: {e}")
+                    raise ValueError(f"Required table {table} not available: {e}") from e
 
             # Create spatial indexes for optimal performance
             if self.config.enable_spatial_indexing:
@@ -1663,7 +1689,7 @@ class NLES5SpatialOperations:
 
             # Check field data
             field_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
                     COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as with_geometry,
                     COUNT(CASE WHEN ST_IsValid(geom) THEN 1 END) as valid_geometry
@@ -1684,7 +1710,7 @@ class NLES5SpatialOperations:
 
             # Check climate data
             climate_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_climate,
                     COUNT(CASE WHEN geometry IS NOT NULL THEN 1 END) as with_geometry,
                     COUNT(CASE WHEN total_percolation IS NOT NULL THEN 1 END) as with_percolation
@@ -1706,14 +1732,14 @@ class NLES5SpatialOperations:
 
             # Check spatial extent compatibility
             field_extent = self.conn.execute("""
-                SELECT 
+                SELECT
                     MIN(ST_X(ST_Centroid(geom))) as min_x, MAX(ST_X(ST_Centroid(geom))) as max_x,
                     MIN(ST_Y(ST_Centroid(geom))) as min_y, MAX(ST_Y(ST_Centroid(geom))) as max_y
                 FROM agricultural_fields_spatial WHERE geom IS NOT NULL
             """).fetchone()
 
             climate_extent = self.conn.execute("""
-                SELECT 
+                SELECT
                     MIN(ST_X(geometry)) as min_x, MAX(ST_X(geometry)) as max_x,
                     MIN(ST_Y(geometry)) as min_y, MAX(ST_Y(geometry)) as max_y
                 FROM climate_percolation WHERE geometry IS NOT NULL

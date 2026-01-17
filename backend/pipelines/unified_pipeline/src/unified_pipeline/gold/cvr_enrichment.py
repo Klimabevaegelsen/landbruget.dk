@@ -16,7 +16,7 @@ import json
 import os
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Dict, Optional, Set
+from typing import Any, ClassVar
 
 import requests
 from pydantic import Field
@@ -71,7 +71,7 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
     )
 
     # Testing configuration
-    test_limit: Optional[int] = Field(
+    test_limit: int | None = Field(
         default=None,
         description="Limit number of CVR numbers to process for testing (None = no limit)",
     )
@@ -89,7 +89,7 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
         default=True, description="Whether to geocode only current addresses (not historical)"
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config) -> None:
         """
@@ -284,7 +284,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.warning(f"Could not apply all memory optimizations: {e}")
 
     @timed(name="CVR enrichment processing")
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> str:
         """
         Run the CVR enrichment process.
 
@@ -319,7 +319,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             raise
 
     @timed(name="Collecting CVR numbers")
-    def _collect_cvr_numbers(self) -> Dict[str, Any]:
+    def _collect_cvr_numbers(self) -> dict[str, Any]:
         """
         Collect CVR numbers from all pipeline CVR collections.
 
@@ -343,7 +343,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         return cvr_collection_data
 
     @timed(name="Fetching CVR enrichment data")
-    async def _fetch_cvr_enrichment_data(self, cvr_numbers: Set[str]) -> Dict[str, Any]:
+    async def _fetch_cvr_enrichment_data(self, cvr_numbers: set[str]) -> dict[str, Any]:
         """
         Fetch CVR register data for all collected CVR numbers.
 
@@ -354,7 +354,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             Dictionary containing CVR enrichment data
         """
         # Convert to sorted list and validate uniqueness
-        cvr_list = sorted(list(cvr_numbers))
+        cvr_list = sorted(cvr_numbers)
 
         # Apply test limit if configured
         if self.config.test_limit is not None:
@@ -366,7 +366,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             )
 
         # Additional validation and logging for deduplication
-        original_count = len(cvr_numbers) if isinstance(cvr_numbers, (set, list)) else 0
+        original_count = len(cvr_numbers) if isinstance(cvr_numbers, set | list) else 0
         unique_count = len(cvr_list)
 
         self.log.info("🔍 CVR deduplication summary:")
@@ -447,8 +447,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
     @timed(name="Processing enrichment data")
     def _process_enrichment_data(
-        self, enrichment_data: Dict[str, Any], cvr_collection_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, enrichment_data: dict[str, Any], cvr_collection_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Process and structure the enriched CVR data.
 
@@ -515,7 +515,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         return processed_data
 
     @timed(name="Saving enriched data")
-    def _save_enriched_data(self, processed_data: Dict[str, Any]) -> str:
+    def _save_enriched_data(self, processed_data: dict[str, Any]) -> str:
         """
         Save the processed CVR enrichment data to GCS using chunked processing.
 
@@ -658,7 +658,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         return table_name
 
-    def _save_collection_summary(self, cvr_collection_data: Dict[str, Any]) -> None:
+    def _save_collection_summary(self, cvr_collection_data: dict[str, Any]) -> None:
         """Save CVR collection summary data."""
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/collection_summary.json"
 
@@ -669,7 +669,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         self.log.info(f"Saved CVR collection summary to {summary_path}")
 
-    def _save_raw_responses(self, enrichment_data: Dict[str, Any]) -> None:
+    def _save_raw_responses(self, enrichment_data: dict[str, Any]) -> None:
         """Save raw API responses for debugging."""
         raw_path = f"gold/{self.config.dataset}/{self.date_pattern}/raw_responses.json"
 
@@ -679,7 +679,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         self.log.info(f"Saved raw CVR API responses to {raw_path}")
 
-    def _save_summary_data(self, processed_data: Dict[str, Any]) -> None:
+    def _save_summary_data(self, processed_data: dict[str, Any]) -> None:
         """Save processing summary data."""
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/processing_summary.json"
 
@@ -722,10 +722,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             return False
 
         # Additional validation: CVR numbers shouldn't start with 0
-        if cvr_clean.startswith("0"):
-            return False
-
-        return True
+        return not cvr_clean.startswith("0")
 
     def _download_financial_xml_documents(self, financial_docs: list) -> list:
         """
@@ -1862,8 +1859,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
                     except Exception as e:
                         self.log.error(
-                            f"❌ Error processing {employment_field} batch {batch_idx + 1}: "
-                            f"{str(e)}"
+                            f"❌ Error processing {employment_field} batch {batch_idx + 1}: {e!s}"
                         )
                         # Continue with next batch
                         continue

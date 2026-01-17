@@ -10,7 +10,6 @@ import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 import duckdb
 
@@ -21,7 +20,7 @@ from unified_pipeline.util.log_util import Logger
 class SchemaToGitHub:
     """Manages automatic schema generation and GitHub commits."""
 
-    def __init__(self, connection: duckdb.DuckDBPyConnection, logger: Optional[Logger] = None):
+    def __init__(self, connection: duckdb.DuckDBPyConnection, logger: Logger | None = None):
         self.conn = connection
         self.logger = logger or Logger(__name__)
         self.schema_manager = NativeSchemaManager(connection, logger)
@@ -75,7 +74,7 @@ class SchemaToGitHub:
                 )
 
             # Add data summary if available
-            if "data_summary" in schema_info and schema_info["data_summary"]:
+            if schema_info.get("data_summary"):
                 md_lines.extend(
                     [
                         "",
@@ -104,8 +103,10 @@ class SchemaToGitHub:
             # Add constraints if any
             if schema_info.get("constraints"):
                 md_lines.extend(["", "## Constraints", ""])
-                for constraint in schema_info["constraints"]:
-                    md_lines.append(f"- **{constraint['type']}:** {constraint['definition']}")
+                md_lines.extend(
+                    f"- **{constraint['type']}:** {constraint['definition']}"
+                    for constraint in schema_info["constraints"]
+                )
 
             # Add usage example
             md_lines.extend(
@@ -136,7 +137,7 @@ class SchemaToGitHub:
             self.logger.error(f"Failed to generate schema doc for {table_name}: {e}")
             return f"# {table_name}\n\nError generating schema documentation: {e}"
 
-    def generate_schema_overview_file(self, tables: List[str], stage: str = "silver") -> str:
+    def generate_schema_overview_file(self, tables: list[str], stage: str = "silver") -> str:
         """
         Generate a comprehensive overview file with all table schemas.
 
@@ -161,8 +162,7 @@ class SchemaToGitHub:
         ]
 
         # Add table list
-        for table in tables:
-            context_lines.append(f"- [{table}](#{table.lower().replace('_', '-')})")
+        context_lines.extend(f"- [{table}](#{table.lower().replace('_', '-')})" for table in tables)
 
         context_lines.append("")
 
@@ -209,7 +209,7 @@ class SchemaToGitHub:
         self.logger.info(f"Schema overview file generated: {overview_file}")
         return str(overview_file)
 
-    def commit_schemas_to_github(self, commit_message: Optional[str] = None) -> bool:
+    def commit_schemas_to_github(self, commit_message: str | None = None) -> bool:
         """
         Commit schema files to GitHub repository.
 
@@ -269,7 +269,7 @@ class SchemaToGitHub:
             self.logger.error(f"Failed to commit schemas to GitHub: {e}")
             return False
 
-    def _find_repo_root(self) -> Optional[str]:
+    def _find_repo_root(self) -> str | None:
         """Find the root directory of the git repository."""
         try:
             result = subprocess.run(
@@ -281,7 +281,7 @@ class SchemaToGitHub:
 
     def generate_and_commit_all_schemas(
         self, stage: str = "silver", commit_to_github: bool = True
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Generate schema documentation for all tables and optionally commit to GitHub.
 
@@ -348,7 +348,7 @@ class SchemaToGitHub:
 class SchemaGitHubMixin:
     """Mixin to add GitHub schema integration to pipeline sources."""
 
-    def generate_schemas_for_github(self, stage: str = "silver", commit: bool = True) -> List[str]:
+    def generate_schemas_for_github(self, stage: str = "silver", commit: bool = True) -> list[str]:
         """
         Generate schema documentation and commit to GitHub.
 

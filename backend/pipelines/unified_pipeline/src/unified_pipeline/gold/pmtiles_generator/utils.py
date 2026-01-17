@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class TippecanoeRunner:
         min_zoom: int = 0,
         buffer: int = 64,
         simplification: int = 10,
-        additional_args: Optional[List[str]] = None,
+        additional_args: list[str] | None = None,
     ) -> bool:
         """Generate PMTiles from GeoJSON using tippecanoe.
 
@@ -89,11 +89,10 @@ class TippecanoeRunner:
                     logger.info(f"PMTiles file size: {size_mb:.1f} MB")
 
                 return True
-            else:
-                logger.error(f"Tippecanoe failed with return code {process.returncode}")
-                logger.error(f"stdout: {stdout.decode()}")
-                logger.error(f"stderr: {stderr.decode()}")
-                return False
+            logger.error(f"Tippecanoe failed with return code {process.returncode}")
+            logger.error(f"stdout: {stdout.decode()}")
+            logger.error(f"stderr: {stderr.decode()}")
+            return False
 
         except Exception as e:
             logger.error(f"Error running tippecanoe: {e}")
@@ -113,9 +112,8 @@ class TippecanoeRunner:
             if result.returncode == 0:
                 logger.info(f"Tippecanoe version: {result.stdout.strip()}")
                 return True
-            else:
-                logger.error("Tippecanoe not available")
-                return False
+            logger.error("Tippecanoe not available")
+            return False
 
         except Exception as e:
             logger.error(f"Error checking tippecanoe availability: {e}")
@@ -130,7 +128,7 @@ class GeoJSONWriter:
         duckdb_conn,
         query: str,
         output_path: str,
-        properties_columns: Optional[List[str]] = None,
+        properties_columns: list[str] | None = None,
     ) -> bool:
         """Write GeoJSON file from a DuckDB query result.
 
@@ -265,7 +263,7 @@ class GeoJSONWriter:
             return False
 
     @staticmethod
-    def _wkt_to_geojson_geometry(wkt: str) -> Optional[Dict[str, Any]]:
+    def _wkt_to_geojson_geometry(wkt: str) -> dict[str, Any] | None:
         """Convert WKT to GeoJSON geometry (simplified implementation).
 
         Args:
@@ -291,7 +289,7 @@ class GeoJSONWriter:
                 x, y = map(float, coords_str.split())
                 return {"type": "Point", "coordinates": [x, y]}
 
-            elif wkt.startswith("POLYGON"):
+            if wkt.startswith("POLYGON"):
                 # This is a simplified polygon parser
                 # In production, use a proper WKT library
                 logger.warning("Polygon WKT parsing is simplified - consider using Shapely")
@@ -300,9 +298,8 @@ class GeoJSONWriter:
                     "coordinates": [[]],  # Placeholder
                 }
 
-            else:
-                logger.warning(f"Unsupported WKT geometry type: {wkt[:20]}...")
-                return None
+            logger.warning(f"Unsupported WKT geometry type: {wkt[:20]}...")
+            return None
 
         except Exception as e:
             logger.error(f"Error parsing WKT: {e}")
@@ -333,13 +330,13 @@ class FileManager:
         Returns:
             Path to temporary file
         """
-        temp_file = tempfile.NamedTemporaryFile(
+        with tempfile.NamedTemporaryFile(
             suffix=suffix, prefix=prefix, dir=str(self.temp_dir), delete=False
-        )
-        temp_file.close()
+        ) as temp_file:
+            temp_path = temp_file.name
 
-        self.temp_files.append(temp_file.name)
-        return temp_file.name
+        self.temp_files.append(temp_path)
+        return temp_path
 
     def create_temp_dir(self, prefix: str = "pmtiles_") -> str:
         """Create a temporary directory and track it for cleanup.

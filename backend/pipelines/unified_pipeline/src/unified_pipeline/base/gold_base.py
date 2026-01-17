@@ -1,7 +1,6 @@
 """Base class for gold layer processing."""
 
 import time
-from typing import List
 
 from .duckdb_processor import DuckDBProcessor
 
@@ -12,7 +11,7 @@ class GoldBase(DuckDBProcessor):
     def __init__(self, dataset_name: str, db_path: str = ":memory:"):
         super().__init__(db_path, dataset_name)
 
-    def create_analytics_table(self, silver_tables: List[str], **kwargs) -> str:
+    def create_analytics_table(self, silver_tables: list[str], **kwargs) -> str:
         """
         Create analytics table from silver layer data.
 
@@ -25,7 +24,7 @@ class GoldBase(DuckDBProcessor):
         """
         raise NotImplementedError("Subclasses must implement create_analytics_table method")
 
-    def aggregate_data(self, table_name: str, group_by: List[str], metrics: List[str]) -> str:
+    def aggregate_data(self, table_name: str, group_by: list[str], metrics: list[str]) -> str:
         """
         Create aggregated data table.
 
@@ -72,9 +71,8 @@ class GoldBase(DuckDBProcessor):
         ]
 
         if numeric_columns:
-            stats_queries = []
-            for col in numeric_columns:
-                stats_queries.append(f"""
+            stats_queries = [
+                f"""
                     SELECT
                         '{col}' as column_name,
                         COUNT({col}) as count,
@@ -83,7 +81,9 @@ class GoldBase(DuckDBProcessor):
                         MAX({col}) as max_val,
                         STDDEV({col}) as std_dev
                     FROM {table_name}
-                """)
+                """
+                for col in numeric_columns
+            ]
 
             union_query = " UNION ALL ".join(stats_queries)
 

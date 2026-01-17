@@ -2,6 +2,7 @@
 Main H3 PFAS processor with modular architecture and GCS data loading.
 """
 
+import contextlib
 import gc
 from pathlib import Path
 
@@ -236,7 +237,7 @@ class H3PFASProcessorRefactored:
                 raise
 
         # Initialize GCS access with shared connection
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
@@ -293,16 +294,22 @@ class H3PFASProcessorRefactored:
         """)
 
         # Add geometry and area calculations using proper H3 functions
-        # FIX: H3 generates geometries in lon/lat order, but field geometries are in lat/lon order
-        # Flip H3 coordinates to match field coordinate system for spherical calculations
+        # H3 generates geometries in WGS84 (lon/lat) - transform to EPSG:25832 for processing
+        # Field data is now in EPSG:25832 (Danish UTM) per CRS refactor strategy
         self.conn.execute("""
             CREATE OR REPLACE TABLE h3_grid_with_geom AS
             SELECT
                 h3_index as h3_cell,
                 lat as center_lat,
                 lon as center_lon,
-                -- Flip H3 geometry coordinates from lon/lat to lat/lon to match field geometries
-                ST_FlipCoordinates(ST_GeomFromText(h3_boundary)) as h3_geometry,
+                -- Transform H3 geometry from WGS84 to EPSG:25832 (Danish UTM) for spatial joins
+                -- H3 output is in lon/lat order, use always_xy to ensure correct interpretation
+                ST_Transform(
+                    ST_GeomFromText(h3_boundary),
+                    'EPSG:4326',
+                    'EPSG:25832',
+                    always_xy := true
+                ) as h3_geometry,
                 h3_cell_area(h3_index, 'm^2') / 10000.0 as h3_area_ha
             FROM h3_grid
         """)
@@ -411,8 +418,7 @@ class H3PFASProcessorRefactored:
                 self.log.error("   - Coordinate system mismatch")
                 self.log.error("   - Empty input data")
                 return
-            else:
-                self.log.info(f"📊 Results table contains {count:,} records")
+            self.log.info(f"📊 Results table contains {count:,} records")
         except Exception as e:
             self.log.error(f"❌ Cannot access results table '{results_table}': {e}")
             return
@@ -598,13 +604,11 @@ class H3PFASProcessorRefactored:
         ]
 
         for table in tables_to_drop:
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-            except Exception:
-                pass  # Ignore errors if table doesn't exist
 
         # Also drop any tables with temp_ prefix or year suffix
-        try:
+        with contextlib.suppress(Exception):
             tables = self.conn.execute("SHOW TABLES").fetchall()
             for (table_name,) in tables:
                 if (
@@ -613,12 +617,9 @@ class H3PFASProcessorRefactored:
                     or table_name.startswith("chunk_")
                     or table_name.startswith("stage")
                     or table_name.startswith("h3_chunk_")
-                ):
+                ) and table_name not in self._protected_tables:
                     # Don't drop protected tables or cached static data
-                    if table_name not in self._protected_tables:
-                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-        except Exception:
-            pass
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
         # Force garbage collection
         gc.collect()

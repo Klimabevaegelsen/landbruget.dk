@@ -9,7 +9,7 @@ PERFORMANCE IMPACT: Reduces Stage 2 Grukos processing complexity significantly
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 from ..config import CONFIG
 from .base import PreFilteringStageBase
@@ -66,7 +66,7 @@ class GrukosPreFilter(PreFilteringStageBase):
         except Exception as e:
             self.log.warning(f"Could not validate Grukos coordinate bounds: {e}")
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Pre-filter Grukos geometries using spatial intersection with fields.
 
@@ -145,7 +145,7 @@ class GrukosPreFilter(PreFilteringStageBase):
             "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 2 Grukos processing",
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save output data - already handled in _execute_stage_processing for Stage 0."""
         # Stage 0 classes handle export directly in _execute_stage_processing
         # to use custom output paths and naming conventions

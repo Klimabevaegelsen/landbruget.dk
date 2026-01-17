@@ -12,7 +12,7 @@ Uses DuckDB Spatial v1.2.2 SPATIAL_JOIN operator for optimal performance.
 
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import ConfigDict
 
@@ -55,7 +55,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.phase_times = {}
         self.properties_path = None
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Execute the Field Area Analysis Gold processing pipeline."""
         start_time = time.time()
         self.log.info("🚀 Starting Field Area Analysis Gold processing")
@@ -196,7 +196,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
-                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
+                    self.log.info(f"   Raw WKT {i + 1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
                     if wkt and "POINT(" in wkt:
                         coords_str = wkt.replace("POINT(", "").replace(")", "")
@@ -206,17 +206,17 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                                 first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
                                 coord_pairs.append((first_val, second_val))
                                 self.log.info(
-                                    f"   Field {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    f"   Field {i + 1}: POINT({first_val:.6f} {second_val:.6f})"
                                 )
                             else:
                                 self.log.warning(
-                                    f"   Field {i+1}: Invalid coordinate format: {coords_str}"
+                                    f"   Field {i + 1}: Invalid coordinate format: {coords_str}"
                                 )
                         except Exception as parse_e:
-                            self.log.warning(f"   Field {i+1}: Parse error: {parse_e}")
+                            self.log.warning(f"   Field {i + 1}: Parse error: {parse_e}")
                             continue
                     else:
-                        self.log.warning(f"   Field {i+1}: Not a POINT geometry: {wkt}")
+                        self.log.warning(f"   Field {i + 1}: Not a POINT geometry: {wkt}")
 
                 if coord_pairs:
                     self.log.info(
@@ -594,7 +594,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         self.log.info("✅ Properties processing completed")
 
-    def _generate_final_results(self) -> Dict[str, any]:
+    def _generate_final_results(self) -> dict[str, any]:
         """Generate final consolidated results."""
 
         # Check what data is available
@@ -746,7 +746,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 "avg_wetland_coverage_by_water_projects": env_summary[3] or 0,
             }
 
-        results = {
+        return {
             "total_fields": total_fields,
             "coverage": {
                 "soil_types": {
@@ -775,9 +775,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             "environmental_coverage_by_water_projects": environmental_stats,
         }
 
-        return results
 
-    def _log_performance_summary(self, total_time: float, results: Dict[str, any]):
+    def _log_performance_summary(self, total_time: float, results: dict[str, any]):
         """Log performance summary."""
         self.log.info("\n" + "=" * 80)
         self.log.info("📈 FIELD AREA ANALYSIS PERFORMANCE SUMMARY")
@@ -809,11 +808,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🚀 DUCKDB SPATIAL v1.2.2 SPATIAL_JOIN OPERATOR USED")
         self.log.info("=" * 80)
 
-    def _get_available_fvm_marker_years(self) -> List[int]:
+    def _get_available_fvm_marker_years(self) -> list[int]:
         """Get list of available FVM marker years from GCS."""
         return super()._get_available_fvm_marker_years()
 
-    def _get_latest_silver_path_for_dataset(self, dataset_name: str) -> Optional[str]:
+    def _get_latest_silver_path_for_dataset(self, dataset_name: str) -> str | None:
         """Get the latest silver data path for a specific dataset."""
         try:
             return self._get_latest_silver_path(dataset_name)

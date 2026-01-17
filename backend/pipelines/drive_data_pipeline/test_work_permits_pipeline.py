@@ -144,9 +144,8 @@ def test_work_permits_pipeline(pdf_path: Path) -> bool | None:
                         logger.info(f"  Created: {output_file}")
 
             return True
-        else:
-            logger.error("❌ No files were processed successfully")
-            return False
+        logger.error("❌ No files were processed successfully")
+        return False
 
     except Exception as e:
         logger.error(f"❌ Pipeline test failed: {e}")

@@ -1,0 +1,22 @@
+{
+  "dataset_name": "water_projects",
+  "source_path": "gs://landbrugsdata-raw-data/silver/water_projects/20260116_221936/data.parquet",
+  "generated_at": "2026-01-17T11:10:49.670167",
+  "record_count": 3967,
+  "unique_identifiers": {},
+  "geometry_bounds": {
+    "min_x": 54.55982897607929,
+    "max_x": 57.59411970281388,
+    "min_y": 8.118112976843983,
+    "max_y": 15.017584184843157
+  },
+  "detected_crs": "EPSG:4326",
+  "column_null_counts": {
+    "geometry": 0,
+    "area_ha": 0,
+    "areal_ha": 1890,
+    "titel": 1995,
+    "layer": 0,
+    "geometry_spatial": 0
+  }
+}

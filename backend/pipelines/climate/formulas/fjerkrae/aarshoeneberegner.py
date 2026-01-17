@@ -10,5 +10,4 @@ def beregn_aarshoener(i_i: float, u_i: float, d_i: float) -> float:
     Returns:
         Antallet af årshøner.
     """
-    h = (i_i + u_i) * 0.5 * (d_i / 365)
-    return h
+    return (i_i + u_i) * 0.5 * (d_i / 365)

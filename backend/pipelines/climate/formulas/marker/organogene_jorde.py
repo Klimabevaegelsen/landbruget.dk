@@ -2,9 +2,9 @@
 Beregning af CO2 fra organogene jorde
 """
 
-from typing import Tuple, Any
 import json
 from pathlib import Path
+from typing import Any
 
 # Utility function to load data from JSON files
 if "load_json_data" not in globals():
@@ -13,7 +13,7 @@ if "load_json_data" not in globals():
         base_path = Path(__file__).resolve().parent.parent.parent / "reference_values"
         full_path = base_path / file_path
         try:
-            with open(full_path, "r", encoding="utf-8") as f:
+            with open(full_path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             print(f"Error: JSON file not found at {full_path}")
@@ -35,7 +35,9 @@ try:
             co2_kulstof_emission_factors[c_content] = {}
         # Ensure keys from table match expected keys "Omdrift" and "Permanent_græs_og_afvandet"
         co2_kulstof_emission_factors[c_content]["Omdrift"] = row.get("Omdrift")
-        co2_kulstof_emission_factors[c_content]["Permanent_græs_og_afvandet"] = row.get("Permanent_græs_og_afvandet")
+        co2_kulstof_emission_factors[c_content]["Permanent_græs_og_afvandet"] = row.get(
+            "Permanent_græs_og_afvandet"
+        )
 except Exception as e:
     print(f"Failed to load or parse tabel_31_data: {e}")
     co2_kulstof_emission_factors = None
@@ -49,7 +51,9 @@ try:
         # Matching based on the description for rule 5c which is for "Vådområde (ikke dyrket)"
         # The python code implies this factor is the same regardless of C_Content for "høj vandstand"
         if row.get("Forvaltningstiltag") == "Vådområde (ikke dyrket)":
-            ch4_co2e_factor_hoj_vandstand = row.get("CH4_CO2e_kg_ha_aar") / 1000.0  # Convert kg to tons
+            ch4_co2e_factor_hoj_vandstand = (
+                row.get("CH4_CO2e_kg_ha_aar") / 1000.0
+            )  # Convert kg to tons
             break
 except Exception as e:
     print(f"Failed to load or parse tabel_32_data: {e}")
@@ -72,7 +76,7 @@ def calculate_co2_organogene_jorde(
     i_omdrift: bool,
     lav_vandstand: bool,
     kulstof_percentage: str,  # Expected "6-12%" or ">12%"
-) -> Tuple[float, float, float, float]:
+) -> tuple[float, float, float, float]:
     """
     Calculates CO2 emissions from organogene jorde based on land characteristics.
 
@@ -118,7 +122,9 @@ def calculate_co2_organogene_jorde(
         if mapped_kulstof_percentage == "6-12%C":
             # Regel 1
             co2_tons_kulstof = h * (
-                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(ef_kulstof_key, 21.08)
+                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(
+                    ef_kulstof_key, 21.08
+                )
                 if not fallback_to_hardcoded
                 else 21.08
             )
@@ -127,21 +133,27 @@ def calculate_co2_organogene_jorde(
         elif mapped_kulstof_percentage == ">12%C":
             # Regel 2
             co2_tons_kulstof = h * (
-                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(ef_kulstof_key, 42.17)
+                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(
+                    ef_kulstof_key, 42.17
+                )
                 if not fallback_to_hardcoded
                 else 42.17
             )
             co2_tons_n2o = h * N2O_CO2E_OMDRIFT_GT12C  # Using the hardcoded N2O factor: 3.87
             # co2_tons_ch4 = 0.0 (as per original)
         else:
-            raise ValueError(f"Invalid kulstof_percentage: {kulstof_percentage} for i_omdrift and lav_vandstand")
+            raise ValueError(
+                f"Invalid kulstof_percentage: {kulstof_percentage} for i_omdrift and lav_vandstand"
+            )
 
     elif not i_omdrift and lav_vandstand:
         ef_kulstof_key = "Permanent_græs_og_afvandet"
         if mapped_kulstof_percentage == ">12%C":
             # Regel 3
             co2_tons_kulstof = h * (
-                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(ef_kulstof_key, 30.8)
+                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(
+                    ef_kulstof_key, 30.8
+                )
                 if not fallback_to_hardcoded
                 else 30.8
             )
@@ -150,14 +162,18 @@ def calculate_co2_organogene_jorde(
         elif mapped_kulstof_percentage == "6-12%C":
             # Regel 4
             co2_tons_kulstof = h * (
-                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(ef_kulstof_key, 15.4)
+                co2_kulstof_emission_factors.get(mapped_kulstof_percentage, {}).get(
+                    ef_kulstof_key, 15.4
+                )
                 if not fallback_to_hardcoded
                 else 15.4
             )
             # co2_tons_n2o = 0.0 (as per original)
             # co2_tons_ch4 = 0.0 (as per original)
         else:
-            raise ValueError(f"Invalid kulstof_percentage: {kulstof_percentage} for not i_omdrift and lav_vandstand")
+            raise ValueError(
+                f"Invalid kulstof_percentage: {kulstof_percentage} for not i_omdrift and lav_vandstand"
+            )
 
     elif not i_omdrift and not lav_vandstand:  # Høj vandstand
         # Regel 5 - Kulstofindhold betyder ingenting for kulstof and N2O (both are 0)

@@ -5,9 +5,10 @@ This module provides improved algorithms for selecting the most appropriate
 primary address when a company has multiple addresses.
 """
 
+import contextlib
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class AddressSelectionStrategy(Enum):
@@ -27,8 +28,8 @@ class AddressSelectionConfig:
     strategy: AddressSelectionStrategy = AddressSelectionStrategy.HYBRID
     prefer_current_only: bool = True
     require_geocoding: bool = True
-    address_type_priority: Dict[str, int] = None
-    coordinate_quality_priority: Dict[str, int] = None
+    address_type_priority: dict[str, int] = None
+    coordinate_quality_priority: dict[str, int] = None
 
     def __post_init__(self):
         if self.address_type_priority is None:
@@ -59,7 +60,7 @@ class EnhancedAddressSelector:
         """
         self.config = config or AddressSelectionConfig()
 
-    def select_primary_address(self, addresses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def select_primary_address(self, addresses: list[dict[str, Any]]) -> dict[str, Any] | None:
         """
         Select the primary address from a list of addresses.
 
@@ -75,19 +76,18 @@ class EnhancedAddressSelector:
         # Apply strategy-specific selection
         if self.config.strategy == AddressSelectionStrategy.FIRST_GEOCODED:
             return self._select_first_geocoded(addresses)
-        elif self.config.strategy == AddressSelectionStrategy.BUSINESS_PRIORITY:
+        if self.config.strategy == AddressSelectionStrategy.BUSINESS_PRIORITY:
             return self._select_by_business_priority(addresses)
-        elif self.config.strategy == AddressSelectionStrategy.BEST_QUALITY:
+        if self.config.strategy == AddressSelectionStrategy.BEST_QUALITY:
             return self._select_by_quality(addresses)
-        elif self.config.strategy == AddressSelectionStrategy.MOST_COMPLETE:
+        if self.config.strategy == AddressSelectionStrategy.MOST_COMPLETE:
             return self._select_most_complete(addresses)
-        elif self.config.strategy == AddressSelectionStrategy.HYBRID:
+        if self.config.strategy == AddressSelectionStrategy.HYBRID:
             return self._select_hybrid(addresses)
-        else:
-            # Fallback to current behavior
-            return self._select_first_geocoded(addresses)
+        # Fallback to current behavior
+        return self._select_first_geocoded(addresses)
 
-    def _filter_candidates(self, addresses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _filter_candidates(self, addresses: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Filter addresses based on basic requirements.
 
@@ -112,13 +112,10 @@ class EnhancedAddressSelector:
                 historical_addresses = [addr for addr in candidates if not addr.get("is_current")]
                 if historical_addresses:
                     # Sort by period_start descending to get most recent first
-                    try:
+                    with contextlib.suppress(Exception):
                         historical_addresses.sort(
                             key=lambda x: x.get("period_start", ""), reverse=True
                         )
-                    except Exception:
-                        # If sorting fails, keep original order
-                        pass
                     candidates = historical_addresses
 
         # Filter by geocoding status if required
@@ -129,7 +126,7 @@ class EnhancedAddressSelector:
 
         return candidates
 
-    def _select_first_geocoded(self, addresses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _select_first_geocoded(self, addresses: list[dict[str, Any]]) -> dict[str, Any] | None:
         """
         Current behavior: select first current and geocoded address, fallback to most recent
         historical ONLY if no current addresses exist.
@@ -161,18 +158,15 @@ class EnhancedAddressSelector:
         ]
         if historical_geocoded:
             # Sort by period_start descending to get most recent first
-            try:
+            with contextlib.suppress(Exception):
                 historical_geocoded.sort(key=lambda x: x.get("period_start", ""), reverse=True)
-            except Exception:
-                # If sorting fails, keep original order
-                pass
             return historical_geocoded[0]
 
         return None
 
     def _select_by_business_priority(
-        self, addresses: List[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
+        self, addresses: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
         """
         Select address based on business logic priority.
 
@@ -196,7 +190,7 @@ class EnhancedAddressSelector:
 
         return candidates[0]
 
-    def _select_by_quality(self, addresses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _select_by_quality(self, addresses: list[dict[str, Any]]) -> dict[str, Any] | None:
         """
         Select address with best coordinate quality.
 
@@ -222,7 +216,7 @@ class EnhancedAddressSelector:
 
         return candidates[0]
 
-    def _select_most_complete(self, addresses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _select_most_complete(self, addresses: list[dict[str, Any]]) -> dict[str, Any] | None:
         """
         Select address with most complete information.
 
@@ -236,7 +230,7 @@ class EnhancedAddressSelector:
         if not candidates:
             return None
 
-        def completeness_score(addr: Dict[str, Any]) -> int:
+        def completeness_score(addr: dict[str, Any]) -> int:
             """Calculate completeness score for an address."""
             score = 0
 
@@ -276,7 +270,7 @@ class EnhancedAddressSelector:
 
         return candidates[0]
 
-    def _select_hybrid(self, addresses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _select_hybrid(self, addresses: list[dict[str, Any]]) -> dict[str, Any] | None:
         """
         Select address using hybrid approach combining multiple factors.
 
@@ -290,7 +284,7 @@ class EnhancedAddressSelector:
         if not candidates:
             return None
 
-        def hybrid_score(addr: Dict[str, Any]) -> tuple:
+        def hybrid_score(addr: dict[str, Any]) -> tuple:
             """Calculate hybrid score for an address."""
 
             # Address type priority (lower is better)
@@ -342,7 +336,7 @@ class EnhancedAddressSelector:
 
         return candidates[0]
 
-    def analyze_selection_options(self, addresses: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze_selection_options(self, addresses: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Analyze what different selection strategies would choose.
 
@@ -372,9 +366,9 @@ class EnhancedAddressSelector:
 
 
 def get_primary_address_with_strategy(
-    addresses: List[Dict[str, Any]],
+    addresses: list[dict[str, Any]],
     strategy: AddressSelectionStrategy = AddressSelectionStrategy.HYBRID,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Convenience function to get primary address with specified strategy.
 

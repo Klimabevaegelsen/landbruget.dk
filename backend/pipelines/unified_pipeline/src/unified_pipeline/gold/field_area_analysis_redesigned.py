@@ -20,7 +20,6 @@ Root Cause Fixed: Fields dataset coordinate swapping fixed in silver layer pipel
 
 import os
 import time
-from typing import Dict, Optional
 
 from ..util.gcs_access import GCSDataAccess
 from ..util.log_util import Logger
@@ -53,7 +52,7 @@ class FieldAreaAnalysisRedesigned:
 
         self.log.info("🚀 Field Area Analysis Redesigned - DuckDB Spatial v1.2.2 Optimized")
 
-    def run_analysis(self) -> Dict[str, any]:
+    def run_analysis(self) -> dict[str, any]:
         """
         Execute the complete field area analysis with optimal performance.
 
@@ -391,7 +390,7 @@ class FieldAreaAnalysisRedesigned:
 
         return properties_time
 
-    def _generate_final_results(self) -> Dict[str, any]:
+    def _generate_final_results(self) -> dict[str, any]:
         """
         Phase 3: Generate final consolidated results.
         """
@@ -528,21 +527,20 @@ class FieldAreaAnalysisRedesigned:
         )
         self.log.info("=" * 80)
 
-    def _get_latest_dataset_path(self, dataset_name: str) -> Optional[str]:
+    def _get_latest_dataset_path(self, dataset_name: str) -> str | None:
         """Get the latest path for a specific dataset."""
         try:
             pattern = f"gs://{self.bucket}/silver/{dataset_name}/*/*.parquet"
             files = self.gcs_access.list_files(pattern)
             if files:
                 return sorted(files, reverse=True)[0]
-            else:
-                self.log.warning(f"No data found for {dataset_name}")
-                return None
+            self.log.warning(f"No data found for {dataset_name}")
+            return None
         except Exception as e:
             self.log.error(f"Error finding {dataset_name}: {e}")
             return None
 
-    def _get_latest_fvm_marker_path(self) -> Optional[str]:
+    def _get_latest_fvm_marker_path(self) -> str | None:
         """Get the latest FVM marker dataset."""
         try:
             pattern = f"gs://{self.bucket}/silver/fvm_marker_*/*/*.parquet"
@@ -563,8 +561,7 @@ class FieldAreaAnalysisRedesigned:
             if year_files:
                 latest_year = max(year_files.keys())
                 return year_files[latest_year]
-            else:
-                return None
+            return None
         except Exception as e:
             self.log.error(f"Error finding FVM marker data: {e}")
             return None

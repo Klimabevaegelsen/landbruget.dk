@@ -6,18 +6,16 @@ system to the optimized GCSDataAccess architecture. These helpers ensure
 consistent patterns and reduce migration complexity.
 """
 
-from typing import List, Optional
-
 import duckdb
 
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 
 
 class GCSMigrationHelper:
     """Helper utilities for migrating to GCSDataAccess."""
 
-    def __init__(self, logger: Optional[Logger] = None):
+    def __init__(self, logger: Logger | None = None):
         self.log = logger or Logger.get_logger()
 
     @staticmethod
@@ -53,7 +51,7 @@ class GCSMigrationHelper:
         gcs_access.create_table_from_gcs(table_name, gcs_path)
 
     @staticmethod
-    def list_gcs_files(gcs_access: GCSDataAccess, bucket: str, prefix: str) -> List[str]:
+    def list_gcs_files(gcs_access: GCSDataAccess, bucket: str, prefix: str) -> list[str]:
         """
         List files in GCS bucket with prefix.
 
@@ -133,9 +131,8 @@ class GCSMigrationHelper:
             if result and result[0] == 1:
                 self.log.info("✅ Connection sharing validation passed")
                 return True
-            else:
-                self.log.error("❌ Connection sharing validation failed - connections are separate")
-                return False
+            self.log.error("❌ Connection sharing validation failed - connections are separate")
+            return False
 
         except Exception as e:
             self.log.error(f"❌ Connection sharing validation failed with error: {e}")
@@ -194,7 +191,7 @@ def migrate_save_data_pattern(
     bucket: str,
     stage: str,
     timestamp: str,
-    subdataset: str = None,
+    subdataset: str | None = None,
 ) -> None:
     """
     Migrate the common _save_data pattern to GCSDataAccess.

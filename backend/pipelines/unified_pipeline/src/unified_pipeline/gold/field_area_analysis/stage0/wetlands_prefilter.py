@@ -8,7 +8,7 @@ PERFORMANCE IMPACT: Dramatically reduces Stage 2 wetlands processing complexity
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 from ..config import CONFIG
 from .base import PreFilteringStageBase
@@ -122,8 +122,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
             self.log.info(
-                f"📍 Coordinate bounds: X({min_x:.2f}, {max_x:.2f}), "
-                f"Y({min_y:.2f}, {max_y:.2f})"
+                f"📍 Coordinate bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
             )
 
             # Check if coordinates are in expected ranges for Denmark
@@ -134,8 +133,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 )
             elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
                 self.log.info(
-                    "✅ Coordinates appear to be in UTM Zone 32N (EPSG:25832) - "
-                    "Denmark bounds OK"
+                    "✅ Coordinates appear to be in UTM Zone 32N (EPSG:25832) - Denmark bounds OK"
                 )
             else:
                 self.log.warning("⚠️ Coordinates outside expected Denmark bounds!")
@@ -165,7 +163,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
-                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
+                    self.log.info(f"   Raw WKT {i + 1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
                     if wkt and "POINT(" in wkt:
                         coords_str = wkt.replace("POINT(", "").replace(")", "")
@@ -175,17 +173,17 @@ class WetlandsPreFilter(PreFilteringStageBase):
                                 first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
                                 coord_pairs.append((first_val, second_val))
                                 self.log.info(
-                                    f"   Wetland {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    f"   Wetland {i + 1}: POINT({first_val:.6f} {second_val:.6f})"
                                 )
                             else:
                                 self.log.warning(
-                                    f"   Wetland {i+1}: Invalid coordinate format: {coords_str}"
+                                    f"   Wetland {i + 1}: Invalid coordinate format: {coords_str}"
                                 )
                         except Exception as parse_e:
-                            self.log.warning(f"   Wetland {i+1}: Parse error: {parse_e}")
+                            self.log.warning(f"   Wetland {i + 1}: Parse error: {parse_e}")
                             continue
                     else:
-                        self.log.warning(f"   Wetland {i+1}: Not a POINT geometry: {wkt}")
+                        self.log.warning(f"   Wetland {i + 1}: Not a POINT geometry: {wkt}")
 
                 if coord_pairs:
                     self.log.info(
@@ -289,7 +287,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
             f"individual polygons after ST_Dump"
         )
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Pre-filter wetlands using chunked processing to manage memory.
 
@@ -441,7 +439,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
             ),
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save output data - already handled in _execute_stage_processing for Stage 0."""
         # Stage 0 classes handle export directly in _execute_stage_processing
         # to use custom output paths and naming conventions

@@ -18,14 +18,9 @@ from .validators.pii_validator import PIIAction, PIIType, PIIValidator
 logger = get_logger()
 
 # Import the new data tracing system
-try:
-    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-    PIPELINE_METADATA_AVAILABLE = True
-except ImportError:
-    logger.warning("Pipeline metadata system not available - continuing without data tracing")
-    PipelineMetadataManager = None
-    PIPELINE_METADATA_AVAILABLE = False
+PIPELINE_METADATA_AVAILABLE = True
 
 
 class SilverProcessor:
@@ -117,7 +112,7 @@ class SilverProcessor:
         self.parquet_manager._owns_connection = False
 
         # Create a persistent GCSDataAccess instance to avoid connection closure
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         self._shared_gcs_access = GCSDataAccess(connection=shared_conn)
 
@@ -203,7 +198,7 @@ class SilverProcessor:
             processed_count = 0
 
             # Process each file from memory
-            for _file_key, file_info in file_data.items():
+            for file_info in file_data.values():
                 # Apply filters
                 file_info.get("metadata", {})
 
@@ -290,7 +285,7 @@ class SilverProcessor:
             return processed_count
 
         except Exception as e:
-            logger.error(f"Failed to process Bronze data from memory: {str(e)}")
+            logger.error(f"Failed to process Bronze data from memory: {e!s}")
             raise
 
     def process_bronze_files(
@@ -351,7 +346,7 @@ class SilverProcessor:
             return processed_count
 
         except Exception as e:
-            logger.error(f"Failed to process Bronze files: {str(e)}")
+            logger.error(f"Failed to process Bronze files: {e!s}")
             raise
 
     def _list_bronze_files(
@@ -402,7 +397,7 @@ class SilverProcessor:
                             all_files.append(relative_path)
 
         except Exception as e:
-            logger.error(f"Failed to list files in Bronze directory {bronze_run_path}: {str(e)}")
+            logger.error(f"Failed to list files in Bronze directory {bronze_run_path}: {e!s}")
             return bronze_files
 
         # Process each metadata file
@@ -439,7 +434,7 @@ class SilverProcessor:
                     logger.warning(f"File does not exist: {file_path}")
 
             except Exception as e:
-                logger.warning(f"Error processing metadata {metadata_path}: {str(e)}")
+                logger.warning(f"Error processing metadata {metadata_path}: {e!s}")
 
         logger.info(f"Found {len(bronze_files)} Bronze files to process")
         return bronze_files
@@ -519,7 +514,7 @@ class SilverProcessor:
                     file_content, original_filename, metadata_dict
                 )
             except Exception as e:
-                logger.error(f"Failed to transform {original_filename}: {str(e)}")
+                logger.error(f"Failed to transform {original_filename}: {e!s}")
                 return False
 
             # Check if we have valid transformed data
@@ -553,7 +548,7 @@ class SilverProcessor:
                         except Exception as e:
                             logger.error(
                                 f"Failed to save transformed data for {original_filename} "
-                                f"sheet {sheet_name}: {str(e)}"
+                                f"sheet {sheet_name}: {e!s}"
                             )
                             return False
 
@@ -589,7 +584,7 @@ class SilverProcessor:
                         except Exception as e:
                             logger.error(
                                 f"Failed to save transformed data for {original_filename} "
-                                f"part {i}: {str(e)}"
+                                f"part {i}: {e!s}"
                             )
                             return False
 
@@ -633,7 +628,7 @@ class SilverProcessor:
                         logger.info(f"Saved transformed data to: {output_path}")
                     except Exception as e:
                         logger.error(
-                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                            f"Failed to save transformed data for {original_filename}: {e!s}"
                         )
                         return False
 
@@ -660,7 +655,7 @@ class SilverProcessor:
                         logger.info(f"Saved transformed data to: {output_path}")
                     except Exception as e:
                         logger.error(
-                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                            f"Failed to save transformed data for {original_filename}: {e!s}"
                         )
                         return False
 
@@ -684,7 +679,7 @@ class SilverProcessor:
         except Exception as e:
             logger.error(
                 f"Failed to process file from memory "
-                f"{file_info.get('original_filename', 'unknown')}: {str(e)}"
+                f"{file_info.get('original_filename', 'unknown')}: {e!s}"
             )
             return False
 
@@ -773,7 +768,7 @@ class SilverProcessor:
             return True
 
         except Exception as e:
-            logger.error(f"Error processing file {file_path}: {str(e)}")
+            logger.error(f"Error processing file {file_path}: {e!s}")
             return False
 
     def _apply_schema_to_file(
@@ -871,7 +866,7 @@ class SilverProcessor:
             return schema_output_path
 
         except Exception as e:
-            logger.warning(f"Failed to apply schema to {output_path}: {str(e)}")
+            logger.warning(f"Failed to apply schema to {output_path}: {e!s}")
             return None
 
     def _handle_pii_in_file(self, output_path: Path, silver_run_path: Path) -> Path | None:
@@ -930,7 +925,7 @@ class SilverProcessor:
                         filename_ext = "." + filename.rsplit(".", 1)[1] if "." in filename else ""
                         new_filename = f"{filename_stem}_pii_handled{filename_ext}"
 
-                        pii_output_path_str = "/".join(path_parts[:-1] + [new_filename])
+                        pii_output_path_str = "/".join([*path_parts[:-1], new_filename])
 
                         # Export handled table back to GCS
                         gcs_access.export_table_to_gcs_direct(handled_table, pii_output_path_str)
@@ -978,5 +973,5 @@ class SilverProcessor:
             return None
 
         except Exception as e:
-            logger.warning(f"Failed to handle PII in {output_path}: {str(e)}")
+            logger.warning(f"Failed to handle PII in {output_path}: {e!s}")
             return None

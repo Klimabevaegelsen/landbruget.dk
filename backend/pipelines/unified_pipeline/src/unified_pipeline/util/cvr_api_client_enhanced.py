@@ -5,7 +5,7 @@ This module provides a patched version of the CVR API client that replaces
 the arbitrary "first address" selection with intelligent address prioritization.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .address_selection_integration import get_primary_address_geometry_enhanced
 from .cvr_api_client import CVRAPIClient as BaseCVRAPIClient
@@ -22,8 +22,8 @@ class EnhancedCVRAPIClient(BaseCVRAPIClient):
 
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
         enable_geocoding: bool = True,
         geocode_current_only: bool = True,
         address_selection_strategy: str = "hybrid",
@@ -46,7 +46,7 @@ class EnhancedCVRAPIClient(BaseCVRAPIClient):
         self.log.info("Enhanced CVR API client initialized")
         self.log.info(f"Address selection strategy: {address_selection_strategy}")
 
-    def enrich_company_with_geometry(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
+    def enrich_company_with_geometry(self, company_data: dict[str, Any]) -> dict[str, Any]:
         """
         Enrich company data with geometry using enhanced address selection.
 
@@ -189,7 +189,7 @@ class EnhancedCVRAPIClient(BaseCVRAPIClient):
             self.log.error(f"Error enriching company data with enhanced geometry: {e}")
             return company_data
 
-    def enrich_pnumber_with_geometry(self, pnumber_data: Dict[str, Any]) -> Dict[str, Any]:
+    def enrich_pnumber_with_geometry(self, pnumber_data: dict[str, Any]) -> dict[str, Any]:
         """
         Enrich P-number data with geometry using enhanced address selection.
 

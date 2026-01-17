@@ -15,13 +15,17 @@ Key Features:
 
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from loguru import logger
 from pydantic import ConfigDict, Field
 from tqdm import tqdm
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+
+# CRS Strategy: With silver layer now producing EPSG:25832 data, no transformation needed
+# Set to True when silver layer is confirmed to produce 25832 data
+USE_UTM_PROCESSING = True
 
 
 class PesticideProximityGoldConfig(BaseJobConfig):
@@ -51,7 +55,7 @@ class PesticideProximityGoldConfig(BaseJobConfig):
     water_typology_dataset: str = "water_typology"
 
     # Year filtering for matrix jobs (process single year instead of all years)
-    pesticide_year: Optional[int] = Field(
+    pesticide_year: int | None = Field(
         default=None,
         description="Specific pesticide year to process (if None, processes all available years)",
     )
@@ -90,7 +94,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         super().__init__(config)
         self.log = logger
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Main execution method for pesticide proximity analysis."""
 
         # Initialize DuckDB spatial extension
@@ -140,7 +144,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.conn.execute("LOAD spatial")
         self.log.info("✅ DuckDB spatial extension loaded")
 
-    async def _load_datasets(self) -> Dict[str, list]:
+    async def _load_datasets(self) -> dict[str, list]:
         """Load required datasets for proximity analysis."""
         datasets = {}
 
@@ -199,7 +203,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info("✅ All input datasets loaded and validated")
         return datasets
 
-    def _get_pesticide_disaggregation_files(self) -> Dict[int, str]:
+    def _get_pesticide_disaggregation_files(self) -> dict[int, str]:
         """Get mapping of years to pesticide disaggregation file paths."""
         pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/*.parquet"
         files = self.gcs_access.list_files(pattern)
@@ -224,11 +228,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         )
         return year_files
 
-    async def _get_available_years(self, disaggregation_files: Dict[int, str]) -> list:
+    async def _get_available_years(self, disaggregation_files: dict[int, str]) -> list:
         """Get list of available years from disaggregated pesticide files."""
         return sorted(disaggregation_files.keys())
 
-    async def _load_year_data(self, year: int, datasets: Dict[str, Any]) -> None:
+    async def _load_year_data(self, year: int, datasets: dict[str, Any]) -> None:
         """Load data for a specific year."""
 
         # Load disaggregated data for this year from the file path
@@ -302,11 +306,17 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         # DuckDB CTE alias issues
 
         # Step 1: Create fields with geometry
+        # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
+        field_geom_expr = (
+            "f.geometry"
+            if USE_UTM_PROCESSING
+            else "ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832')"
+        )
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE fields_with_geometry AS
             SELECT DISTINCT
                 cd.field_uuid,
-                ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832') as field_geom_utm
+                {field_geom_expr} as field_geom_utm
             FROM current_disaggregation cd
             JOIN {field_table} f ON cd.field_uuid = f.field_uuid
             WHERE f.geometry IS NOT NULL
@@ -357,11 +367,17 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             """)
 
             # Step 2: Pre-filter buildings to residential only
-            self.conn.execute("""
+            # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
+            building_geom_expr = (
+                "geometry"
+                if USE_UTM_PROCESSING
+                else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
+            )
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE residential_buildings AS
                 SELECT
                     address,
-                    ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
+                    {building_geom_expr} as building_geom_utm
                 FROM data_bbr_buildings_silver
                 WHERE category_group = 'residential'
                   AND address IS NOT NULL
@@ -451,11 +467,17 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             """)
 
             # Step 2: Pre-filter buildings to educational only
-            self.conn.execute("""
+            # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
+            building_geom_expr = (
+                "geometry"
+                if USE_UTM_PROCESSING
+                else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
+            )
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE educational_buildings AS
                 SELECT
                     address,
-                    ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
+                    {building_geom_expr} as building_geom_utm
                 FROM data_bbr_buildings_silver
                 WHERE category_group = 'publicServices'
                   AND address IS NOT NULL
@@ -545,12 +567,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             """)
 
             # Step 2: Pre-filter water features
-            self.conn.execute("""
+            # With USE_UTM_PROCESSING, silver layer stores WKT in EPSG:25832
+            water_geom_expr = (
+                "ST_GeomFromText(geometry)"
+                if USE_UTM_PROCESSING
+                else "ST_Transform(ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832')"
+            )
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE water_features AS
                 SELECT
-                    ST_Transform(
-                        ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832'
-                    ) as water_geom_utm
+                    {water_geom_expr} as water_geom_utm
                 FROM data_water_typology_silver
                 WHERE geometry IS NOT NULL AND geometry != ''
             """)
@@ -658,7 +684,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
         self.log.info(f"📁 Proximity GCS Path: {output_path}")
 
-    def get_schema_info(self) -> Dict[str, Any]:
+    def get_schema_info(self) -> dict[str, Any]:
         """Return schema information for the proximity analysis output."""
         return {
             "output_columns": [

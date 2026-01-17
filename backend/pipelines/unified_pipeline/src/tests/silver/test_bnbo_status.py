@@ -398,7 +398,7 @@ def test_create_dissolved_df_with_test_data(bnbo_status_silver: BNBOStatusSilver
         desc[0] for desc in bnbo_status_silver.conn.execute(f"DESCRIBE {result_table}").fetchall()
     ]
     assert "status_category" in columns
-    assert "dissolved_geometry" in columns
+    assert "geometry" in columns  # Column is named 'geometry' in the final output
 
 
 def test_create_dissolved_df_empty_input(bnbo_status_silver: BNBOStatusSilver) -> None:
@@ -489,8 +489,10 @@ async def test_run(
     ):
         await bnbo_status_silver.run()
 
-        # Check that the methods were called
-        mock_read_data.assert_called_once_with(silver_config.dataset, silver_config.bucket)
+        # Check that the methods were called - now with bronze_data kwarg
+        mock_read_data.assert_called_once_with(
+            silver_config.dataset, silver_config.bucket, bronze_data=None
+        )
         mock_process_xml_data.assert_called_once()
         mock_create_dissolved_df.assert_called_once()
         mock_save_data.assert_called()
@@ -502,15 +504,17 @@ async def test_run_with_empty_dataframe(
     bnbo_status_silver: BNBOStatusSilver,
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
-    """Test the run method with an empty ."""
+    """Test the run method with no bronze data."""
     # Mock the read_data and save_data methods
     with (
         patch.object(bnbo_status_silver, "_read_bronze_data", return_value=None) as mock_read_data,
     ):
         await bnbo_status_silver.run()
 
-        # Check that the methods were called
-        mock_read_data.assert_called_once_with(silver_config.dataset, silver_config.bucket)
+        # Check that the methods were called - now with bronze_data kwarg
+        mock_read_data.assert_called_once_with(
+            silver_config.dataset, silver_config.bucket, bronze_data=None
+        )
 
 
 @pytest.mark.asyncio
@@ -530,6 +534,8 @@ async def test_run_with_empty_processed_data(
     ):
         await bnbo_status_silver.run()
 
-        # Check that the methods were called
-        mock_read_data.assert_called_once_with(silver_config.dataset, silver_config.bucket)
+        # Check that the methods were called - now with bronze_data kwarg
+        mock_read_data.assert_called_once_with(
+            silver_config.dataset, silver_config.bucket, bronze_data=None
+        )
         mock_process_xml_data.assert_called_once()

@@ -9,7 +9,7 @@ address coverage for building matching.
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 from pydantic import Field
 
@@ -58,7 +58,7 @@ class PNumberFetchingConfig(BaseJobConfig):
         description="Whether to enrich addresses with geometry (handled in separate step)",
     )
 
-    model_config = {"frozen": True}
+    model_config: ClassVar[dict[str, bool]] = {"frozen": True}
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
@@ -117,7 +117,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         )
 
     @timed(name="P-number fetching processing")
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> str:
         """
         Run the P-number fetching process.
 
@@ -153,7 +153,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             raise
 
     @timed(name="Extracting P-numbers from companies")
-    def _extract_pnumbers_from_companies(self) -> Dict[str, Any]:
+    def _extract_pnumbers_from_companies(self) -> dict[str, Any]:
         """
         Load company data and extract P-numbers for fetching.
 
@@ -254,40 +254,39 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     # In GitHub Actions, we only need to process the artifact once
                     break
 
-                else:
-                    # Use GCS temp download for local development
-                    self.log.info(f"Local development - downloading from GCS: {input_path}")
-                    with self.gcs_access._temp_download(input_path) as temp_file:
-                        # Load company data from temp file
-                        result = self.conn.execute(
-                            """
+                # Use GCS temp download for local development
+                self.log.info(f"Local development - downloading from GCS: {input_path}")
+                with self.gcs_access._temp_download(input_path) as temp_file:
+                    # Load company data from temp file
+                    result = self.conn.execute(
+                        """
                             SELECT cvr_number, company_data_json
                             FROM read_parquet(?)
                             WHERE company_data_json IS NOT NULL
                         """,
-                            [temp_file],
-                        ).fetchall()
+                        [temp_file],
+                    ).fetchall()
 
-                        # Extract P-numbers from each company inside the context manager
-                        for cvr_number, company_json in result:
-                            total_companies += 1
+                    # Extract P-numbers from each company inside the context manager
+                    for cvr_number, company_json in result:
+                        total_companies += 1
 
-                            try:
-                                company_data = json.loads(company_json)
-                                extracted_pnumbers = company_data.get("extracted_pnumbers", [])
+                        try:
+                            company_data = json.loads(company_json)
+                            extracted_pnumbers = company_data.get("extracted_pnumbers", [])
 
-                                if extracted_pnumbers:
-                                    cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
+                            if extracted_pnumbers:
+                                cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
 
-                                    for pnumber in extracted_pnumbers:
-                                        all_pnumbers.add(pnumber)
-                                        pnumber_to_cvr[pnumber] = str(cvr_number)
+                                for pnumber in extracted_pnumbers:
+                                    all_pnumbers.add(pnumber)
+                                    pnumber_to_cvr[pnumber] = str(cvr_number)
 
-                            except json.JSONDecodeError as e:
-                                self.log.warning(
-                                    f"Failed to parse company data for CVR {cvr_number}: {e}"
-                                )
-                                continue
+                        except json.JSONDecodeError as e:
+                            self.log.warning(
+                                f"Failed to parse company data for CVR {cvr_number}: {e}"
+                            )
+                            continue
 
             except Exception as e:
                 self.log.error(f"Failed to process company data from {input_path}: {e}")
@@ -316,7 +315,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         return extraction_result
 
     @timed(name="Validating CVR consistency")
-    def _validate_cvr_consistency(self, companies_metadata: List[Dict[str, Any]]) -> None:
+    def _validate_cvr_consistency(self, companies_metadata: list[dict[str, Any]]) -> None:
         """
         Validate that this step is processing companies from the same pipeline run.
 
@@ -373,7 +372,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             self.log.warning("This may indicate independent execution mode is enabled")
 
         # Log success
-        run_id = list(pipeline_run_ids)[0] if pipeline_run_ids else "unknown"
+        run_id = next(iter(pipeline_run_ids)) if pipeline_run_ids else "unknown"
         self.log.info("✅ CVR consistency validation passed:")
         self.log.info(f"   • Companies from pipeline run: {run_id}")
         self.log.info(f"   • Total companies: {len(companies_metadata)}")
@@ -381,7 +380,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         self.log.info("   • All companies are from the same pipeline execution")
 
     @timed(name="Fetching P-number data")
-    async def _fetch_pnumber_data(self, pnumber_extraction: Dict[str, Any]) -> Dict[str, Any]:
+    async def _fetch_pnumber_data(self, pnumber_extraction: dict[str, Any]) -> dict[str, Any]:
         """
         Fetch P-number data from CVR register.
 
@@ -424,8 +423,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
 
     @timed(name="Processing P-number data")
     def _process_pnumber_data(
-        self, pnumber_data: Dict[str, Any], pnumber_extraction: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, pnumber_data: dict[str, Any], pnumber_extraction: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Process and link P-number data to companies.
 
@@ -491,7 +490,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         return processed_data
 
     @timed(name="Saving P-number data")
-    def _save_pnumber_data(self, processed_data: Dict[str, Any]) -> str:
+    def _save_pnumber_data(self, processed_data: dict[str, Any]) -> str:
         """
         Save processed P-number data to GCS.
 
@@ -623,7 +622,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
 
         return table_name
 
-    def _save_summary_data(self, summary: Dict[str, Any]) -> None:
+    def _save_summary_data(self, summary: dict[str, Any]) -> None:
         """Save processing summary data."""
         # No batching - single summary file
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/pnumber_summary.json"

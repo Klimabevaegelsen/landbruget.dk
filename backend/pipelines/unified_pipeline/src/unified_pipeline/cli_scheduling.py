@@ -22,8 +22,7 @@ except ImportError:
             result.append(" | ".join(str(h) for h in headers))
             result.append("-" * (sum(len(str(h)) for h in headers) + len(headers) * 3 - 3))
 
-        for row in data:
-            result.append(" | ".join(str(cell) for cell in row))
+        result.extend(" | ".join(str(cell) for cell in row) for row in data)
 
         return "\n".join(result)
 
@@ -108,7 +107,7 @@ def list_schedules(frequency: str, show_dependencies: bool):
     for freq, count in sorted(freq_counts.items()):
         click.echo(f"  {freq.title()}: {count} pipelines")
     click.echo(
-        f"  Total estimated duration: {total_duration} minutes ({total_duration/60:.1f} hours)"
+        f"  Total estimated duration: {total_duration} minutes ({total_duration / 60:.1f} hours)"
     )
 
 
@@ -152,7 +151,7 @@ def execution_order(frequency: str):
             click.echo(f"  • {source.value:<30} {config.description[:40]}...{deps_str}")
 
     click.echo(
-        f"\n⏱️ Total estimated duration: {total_duration} minutes ({total_duration/60:.1f} hours)"
+        f"\n⏱️ Total estimated duration: {total_duration} minutes ({total_duration / 60:.1f} hours)"
     )
     click.echo(f"📊 {len(sources)} pipelines in {len(batches)} execution batches")
 

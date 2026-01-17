@@ -12,7 +12,7 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import duckdb
 from dotenv import load_dotenv
@@ -76,7 +76,9 @@ class SvineflytningSilverProcessor:
             logger.error(f"Failed to setup DuckDB: {e}")
             raise
 
-    def process_bronze_data(self, bronze_data_path: str, export_timestamp: Optional[str] = None) -> Dict[str, Any]:
+    def process_bronze_data(
+        self, bronze_data_path: str, export_timestamp: str | None = None
+    ) -> dict[str, Any]:
         """
         Process bronze pig movement data into silver layer.
 
@@ -120,7 +122,7 @@ class SvineflytningSilverProcessor:
             logger.error(f"Error in silver processing: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
-    def _load_bronze_data(self, data_path: str) -> List[Dict[str, Any]]:
+    def _load_bronze_data(self, data_path: str) -> list[dict[str, Any]]:
         """
         Load bronze data from local file or GCS.
 
@@ -141,14 +143,16 @@ class SvineflytningSilverProcessor:
                 blob = bucket.blob(blob_path)
 
                 # Download to temporary file for processing
-                with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as tmp_file:
+                with tempfile.NamedTemporaryFile(
+                    mode="w+", suffix=".json", delete=False
+                ) as tmp_file:
                     blob.download_to_filename(tmp_file.name)
-                    with open(tmp_file.name, "r") as f:
+                    with open(tmp_file.name) as f:
                         data = json.load(f)
                 os.unlink(tmp_file.name)
             else:
                 # Load from local file
-                with open(data_path, "r") as f:
+                with open(data_path) as f:
                     data = json.load(f)
 
             logger.info(f"Loaded {len(data)} bronze records")
@@ -158,7 +162,7 @@ class SvineflytningSilverProcessor:
             logger.error(f"Failed to load bronze data: {e}")
             raise
 
-    def _transform_movements(self, raw_data: List[Dict[str, Any]], export_timestamp: str) -> int:
+    def _transform_movements(self, raw_data: list[dict[str, Any]], export_timestamp: str) -> int:
         """
         Transform raw movement data into structured silver tables.
 
@@ -427,8 +431,12 @@ class SvineflytningSilverProcessor:
 
         # Log data quality metrics
         total_count = self.conn.execute("SELECT COUNT(*) FROM silver_movements").fetchone()[0]
-        deleted_count = self.conn.execute("SELECT COUNT(*) FROM silver_movements WHERE is_deleted = true").fetchone()[0]
-        invalid_count = self.conn.execute("SELECT COUNT(*) FROM silver_movements WHERE is_invalid = true").fetchone()[0]
+        deleted_count = self.conn.execute(
+            "SELECT COUNT(*) FROM silver_movements WHERE is_deleted = true"
+        ).fetchone()[0]
+        invalid_count = self.conn.execute(
+            "SELECT COUNT(*) FROM silver_movements WHERE is_invalid = true"
+        ).fetchone()[0]
         missing_animals = self.conn.execute(
             "SELECT COUNT(*) FROM silver_movements WHERE missing_animal_count = true"
         ).fetchone()[0]
@@ -532,7 +540,7 @@ class SvineflytningSilverProcessor:
         vehicle_count = self.conn.execute("SELECT COUNT(*) FROM silver_vehicles").fetchone()[0]
         logger.info(f"Vehicles table created with {vehicle_count} unique vehicles")
 
-    def _export_silver_data(self, export_timestamp: str) -> Dict[str, Any]:
+    def _export_silver_data(self, export_timestamp: str) -> dict[str, Any]:
         """
         Export processed silver data to storage.
 
@@ -555,17 +563,22 @@ class SvineflytningSilverProcessor:
 
         if USE_GCS:
             try:
-                from unified_pipeline.util.gcs_access import GCSDataAccess
+                from common.gcs import GCSDataAccess
 
                 gcs_access = GCSDataAccess()
 
                 # Try native DuckDB HTTPFS GCS export for each table
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
-                    gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+                    gcs_path = (
+                        f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+                    )
 
                     gcs_access.export_to_gcs_native(
-                        connection=self.conn, table_name=table, gcs_path=gcs_path, compression="zstd"
+                        connection=self.conn,
+                        table_name=table,
+                        gcs_path=gcs_path,
+                        compression="zstd",
                     )
                     exported_files.append(gcs_path)
                     logger.info(f"✅ Native GCS export successful: {gcs_path}")
@@ -597,7 +610,9 @@ class SvineflytningSilverProcessor:
                 # Build GCS paths for return
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
-                    gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+                    gcs_path = (
+                        f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+                    )
                     exported_files.append(gcs_path)
                 destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
                 storage_type = "gcs"
@@ -639,7 +654,7 @@ class SvineflytningSilverProcessor:
         """
         try:
             # Try to import GCS utilities
-            from unified_pipeline.util.gcs_access import GCSDataAccess
+            from common.gcs import GCSDataAccess
 
             gcs_access = GCSDataAccess()
 
@@ -659,11 +674,10 @@ class SvineflytningSilverProcessor:
                     gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{parquet_file.name}"
 
                     # Upload file using streaming
-                    with open(parquet_file, "rb") as src:
-                        with gcs_access.fs.open(gcs_path, "wb") as dst:
-                            import shutil
+                    import shutil
 
-                            shutil.copyfileobj(src, dst)
+                    with open(parquet_file, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
 
                     logger.info(f"✅ Uploaded {parquet_file.name} to {gcs_path}")
                     uploaded_count += 1
@@ -674,9 +688,8 @@ class SvineflytningSilverProcessor:
             if uploaded_count == len(parquet_files):
                 logger.info(f"✅ Successfully uploaded all {uploaded_count} silver files to GCS")
                 return True
-            else:
-                logger.warning(f"⚠️ Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
-                return False
+            logger.warning(f"⚠️ Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
+            return False
 
         except ImportError:
             logger.warning("GCS utilities not available - skipping silver data upload")
@@ -687,8 +700,10 @@ class SvineflytningSilverProcessor:
 
 
 def process_svineflytning_silver(
-    bronze_data_path: str, output_dir: str = "/data/silver/svineflytning", export_timestamp: Optional[str] = None
-) -> Dict[str, Any]:
+    bronze_data_path: str,
+    output_dir: str = "/data/silver/svineflytning",
+    export_timestamp: str | None = None,
+) -> dict[str, Any]:
     """
     Main function to process svineflytning data from bronze to silver.
 
@@ -709,19 +724,26 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Process Svineflytning data to silver layer")
     parser.add_argument("bronze_data_path", help="Path to bronze data file or GCS path")
-    parser.add_argument("--output-dir", default="/data/silver/svineflytning", help="Output directory")
+    parser.add_argument(
+        "--output-dir", default="/data/silver/svineflytning", help="Output directory"
+    )
     parser.add_argument("--export-timestamp", help="Export timestamp (defaults to current time)")
-    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    parser.add_argument(
+        "--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"]
+    )
 
     args = parser.parse_args()
 
     # Setup logging
     logging.basicConfig(
-        level=getattr(logging, args.log_level), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
     # Process data
-    result = process_svineflytning_silver(args.bronze_data_path, args.output_dir, args.export_timestamp)
+    result = process_svineflytning_silver(
+        args.bronze_data_path, args.output_dir, args.export_timestamp
+    )
 
     if result["success"]:
         print("✅ Silver processing completed successfully")

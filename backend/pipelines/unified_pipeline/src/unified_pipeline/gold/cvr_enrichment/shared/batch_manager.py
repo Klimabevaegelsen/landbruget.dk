@@ -7,7 +7,7 @@ merging, and coordination.
 """
 
 import math
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from unified_pipeline.util.log_util import Logger
 
@@ -20,7 +20,7 @@ class CVRBatchManager:
     managing batch dependencies, and coordinating parallel execution.
     """
 
-    def __init__(self, batch_size: int = 50, max_batches: Optional[int] = None):
+    def __init__(self, batch_size: int = 50, max_batches: int | None = None):
         """
         Initialize batch manager.
 
@@ -32,7 +32,7 @@ class CVRBatchManager:
         self.max_batches = max_batches
         self.log = Logger.get_logger()
 
-    def create_cvr_batches(self, cvr_numbers: Set[str]) -> List[List[str]]:
+    def create_cvr_batches(self, cvr_numbers: set[str]) -> list[list[str]]:
         """
         Split CVR numbers into batches for parallel processing.
 
@@ -42,7 +42,7 @@ class CVRBatchManager:
         Returns:
             List of batches, each containing a list of CVR numbers
         """
-        cvr_list = sorted(list(cvr_numbers))
+        cvr_list = sorted(cvr_numbers)
         total_cvrs = len(cvr_list)
 
         if total_cvrs == 0:
@@ -79,7 +79,7 @@ class CVRBatchManager:
 
         return batches
 
-    def get_batch_summary(self, batches: List[List[str]]) -> Dict[str, Any]:
+    def get_batch_summary(self, batches: list[list[str]]) -> dict[str, Any]:
         """
         Get summary statistics for a set of batches.
 
@@ -112,8 +112,8 @@ class CVRBatchManager:
         }
 
     def validate_batch_coverage(
-        self, original_items: Set[str], batches: List[List[str]]
-    ) -> Dict[str, Any]:
+        self, original_items: set[str], batches: list[list[str]]
+    ) -> dict[str, Any]:
         """
         Validate that batches cover all original items without duplicates.
 
@@ -168,7 +168,7 @@ class CVRBatchManager:
         total_items: int,
         max_batch_size: int = 100,
         min_batch_size: int = 10,
-        target_batches: Optional[int] = None,
+        target_batches: int | None = None,
     ) -> int:
         """
         Calculate optimal number of batches based on constraints.
@@ -190,12 +190,11 @@ class CVRBatchManager:
             items_per_batch = total_items / target_batches
             if min_batch_size <= items_per_batch <= max_batch_size:
                 return target_batches
-            else:
-                self.log.warning(
-                    f"Target batches {target_batches} not feasible "
-                    f"(would result in {items_per_batch:.1f} items per batch, "
-                    f"outside range {min_batch_size}-{max_batch_size})"
-                )
+            self.log.warning(
+                f"Target batches {target_batches} not feasible "
+                f"(would result in {items_per_batch:.1f} items per batch, "
+                f"outside range {min_batch_size}-{max_batch_size})"
+            )
 
         # Calculate based on max batch size constraint
         min_batches_needed = math.ceil(total_items / max_batch_size)
@@ -226,7 +225,7 @@ class CVRBatchManager:
 
         return optimal_batches
 
-    def merge_batch_results(self, batch_results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def merge_batch_results(self, batch_results: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Merge results from multiple batch processing operations.
 

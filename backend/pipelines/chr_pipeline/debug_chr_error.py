@@ -14,7 +14,9 @@ backend_path = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, backend_path)
 
 # Set up logging to see what's happening
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +27,7 @@ def load_env_credentials():
         raise FileNotFoundError(f"No .env file found at {env_file}")
 
     credentials = {}
-    with open(env_file, "r") as f:
+    with open(env_file) as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
@@ -36,7 +38,9 @@ def load_env_credentials():
     password = credentials.get("FVM_PASSWORD")
 
     if not username or not password:
-        raise ValueError(f"Missing FVM_USERNAME or FVM_PASSWORD in .env file. Found keys: {list(credentials.keys())}")
+        raise ValueError(
+            f"Missing FVM_USERNAME or FVM_PASSWORD in .env file. Found keys: {list(credentials.keys())}"
+        )
 
     return username, password
 
@@ -54,7 +58,9 @@ def test_chr_pipeline():
         print(f"Got credentials for user: {username}")
 
         # Create CHR_dyr client
-        chr_dyr_client = create_soap_client("https://webservice.fvm.dk/wsdl/CHR_dyr/CHR_dyr.wsdl", username, password)
+        chr_dyr_client = create_soap_client(
+            "https://webservice.fvm.dk/wsdl/CHR_dyr/CHR_dyr.wsdl", username, password
+        )
         print("Created CHR_dyr client successfully")
 
         # Test with problematic herds from the logs
@@ -67,7 +73,9 @@ def test_chr_pipeline():
 
             try:
                 # Call the function that's failing
-                result = load_animal_movements(chr_dyr_client, username, test_herd, start_date, end_date)
+                result = load_animal_movements(
+                    chr_dyr_client, username, test_herd, start_date, end_date
+                )
 
                 if result:
                     print("Success! Got result")
@@ -111,7 +119,11 @@ def test_chr_pipeline():
                     print(f"Raw response hasattr Response: {hasattr(response, 'Response')}")
 
                     if hasattr(response, "Response"):
-                        resp_obj = response.Response[0] if isinstance(response.Response, list) else response.Response
+                        resp_obj = (
+                            response.Response[0]
+                            if isinstance(response.Response, list)
+                            else response.Response
+                        )
                         print(f"Response object type: {type(resp_obj)}")
                         print(f"Response object attributes: {dir(resp_obj)}")
 
@@ -122,8 +134,12 @@ def test_chr_pipeline():
 
                             # This is where the error probably happens
                             if isinstance(animals, int):
-                                print(f"FOUND THE ISSUE: Enkeltdyrsoplysninger is an integer: {animals}")
-                                print("This should be handled by the safety checks, but apparently it's not")
+                                print(
+                                    f"FOUND THE ISSUE: Enkeltdyrsoplysninger is an integer: {animals}"
+                                )
+                                print(
+                                    "This should be handled by the safety checks, but apparently it's not"
+                                )
                             elif hasattr(animals, "__iter__"):
                                 print(
                                     f"Enkeltdyrsoplysninger is iterable, length: "

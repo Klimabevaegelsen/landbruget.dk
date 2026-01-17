@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import duckdb
 
@@ -10,7 +9,7 @@ from .config import GOLD_BASE_DIR
 
 # Try to import GCS utilities
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
     from unified_pipeline.util.migration_helpers import migrate_save_data_pattern
 
     GCS_AVAILABLE = True
@@ -43,7 +42,8 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
             len(column_names) >= 6
             and any(col.replace("_", "").replace(".", "").isdigit() for col in column_names[1:3])
             and any(
-                ("_" in col and len(col.split("_")) == 3) or ("-" in col and len(col.split("-")) == 3)
+                ("_" in col and len(col.split("_")) == 3)
+                or ("-" in col and len(col.split("-")) == 3)
                 for col in column_names[:1]
             )
         )
@@ -94,9 +94,16 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
             """)
         else:
             # Try to identify coordinate and date columns dynamically (original logic)
-            coord_x_col = next((col for col in column_names if "x" in col.lower() or "coord" in col.lower()), None)
-            coord_y_col = next((col for col in column_names if "y" in col.lower() or "coord" in col.lower()), None)
-            date_col = next((col for col in column_names if "date" in col.lower() or "time" in col.lower()), None)
+            coord_x_col = next(
+                (col for col in column_names if "x" in col.lower() or "coord" in col.lower()), None
+            )
+            coord_y_col = next(
+                (col for col in column_names if "y" in col.lower() or "coord" in col.lower()), None
+            )
+            date_col = next(
+                (col for col in column_names if "date" in col.lower() or "time" in col.lower()),
+                None,
+            )
 
             if not coord_x_col or not coord_y_col:
                 logger.warning("⚠️ Could not identify coordinate columns in stable_fires data")
@@ -312,7 +319,7 @@ def match_fires_to_properties(con: duckdb.DuckDBPyConnection, max_distance_m: in
         return False
 
 
-def get_chr_column(con: duckdb.DuckDBPyConnection, table_name: str) -> Optional[str]:
+def get_chr_column(con: duckdb.DuckDBPyConnection, table_name: str) -> str | None:
     """Find CHR number column dynamically."""
     try:
         columns = con.execute(f"DESCRIBE {table_name}").fetchall()
@@ -324,7 +331,9 @@ def get_chr_column(con: duckdb.DuckDBPyConnection, table_name: str) -> Optional[
             return chr_candidates[0]
 
         # Fallback patterns
-        number_candidates = [col for col in column_names if "nummer" in col.lower() or "number" in col.lower()]
+        number_candidates = [
+            col for col in column_names if "nummer" in col.lower() or "number" in col.lower()
+        ]
         if number_candidates:
             return number_candidates[0]
 
@@ -333,7 +342,7 @@ def get_chr_column(con: duckdb.DuckDBPyConnection, table_name: str) -> Optional[
         return None
 
 
-def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> Dict[str, Optional[str]]:
+def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> dict[str, str | None]:
     """Find date-related columns dynamically with improved logic for animal welfare data."""
     try:
         columns = con.execute(f"DESCRIBE {table_name}").fetchall()
@@ -344,20 +353,28 @@ def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> Dict[st
         # Special handling for animal welfare data
         if table_name == "animal_welfare":
             # For animal welfare, prefer the specific intervention dates
-            intervention_start = next((col for col in column_names if "indsatsomraade_startdato" in col.lower()), None)
-            intervention_end = next((col for col in column_names if "indsatsomraade_slutdato" in col.lower()), None)
+            intervention_start = next(
+                (col for col in column_names if "indsatsomraade_startdato" in col.lower()), None
+            )
+            intervention_end = next(
+                (col for col in column_names if "indsatsomraade_slutdato" in col.lower()), None
+            )
 
             if intervention_start:
                 result["start"] = intervention_start
             if intervention_end:
                 result["end"] = intervention_end
 
-            logger.info(f"🎯 Animal welfare date columns: start={result.get('start')}, end={result.get('end')}")
+            logger.info(
+                f"🎯 Animal welfare date columns: start={result.get('start')}, end={result.get('end')}"
+            )
         else:
             # Generic logic for other tables
             # Look for start date
             start_candidates = [
-                col for col in column_names if any(word in col.lower() for word in ["start", "from", "begin"])
+                col
+                for col in column_names
+                if any(word in col.lower() for word in ["start", "from", "begin"])
             ]
             result["start"] = start_candidates[0] if start_candidates else None
 
@@ -366,15 +383,24 @@ def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> Dict[st
             for col in column_names:
                 col_lower = col.lower()
                 # Only match actual end patterns, avoid false positives like "to" in "startdato"
-                if any(word in col_lower for word in ["end", "slut", "expir"]) and "start" not in col_lower:
-                    end_candidates.append(col)
-                elif col_lower.endswith("_to") or col_lower.endswith("to_date"):
+                if (
+                    (
+                        any(word in col_lower for word in ["end", "slut", "expir"])
+                        and "start" not in col_lower
+                    )
+                    or col_lower.endswith("_to")
+                    or col_lower.endswith("to_date")
+                ):
                     end_candidates.append(col)
 
             result["end"] = end_candidates[0] if end_candidates else None
 
         # Look for general date
-        date_candidates = [col for col in column_names if any(word in col.lower() for word in ["date", "dato", "time"])]
+        date_candidates = [
+            col
+            for col in column_names
+            if any(word in col.lower() for word in ["date", "dato", "time"])
+        ]
         result["date"] = date_candidates[0] if date_candidates else None
 
         return result
@@ -382,7 +408,7 @@ def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> Dict[st
         return {}
 
 
-def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str]:
+def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Create animal welfare timeline parts dynamically."""
     parts = []
     try:
@@ -398,7 +424,11 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
         column_names = [col[0] for col in columns]
 
         desc_col = next(
-            (col for col in column_names if any(word in col.lower() for word in ["indsats", "description", "område"])),
+            (
+                col
+                for col in column_names
+                if any(word in col.lower() for word in ["indsats", "description", "område"])
+            ),
             "NULL",
         )
         # Use standardized species columns (created by standardize_species_data)
@@ -432,7 +462,7 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
         return []
 
 
-def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str]:
+def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Create veterinary events timeline parts dynamically."""
     try:
         chr_col = get_chr_column(con, "property_vet_events")
@@ -447,11 +477,20 @@ def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str
 
         # Look for disease/status columns
         disease_col = next(
-            (col for col in column_names if any(word in col.lower() for word in ["sygdom", "disease"])), "NULL"
+            (
+                col
+                for col in column_names
+                if any(word in col.lower() for word in ["sygdom", "disease"])
+            ),
+            "NULL",
         )
         status_col = next((col for col in column_names if "status" in col.lower()), "NULL")
         species_col = next(
-            (col for col in column_names if any(word in col.lower() for word in ["dyre", "species", "art"])),
+            (
+                col
+                for col in column_names
+                if any(word in col.lower() for word in ["dyre", "species", "art"])
+            ),
             "'Unknown'",
         )
 
@@ -510,7 +549,7 @@ def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str
         return []
 
 
-def create_tail_cutting_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str]:
+def create_tail_cutting_timeline_parts(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Create pig tail cutting timeline parts dynamically."""
     try:
         chr_col = get_chr_column(con, "pig_tail_cutting")
@@ -550,7 +589,9 @@ def create_tail_cutting_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[s
         return []
 
 
-def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_date: str) -> List[str]:
+def create_spf_su_timeline_parts(
+    con: duckdb.DuckDBPyConnection, pipeline_run_date: str
+) -> list[str]:
     """Create SPF-SU timeline parts dynamically."""
     parts = []
     try:
@@ -564,7 +605,9 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
         column_names = [col[0] for col in columns]
 
         health_col = next((col for col in column_names if "health_status" in col.lower()), None)
-        cert_date_col = next((col for col in column_names if "cert" in col.lower() and "date" in col.lower()), None)
+        cert_date_col = next(
+            (col for col in column_names if "cert" in col.lower() and "date" in col.lower()), None
+        )
         cert_approved_col = next((col for col in column_names if "approved" in col.lower()), None)
         next((col for col in column_names if "salmonella_date" in col.lower()), None)
         next((col for col in column_names if "salmonella_status" in col.lower()), None)
@@ -660,17 +703,19 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
         return []
 
 
-def create_spf_su_salmonella_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str]:
+def create_spf_su_salmonella_timeline_parts(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Create SPF-SU salmonella timeline parts from detailed salmonella data."""
 
     # Skip salmonella processing - data contains only enrollment records with no meaningful test data
     # All records have placeholder dates (0001-01-01) and empty arrays for test results
     # Will be re-enabled when actual salmonella test results become available
-    logger.info("⚠️ Skipping salmonella timeline processing - only enrollment data available (no test results)")
+    logger.info(
+        "⚠️ Skipping salmonella timeline processing - only enrollment data available (no test results)"
+    )
     return []
 
 
-def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str]:
+def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Create stable fire timeline parts from matched data."""
     try:
         # Check if we have fire matches
@@ -708,7 +753,7 @@ def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[st
         return []
 
 
-def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
+def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
     """
     Load all available data sources dynamically using GCS patterns.
     Uses unified pipeline pattern: shared DuckDB connection with GCSDataAccess.
@@ -785,11 +830,17 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
                             gcs_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
 
                         except Exception as e:
-                            logger.warning(f"⚠️ Failed to load additional file {additional_file}: {e}")
+                            logger.warning(
+                                f"⚠️ Failed to load additional file {additional_file}: {e}"
+                            )
 
                     # Get final count
-                    total_rows = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                    logger.info(f"   Combined total: {total_rows} rows from {len(valid_files)} files")
+                    total_rows = gcs_access.duckdb_conn.execute(
+                        f"SELECT COUNT(*) FROM {table_name}"
+                    ).fetchone()[0]
+                    logger.info(
+                        f"   Combined total: {total_rows} rows from {len(valid_files)} files"
+                    )
                 else:
                     # Single file loading (existing behavior)
                     latest_file = valid_files[0]
@@ -801,7 +852,9 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
 
                 # Log column info dynamically using shared connection
                 columns = gcs_access.duckdb_conn.execute(f"DESCRIBE {table_name}").fetchall()
-                logger.info(f"   Columns: {[col[0] for col in columns[:5]]}{'...' if len(columns) > 5 else ''}")
+                logger.info(
+                    f"   Columns: {[col[0] for col in columns[:5]]}{'...' if len(columns) > 5 else ''}"
+                )
             else:
                 logger.warning(f"⚠️ No files found for {table_name} with pattern: {pattern}")
                 loaded_tables[table_name] = False
@@ -941,7 +994,9 @@ def standardize_species_data(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def create_veterinary_timeline(
-    con: duckdb.DuckDBPyConnection, pipeline_run_date: str, gcs_access: Optional[GCSDataAccess] = None
+    con: duckdb.DuckDBPyConnection,
+    pipeline_run_date: str,
+    gcs_access: GCSDataAccess | None = None,
 ) -> bool:
     """
     Create comprehensive veterinary timeline combining all sources.
@@ -1037,17 +1092,19 @@ def create_veterinary_timeline(
                 col_count = len(result)
                 cols_preview = [row[0] for row in result[:3]]
                 cols_suffix = "..." if col_count > 3 else ""
-                logger.info(f"   Part {i+1}: {col_count} columns - {cols_preview}{cols_suffix}")
+                logger.info(f"   Part {i + 1}: {col_count} columns - {cols_preview}{cols_suffix}")
 
                 if col_count != 10:
-                    logger.error(f"❌ Part {i+1} has {col_count} columns, expected 10!")
+                    logger.error(f"❌ Part {i + 1} has {col_count} columns, expected 10!")
                     logger.error(f"   All columns: {[row[0] for row in result]}")
 
             except Exception as e:
-                logger.error(f"❌ Part {i+1} failed individual test: {e}")
+                logger.error(f"❌ Part {i + 1} failed individual test: {e}")
 
         # Combine all timeline parts
-        full_query = "CREATE OR REPLACE TABLE veterinary_timeline AS\n" + "\nUNION ALL\n".join(timeline_parts)
+        full_query = "CREATE OR REPLACE TABLE veterinary_timeline AS\n" + "\nUNION ALL\n".join(
+            timeline_parts
+        )
         con.execute(full_query)
 
         # Get summary statistics
@@ -1090,9 +1147,9 @@ def create_veterinary_timeline(
 
 def process_veterinary_timeline(
     export_timestamp: str,
-    gold_dir: Optional[Path] = None,
-    gcs_access: Optional[GCSDataAccess] = None,
-    pipeline_run_date: Optional[str] = None,
+    gold_dir: Path | None = None,
+    gcs_access: GCSDataAccess | None = None,
+    pipeline_run_date: str | None = None,
 ) -> bool:
     """
     Main function to process veterinary timeline for gold layer.
@@ -1140,14 +1197,26 @@ def process_veterinary_timeline(
                 bucket = "landbrugsdata-raw-data"
                 # Use subdataset parameter to create separate filenames
                 migrate_save_data_pattern(
-                    gcs_access, "veterinary_timeline", "chr", bucket, "gold", export_timestamp, "veterinary_timeline"
+                    gcs_access,
+                    "veterinary_timeline",
+                    "chr",
+                    bucket,
+                    "gold",
+                    export_timestamp,
+                    "veterinary_timeline",
                 )
 
                 # Check if timeline_summary was created
                 try:
                     gcs_access.duckdb_conn.execute("SELECT COUNT(*) FROM timeline_summary")
                     migrate_save_data_pattern(
-                        gcs_access, "timeline_summary", "chr", bucket, "gold", export_timestamp, "timeline_summary"
+                        gcs_access,
+                        "timeline_summary",
+                        "chr",
+                        bucket,
+                        "gold",
+                        export_timestamp,
+                        "timeline_summary",
                     )
                 except Exception:
                     logger.info("ℹ️ No timeline_summary table to export")

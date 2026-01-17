@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-from typing import Dict, List, Optional
 
 import duckdb
 
@@ -12,6 +11,10 @@ from .data_loader import PMTilesDataLoader
 from .utils import FileManager, GeoJSONWriter, TippecanoeRunner
 
 logger = logging.getLogger(__name__)
+
+# CRS Strategy: With silver/gold layers now in EPSG:25832, we need to transform to
+# EPSG:4326 (WGS84) for PMTiles/GeoJSON output (required for map display)
+USE_UTM_PROCESSING = True
 
 
 class FieldAnalysisPMTilesGenerator:
@@ -35,7 +38,7 @@ class FieldAnalysisPMTilesGenerator:
         self.conn = duckdb_conn
         self.tippecanoe = TippecanoeRunner(self.config.temp_dir)
 
-    async def generate_field_analysis_pmtiles(self, year: int) -> Optional[str]:
+    async def generate_field_analysis_pmtiles(self, year: int) -> str | None:
         """Generate field analysis PMTiles for a specific year.
 
         Args:
@@ -133,11 +136,9 @@ class FieldAnalysisPMTilesGenerator:
 
             # Write GeoJSON using utility (this will stream the results)
             # The write function handles column detection and geometry parsing
-            success = await GeoJSONWriter.write_geojson_from_query(
+            return await GeoJSONWriter.write_geojson_from_query(
                 self.conn, query, output_path, properties_columns=None
             )
-
-            return success
 
         except Exception as e:
             logger.error(f"Error exporting field analysis GeoJSON: {e}")
@@ -326,13 +327,21 @@ class FieldAnalysisPMTilesGenerator:
             # DEBUG: Log what fields were actually selected
             logger.info(f"DEBUG: Selected {len(selected_fields)} fields: {selected_fields}")
 
-            # Always include geometry last - convert to GeoJSON format with coordinate swap
+            # Always include geometry last - convert to GeoJSON format
             if "geometry" in available_columns:
-                # Use ST_FlipCoordinates to ensure lon,lat order for PMTiles compatibility
-                selected_fields.append("ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry")
-                logger.info(
-                    "Geometry column found and added (converted to GeoJSON with coordinate swap)"
-                )
+                # With USE_UTM_PROCESSING, data is in EPSG:25832, transform to WGS84 for GeoJSON
+                if USE_UTM_PROCESSING:
+                    # Transform from UTM to WGS84 for map display
+                    # always_xy := true ensures GeoJSON-standard (lon, lat) coordinate order
+                    geom_expr = "ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))"
+                    logger.info(
+                        "Geometry column found (transforming from EPSG:25832 to WGS84 for GeoJSON)"
+                    )
+                else:
+                    # Legacy: Use ST_FlipCoordinates for WGS84 coordinate order fix
+                    geom_expr = "ST_AsGeoJSON(ST_FlipCoordinates(geometry))"
+                    logger.info("Geometry column found (flipping coordinates for WGS84 GeoJSON)")
+                selected_fields.append(f"{geom_expr} as geometry")
 
                 # DEBUG: Log coordinate bounds to verify swap worked
                 try:
@@ -366,14 +375,18 @@ class FieldAnalysisPMTilesGenerator:
 
         except Exception as e:
             logger.warning(f"Could not determine table schema, using base fields: {e}")
-            selected_fields = base_fields + [
-                "ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry"
-            ]
+            # Use appropriate geometry expression based on CRS strategy
+            if USE_UTM_PROCESSING:
+                # always_xy := true ensures GeoJSON-standard (lon, lat) coordinate order
+                geom_expr = "ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))"
+            else:
+                geom_expr = "ST_AsGeoJSON(ST_FlipCoordinates(geometry))"
+            selected_fields = [*base_fields, f"{geom_expr} as geometry"]
 
         # Build query
         fields_str = ",\n    ".join(selected_fields)
 
-        query = f"""
+        return f"""
         SELECT
             {fields_str}
         FROM {table_name}
@@ -381,9 +394,7 @@ class FieldAnalysisPMTilesGenerator:
         ORDER BY field_uuid
         """
 
-        return query
-
-    def _get_field_analysis_tippecanoe_args(self) -> List[str]:
+    def _get_field_analysis_tippecanoe_args(self) -> list[str]:
         """Get additional tippecanoe arguments for field analysis.
 
         Returns:
@@ -461,7 +472,7 @@ class FieldAnalysisPMTilesGenerator:
 
         return args
 
-    async def generate_multiple_years(self, years: List[int]) -> Dict[int, Optional[str]]:
+    async def generate_multiple_years(self, years: list[int]) -> dict[int, str | None]:
         """Generate field analysis PMTiles for multiple years.
 
         Args:
@@ -478,7 +489,7 @@ class FieldAnalysisPMTilesGenerator:
             # Process years in parallel (limited by max_parallel_years)
             semaphore = asyncio.Semaphore(self.config.max_parallel_years)
 
-            async def process_year_with_semaphore(year: int) -> tuple[int, Optional[str]]:
+            async def process_year_with_semaphore(year: int) -> tuple[int, str | None]:
                 async with semaphore:
                     result = await self.generate_field_analysis_pmtiles(year)
                     return year, result

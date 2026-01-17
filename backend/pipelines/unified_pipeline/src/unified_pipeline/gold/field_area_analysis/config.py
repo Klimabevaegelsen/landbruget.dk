@@ -1,7 +1,6 @@
 """Shared configuration for Field Area Analysis pipeline stages."""
 
 import os
-from typing import Dict
 
 from pydantic import BaseModel, ConfigDict
 
@@ -59,7 +58,7 @@ class FieldAreaAnalysisConfig(BaseModel):
 
     # Output dataset names for intermediate stages
     # Note: These will be dynamically updated with year suffix via update_outputs_for_year()
-    stage_outputs: Dict[str, str] = {
+    stage_outputs: dict[str, str] = {
         # Stage 0 outputs (pre-filtering for massive performance improvement)
         "properties_prefiltered": "stage0_properties_filtered",
         "bnbo_prefiltered": "stage0_bnbo_filtered",
@@ -130,7 +129,7 @@ class FieldAreaAnalysisConfig(BaseModel):
         """Get agricultural fields dataset name for the configured year."""
         return f"fvm_marker_{self.agricultural_fields_year}"
 
-    def update_outputs_for_year(self) -> Dict[str, str]:
+    def update_outputs_for_year(self) -> dict[str, str]:
         """Update output dataset names to include year suffix."""
         updated_outputs = {}
         for key, dataset_name in self.stage_outputs.items():

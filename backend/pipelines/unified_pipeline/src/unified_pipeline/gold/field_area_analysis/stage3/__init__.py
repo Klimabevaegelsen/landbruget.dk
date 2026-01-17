@@ -10,4 +10,4 @@ from .final_bnbo import FinalBNBOAnalysis
 from .final_grukos import FinalGrukosAnalysis
 from .final_wetland import FinalWetlandAnalysis
 
-__all__ = ["FinalBNBOAnalysis", "FinalWetlandAnalysis", "FinalGrukosAnalysis"]
+__all__ = ["FinalBNBOAnalysis", "FinalGrukosAnalysis", "FinalWetlandAnalysis"]
