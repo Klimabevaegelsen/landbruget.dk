@@ -62,9 +62,11 @@ class GrukosBronzeConfig(BaseJobConfig):
     request_semaphore: Semaphore = Semaphore(max_concurrent)
     layers: ClassVar[list[str]] = [
         "grukos:indsatsomraader",  # Indsatsområder (action areas for groundwater protection)
+        "grukos:indvindingsoplande_alle",  # Indvindingsoplande (groundwater abstraction catchments)
     ]
     url_mapping: ClassVar[dict[str, str]] = {
         "grukos:indsatsomraader": "https://wfs2-miljoegis.mim.dk/grukos/wfs",
+        "grukos:indvindingsoplande_alle": "https://wfs2-miljoegis.mim.dk/grukos/ows",
     }
     service_types: ClassVar[dict[str, str]] = {}  # All layers use default WFS service type
 
