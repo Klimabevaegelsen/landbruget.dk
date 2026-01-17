@@ -17,10 +17,8 @@ Reference: .claude/rules/data-quality.md
 
 import duckdb
 import pandas as pd
-import pytest
 
-from backend.common.crs_utils import DANISH_UTM, WGS84, DENMARK_BOUNDS_WGS84
-
+from backend.common.crs_utils import DANISH_UTM, DENMARK_BOUNDS_WGS84, WGS84
 
 # =============================================================================
 # Identifier Preservation Tests (Bronze -> Silver -> Gold)
@@ -32,7 +30,7 @@ def test_cvr_preservation_through_pipeline(
 ) -> None:
     """Test that CVR numbers are preserved through full pipeline."""
     # Bronze: Raw data with various CVR formats
-    bronze_df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr_raw": [31373077, "00113115", 12345678, "00000123"],
             "company_name": ["Arla Foods", "Test Co", "Generic", "Small Co"],
@@ -87,7 +85,7 @@ def test_chr_preservation_through_pipeline(
 ) -> None:
     """Test that CHR numbers are preserved through full pipeline."""
     # Bronze: Raw data with various CHR formats
-    bronze_df = pd.DataFrame(
+    pd.DataFrame(
         {
             "chr_raw": [123456, "000123", 654321, 1],
             "herd_type": ["Cattle", "Pig", "Cattle", "Sheep"],
@@ -135,7 +133,7 @@ def test_chr_preservation_through_pipeline(
 def test_bfe_preservation_through_pipeline(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that BFE numbers are preserved through full pipeline."""
     # Bronze: Raw BFE data
-    bronze_df = pd.DataFrame(
+    pd.DataFrame(
         {
             "bfe": ["0101-123456-12a", "0851-234567-1", "0461-100000-abc"],
             "area_ha": [10.5, 20.3, 15.7],
@@ -238,7 +236,7 @@ def test_geospatial_crs_maintained_wgs84(
 def test_geometry_validation_bounds_check(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that geometries outside Denmark bounds are flagged."""
     # Create test data with some points outside Denmark
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "location": ["Copenhagen", "Paris", "Aarhus", "Berlin"],
             "lon": [12.5683, 2.3522, 10.2039, 13.4050],
@@ -279,11 +277,9 @@ def test_geometry_validation_bounds_check(mock_duckdb_connection: duckdb.DuckDBP
 def test_data_joinability_on_cvr(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that data can be joined on CVR identifier."""
     # Create two tables with CVR as join key
-    companies_df = pd.DataFrame(
-        {"cvr": ["31373077", "10150817", "12345678"], "company_name": ["Arla", "Crown", "Test"]}
-    )
+    pd.DataFrame({"cvr": ["31373077", "10150817", "12345678"], "company_name": ["Arla", "Crown", "Test"]})
 
-    fields_df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": ["31373077", "31373077", "12345678"],
             "field_id": ["F001", "F002", "F003"],
@@ -320,9 +316,9 @@ def test_data_joinability_on_cvr(mock_duckdb_connection: duckdb.DuckDBPyConnecti
 def test_data_joinability_on_chr(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that data can be joined on CHR identifier."""
     # Create two tables with CHR as join key
-    herds_df = pd.DataFrame({"chr": ["123456", "654321", "111111"], "herd_type": ["Cattle", "Pig", "Cattle"]})
+    pd.DataFrame({"chr": ["123456", "654321", "111111"], "herd_type": ["Cattle", "Pig", "Cattle"]})
 
-    movements_df = pd.DataFrame(
+    pd.DataFrame(
         {
             "chr": ["123456", "123456", "654321"],
             "movement_date": ["2024-01-01", "2024-02-01", "2024-01-15"],
@@ -395,7 +391,7 @@ def test_data_joinability_on_geometry(
 
     # Verify spatial join worked
     assert len(result) == 1, "Should have 1 field-zone pair"
-    assert result["intersects"].iloc[0] == True, "Field should intersect protection zone"
+    assert result["intersects"].iloc[0], "Field should intersect protection zone"
 
 
 # =============================================================================
@@ -406,7 +402,7 @@ def test_data_joinability_on_geometry(
 def test_null_identifier_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that NULL identifiers are handled correctly."""
     # Create data with NULL values
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": ["31373077", None, "12345678", None],
             "chr": ["123456", "654321", None, None],
@@ -436,7 +432,7 @@ def test_null_identifier_handling(mock_duckdb_connection: duckdb.DuckDBPyConnect
 
 def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that NULL geometries are handled correctly."""
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "field_id": ["F001", "F002", "F003"],
             "geom_wkt": ["POINT(12.5 55.6)", None, "POINT(10.2 56.1)"],
@@ -459,9 +455,9 @@ def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnectio
     ).fetchdf()
 
     # Verify NULL handling
-    assert result.loc[0, "has_geometry"] == True
-    assert result.loc[1, "has_geometry"] == False
-    assert result.loc[2, "has_geometry"] == True
+    assert result.loc[0, "has_geometry"]
+    assert not result.loc[1, "has_geometry"]
+    assert result.loc[2, "has_geometry"]
 
 
 # =============================================================================
@@ -472,7 +468,7 @@ def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnectio
 def test_duplicate_detection_by_cvr(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that duplicate CVR records are detected."""
     # Create data with duplicates
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": ["31373077", "31373077", "12345678", "31373077"],
             "company_name": ["Arla Foods", "Arla Foods", "Test Co", "Arla Foods"],
@@ -504,7 +500,7 @@ def test_duplicate_detection_by_cvr(mock_duckdb_connection: duckdb.DuckDBPyConne
 def test_duplicate_prevention_with_upsert(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that duplicates are prevented using upsert pattern."""
     # Initial data
-    df1 = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": ["31373077", "12345678"],
             "company_name": ["Arla Foods", "Test Co"],
@@ -515,7 +511,7 @@ def test_duplicate_prevention_with_upsert(mock_duckdb_connection: duckdb.DuckDBP
     mock_duckdb_connection.execute("CREATE TABLE companies AS SELECT * FROM df1")
 
     # New data with overlapping CVR (simulating upsert)
-    df2 = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": ["31373077", "87654321"],
             "company_name": ["Arla Foods Updated", "New Co"],
@@ -550,7 +546,7 @@ def test_duplicate_prevention_with_upsert(mock_duckdb_connection: duckdb.DuckDBP
 def test_data_type_consistency_identifiers(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that identifiers maintain string data type."""
     # Create data with proper types
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": ["31373077", "00113115", "12345678"],
             "chr": ["123456", "000123", "654321"],
@@ -580,7 +576,7 @@ def test_data_type_consistency_identifiers(mock_duckdb_connection: duckdb.DuckDB
 def test_data_type_consistency_numeric(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that numeric fields maintain proper data types."""
     # Create data with numeric fields
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "field_id": ["F001", "F002", "F003"],
             "area_ha": [10.5, 20.3, 15.7],
@@ -611,7 +607,7 @@ def test_data_type_consistency_numeric(mock_duckdb_connection: duckdb.DuckDBPyCo
 def test_data_type_consistency_dates(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that date fields maintain proper data types."""
     # Create data with dates
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "record_id": [1, 2, 3],
             "record_date": pd.to_datetime(["2024-01-01", "2024-02-01", "2024-03-01"]),
@@ -649,7 +645,7 @@ def test_full_pipeline_quality_check(
     # Bronze: Raw data from various sources
     copenhagen = sample_danish_geometries["copenhagen_point"]
 
-    bronze_df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr_raw": [31373077, "113115"],
             "company_name": ["Arla Foods", "Test Co"],

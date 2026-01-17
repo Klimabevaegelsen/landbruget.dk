@@ -6,9 +6,8 @@ including mocks for GCS, DuckDB, and Danish data validation helpers.
 
 import tempfile
 from collections.abc import Generator
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, Mock
 
 import duckdb

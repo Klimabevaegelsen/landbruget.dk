@@ -14,11 +14,10 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import duckdb
 import pytest
-
 
 # =============================================================================
 # Mock storage_interface module since it has external dependencies
@@ -100,7 +99,6 @@ class GCSStorage(StorageInterface):
         # Try to use optimized GCSDataAccess
         try:
             # Check if GCSDataAccess is available (mocked in tests)
-            from unittest.mock import MagicMock
 
             if hasattr(sys.modules.get("storage_interface", None), "GCSDataAccess"):
                 self.gcs_access = sys.modules["storage_interface"].GCSDataAccess()

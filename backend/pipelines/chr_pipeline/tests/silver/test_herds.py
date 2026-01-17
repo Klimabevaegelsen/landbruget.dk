@@ -7,11 +7,8 @@ Tests the silver layer herd processing including:
 - Herd size aggregation logic
 """
 
-from pathlib import Path
-
 import duckdb
 import pytest
-
 from chr_pipeline.silver.herds import (
     create_herd_owners_table,
     create_herd_sizes_table,
@@ -64,7 +61,7 @@ class TestHerdsTable:
         assert herds_df.iloc[0]["herd_number"] == 123456
         assert herds_df.iloc[0]["chr_number"] == 123456
         assert herds_df.iloc[0]["species_name"] == "Kvæg"
-        assert herds_df.iloc[0]["is_organic"] == True
+        assert herds_df.iloc[0]["is_organic"]
 
     def test_create_herds_table_with_none_input(self, tmp_path):
         """Test that None input returns None gracefully."""
@@ -184,7 +181,7 @@ class TestHerdsTable:
             }] AS Response
         """)
 
-        result = create_herds_table(con, "bes_details", silver_dir)
+        create_herds_table(con, "bes_details", silver_dir)
 
         # Should deduplicate
         herds_df = con.execute("SELECT * FROM herds").df()
@@ -218,7 +215,7 @@ class TestHerdsTable:
             }] AS Response
         """)
 
-        result = create_herds_table(con, "bes_details", silver_dir)
+        create_herds_table(con, "bes_details", silver_dir)
 
         herds_df = con.execute("SELECT * FROM herds").df()
         assert herds_df.iloc[0]["date_created"] is not None
@@ -294,7 +291,7 @@ class TestHerdOwners:
             }] AS Response
         """)
 
-        result = create_herd_owners_table(con, "bes_details", silver_dir)
+        create_herd_owners_table(con, "bes_details", silver_dir)
 
         owners_df = con.execute("SELECT * FROM herd_owners").df()
         # CVR should be stored as string preserving leading zeros
@@ -474,7 +471,7 @@ class TestHerdSizes:
             }] AS Response
         """)
 
-        result = create_herd_sizes_table(con, "bes_details", silver_dir)
+        create_herd_sizes_table(con, "bes_details", silver_dir)
 
         sizes_df = con.execute("SELECT * FROM herd_sizes").df()
         total_animals = sizes_df["count"].sum()
@@ -530,7 +527,7 @@ class TestHerdSizes:
             }] AS Response
         """)
 
-        result = create_herd_sizes_table(con, "bes_details", silver_dir)
+        create_herd_sizes_table(con, "bes_details", silver_dir)
 
         sizes_df = con.execute("SELECT * FROM herd_sizes").df()
         # Each record should have a unique UUID

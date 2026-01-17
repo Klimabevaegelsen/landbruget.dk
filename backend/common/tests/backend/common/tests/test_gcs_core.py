@@ -11,17 +11,14 @@ Tests cover:
 Tests use realistic Danish data including CVR numbers and special characters (æøå).
 """
 
-import hashlib
 import io
 import json
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, Mock, call, mock_open, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import duckdb
-import pandas as pd
 import pytest
 
 

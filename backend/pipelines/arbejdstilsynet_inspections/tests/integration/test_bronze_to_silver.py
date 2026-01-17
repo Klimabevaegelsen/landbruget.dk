@@ -9,6 +9,8 @@ This module tests:
 - Error propagation
 """
 
+# Import pipeline components
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -16,11 +18,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-# Import pipeline components
-import sys
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from bronze.export import BronzePipeline
 from silver.transform import SilverPipeline
 
 

@@ -5,34 +5,33 @@ Covers constants, detection functions, validation utilities, and SQL generation 
 """
 
 import pytest
-
 from common.crs_utils import (
     # Constants
     DANISH_UTM,
-    WGS84,
-    WEB_MERCATOR,
+    DEGREES_TO_METERS_AVG,
+    DEGREES_TO_METERS_LAT,
+    DEGREES_TO_METERS_LON,
+    DENMARK_BOUNDS_UTM,
+    DENMARK_BOUNDS_WGS84,
     SOURCE_CRS_DANISH,
     TARGET_CRS_STORAGE,
-    DENMARK_BOUNDS_WGS84,
-    DENMARK_BOUNDS_UTM,
-    DEGREES_TO_METERS_LON,
-    DEGREES_TO_METERS_LAT,
-    DEGREES_TO_METERS_AVG,
-    # Conversion functions
-    meters_to_degrees,
+    WEB_MERCATOR,
+    WGS84,
     degrees_to_meters,
     # Detection functions
     detect_crs_from_bounds,
     is_utm_coordinate_range,
     is_wgs84_coordinate_range,
-    # Validation functions
-    validate_crs_before_transform,
     log_geometry_bounds,
+    # Conversion functions
+    meters_to_degrees,
+    sql_buffer_meters,
+    sql_intersects_with_buffer_meters,
     # SQL generation helpers
     sql_transform_to_utm,
     sql_transform_to_wgs84,
-    sql_buffer_meters,
-    sql_intersects_with_buffer_meters,
+    # Validation functions
+    validate_crs_before_transform,
 )
 
 
@@ -609,7 +608,7 @@ class TestNewCRSStrategyFunctions:
 
     def test_sql_transform_for_supabase_already_wgs84(self):
         """Should return expression unchanged if already in WGS84."""
-        from common.crs_utils import sql_transform_for_supabase, WGS84
+        from common.crs_utils import WGS84, sql_transform_for_supabase
 
         result = sql_transform_for_supabase("geometry", source_crs=WGS84)
         assert result == "geometry"
@@ -624,21 +623,21 @@ class TestNewCRSStrategyFunctions:
 
     def test_sql_transform_to_processing_crs_from_wgs84(self):
         """Should generate transform SQL from WGS84 to UTM."""
-        from common.crs_utils import sql_transform_to_processing_crs, WGS84
+        from common.crs_utils import WGS84, sql_transform_to_processing_crs
 
         result = sql_transform_to_processing_crs("geometry", source_crs=WGS84)
         assert result == "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
 
     def test_sql_transform_to_processing_crs_already_utm(self):
         """Should return expression unchanged if already in UTM."""
-        from common.crs_utils import sql_transform_to_processing_crs, DANISH_UTM
+        from common.crs_utils import DANISH_UTM, sql_transform_to_processing_crs
 
         result = sql_transform_to_processing_crs("geometry", source_crs=DANISH_UTM)
         assert result == "geometry"
 
     def test_processing_crs_constant_is_utm(self):
         """Verify TARGET_CRS_PROCESSING is Danish UTM."""
-        from common.crs_utils import TARGET_CRS_PROCESSING, DANISH_UTM
+        from common.crs_utils import DANISH_UTM, TARGET_CRS_PROCESSING
 
         assert TARGET_CRS_PROCESSING == DANISH_UTM
 

@@ -19,20 +19,17 @@ import pytest
 
 from backend.common.crs_utils import (
     DANISH_UTM,
-    WGS84,
-    DENMARK_BOUNDS_UTM,
     DENMARK_BOUNDS_WGS84,
+    WGS84,
     detect_crs_from_bounds,
     is_utm_coordinate_range,
     is_wgs84_coordinate_range,
-    log_geometry_bounds,
     sql_buffer_meters,
     sql_intersects_with_buffer_meters,
     sql_transform_to_utm,
     sql_transform_to_wgs84,
     validate_crs_before_transform,
 )
-
 
 # =============================================================================
 # CRS Transformation Tests (EPSG:25832 -> EPSG:4326)
@@ -111,8 +108,6 @@ def test_transform_wgs84_to_utm_accuracy(
     x, y = result
 
     # Expected coordinates (Aarhus City Hall in UTM)
-    expected_easting = 577030.82
-    expected_northing = 6224098.93
 
     # Just verify the transformation produces numeric coordinates
     # Different PROJ versions may produce different results
@@ -206,7 +201,7 @@ def test_denmark_bounds_utm_validation(mock_duckdb_connection: duckdb.DuckDBPyCo
 def test_sql_bounds_check_wgs84(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test SQL-based bounds checking for WGS84 coordinates."""
     # Create test points (some inside, some outside Denmark)
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "name": ["Copenhagen", "Aarhus", "Paris", "Berlin"],
             "lon": [12.5683, 10.2039, 2.3522, 13.4050],
@@ -229,10 +224,10 @@ def test_sql_bounds_check_wgs84(mock_duckdb_connection: duckdb.DuckDBPyConnectio
     ).fetchdf()
 
     # Verify results
-    assert result.loc[result["name"] == "Copenhagen", "is_in_denmark"].iloc[0] == True
-    assert result.loc[result["name"] == "Aarhus", "is_in_denmark"].iloc[0] == True
-    assert result.loc[result["name"] == "Paris", "is_in_denmark"].iloc[0] == False
-    assert result.loc[result["name"] == "Berlin", "is_in_denmark"].iloc[0] == False
+    assert result.loc[result["name"] == "Copenhagen", "is_in_denmark"].iloc[0]
+    assert result.loc[result["name"] == "Aarhus", "is_in_denmark"].iloc[0]
+    assert not result.loc[result["name"] == "Paris", "is_in_denmark"].iloc[0]
+    assert not result.loc[result["name"] == "Berlin", "is_in_denmark"].iloc[0]
 
 
 # =============================================================================
@@ -368,7 +363,7 @@ def test_coordinate_precision_preserved(
 
 def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test that NULL geometries are handled correctly."""
-    df = pd.DataFrame({"id": [1, 2, 3], "geom_wkt": ["POINT(12.5 55.6)", None, "POINT(10.2 56.1)"]})
+    pd.DataFrame({"id": [1, 2, 3], "geom_wkt": ["POINT(12.5 55.6)", None, "POINT(10.2 56.1)"]})
 
     mock_duckdb_connection.execute("CREATE TABLE test_geoms AS SELECT * FROM df")
 

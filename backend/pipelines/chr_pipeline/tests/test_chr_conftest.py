@@ -3,7 +3,7 @@
 This test file validates that the CHR-specific fixtures in conftest.py work correctly.
 """
 
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import Mock
 
 import pytest

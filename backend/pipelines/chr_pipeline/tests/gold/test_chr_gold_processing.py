@@ -9,9 +9,7 @@ Tests the gold processing logic including:
 Note: These tests skip if gold module cannot be imported (due to Python version incompatibility).
 """
 
-from pathlib import Path
-from typing import Optional
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -161,7 +159,7 @@ class TestGoldOrchestration:
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
-            result = process_gold_data(export_timestamp=export_timestamp, gold_dir=None)
+            process_gold_data(export_timestamp=export_timestamp, gold_dir=None)
 
             expected_dir = tmp_path / export_timestamp
             assert expected_dir.exists()

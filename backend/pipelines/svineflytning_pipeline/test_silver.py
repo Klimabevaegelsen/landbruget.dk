@@ -117,7 +117,6 @@ def create_test_data():
     ]
 
 
-
 def test_silver_processing():
     """Test the silver processing with sample data."""
     logger.info("Starting silver processing test")

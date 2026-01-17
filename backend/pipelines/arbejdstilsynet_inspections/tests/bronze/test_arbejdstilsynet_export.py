@@ -9,14 +9,13 @@ This module tests:
 - Error handling for browser failures
 """
 
+# Import the bronze pipeline
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-
-# Import the bronze pipeline
-import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from bronze.export import BronzePipeline, GCSStorage

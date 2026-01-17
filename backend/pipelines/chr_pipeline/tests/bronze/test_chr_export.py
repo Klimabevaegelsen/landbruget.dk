@@ -7,14 +7,12 @@ on GCS and other external services.
 
 import gc
 import json
-import os
 import sys
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, call, mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
-
 
 # Mark all tests in this file as bronze layer tests
 pytestmark = pytest.mark.chr_bronze
@@ -395,7 +393,7 @@ class TestFinalizeExport:
 
     def test_finalize_export_local(self):
         """Test finalize_export writes to local filesystem when GCS unavailable."""
-        from bronze.export import finalize_export, get_data_buffer, save_raw_data
+        from bronze.export import finalize_export, save_raw_data
 
         MockBronzeExport.USE_GCS = False
         save_raw_data({"chr_number": "123456"}, "chr_herds", "test")

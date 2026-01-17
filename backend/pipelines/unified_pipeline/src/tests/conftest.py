@@ -7,8 +7,6 @@ import from common.gcs and other backend-level modules.
 import sys
 from pathlib import Path
 
-import pytest
-
 # Add backend directory to Python path for common module access
 # Path structure: tests/conftest.py -> src/tests -> src -> unified_pipeline -> pipelines -> backend
 # Or equivalently: 5 levels up from conftest.py gets us to backend

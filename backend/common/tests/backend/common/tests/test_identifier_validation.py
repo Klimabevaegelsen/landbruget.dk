@@ -12,12 +12,10 @@ Reference: .claude/rules/data-quality.md
 """
 
 import re
-from typing import Any
 
 import duckdb
 import pandas as pd
 import pytest
-
 
 # =============================================================================
 # CVR Number Tests (Company ID - 8 digits)
@@ -212,7 +210,7 @@ def test_bfe_format_invalid_pattern() -> None:
 
 def test_batch_cvr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test batch CVR validation on DataFrame."""
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": ["31373077", "00113115", "12345678", "invalid", "1234567"],
             "company_name": ["Arla", "Test Co", "Generic", "Bad", "Short"],
@@ -231,16 +229,16 @@ def test_batch_cvr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyC
     ).fetchdf()
 
     # Check validation results
-    assert result.loc[0, "is_valid"] == True  # Valid CVR
-    assert result.loc[1, "is_valid"] == True  # Valid with leading zeros
-    assert result.loc[2, "is_valid"] == True  # Valid
-    assert result.loc[3, "is_valid"] == False  # Non-numeric
-    assert result.loc[4, "is_valid"] == False  # Too short
+    assert result.loc[0, "is_valid"]  # Valid CVR
+    assert result.loc[1, "is_valid"]  # Valid with leading zeros
+    assert result.loc[2, "is_valid"]  # Valid
+    assert not result.loc[3, "is_valid"]  # Non-numeric
+    assert not result.loc[4, "is_valid"]  # Too short
 
 
 def test_batch_chr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test batch CHR validation on DataFrame."""
-    df = pd.DataFrame(
+    pd.DataFrame(
         {
             "chr": ["123456", "000123", "654321", "12345", "12345a"],
             "herd_type": ["Cattle", "Pig", "Cattle", "Invalid", "Invalid"],
@@ -259,17 +257,17 @@ def test_batch_chr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyC
     ).fetchdf()
 
     # Check validation results
-    assert result.loc[0, "is_valid"] == True  # Valid CHR
-    assert result.loc[1, "is_valid"] == True  # Valid with leading zeros
-    assert result.loc[2, "is_valid"] == True  # Valid
-    assert result.loc[3, "is_valid"] == False  # Too short
-    assert result.loc[4, "is_valid"] == False  # Non-numeric
+    assert result.loc[0, "is_valid"]  # Valid CHR
+    assert result.loc[1, "is_valid"]  # Valid with leading zeros
+    assert result.loc[2, "is_valid"]  # Valid
+    assert not result.loc[3, "is_valid"]  # Too short
+    assert not result.loc[4, "is_valid"]  # Non-numeric
 
 
 def test_identifier_normalization_pipeline(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
     """Test full identifier normalization pipeline (Bronze -> Silver)."""
     # Bronze: Raw data with inconsistent formatting
-    raw_df = pd.DataFrame(
+    pd.DataFrame(
         {
             "cvr": [31373077, 113115, "12345678", "00000123"],
             "chr": [123456, 123, "654321", "000001"],

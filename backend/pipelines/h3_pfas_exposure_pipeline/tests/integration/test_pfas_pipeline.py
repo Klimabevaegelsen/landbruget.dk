@@ -162,9 +162,7 @@ def test_data_preservation(duckdb_conn, spatial_joiner, full_test_dataset):
     h3_count = duckdb_conn.execute(
         f"SELECT COUNT(*) FROM {full_test_dataset['h3_table']}"
     ).fetchone()[0]
-    field_count = duckdb_conn.execute(
-        f"SELECT COUNT(*) FROM {full_test_dataset['fields_table']}"
-    ).fetchone()[0]
+    duckdb_conn.execute(f"SELECT COUNT(*) FROM {full_test_dataset['fields_table']}").fetchone()[0]
 
     # Run pipeline
     result_table = spatial_joiner.perform_chunked_spatial_join(

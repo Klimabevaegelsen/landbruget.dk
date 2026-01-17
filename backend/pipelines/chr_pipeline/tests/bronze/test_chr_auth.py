@@ -9,11 +9,9 @@ import base64
 import os
 import sys
 from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # Mark all tests in this file as bronze layer tests
 pytestmark = pytest.mark.chr_bronze

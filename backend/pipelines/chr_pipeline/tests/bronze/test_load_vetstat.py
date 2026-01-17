@@ -10,11 +10,10 @@ import hashlib
 import os
 import sys
 import uuid
-from datetime import date, datetime
+from datetime import date
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
 
 # =============================================================================
 # Mock lxml module

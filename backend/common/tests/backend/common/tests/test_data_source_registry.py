@@ -4,11 +4,9 @@ Validates that all pipelines have corresponding entries in the data source regis
 This ensures documentation and data lineage tracking stays up to date.
 """
 
-import os
 from pathlib import Path
 
 import pytest
-
 from common.data_source_registry import DATA_SOURCE_REGISTRY
 
 

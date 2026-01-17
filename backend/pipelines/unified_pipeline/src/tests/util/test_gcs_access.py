@@ -15,13 +15,12 @@ Note: These tests directly import from common.gcs which is available via sys.pat
       configuration in conftest.py.
 """
 
-import json
 import os
 import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import MagicMock, patch
 
 import duckdb
 import pytest
@@ -43,7 +42,6 @@ if not backend_dir.exists():
 
 # Now import from common.gcs
 from common.gcs import GCSDataAccess, ResourceMonitor, get_duckdb_with_gcs, get_gcs_filesystem
-
 
 # =============================================================================
 # GCS Filesystem Tests
@@ -189,10 +187,9 @@ def test_duckdb_spatial_extension_loaded(mock_setup_native):
     # This will raise an error if spatial extension isn't loaded
     try:
         # Try to use a spatial function
-        result = conn.execute("SELECT ST_Point(0, 0) as geom").fetchone()
-        spatial_loaded = True
+        conn.execute("SELECT ST_Point(0, 0) as geom").fetchone()
     except duckdb.CatalogException:
-        spatial_loaded = False
+        pass
 
     # Note: Spatial extension may not be available in all test environments
     # So we just verify the connection works
@@ -268,10 +265,10 @@ def test_resource_monitor_thresholds(mock_psutil):
 
     # Should issue warnings for high usage
     with pytest.warns(UserWarning, match="High memory usage"):
-        result = monitor.check_resources("test_operation")
+        monitor.check_resources("test_operation")
 
     with pytest.warns(UserWarning, match="High disk usage"):
-        result = monitor.check_resources("test_operation")
+        monitor.check_resources("test_operation")
 
     # Verify max tracking
     assert monitor.max_memory_usage > 20

@@ -15,8 +15,7 @@ Covers:
 """
 
 import json
-import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 import requests
@@ -44,7 +43,7 @@ class TestCVRAPIClient:
     def test_http_basic_auth_setup(self, mock_auth):
         """Test HTTP Basic Auth is properly configured."""
         with patch.dict("os.environ", {"CVR_USERNAME": "user123", "CVR_PASSWORD": "pass456"}):
-            client = CVRAPIClient()
+            CVRAPIClient()
             mock_auth.assert_called_once_with("user123", "pass456")
 
 
@@ -200,7 +199,7 @@ class TestBatchFetching:
 
         with patch.dict("os.environ", {"CVR_USERNAME": "test", "CVR_PASSWORD": "test"}):
             client = CVRAPIClient()
-            results = client.batch_fetch_companies(cvr_list)
+            client.batch_fetch_companies(cvr_list)
 
         # Only valid CVR should be fetched
         assert mock_post.call_count == 1
@@ -251,7 +250,7 @@ class TestRetryLogic:
 
         with patch.dict("os.environ", {"CVR_USERNAME": "test", "CVR_PASSWORD": "test"}):
             client = CVRAPIClient()
-            result = client.fetch_cvr("12345678")
+            client.fetch_cvr("12345678")
 
         # Should retry and eventually succeed
         assert mock_post.call_count == 3
@@ -272,7 +271,7 @@ class TestRetryLogic:
 
         with patch.dict("os.environ", {"CVR_USERNAME": "test", "CVR_PASSWORD": "test"}):
             client = CVRAPIClient()
-            result = client.fetch_cvr("12345678")
+            client.fetch_cvr("12345678")
 
         assert mock_post.call_count >= 1
 
@@ -378,7 +377,7 @@ class TestPIIFiltering:
 
         with patch.dict("os.environ", {"CVR_USERNAME": "test", "CVR_PASSWORD": "test"}):
             client = CVRAPIClient()
-            result = client.fetch_cvr("31373077")
+            client.fetch_cvr("31373077")
 
         # PII filter should have been called
         mock_filter.assert_called_once()

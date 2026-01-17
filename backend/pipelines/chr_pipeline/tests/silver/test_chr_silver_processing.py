@@ -8,13 +8,11 @@ Tests the main silver processing logic including:
 """
 
 import json
-from datetime import date, datetime
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from datetime import date
+from unittest.mock import Mock, patch
 
 import duckdb
 import pytest
-
 from chr_pipeline.silver.chr_silver_processing import (
     _save_discovered_cvr_numbers,
     download_bronze_data_from_gcs,
@@ -140,7 +138,7 @@ class TestSilverOrchestration:
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
 
             try:
-                result = process_chr_data(
+                process_chr_data(
                     silver_dir=silver_dir,
                     in_memory_data=None,
                     export_timestamp="20240101_120000",
@@ -246,7 +244,7 @@ class TestCVRCollection:
             patch(
                 "chr_pipeline.silver.chr_silver_processing.save_pipeline_cvr_numbers"
             ) as mock_save,
-            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess") as mock_gcs,
+            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess"),
         ):
             mock_extract.side_effect = [
                 ["12345678", "87654321"],  # property_owners
@@ -276,7 +274,7 @@ class TestCVRCollection:
             patch(
                 "chr_pipeline.silver.chr_silver_processing.extract_cvr_numbers_from_table"
             ) as mock_extract,
-            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess") as mock_gcs,
+            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess"),
         ):
             mock_extract.return_value = []
 

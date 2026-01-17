@@ -12,9 +12,7 @@ Covers:
 - Performance statistics
 """
 
-from unittest.mock import Mock, patch, MagicMock
-
-import pytest
+from unittest.mock import Mock, patch
 
 from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
 
@@ -37,7 +35,7 @@ class TestCachedDAWAAPIClient:
     @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
     def test_client_initialization_with_cache_version(self, mock_cache, mock_dawa):
         """Test client initialization with custom cache version."""
-        client = CachedDAWAAPIClient(cache_version=2)
+        CachedDAWAAPIClient(cache_version=2)
 
         # Verify cache version is passed
         mock_cache.assert_called_once_with(cache_version=2)
@@ -356,7 +354,7 @@ class TestContextManager:
         mock_cache_class.return_value = mock_cache
 
         try:
-            with CachedDAWAAPIClient() as client:
+            with CachedDAWAAPIClient():
                 raise ValueError("Test exception")
         except ValueError:
             pass
@@ -442,7 +440,7 @@ class TestCacheStorage:
         mock_dawa_class.return_value = mock_dawa
 
         client = CachedDAWAAPIClient()
-        result = client.geocode_address_by_id("test-id")
+        client.geocode_address_by_id("test-id")
 
         # Null result should not be stored
         mock_cache.store_dawa_result.assert_not_called()
@@ -463,7 +461,7 @@ class TestCacheStorage:
         mock_dawa_class.return_value = mock_dawa
 
         client = CachedDAWAAPIClient()
-        result = client.geocode_with_datavask("Rødkildevej 46")
+        client.geocode_with_datavask("Rødkildevej 46")
 
         # Result should be stored with 'datavask' source
         call_args = mock_cache.store_address_text_result.call_args
@@ -504,7 +502,7 @@ class TestAPIFailureHandling:
         mock_dawa_class.return_value = mock_dawa
 
         client = CachedDAWAAPIClient()
-        result = client.geocode_address_by_id("test-id")
+        client.geocode_address_by_id("test-id")
 
         # Failed result should not be stored in cache
         mock_cache.store_dawa_result.assert_not_called()

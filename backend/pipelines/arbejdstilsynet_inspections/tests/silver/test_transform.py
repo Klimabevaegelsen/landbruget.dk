@@ -9,18 +9,14 @@ This module tests all data transformations including:
 - Null handling
 """
 
-import os
+# Import the silver pipeline
+import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import duckdb
 import pandas as pd
 import pytest
-
-# Import the silver pipeline
-import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from silver.transform import SilverPipeline

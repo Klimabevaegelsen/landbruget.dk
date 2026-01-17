@@ -14,11 +14,8 @@ Covers:
 - Retry logic
 """
 
-import json
-import time
 from unittest.mock import Mock, patch
 
-import pytest
 import requests
 
 from unified_pipeline.util.dawa_api_client import DAWAAPIClient
@@ -221,7 +218,7 @@ class TestSearchAddress:
         mock_get.return_value = mock_response
 
         client = DAWAAPIClient()
-        results = client.search_address("Testvej", limit=5)
+        client.search_address("Testvej", limit=5)
 
         # Verify limit parameter is passed
         call_args = mock_get.call_args
@@ -325,7 +322,7 @@ class TestBatchGeocoding:
         address_ids = ["id1", None, "", "id2"]
 
         client = DAWAAPIClient()
-        results = client.geocode_addresses_batch(address_ids)
+        client.geocode_addresses_batch(address_ids)
 
         # Should only process non-empty IDs
         assert mock_get.call_count == 2

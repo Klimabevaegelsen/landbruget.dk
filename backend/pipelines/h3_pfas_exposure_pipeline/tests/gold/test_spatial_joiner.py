@@ -480,9 +480,7 @@ def test_spatial_join_performance(duckdb_conn, config, spatial_joiner):
     """)
 
     start_time = time.time()
-    result_table = spatial_joiner.perform_chunked_spatial_join(
-        "perf_h3", "perf_field", "perf_pesticides", 2023
-    )
+    spatial_joiner.perform_chunked_spatial_join("perf_h3", "perf_field", "perf_pesticides", 2023)
     elapsed = time.time() - start_time
 
     # Should complete in reasonable time (< 10 seconds for 200 cells)

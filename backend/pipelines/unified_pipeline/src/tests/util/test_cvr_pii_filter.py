@@ -13,8 +13,6 @@ Covers:
 
 import copy
 
-import pytest
-
 from unified_pipeline.util.cvr_pii_filter import (
     filter_cvr_pii,
     filter_deltager_data,
@@ -72,7 +70,7 @@ class TestFilterCVRPII:
         # Make a copy to compare later
         original_copy = copy.deepcopy(original_data)
 
-        filtered = filter_cvr_pii(original_data)
+        filter_cvr_pii(original_data)
 
         # Original should be unchanged
         assert original_data == original_copy

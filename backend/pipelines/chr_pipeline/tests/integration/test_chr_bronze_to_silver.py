@@ -8,12 +8,9 @@ Tests the full data pipeline from bronze layer to silver layer including:
 """
 
 import json
-from datetime import date, datetime
-from pathlib import Path
 
 import duckdb
 import pytest
-
 from chr_pipeline.silver.chr_silver_processing import process_chr_data
 from chr_pipeline.silver.herds import create_herds_table
 
@@ -116,8 +113,6 @@ class TestBronzeToSilverFlow:
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
             mock_upload.return_value = True
 
-            from unittest.mock import patch
-
             try:
                 process_chr_data(
                     silver_dir=silver_dir,
@@ -207,8 +202,6 @@ class TestBronzeToSilverFlow:
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
             mock_upload.return_value = True
 
-            from unittest.mock import patch
-
             try:
                 process_chr_data(
                     silver_dir=silver_dir,
@@ -280,7 +273,7 @@ class TestDataValidation:
             }] AS Response
         """)
 
-        result = create_herds_table(con, "bes_details", silver_dir)
+        create_herds_table(con, "bes_details", silver_dir)
 
         herds_df = con.execute("SELECT * FROM herds ORDER BY herd_number").df()
 
@@ -323,7 +316,7 @@ class TestDataValidation:
 
         from chr_pipeline.silver.herds import create_herd_owners_table
 
-        result = create_herd_owners_table(con, "bes_details", silver_dir)
+        create_herd_owners_table(con, "bes_details", silver_dir)
 
         owners_df = con.execute("SELECT * FROM herd_owners ORDER BY herd_number").df()
 
@@ -353,7 +346,7 @@ class TestDataValidation:
             }] AS Response
         """)
 
-        result = create_herds_table(con, "bes_details", silver_dir)
+        create_herds_table(con, "bes_details", silver_dir)
 
         herds_df = con.execute("SELECT * FROM herds").df()
 
@@ -397,7 +390,7 @@ class TestErrorPropagation:
             }] AS Response
         """)
 
-        result = create_herds_table(con, "bes_details", silver_dir)
+        create_herds_table(con, "bes_details", silver_dir)
 
         herds_df = con.execute("SELECT * FROM herds").df()
 
@@ -424,8 +417,6 @@ class TestErrorPropagation:
         ):
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
-
-            from unittest.mock import patch
 
             process_chr_data(
                 silver_dir=silver_dir,
@@ -462,7 +453,7 @@ class TestPerformance:
 
         con.execute(f"CREATE TABLE bes_details AS SELECT {herd_data} AS Response")
 
-        result = create_herds_table(con, "bes_details", silver_dir)
+        create_herds_table(con, "bes_details", silver_dir)
 
         herds_df = con.execute("SELECT * FROM herds").df()
         assert len(herds_df) == 100
@@ -470,7 +461,6 @@ class TestPerformance:
     def test_pipeline_memory_efficiency(self, tmp_path):
         """Test that pipeline doesn't consume excessive memory."""
         import gc
-        import sys
 
         con = duckdb.connect()
         silver_dir = tmp_path / "silver"

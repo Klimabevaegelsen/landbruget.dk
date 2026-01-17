@@ -457,7 +457,7 @@ class TestPesticideDisaggregationGold:
     ):
         """Test handling of edge cases like zero-area fields and missing data."""
         # Create a field with zero area
-        zero_area_field = gGeo(
+        gGeo(
             {
                 "field_id": ["field_005"],
                 "cvr_number": ["12345678"],

@@ -6,10 +6,9 @@ external services like SOAP clients and cryptography libraries.
 """
 
 import sys
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
 import pytest
-
 
 # =============================================================================
 # Mock zeep module
