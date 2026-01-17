@@ -63,6 +63,8 @@ class TestGoldOrchestration:
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
+            from gold.chr_gold_processing import process_gold_data
+
             result = process_gold_data(
                 export_timestamp=export_timestamp, gold_dir=gold_dir, step=None
             )
@@ -82,6 +84,8 @@ class TestGoldOrchestration:
         ):
             mock_timeline.return_value = True
             mock_transport.return_value = True
+
+            from gold.chr_gold_processing import process_gold_data
 
             result = process_gold_data(
                 export_timestamp=export_timestamp,
@@ -105,6 +109,8 @@ class TestGoldOrchestration:
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
+            from gold.chr_gold_processing import process_gold_data
+
             result = process_gold_data(
                 export_timestamp=export_timestamp,
                 gold_dir=gold_dir,
@@ -127,6 +133,8 @@ class TestGoldOrchestration:
             mock_timeline.return_value = False  # Simulate failure
             mock_transport.return_value = True
 
+            from gold.chr_gold_processing import process_gold_data
+
             result = process_gold_data(export_timestamp=export_timestamp, gold_dir=gold_dir)
 
             assert result is False
@@ -143,6 +151,8 @@ class TestGoldOrchestration:
             mock_timeline.return_value = False
             mock_transport.return_value = False
 
+            from gold.chr_gold_processing import process_gold_data
+
             result = process_gold_data(export_timestamp=export_timestamp, gold_dir=gold_dir)
 
             assert result is False
@@ -158,6 +168,8 @@ class TestGoldOrchestration:
         ):
             mock_timeline.return_value = True
             mock_transport.return_value = True
+
+            from gold.chr_gold_processing import process_gold_data
 
             process_gold_data(export_timestamp=export_timestamp, gold_dir=None)
 
