@@ -3,20 +3,29 @@
 import json
 import logging
 import os
+from collections.abc import Iterator
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, Iterator, List
+from typing import Any
 
 import ijson  # Add this import for streaming JSON parsing
 from dotenv import load_dotenv
-from google.cloud import storage
+
+# Import the unified GCS access layer
+try:
+    from common.gcs import GCSDataAccess
+
+    GCS_AVAILABLE = True
+except ImportError:
+    GCSDataAccess = None
+    GCS_AVAILABLE = False
 
 
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder for handling datetime and date objects."""
 
     def default(self, obj: Any) -> str:
-        if isinstance(obj, (datetime, date)):
+        if isinstance(obj, datetime | date):
             return obj.isoformat()
         # Handle any other custom types that might come from the SOAP response
         try:
@@ -36,26 +45,28 @@ GCS_BUCKET = os.getenv("GCS_BUCKET")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 
 # Use GCS if we have the required configuration
-USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
+USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT and GCS_AVAILABLE)
 
-# Initialize GCS client if bucket is configured
-gcs_client = None
+# Initialize GCS access layer if available
+gcs_access = None
 if USE_GCS:
     try:
-        gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
-        logger.debug(f"Initialized GCS client for project: {GOOGLE_CLOUD_PROJECT}")
+        gcs_access = GCSDataAccess()
+        logger.debug(f"Initialized GCSDataAccess for project: {GOOGLE_CLOUD_PROJECT}")
     except Exception as e:
-        logger.error(f"Failed to initialize GCS client: {e}")
+        logger.error(f"Failed to initialize GCSDataAccess: {e}")
         logger.warning("Falling back to local storage")
         USE_GCS = False
 
 if not USE_GCS:
-    logger.warning("Using local storage (path will be determined by SVINEFLYTNING_OUTPUT_DIR environment variable)")
+    logger.warning(
+        "Using local storage (path will be determined by SVINEFLYTNING_OUTPUT_DIR environment variable)"
+    )
 
 
-def _save_to_gcs(blob_path: str, data_iterator: Iterator[Dict]) -> str:
+def _save_to_gcs(blob_path: str, data_iterator: Iterator[dict]) -> str:
     """
-    Helper function to stream content to GCS.
+    Helper function to stream content to GCS using unified GCSDataAccess.
 
     Args:
         blob_path: The path to save the blob to.
@@ -64,13 +75,12 @@ def _save_to_gcs(blob_path: str, data_iterator: Iterator[Dict]) -> str:
     Returns:
         str: The full GCS path where the content was saved.
     """
-    bucket = gcs_client.bucket(GCS_BUCKET)
     # Add bronze/svineflytning/{timestamp} prefix to all files
     full_path = f"bronze/svineflytning/{blob_path}"
-    blob = bucket.blob(full_path)
+    gcs_path = f"gs://{GCS_BUCKET}/{full_path}"
 
-    # Create a streaming upload
-    with blob.open("w") as f:
+    # Create a streaming upload using gcsfs
+    with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
         # Write opening bracket for JSON array
         f.write("[\n")
 
@@ -85,10 +95,10 @@ def _save_to_gcs(blob_path: str, data_iterator: Iterator[Dict]) -> str:
         # Write closing bracket
         f.write("\n]")
 
-    return f"gs://{GCS_BUCKET}/{full_path}"
+    return gcs_path
 
 
-def _save_locally(filepath: Path, data_iterator: Iterator[Dict]) -> str:
+def _save_locally(filepath: Path, data_iterator: Iterator[dict]) -> str:
     """
     Helper function to save content locally.
 
@@ -119,8 +129,11 @@ def _save_locally(filepath: Path, data_iterator: Iterator[Dict]) -> str:
 
 
 def export_movements(
-    data_iterator: Iterator[Dict], export_timestamp: str, filename: str, output_dir: str = "/data/raw/svineflytning"
-) -> Dict[str, Any]:
+    data_iterator: Iterator[dict],
+    export_timestamp: str,
+    filename: str,
+    output_dir: str = "/data/raw/svineflytning",
+) -> dict[str, Any]:
     """
     Export pig movement data to either GCS or local storage using streaming.
 
@@ -159,8 +172,11 @@ def export_movements(
 
 
 def export_movements_optimized(
-    temp_files: List[Path], export_timestamp: str, total_chunks: int, output_dir: str = "/data/raw/svineflytning"
-) -> Dict[str, Any]:
+    temp_files: list[Path],
+    export_timestamp: str,
+    total_chunks: int,
+    output_dir: str = "/data/raw/svineflytning",
+) -> dict[str, Any]:
     """
     Export pig movement data using streaming to minimize memory usage.
 
@@ -178,19 +194,18 @@ def export_movements_optimized(
         """Stream contents of a temp file one item at a time."""
         with open(temp_file, "rb") as f:
             parser = ijson.items(f, "item")
-            for item in parser:
-                yield item
+            yield from parser
 
     if USE_GCS:
         try:
             logger.debug(f"Starting streaming upload to GCS bucket '{GCS_BUCKET}'")
 
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(GCS_BUCKET)
-            blob = bucket.blob(f"bronze/svineflytning/{export_timestamp}/svineflytning.json")
+            gcs_path = (
+                f"gs://{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
+            )
 
-            # Stream directly to GCS
-            with blob.open("w") as f:
+            # Stream directly to GCS using gcsfs
+            with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
                 f.write("[\n")
 
                 first_item = True
@@ -204,7 +219,7 @@ def export_movements_optimized(
 
                 f.write("\n]")
 
-            destination = f"gs://{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
+            destination = gcs_path
             logger.debug(f"Successfully exported to GCS: {destination}")
 
         except Exception as e:

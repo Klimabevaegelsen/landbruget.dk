@@ -1,0 +1,112 @@
+{
+  "metadata": {
+    "title": "NH3 Emission Factors for Synthetic Fertilizer Application to Fields",
+    "source": "KB_21_5397_AP2 Notat beregningsgrundlag, Table 22 (Side 80)",
+    "description": "Ammonia emission factors for different types of synthetic (mineral) fertilizers applied to fields. Values represent kg NH3-N per kg N applied (2015-2017 period).",
+    "unit": "kg NH3-N per kg N applied",
+    "note": "NH3 contributes to acidification and eutrophication but is not a direct greenhouse gas. Must be converted to kg NH3 by multiplying by (17/14) = 1.214.",
+    "data_period": "2015-2017",
+    "footnote": "Sulfur-coated ammonium and amide-containing fertilizers have been subject to regulations since 2020 to limit ammonia volatilization."
+  },
+  "fertilizer_types": {
+    "calcium_nitrat": {
+      "name": "Calcium- og bor calciumnitrat",
+      "ef_nh3_n_per_kg_n": 0.05,
+      "consumption_2017_tons_n": 0.2,
+      "description": "Calcium and boron calcium nitrate"
+    },
+    "ammoniumsulfat": {
+      "name": "Ammoniumsulfat (svovlsur ammoniak)",
+      "ef_nh3_n_per_kg_n": 0.09,
+      "consumption_2017_tons_n": 8.2,
+      "description": "Ammonium sulfate (sulfuric ammonia)",
+      "note": "Subject to regulations since 2020 to limit NH3 volatilization"
+    },
+    "calcium_ammonium_nitrat": {
+      "name": "Calcium ammonium nitrat",
+      "ef_nh3_n_per_kg_n": 0.008,
+      "consumption_2017_tons_n": 109.1,
+      "description": "Calcium ammonium nitrate (most common fertilizer in Denmark)"
+    },
+    "ammoniumnitrat": {
+      "name": "Ammoniumnitrat",
+      "ef_nh3_n_per_kg_n": 0.015,
+      "consumption_2017_tons_n": 3.5,
+      "description": "Ammonium nitrate"
+    },
+    "flydende_ammoniak": {
+      "name": "Flydende ammoniak",
+      "ef_nh3_n_per_kg_n": 0.019,
+      "consumption_2017_tons_n": 6.0,
+      "description": "Liquid ammonia"
+    },
+    "urea": {
+      "name": "Urea",
+      "ef_nh3_n_per_kg_n": 0.155,
+      "consumption_2017_tons_n": 1.0,
+      "description": "Urea (highest NH3 emission factor)",
+      "note": "Subject to regulations since 2020 to limit NH3 volatilization"
+    },
+    "andre_kvælstofgødninger": {
+      "name": "Andre kvælstofgødninger",
+      "ef_nh3_n_per_kg_n": 0.01,
+      "consumption_2017_tons_n": 37.9,
+      "description": "Other nitrogen fertilizers"
+    },
+    "magnesium_gødninger": {
+      "name": "Magnesium gødninger",
+      "ef_nh3_n_per_kg_n": 0.05,
+      "consumption_2017_tons_n": 0.0,
+      "description": "Magnesium fertilizers"
+    },
+    "npk_gødninger": {
+      "name": "NPK-gødninger",
+      "ef_nh3_n_per_kg_n": 0.05,
+      "consumption_2017_tons_n": 70.3,
+      "description": "NPK compound fertilizers (nitrogen-phosphorus-potassium)"
+    },
+    "diammonfosfat": {
+      "name": "Diammonfosfat",
+      "ef_nh3_n_per_kg_n": 0.05,
+      "consumption_2017_tons_n": 3.2,
+      "description": "Diammonium phosphate (DAP)"
+    },
+    "andre_np_gødninger": {
+      "name": "Andre NP-gødninger",
+      "ef_nh3_n_per_kg_n": 0.05,
+      "consumption_2017_tons_n": 7.9,
+      "description": "Other NP fertilizers (nitrogen-phosphorus)"
+    },
+    "nk_gødninger": {
+      "name": "NK-gødninger",
+      "ef_nh3_n_per_kg_n": 0.015,
+      "consumption_2017_tons_n": 1.5,
+      "description": "NK fertilizers (nitrogen-potassium)"
+    },
+    "andre_gødninger": {
+      "name": "Andre gødninger",
+      "ef_nh3_n_per_kg_n": 0.026,
+      "consumption_2017_tons_n": 0.0,
+      "description": "Other fertilizers"
+    }
+  },
+  "default_factor": {
+    "name": "Weighted average for Danish synthetic fertilizers",
+    "ef_nh3_n_per_kg_n": 0.026,
+    "description": "Default factor to use when specific fertilizer type is unknown. Calculated as weighted average based on 2017 consumption (248.7 tons N total).",
+    "calculation_note": "Weighted by consumption: (0.008*109.1 + 0.05*70.3 + 0.01*37.9 + 0.09*8.2 + ...) / 248.7 ≈ 0.026"
+  },
+  "conversion": {
+    "nh3_n_to_nh3": 1.214,
+    "description": "To convert kg NH3-N to kg NH3, multiply by 17/14 = 1.214",
+    "example": "If emission factor is 0.026 kg NH3-N/kg N, then in kg NH3: 0.026 * 1.214 = 0.0316 kg NH3/kg N"
+  },
+  "usage_notes": [
+    "These factors apply to synthetic (mineral) fertilizers only, not organic fertilizers (manure)",
+    "For organic fertilizers (husdyrgødning), use separate emission factors from Table 19",
+    "NH3 emissions from fertilizer application are separate from livestock NH3 emissions",
+    "Default factor (0.026 kg NH3-N/kg N) is recommended when specific fertilizer type is unknown",
+    "Emissions occur during and shortly after application (volatilization)",
+    "Actual emissions depend on application method, timing, weather, and soil conditions"
+  ]
+}

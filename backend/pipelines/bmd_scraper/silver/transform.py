@@ -2,12 +2,12 @@
 Transform raw BMD Excel data into cleaned, structured Parquet format.
 """
 
+import contextlib
 import json
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import duckdb
 
@@ -22,14 +22,16 @@ def _get_optimized_gcs_access():
     Returns GCSDataAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when unified_pipeline is properly installed
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         logger.info("✅ Successfully imported optimized GCSDataAccess")
         return GCSDataAccess
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-        logger.warning("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        logger.warning(
+            "⚠️ Falling back to basic storage - ensure common.gcs is installed "
+            "for optimal performance"
+        )
         return None
 
 
@@ -65,12 +67,12 @@ class OptimizedGCSStorage:
             self.gcs_client = storage.Client()
             self.gcs_bucket = self.gcs_client.bucket(bucket_name)
             logger.info(f"✅ BMD Silver: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError:
-            raise ImportError("google-cloud-storage is required but not available")
+        except ImportError as e:
+            raise ImportError("google-cloud-storage is required but not available") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
-    def upload_file(self, local_path: Path, gcs_path: str = None) -> bool:
+    def upload_file(self, local_path: Path, gcs_path: str | None = None) -> bool:
         """Upload file to GCS with optimized or fallback method."""
         try:
             if gcs_path is None:
@@ -80,18 +82,22 @@ class OptimizedGCSStorage:
 
             if self.use_optimized:
                 # Use optimized upload
-                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
-                with open(local_path, "rb") as file_obj:
-                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
-                        import shutil
+                import shutil
 
-                        shutil.copyfileobj(file_obj, gcs_file)
+                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+                with (
+                    open(local_path, "rb") as file_obj,
+                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                ):
+                    shutil.copyfileobj(file_obj, gcs_file)
                 logger.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized)")
             else:
                 # Use fallback upload
                 blob = self.gcs_bucket.blob(gcs_path)
                 blob.upload_from_filename(str(local_path))
-                logger.info(f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                logger.info(
+                    f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)"
+                )
 
             return True
 
@@ -136,7 +142,7 @@ class BMDTransformer:
         # Try to load metadata from bronze stage
         metadata_path = input_file.parent / "metadata.json"
         if metadata_path.exists():
-            with open(metadata_path, "r", encoding="utf-8") as f:
+            with open(metadata_path, encoding="utf-8") as f:
                 self.metadata = json.load(f)
                 logger.info(f"Loaded bronze metadata from {metadata_path}")
 
@@ -190,10 +196,8 @@ class BMDTransformer:
     def __del__(self):
         """Clean up DuckDB connection on object destruction."""
         if self.conn is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.close()
-            except:
-                pass
 
     def read_excel(self) -> str:
         """
@@ -280,7 +284,9 @@ class BMDTransformer:
             """)
 
             # Log the column mapping
-            logger.info(f"Column mapping: {column_mapping} Column mapping lens: {len(column_mapping)}")
+            logger.info(
+                f"Column mapping: {column_mapping} Column mapping lens: {len(column_mapping)}"
+            )
 
             return "cleaned_columns"
 
@@ -390,7 +396,9 @@ class BMDTransformer:
             # Identify text columns for trimming
             text_columns = []
             for col in columns:
-                col_type = self.conn.execute(f"SELECT typeof({col}) FROM {table_name} LIMIT 1").fetchone()[0]
+                col_type = self.conn.execute(
+                    f"SELECT typeof({col}) FROM {table_name} LIMIT 1"
+                ).fetchone()[0]
                 if col_type.lower() in ["varchar", "string", "text"]:
                     text_columns.append(col)
 
@@ -451,13 +459,14 @@ class BMDTransformer:
             columns = [desc[0] for desc in result]
 
             # Identify potential date columns
-            date_columns = []
-            for col in columns:
+            date_columns = [
+                col
+                for col in columns
                 if any(
                     date_term in col.lower()
                     for date_term in ["date", "dato", "godkendelsesdato", "udløbsdato", "expiry"]
-                ):
-                    date_columns.append(col)
+                )
+            ]
 
             # If we have date columns, parse them
             if date_columns:
@@ -481,9 +490,8 @@ class BMDTransformer:
                 logger.info(f"Parsed date columns: {date_columns}")
 
                 return "date_parsed"
-            else:
-                logger.info("No date columns found to parse")
-                return table_name
+            logger.info("No date columns found to parse")
+            return table_name
 
         except Exception as e:
             logger.exception(f"Error parsing dates: {e}")
@@ -509,7 +517,10 @@ class BMDTransformer:
             # Find the active ingredients column (should be aktivstofnavn_e after cleaning)
             active_ingredient_col = None
             for col in columns:
-                if any(term in col.lower() for term in ["aktivstofnavn", "active_ingredient", "ingredient_name"]):
+                if any(
+                    term in col.lower()
+                    for term in ["aktivstofnavn", "active_ingredient", "ingredient_name"]
+                ):
                     active_ingredient_col = col
                     break
 
@@ -527,10 +538,10 @@ class BMDTransformer:
             logger.info(f"Using column '{active_ingredient_col}' for PFAS detection")
 
             # Create PFAS detection SQL using LIKE patterns for each PFAS ingredient
-            pfas_conditions = []
-            for pfas_ingredient in self.pfas_active_ingredients:
-                # Use LOWER and LIKE for case-insensitive partial matching
-                pfas_conditions.append(f"LOWER({active_ingredient_col}) LIKE '%{pfas_ingredient.lower()}%'")
+            pfas_conditions = [
+                f"LOWER({active_ingredient_col}) LIKE '%{pfas_ingredient.lower()}%'"
+                for pfas_ingredient in self.pfas_active_ingredients
+            ]
 
             pfas_check_sql = " OR ".join(pfas_conditions)
 
@@ -538,19 +549,20 @@ class BMDTransformer:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pfas_enhanced AS
                 SELECT *,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN {pfas_check_sql} THEN true
                         ELSE false
                     END AS contains_pfas,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN LOWER({active_ingredient_col}) LIKE '%diquat%' THEN true
                         ELSE false
                     END AS contains_diquat,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
-                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
+                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%'
+                            OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
                         ELSE false
                     END AS contains_glyphosate
                 FROM {table_name};
@@ -558,33 +570,36 @@ class BMDTransformer:
 
             # Log detection statistics
             pfas_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_pfas = true
             """).fetchone()[0]
 
             diquat_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_diquat = true
             """).fetchone()[0]
 
             glyphosate_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_glyphosate = true
             """).fetchone()[0]
 
             total_count = self.conn.execute("SELECT COUNT(*) FROM pfas_enhanced").fetchone()[0]
 
             logger.info(
-                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS ({pfas_count / total_count:.1%})"
+                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS "
+                f"({pfas_count / total_count:.1%})"
             )
             logger.info(
-                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat ({diquat_count / total_count:.1%})"
+                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat "
+                f"({diquat_count / total_count:.1%})"
             )
             logger.info(
-                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate ({glyphosate_count / total_count:.1%})"
+                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate "
+                f"({glyphosate_count / total_count:.1%})"
             )
 
             # Store detection metadata
@@ -593,15 +608,21 @@ class BMDTransformer:
                     "pfas_ingredients_checked": list(self.pfas_active_ingredients),
                     "active_ingredient_column": active_ingredient_col,
                     "pfas_products_count": pfas_count,
-                    "pfas_percentage": round(pfas_count / total_count * 100, 2) if total_count > 0 else 0,
+                    "pfas_percentage": round(pfas_count / total_count * 100, 2)
+                    if total_count > 0
+                    else 0,
                 },
                 "diquat_detection": {
                     "diquat_products_count": diquat_count,
-                    "diquat_percentage": round(diquat_count / total_count * 100, 2) if total_count > 0 else 0,
+                    "diquat_percentage": round(diquat_count / total_count * 100, 2)
+                    if total_count > 0
+                    else 0,
                 },
                 "glyphosate_detection": {
                     "glyphosate_products_count": glyphosate_count,
-                    "glyphosate_percentage": round(glyphosate_count / total_count * 100, 2) if total_count > 0 else 0,
+                    "glyphosate_percentage": round(glyphosate_count / total_count * 100, 2)
+                    if total_count > 0
+                    else 0,
                 },
                 "total_products_count": total_count,
             }
@@ -612,7 +633,7 @@ class BMDTransformer:
             logger.exception(f"Error adding PFAS indicator: {e}")
             raise
 
-    def validate_data(self, table_name: str) -> Tuple[str, Dict[str, List[str]]]:
+    def validate_data(self, table_name: str) -> tuple[str, dict[str, list[str]]]:
         """
         Validate the cleaned data and report issues.
 
@@ -644,8 +665,12 @@ class BMDTransformer:
                 """).fetchone()[0]
 
                 if null_count > 0:
-                    missing_values.append(f"{col}: {null_count} missing values ({null_count / row_count:.1%})")
-                    logger.warning(f"Column {col} has {null_count} missing values ({null_count / row_count:.1%})")
+                    missing_values.append(
+                        f"{col}: {null_count} missing values ({null_count / row_count:.1%})"
+                    )
+                    logger.warning(
+                        f"Column {col} has {null_count} missing values ({null_count / row_count:.1%})"
+                    )
 
             if missing_values:
                 validation_issues["missing_values"] = missing_values
@@ -653,7 +678,10 @@ class BMDTransformer:
             # TODO: check outlier later
 
             # Store validation results in metadata
-            self.silver_metadata["validation"] = {"has_issues": bool(validation_issues), "issues": validation_issues}
+            self.silver_metadata["validation"] = {
+                "has_issues": bool(validation_issues),
+                "issues": validation_issues,
+            }
 
             return table_name, validation_issues
 
@@ -663,7 +691,7 @@ class BMDTransformer:
 
     def save_parquet(self, table_name: str) -> Path:
         """
-        Save the processed data as a Parquet file.
+        Save the processed data as a Parquet file with enhanced GCS export.
 
         Args:
             table_name: Name of the DuckDB table
@@ -678,7 +706,30 @@ class BMDTransformer:
         logger.info(f"Saving Parquet file to {output_path}")
 
         try:
-            # Export directly from DuckDB to Parquet
+            # 🚀 ENHANCED: Try native GCS export first if OptimizedGCSDataAccess is available
+            gcs_export_success = False
+            if OptimizedGCSDataAccess:
+                try:
+                    gcs_access = OptimizedGCSDataAccess()
+                    bucket_name = "landbrugsdata-raw-data"
+                    gcs_path = (
+                        f"gs://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
+                    )
+
+                    # Use native GCS export with server-side compression
+                    gcs_access.export_to_gcs_native(
+                        connection=self.conn,
+                        table_name=table_name,
+                        gcs_path=gcs_path,
+                        compression="zstd",
+                    )
+
+                    logger.info(f"✅ Native GCS export successful: {gcs_path}")
+                    gcs_export_success = True
+                except Exception as e:
+                    logger.warning(f"Native GCS export failed, using local export: {e}")
+
+            # Always create local file as well (for compatibility)
             self.conn.execute(f"""
                 COPY (SELECT * FROM {table_name})
                 TO '{output_path}' (FORMAT 'parquet')
@@ -692,6 +743,7 @@ class BMDTransformer:
             metadata_path = self.output_dir / "metadata.json"
             self.silver_metadata["output_file"] = str(output_path)
             self.silver_metadata["output_size_bytes"] = os.path.getsize(output_path)
+            self.silver_metadata["gcs_native_export"] = gcs_export_success
 
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(self.silver_metadata, f, indent=2, ensure_ascii=False)
@@ -730,7 +782,7 @@ class BMDTransformer:
             table_name = self.add_pfas_indicator(table_name)
 
             # 6. Validate data
-            table_name, validation_issues = self.validate_data(table_name)
+            table_name, _validation_issues = self.validate_data(table_name)
 
             # 7. Save to Parquet
             output_path = self.save_parquet(table_name)

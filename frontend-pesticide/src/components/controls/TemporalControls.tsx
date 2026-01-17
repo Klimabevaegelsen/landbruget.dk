@@ -1,17 +1,12 @@
-'use client'
+'use client';
 
-import { useEffect } from 'react'
-import { useTemporalStore } from '@/stores/temporal-store'
-import { usePMTilesStore } from '@/stores/pmtiles-store'
-import { 
-  Play, 
-  Pause, 
-  ChevronLeft, 
-  ChevronRight
-} from 'lucide-react'
+import { useEffect } from 'react';
+import { useTemporalStore } from '@/stores/temporal-store';
+import { usePMTilesStore } from '@/stores/pmtiles-store';
+import { Play, Pause, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface TemporalControlsProps {
-  className?: string
+  className?: string;
 }
 
 export function TemporalControls({ className = '' }: TemporalControlsProps) {
@@ -26,68 +21,72 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
     canGoNext,
     canGoPrevious,
     getYearRange,
-  } = useTemporalStore()
-  
-  const { metadata } = usePMTilesStore()
-  
+  } = useTemporalStore();
+
+  const { metadata } = usePMTilesStore();
+
   // Update available years from metadata
   useEffect(() => {
     if (metadata?.years) {
-      useTemporalStore.getState().setAvailableYears(metadata.years)
+      useTemporalStore.getState().setAvailableYears(metadata.years);
     }
-  }, [metadata])
-  
-  const yearRange = getYearRange()
-  
+  }, [metadata]);
+
+  const yearRange = getYearRange();
+
   return (
     <div className={`${className}`}>
       {/* Simple Controls */}
-      <div className="flex items-center justify-center space-x-4 mb-3">
+      <div className="mb-3 flex items-center justify-center space-x-4">
         {/* Previous */}
         <button
           onClick={goToPreviousYear}
           disabled={!canGoPrevious() || isAnimating}
-          className="p-2 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          className="rounded-full bg-white/10 p-2 transition-all hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30"
         >
-          <ChevronLeft className="w-4 h-4 text-white" />
+          <ChevronLeft className="h-4 w-4 text-white" />
         </button>
-        
+
         {/* Play/Pause */}
         <button
           onClick={isAnimating ? stopAnimation : startAnimation}
           disabled={availableYears.length <= 1}
-          className="p-2 rounded-full bg-white text-black hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          className="rounded-full bg-white p-2 text-black transition-all hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
         >
-          {isAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          {isAnimating ? (
+            <Pause className="h-4 w-4" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
         </button>
-        
+
         {/* Next */}
         <button
           onClick={goToNextYear}
           disabled={!canGoNext() || isAnimating}
-          className="p-2 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          className="rounded-full bg-white/10 p-2 transition-all hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30"
         >
-          <ChevronRight className="w-4 h-4 text-white" />
+          <ChevronRight className="h-4 w-4 text-white" />
         </button>
       </div>
-      
+
       {/* Year Progress Bar */}
       {yearRange && (
         <div>
-          <div className="flex justify-between text-xs text-gray-400 mb-1">
+          <div className="mb-1 flex justify-between text-xs text-gray-400">
             <span>{yearRange[0]}</span>
             <span>{yearRange[1]}</span>
           </div>
-          <div className="w-full bg-white/20 rounded-full h-0.5">
+          <div className="h-0.5 w-full rounded-full bg-white/20">
             <div
-              className="bg-white h-0.5 rounded-full transition-all duration-300"
+              className="h-0.5 rounded-full bg-white transition-all duration-300"
               style={{
-                width: `${((currentYear - yearRange[0]) / (yearRange[1] - yearRange[0])) * 100}%`
+                width: `${((currentYear - yearRange[0]) / (yearRange[1] - yearRange[0])) * 100}%`,
               }}
             />
           </div>
         </div>
       )}
     </div>
-  )
-} 
+  );
+}

@@ -2,6 +2,7 @@
 Spatial joining utilities for H3 PFAS exposure analysis.
 """
 
+import contextlib
 import gc
 import math
 import time
@@ -81,10 +82,8 @@ class SpatialJoiner:
                 # Force garbage collection and checkpoint every few chunks
                 if chunk_idx % 5 == 0:
                     gc.collect()
-                    try:
+                    with contextlib.suppress(Exception):
                         self.conn.execute("CHECKPOINT")
-                    except Exception:
-                        pass
 
                 chunk_time = time.time() - chunk_start_time
                 progress_pct = (chunk_idx + 1) / total_chunks * 100
@@ -195,7 +194,7 @@ class SpatialJoiner:
             f.geometry,
             -- Add field UUID support
             f.field_uuid,
-            COALESCE(f.field_uuid, 
+            COALESCE(f.field_uuid,
                      'legacy_' || CAST(f.cvr_number AS VARCHAR) || '_' || CAST(f.block_id AS VARCHAR) || '_' || CAST(f.field_id AS VARCHAR)
             ) as primary_field_id
         FROM {h3_table} h
@@ -367,7 +366,7 @@ class SpatialJoiner:
                 ELSE 0
             END as weighted_glyphosate_pesticide_belastning
         FROM {aggregated_table} i
-        LEFT JOIN {pesticide_table} p ON i.field_uuid = p.field_uuid 
+        LEFT JOIN {pesticide_table} p ON i.field_uuid = p.field_uuid
             AND i.cvr_number = p.cvr
         """
 

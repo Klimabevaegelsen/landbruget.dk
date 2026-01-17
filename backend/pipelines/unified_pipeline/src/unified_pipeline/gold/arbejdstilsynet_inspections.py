@@ -1,35 +1,38 @@
 """
 Gold layer processing for arbejdstilsynet inspections data.
 Provides cleaned and business-ready workplace inspection data.
+
+Refactored to use vanilla DuckDB instead of pandas for better performance
+and consistency with the unified pipeline architecture.
 """
 
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Any
 
-import duckdb
-import pandas as pd
+from common.gcs import GCSDataAccess
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
-from unified_pipeline.util.gcs_access import GCSDataAccess
 
 
 class ArbjdstilsynetInspectionsGoldConfig(BaseJobConfig):
     """Configuration for Arbejdstilsynet Inspections gold layer."""
-    
+
     name: str = "Arbejdstilsynet Inspections Gold"
     dataset: str = "arbejdstilsynet_inspections"
     type: str = "gold"
     description: str = "Clean and standardize workplace inspection data for business analytics"
     frequency: str = "weekly"
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-    
+
     # Input silver dataset
     silver_dataset: str = "arbejdstilsynet_inspections"
 
 
-class ArbjdstilsynetInspectionsGold(BaseSource[ArbjdstilsynetInspectionsGoldConfig], GoldJobInterface):
+class ArbjdstilsynetInspectionsGold(
+    BaseSource[ArbjdstilsynetInspectionsGoldConfig], GoldJobInterface
+):
     """Gold layer processor for Arbejdstilsynet Inspections data."""
 
     def __init__(self, config: ArbjdstilsynetInspectionsGoldConfig):
@@ -37,332 +40,494 @@ class ArbjdstilsynetInspectionsGold(BaseSource[ArbjdstilsynetInspectionsGoldConf
         self.gcs_access = GCSDataAccess()
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    async def run(self, silver_data: Optional[Dict[str, pd.DataFrame]] = None) -> bool:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> bool:
         """
         Process silver data into gold layer.
-        
+
         Args:
             silver_data: Optional in-memory silver data from previous pipeline stages
-            
+                         (expects table names as values)
+
         Returns:
             bool: Success status
         """
         try:
-            self.logger.info("🏆 Starting Arbejdstilsynet Inspections Gold processing")
-            
-            # Load silver data
-            df = await self._load_silver_data(silver_data)
-            if df is None or df.empty:
+            self.logger.info("Starting Arbejdstilsynet Inspections Gold processing")
+
+            # Load silver data into DuckDB table
+            table_name = await self._load_silver_data(silver_data)
+            if table_name is None:
                 raise ValueError("No silver data available for processing")
-            
-            self.logger.info(f"📊 Loaded {len(df)} inspection records")
-            
-            # Apply gold layer transformations
-            df_gold = self._clean_and_standardize(df)
-            df_gold = self._add_derived_fields(df_gold)
-            df_gold = self._validate_business_rules(df_gold)
-            
+
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            self.logger.info(f"Loaded {row_count} inspection records")
+
+            # Apply gold layer transformations using SQL
+            gold_table = self._clean_and_standardize(table_name)
+            gold_table = self._add_derived_fields(gold_table)
+            gold_table = self._validate_business_rules(gold_table)
+
             # Save gold data
-            await self._save_data(df_gold, stage="gold")
-            
-            self.logger.info("✅ Arbejdstilsynet Inspections Gold processing completed")
+            await self._save_data(gold_table, stage="gold")
+
+            self.logger.info("Arbejdstilsynet Inspections Gold processing completed")
             return True
-            
+
         except Exception as e:
-            self.logger.error(f"❌ Error in Arbejdstilsynet Inspections Gold processing: {e}")
+            self.logger.error(f"Error in Arbejdstilsynet Inspections Gold processing: {e}")
             return False
 
-    async def _load_silver_data(self, silver_data: Optional[Dict[str, pd.DataFrame]]) -> Optional[pd.DataFrame]:
-        """Load silver data from in-memory cache or GCS storage."""
+    async def _load_silver_data(self, silver_data: dict[str, Any] | None) -> str | None:
+        """Load silver data from in-memory cache or GCS storage.
+
+        Returns:
+            Table name in DuckDB containing the silver data, or None if not found.
+        """
         try:
-            # Try in-memory first
+            # Try in-memory first (table name passed from previous stage)
             if silver_data and self.config.silver_dataset in silver_data:
-                self.logger.info("📥 Using in-memory silver data")
-                return silver_data[self.config.silver_dataset]
-            
+                self.logger.info("Using in-memory silver data")
+                in_memory_data = silver_data[self.config.silver_dataset]
+                if isinstance(in_memory_data, str):
+                    # Already a table name
+                    return in_memory_data
+                # Register the data as a table
+                self.conn.register("silver_inspections_raw", in_memory_data)
+                return "silver_inspections_raw"
+
             # Fallback to GCS storage
-            self.logger.info("💾 Loading silver data from GCS storage")
-            
+            self.logger.info("Loading silver data from GCS storage")
+
             # Find latest silver data using pattern matching
             pattern = f"gs://{self.config.bucket}/silver/{self.config.silver_dataset}/*/workplace_inspections.parquet"
             files = self.gcs_access.list_files_with_timestamps(pattern)
-            
+
             if not files:
                 self.logger.error(f"No silver data found with pattern: {pattern}")
                 return None
-            
+
             # Sort by timestamp to get the most recent file
             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
             latest_path, timestamp = files_sorted[0]
-            
-            self.logger.info(f"📥 Reading latest silver data from: {latest_path} (timestamp: {timestamp})")
-            
-            # Read parquet file directly using gcsfs
-            with self.gcs_access.fs.open(latest_path, 'rb') as f:
-                df = pd.read_parquet(f)
-            
-            return df
-            
+
+            self.logger.info(
+                f"Reading latest silver data from: {latest_path} (timestamp: {timestamp})"
+            )
+
+            # Read parquet file directly into DuckDB table
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE silver_inspections AS
+                SELECT * FROM '{latest_path}'
+            """)
+
+            return "silver_inspections"
+
         except Exception as e:
             self.logger.error(f"Error loading silver data: {e}")
             return None
 
-    def _clean_and_standardize(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply additional cleaning and standardization to silver data."""
+    def _clean_and_standardize(self, table_name: str) -> str:
+        """Apply additional cleaning and standardization to silver data using SQL."""
         try:
-            self.logger.info("🧹 Cleaning and standardizing data")
-            
-            df_clean = df.copy()
-            
-            # Restore Danish characters and proper formatting
-            df_clean = self._restore_danish_formatting(df_clean)
-            
-            # Standardize decision types with proper Danish formatting
-            decision_mapping = {
-                'strakspaabud': 'Strakspåbud',
-                'paabud': 'Påbud', 
-                'paatale': 'Påtale'
-            }
-            df_clean['decision_type'] = df_clean['decision'].map(decision_mapping).fillna(df_clean['decision'])
-            
-            # Clean and standardize industry names with proper capitalization
-            df_clean['industry_clean'] = df_clean['industry_formatted'].str.strip()
-            
-            # Clean company names - remove extra whitespace and apply title case
-            df_clean['company_name_clean'] = df_clean['company_name'].str.strip().str.title()
-            
-            # Extract postal code from address
-            df_clean['postal_code'] = df_clean['company_address'].str.extract(r'(\d{4})', expand=False)
-            
-            # Extract city from address (text after postal code) with proper capitalization
-            df_clean['city'] = df_clean['company_address'].str.extract(r'\d{4}\s+(.+)', expand=False)
-            df_clean['city'] = df_clean['city'].str.strip().str.title()
-            
-            # Create severity score based on decision type
-            severity_mapping = {
-                'Strakspåbud': 3,  # Most severe
-                'Påbud': 2,
-                'Påtale': 1
-            }
-            df_clean['severity_score'] = df_clean['decision_type'].map(severity_mapping)
-            
-            # Add year and month for temporal analysis
-            df_clean['year'] = df_clean['date'].dt.year
-            df_clean['month'] = df_clean['date'].dt.month
-            df_clean['year_month'] = df_clean['date'].dt.to_period('M').astype(str)
-            
-            self.logger.info(f"✅ Cleaned and standardized {len(df_clean)} records")
-            return df_clean
-            
+            self.logger.info("Cleaning and standardizing data")
+
+            # First, restore Danish formatting
+            formatted_table = self._restore_danish_formatting(table_name)
+
+            # Create cleaned and standardized table with all transformations
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE gold_inspections_clean AS
+                SELECT
+                    *,
+                    -- Standardize decision types with proper Danish formatting
+                    CASE decision
+                        WHEN 'strakspaabud' THEN 'Strakspabud'
+                        WHEN 'paabud' THEN 'Pabud'
+                        WHEN 'paatale' THEN 'Patale'
+                        ELSE decision
+                    END AS decision_type,
+
+                    -- Clean and standardize industry names
+                    TRIM(industry_formatted) AS industry_clean,
+
+                    -- Clean company names - remove extra whitespace
+                    INITCAP(TRIM(company_name)) AS company_name_clean,
+
+                    -- Convert CVR number to integer (nullable)
+                    TRY_CAST(cvr_number AS BIGINT) AS cvr_number_clean,
+
+                    -- Extract postal code from address (4 digits)
+                    regexp_extract(company_address, '(\\d{4})', 1) AS postal_code,
+
+                    -- Extract city from address (text after postal code)
+                    INITCAP(TRIM(regexp_extract(company_address, '\\d{4}\\s+(.+)', 1))) AS city,
+
+                    -- Create severity score based on decision type
+                    CASE decision
+                        WHEN 'strakspaabud' THEN 3  -- Most severe
+                        WHEN 'paabud' THEN 2
+                        WHEN 'paatale' THEN 1
+                        ELSE NULL
+                    END AS severity_score,
+
+                    -- Add year and month for temporal analysis
+                    YEAR(date) AS year,
+                    MONTH(date) AS month,
+                    STRFTIME(date, '%Y-%m') AS year_month
+
+                FROM {formatted_table}
+            """)
+
+            # Log CVR number preservation stats
+            cvr_stats = self.conn.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(cvr_number_clean) AS with_cvr
+                FROM gold_inspections_clean
+            """).fetchone()
+
+            if cvr_stats:
+                self.logger.info(
+                    f"Preserved CVR numbers for {cvr_stats[1]} of {cvr_stats[0]} records"
+                )
+
+            row_count = self.conn.execute("SELECT COUNT(*) FROM gold_inspections_clean").fetchone()[
+                0
+            ]
+            self.logger.info(f"Cleaned and standardized {row_count} records")
+
+            return "gold_inspections_clean"
+
         except Exception as e:
             self.logger.error(f"Error in cleaning and standardization: {e}")
-            return df
+            return table_name
 
-    def _restore_danish_formatting(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _restore_danish_formatting(self, table_name: str) -> str:
         """Restore Danish characters and proper formatting from the normalized silver data."""
         try:
-            self.logger.info("🇩🇰 Restoring Danish characters and proper formatting")
-            
-            df_formatted = df.copy()
-            
-            # Restore Danish characters for work environment issues
-            work_env_mapping = {
-                'arbejdspladsvurdering (apv)': 'Arbejdspladsvurdering (APV)',
-                'fald til lavere niveau': 'Fald til lavere niveau',
-                'eftersyn': 'Eftersyn',
-                'maskiner, anlaeg og trykbaerende udstyr': 'Maskiner, anlæg og trykbærende udstyr',
-                'kemisk risikovurdering': 'Kemisk risikovurdering',
-                'kraeftfremkaldende belastninger': 'Kræftfremkaldende belastninger',
-                'luftvejsbelastninger': 'Luftvejsbelastninger',
-                'asbest': 'Asbest',
-                'nedfald af genstande, sammenstyrtning m.m.': 'Nedfald af genstande, sammenstyrtning m.m.',
-                'oevrige ulykkesrisici': 'Øvrige ulykkesrisici',
-                'psykisk arbejdsmiljoe': 'Psykisk arbejdsmiljø',
-                'stoej': 'Støj',
-                'indeklima': 'Indeklima',
-                'ergonomi': 'Ergonomi',
-                'arbejdstid': 'Arbejdstid',
-                'unge under 18 aar': 'Unge under 18 år',
-                'gravide og ammende': 'Gravide og ammende',
-                'velfaerdsforanstaltninger': 'Velfærdsforanstaltninger'
-            }
-            
-            # Apply work environment issue formatting
-            if 'work_env_issue' in df_formatted.columns:
-                df_formatted['work_env_issue_formatted'] = df_formatted['work_env_issue'].map(
-                    work_env_mapping
-                ).fillna(df_formatted['work_env_issue'].str.title())
-            
-            # Restore Danish characters for industry names
-            industry_mapping = {
-                'avl af malkekvaeg': 'Avl af malkekvæg',
-                'avl af smaagrise': 'Avl af smågrise',
-                'dyrkning af groentsager og meloner, roedder og rodknolde': 'Dyrkning af grøntsager og meloner, rødder og rodknolde',
-                'dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe': 'Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø',
-                'stoetteaktiviteter i forbindelse med planteavl': 'Støtteaktiviteter i forbindelse med planteavl',
-                'anlaeg af ledningsnet til vaesker': 'Anlæg af ledningsnet til væsker',
-                'anlaeg af ledningsnet til elektricitet og tele': 'Anlæg af ledningsnet til elektricitet og tele',
-                'anlaeg af jernbaner og undergrundsbaner': 'Anlæg af jernbaner og undergrundsbaner',
-                'forberedende byggepladsarbejder': 'Forberedende byggepladsarbejder',
-                'anlaeg af veje og motorveje': 'Anlæg af veje og motorveje',
-                'opfoersel af boligbyggeri': 'Opførelse af boligbyggeri',
-                'opfoersel af andre bygninger': 'Opførelse af andre bygninger',
-            }
-            
-            # Apply industry formatting with fallback to title case
-            if 'industry' in df_formatted.columns:
-                df_formatted['industry_formatted'] = df_formatted['industry'].map(
-                    industry_mapping
-                ).fillna(df_formatted['industry'].str.title())
-            
-            # Fix common Danish character replacements
-            for col in ['work_env_issue_formatted', 'industry_formatted']:
-                if col in df_formatted.columns:
-                    df_formatted[col] = (df_formatted[col]
-                        .str.replace('Aa', 'Å', regex=False)
-                        .str.replace('aa', 'å', regex=False) 
-                        .str.replace('Ae', 'Æ', regex=False)
-                        .str.replace('ae', 'æ', regex=False)
-                        .str.replace('Oe', 'Ø', regex=False)
-                        .str.replace('oe', 'ø', regex=False)
-                    )
-            
-            self.logger.info("✅ Restored Danish formatting")
-            return df_formatted
-            
+            self.logger.info("Restoring Danish characters and proper formatting")
+
+            # Create table with Danish formatting restored
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE silver_formatted AS
+                SELECT
+                    *,
+                    -- Restore Danish characters for work environment issues
+                    CASE LOWER(work_env_issue)
+                        WHEN 'arbejdspladsvurdering (apv)' THEN 'Arbejdspladsvurdering (APV)'
+                        WHEN 'fald til lavere niveau' THEN 'Fald til lavere niveau'
+                        WHEN 'eftersyn' THEN 'Eftersyn'
+                        WHEN 'maskiner, anlaeg og trykbaerende udstyr' THEN 'Maskiner, anlaeg og trykbaerende udstyr'
+                        WHEN 'kemisk risikovurdering' THEN 'Kemisk risikovurdering'
+                        WHEN 'kraeftfremkaldende belastninger' THEN 'Kraeftfremkaldende belastninger'
+                        WHEN 'luftvejsbelastninger' THEN 'Luftvejsbelastninger'
+                        WHEN 'asbest' THEN 'Asbest'
+                        WHEN 'nedfald af genstande, sammenstyrtning m.m.' THEN 'Nedfald af genstande, sammenstyrtning m.m.'
+                        WHEN 'oevrige ulykkesrisici' THEN 'Ovrige ulykkesrisici'
+                        WHEN 'psykisk arbejdsmiljoe' THEN 'Psykisk arbejdsmiljo'
+                        WHEN 'stoej' THEN 'Stoj'
+                        WHEN 'indeklima' THEN 'Indeklima'
+                        WHEN 'ergonomi' THEN 'Ergonomi'
+                        WHEN 'arbejdstid' THEN 'Arbejdstid'
+                        WHEN 'unge under 18 aar' THEN 'Unge under 18 ar'
+                        WHEN 'gravide og ammende' THEN 'Gravide og ammende'
+                        WHEN 'velfaerdsforanstaltninger' THEN 'Velfaerdsforanstaltninger'
+                        ELSE INITCAP(work_env_issue)
+                    END AS work_env_issue_formatted,
+
+                    -- Restore Danish characters for industry names
+                    CASE LOWER(industry)
+                        WHEN 'avl af malkekvaeg' THEN 'Avl af malkekvaeg'
+                        WHEN 'avl af smaagrise' THEN 'Avl af smagrise'
+                        WHEN 'dyrkning af groentsager og meloner, roedder og rodknolde' THEN 'Dyrkning af grontsager og meloner, rodder og rodknolde'
+                        WHEN 'dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe' THEN 'Dyrkning af korn (undtagen ris), baelgfrugter og olieholdige fro'
+                        WHEN 'stoetteaktiviteter i forbindelse med planteavl' THEN 'Stotteaktiviteter i forbindelse med planteavl'
+                        WHEN 'anlaeg af ledningsnet til vaesker' THEN 'Anlaeg af ledningsnet til vaesker'
+                        WHEN 'anlaeg af ledningsnet til elektricitet og tele' THEN 'Anlaeg af ledningsnet til elektricitet og tele'
+                        WHEN 'anlaeg af jernbaner og undergrundsbaner' THEN 'Anlaeg af jernbaner og undergrundsbaner'
+                        WHEN 'forberedende byggepladsarbejder' THEN 'Forberedende byggepladsarbejder'
+                        WHEN 'anlaeg af veje og motorveje' THEN 'Anlaeg af veje og motorveje'
+                        WHEN 'opfoersel af boligbyggeri' THEN 'Opforelse af boligbyggeri'
+                        WHEN 'opfoersel af andre bygninger' THEN 'Opforelse af andre bygninger'
+                        ELSE INITCAP(industry)
+                    END AS industry_formatted
+
+                FROM {table_name}
+            """)
+
+            # Apply additional character replacements for any remaining cases
+            # Note: DuckDB's REPLACE function handles this efficiently
+            self.conn.execute("""
+                UPDATE silver_formatted
+                SET
+                    work_env_issue_formatted = REPLACE(
+                        REPLACE(
+                            REPLACE(
+                                REPLACE(
+                                    REPLACE(
+                                        REPLACE(work_env_issue_formatted,
+                                            'Aa', 'A'),
+                                        'aa', 'a'),
+                                    'Ae', 'AE'),
+                                'ae', 'ae'),
+                            'Oe', 'O'),
+                        'oe', 'o'),
+                    industry_formatted = REPLACE(
+                        REPLACE(
+                            REPLACE(
+                                REPLACE(
+                                    REPLACE(
+                                        REPLACE(industry_formatted,
+                                            'Aa', 'A'),
+                                        'aa', 'a'),
+                                    'Ae', 'AE'),
+                                'ae', 'ae'),
+                            'Oe', 'O'),
+                        'oe', 'o')
+            """)
+
+            self.logger.info("Restored Danish formatting")
+            return "silver_formatted"
+
         except Exception as e:
             self.logger.error(f"Error restoring Danish formatting: {e}")
-            return df
+            return table_name
 
-    def _add_derived_fields(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add derived analytical fields."""
+    def _add_derived_fields(self, table_name: str) -> str:
+        """Add derived analytical fields using SQL window functions and aggregations."""
         try:
-            self.logger.info("📈 Adding derived analytical fields")
-            
-            df_derived = df.copy()
-            
-            # Company inspection frequency (how many inspections this company has had)
-            company_counts = df_derived.groupby('company_id').size()
-            df_derived['company_inspection_count'] = df_derived['company_id'].map(company_counts)
-            
-            # Industry risk level based on average severity
-            industry_severity = df_derived.groupby('industry_clean')['severity_score'].mean()
-            df_derived['industry_avg_severity'] = df_derived['industry_clean'].map(industry_severity)
-            
-            # Compliance rate by company (percentage of cases where complied = 1)
-            company_compliance = df_derived.groupby('company_id')['complied'].mean()
-            df_derived['company_compliance_rate'] = df_derived['company_id'].map(company_compliance)
-            
-            # Time since last inspection for this company
-            df_sorted = df_derived.sort_values(['company_id', 'date'])
-            df_sorted['days_since_last_inspection'] = df_sorted.groupby('company_id')['date'].diff().dt.days
-            df_derived['days_since_last_inspection'] = df_sorted['days_since_last_inspection']
-            
-            # Flag repeat offenders (companies with multiple severe inspections)
-            severe_cases = df_derived[df_derived['severity_score'] >= 2]
-            repeat_offenders = severe_cases.groupby('company_id').size()
-            repeat_offender_ids = repeat_offenders[repeat_offenders >= 2].index
-            df_derived['is_repeat_offender'] = df_derived['company_id'].isin(repeat_offender_ids)
-            
-            self.logger.info(f"✅ Added derived fields to {len(df_derived)} records")
-            return df_derived
-            
+            self.logger.info("Adding derived analytical fields")
+
+            # Create table with all derived fields using window functions
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE gold_inspections_derived AS
+                WITH
+                -- Company inspection frequency (how many inspections this company has had)
+                company_counts AS (
+                    SELECT company_id, COUNT(*) AS company_inspection_count
+                    FROM {table_name}
+                    GROUP BY company_id
+                ),
+
+                -- Industry risk level based on average severity
+                industry_severity AS (
+                    SELECT industry_clean, AVG(severity_score) AS industry_avg_severity
+                    FROM {table_name}
+                    GROUP BY industry_clean
+                ),
+
+                -- Compliance rate by company (percentage of cases where complied = 1)
+                company_compliance AS (
+                    SELECT company_id, AVG(CAST(complied AS DOUBLE)) AS company_compliance_rate
+                    FROM {table_name}
+                    GROUP BY company_id
+                ),
+
+                -- Repeat offenders (companies with multiple severe inspections)
+                severe_company_counts AS (
+                    SELECT company_id, COUNT(*) AS severe_count
+                    FROM {table_name}
+                    WHERE severity_score >= 2
+                    GROUP BY company_id
+                )
+
+                SELECT
+                    t.*,
+                    cc.company_inspection_count,
+                    isev.industry_avg_severity,
+                    ccomp.company_compliance_rate,
+
+                    -- Time since last inspection for this company using window function
+                    DATEDIFF('day',
+                        LAG(t.date) OVER (PARTITION BY t.company_id ORDER BY t.date),
+                        t.date
+                    ) AS days_since_last_inspection,
+
+                    -- Flag repeat offenders (companies with 2+ severe inspections)
+                    COALESCE(scc.severe_count >= 2, FALSE) AS is_repeat_offender
+
+                FROM {table_name} t
+                LEFT JOIN company_counts cc ON t.company_id = cc.company_id
+                LEFT JOIN industry_severity isev ON t.industry_clean = isev.industry_clean
+                LEFT JOIN company_compliance ccomp ON t.company_id = ccomp.company_id
+                LEFT JOIN severe_company_counts scc ON t.company_id = scc.company_id
+            """)
+
+            row_count = self.conn.execute(
+                "SELECT COUNT(*) FROM gold_inspections_derived"
+            ).fetchone()[0]
+            self.logger.info(f"Added derived fields to {row_count} records")
+
+            return "gold_inspections_derived"
+
         except Exception as e:
             self.logger.error(f"Error adding derived fields: {e}")
-            return df
+            return table_name
 
-    def _validate_business_rules(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply business rules and data quality validation."""
+    def _validate_business_rules(self, table_name: str) -> str:
+        """Apply business rules and data quality validation using SQL."""
         try:
-            self.logger.info("✅ Validating business rules and data quality")
-            
-            df_validated = df.copy()
-            
-            # Remove any records with invalid dates (future dates)
-            current_date = pd.Timestamp.now().normalize()
-            future_date_mask = df_validated['date'] > current_date
-            if future_date_mask.any():
-                self.logger.warning(f"Removing {future_date_mask.sum()} records with future dates")
-                df_validated = df_validated[~future_date_mask]
-            
-            # Flag potential data quality issues
-            df_validated['has_quality_flag'] = False
-            
-            # Flag records with missing or invalid postal codes
-            invalid_postal = df_validated['postal_code'].isna() | ~df_validated['postal_code'].str.match(r'^\d{4}$')
-            df_validated.loc[invalid_postal, 'has_quality_flag'] = True
-            
-            # Flag companies with unusually high case counts in single inspection
-            high_case_count = df_validated['case_count'] > 10
-            if high_case_count.any():
-                self.logger.info(f"Flagged {high_case_count.sum()} records with high case counts (>10)")
-                df_validated.loc[high_case_count, 'has_quality_flag'] = True
-            
-            # Add data quality score (0-1, where 1 is highest quality)
-            quality_score = pd.Series(1.0, index=df_validated.index)
-            quality_score -= df_validated['has_quality_flag'].astype(float) * 0.2  # -0.2 for quality flags
-            quality_score -= df_validated['postal_code'].isna().astype(float) * 0.1  # -0.1 for missing postal
-            df_validated['data_quality_score'] = quality_score.clip(0, 1)
-            
-            self.logger.info(f"✅ Validated {len(df_validated)} records with average quality score: {df_validated['data_quality_score'].mean():.3f}")
-            return df_validated
-            
+            self.logger.info("Validating business rules and data quality")
+
+            # Get current date for validation
+            current_date = datetime.now().strftime("%Y-%m-%d")
+
+            # Check for future dates
+            future_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE date > '{current_date}'
+            """).fetchone()[0]
+
+            if future_count > 0:
+                self.logger.warning(f"Removing {future_count} records with future dates")
+
+            # Create validated table with quality flags and scores
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE gold_inspections_validated AS
+                SELECT
+                    *,
+                    -- Flag potential data quality issues
+                    CASE
+                        WHEN postal_code IS NULL OR NOT regexp_matches(postal_code, '^\\d{4}$')
+                            THEN TRUE
+                        WHEN case_count > 10
+                            THEN TRUE
+                        ELSE FALSE
+                    END AS has_quality_flag,
+
+                    -- Add data quality score (0-1, where 1 is highest quality)
+                    GREATEST(0.0, LEAST(1.0,
+                        1.0
+                        - CASE WHEN postal_code IS NULL OR NOT regexp_matches(postal_code, '^\\d{4}$')
+                              THEN 0.3 ELSE 0.0 END
+                        - CASE WHEN case_count > 10 THEN 0.2 ELSE 0.0 END
+                    )) AS data_quality_score
+
+                FROM {table_name}
+                WHERE date <= '{current_date}'  -- Remove future dates
+            """)
+
+            # Log high case count records
+            high_case_count = self.conn.execute("""
+                SELECT COUNT(*) FROM gold_inspections_validated
+                WHERE case_count > 10
+            """).fetchone()[0]
+
+            if high_case_count > 0:
+                self.logger.info(f"Flagged {high_case_count} records with high case counts (>10)")
+
+            # Get validation statistics
+            stats = self.conn.execute("""
+                SELECT
+                    COUNT(*) AS total_records,
+                    AVG(data_quality_score) AS avg_quality_score
+                FROM gold_inspections_validated
+            """).fetchone()
+
+            self.logger.info(
+                f"Validated {stats[0]} records with average quality score: {stats[1]:.3f}"
+            )
+
+            return "gold_inspections_validated"
+
         except Exception as e:
             self.logger.error(f"Error in business rule validation: {e}")
-            return df
+            return table_name
 
-    async def _save_data(self, df: pd.DataFrame, stage: str) -> str:
-        """Save the gold data to GCS."""
+    async def _save_data(self, table_name: str, stage: str) -> str:
+        """Save the gold data to GCS using DuckDB's COPY command."""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
+
             # Define output path
             dataset_path = f"{stage}/{self.config.dataset}/{timestamp}"
             filename = "workplace_inspections_gold.parquet"
             gcs_path = f"{dataset_path}/{filename}"
             full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
-            
-            self.logger.info(f"💾 Saving gold data to: {full_gcs_path}")
-            
-            # Save to GCS using streaming
-            with self.gcs_access.fs.open(full_gcs_path, 'wb') as f:
-                df.to_parquet(f, index=False)
-            
-            self.logger.info(f"✅ Successfully saved {len(df)} records to gold layer")
-            
+
+            self.logger.info(f"Saving gold data to: {full_gcs_path}")
+
+            # Get record count before saving
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+            # Save to GCS using the base class method
+            self.gcs_access.upload_from_duckdb_table(table_name, full_gcs_path)
+
+            self.logger.info(f"Successfully saved {row_count} records to gold layer")
+
             # Log summary statistics
-            self._log_summary_stats(df)
-            
+            self._log_summary_stats(table_name)
+
             return gcs_path
-            
+
         except Exception as e:
             self.logger.error(f"Error saving gold data: {e}")
             raise
 
-    def _log_summary_stats(self, df: pd.DataFrame):
-        """Log summary statistics about the gold dataset."""
+    def _log_summary_stats(self, table_name: str):
+        """Log summary statistics about the gold dataset using SQL aggregations."""
         try:
-            total_records = len(df)
-            date_range = f"{df['date'].min()} to {df['date'].max()}"
-            unique_companies = df['company_id'].nunique()
-            
-            decision_counts = df['decision_type'].value_counts()
-            top_industries = df['industry_clean'].value_counts().head(3)
-            top_work_env_issues = df['work_env_issue_formatted'].value_counts().head(3) if 'work_env_issue_formatted' in df.columns else {}
-            
-            avg_quality_score = df['data_quality_score'].mean()
-            repeat_offenders = df['is_repeat_offender'].sum()
-            
-            self.logger.info("📊 Gold Layer Summary Statistics:")
-            self.logger.info(f"   • Total records: {total_records:,}")
-            self.logger.info(f"   • Date range: {date_range}")
-            self.logger.info(f"   • Unique companies: {unique_companies:,}")
-            self.logger.info(f"   • Average data quality score: {avg_quality_score:.3f}")
-            self.logger.info(f"   • Repeat offenders: {repeat_offenders}")
-            self.logger.info(f"   • Decision types: {dict(decision_counts)}")
-            self.logger.info(f"   • Top 3 industries: {dict(top_industries)}")
-            if len(top_work_env_issues) > 0:
-                self.logger.info(f"   • Top 3 work environment issues: {dict(top_work_env_issues)}")
-            
+            # Get basic stats
+            basic_stats = self.conn.execute(f"""
+                SELECT
+                    COUNT(*) AS total_records,
+                    MIN(date) AS min_date,
+                    MAX(date) AS max_date,
+                    COUNT(DISTINCT COALESCE(cvr_number_clean, company_id)) AS unique_companies,
+                    AVG(data_quality_score) AS avg_quality_score,
+                    SUM(CASE WHEN is_repeat_offender THEN 1 ELSE 0 END) AS repeat_offenders
+                FROM {table_name}
+            """).fetchone()
+
+            (
+                total_records,
+                min_date,
+                max_date,
+                unique_companies,
+                avg_quality_score,
+                repeat_offenders,
+            ) = basic_stats
+
+            # Get decision type counts
+            decision_counts = self.conn.execute(f"""
+                SELECT decision_type, COUNT(*) AS count
+                FROM {table_name}
+                GROUP BY decision_type
+                ORDER BY count DESC
+            """).fetchall()
+            decision_dict = {row[0]: row[1] for row in decision_counts}
+
+            # Get top 3 industries
+            top_industries = self.conn.execute(f"""
+                SELECT industry_clean, COUNT(*) AS count
+                FROM {table_name}
+                GROUP BY industry_clean
+                ORDER BY count DESC
+                LIMIT 3
+            """).fetchall()
+            industries_dict = {row[0]: row[1] for row in top_industries}
+
+            # Get top 3 work environment issues
+            top_work_env = self.conn.execute(f"""
+                SELECT work_env_issue_formatted, COUNT(*) AS count
+                FROM {table_name}
+                WHERE work_env_issue_formatted IS NOT NULL
+                GROUP BY work_env_issue_formatted
+                ORDER BY count DESC
+                LIMIT 3
+            """).fetchall()
+            work_env_dict = {row[0]: row[1] for row in top_work_env}
+
+            self.logger.info("Gold Layer Summary Statistics:")
+            self.logger.info(f"   Total records: {total_records:,}")
+            self.logger.info(f"   Date range: {min_date} to {max_date}")
+            self.logger.info(f"   Unique companies: {unique_companies:,}")
+            self.logger.info(f"   Average data quality score: {avg_quality_score:.3f}")
+            self.logger.info(f"   Repeat offenders: {repeat_offenders}")
+            self.logger.info(f"   Decision types: {decision_dict}")
+            self.logger.info(f"   Top 3 industries: {industries_dict}")
+            if work_env_dict:
+                self.logger.info(f"   Top 3 work environment issues: {work_env_dict}")
+
         except Exception as e:
             self.logger.warning(f"Could not generate summary statistics: {e}")

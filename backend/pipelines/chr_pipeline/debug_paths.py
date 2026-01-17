@@ -6,11 +6,18 @@ import logging
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Test paths
-test_paths = ["/usr/data/bronze/chr", "/usr/data/silver/chr", "/data/bronze/chr", "/data/silver/chr"]
+test_paths = [
+    "/usr/data/bronze/chr",
+    "/usr/data/silver/chr",
+    "/data/bronze/chr",
+    "/data/silver/chr",
+]
 
 # Create timestamp directory
 timestamp = "debug_test"

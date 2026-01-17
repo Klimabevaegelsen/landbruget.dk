@@ -1,5 +1,5 @@
 # Makefile for Unified Pipeline Operations
-# 
+#
 # This makefile provides convenient commands for running the property-cadastral merge pipeline
 # and other unified pipeline operations.
 
@@ -44,7 +44,7 @@ build: clean-build  ## Build wheel file
 .PHONY: test
 test: clean-test  ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@uv run pytest ${TEST_DIR}
+	@PYTHONPATH="$$(cd ../.. && pwd):${PYTHONPATH}" uv run pytest ${TEST_DIR}
 
 .PHONY: coverage
 coverage: clean-test  ## Test the code with pytest and generate coverage report
@@ -203,7 +203,7 @@ clean:
 dev-setup:
 	@echo "Setting up development environment..."
 	uv pip install -e .
-uv pip install pytest pytest-cov black isort mypy
+	uv pip install pytest pytest-cov black isort mypy
 
 # Run formatters
 format:

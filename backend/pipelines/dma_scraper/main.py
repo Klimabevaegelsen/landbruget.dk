@@ -1,7 +1,5 @@
 import argparse
 import asyncio
-
-# inside backend/pipelines/dma_scraper/fetch_company_data.py
 import os
 import sys
 import time
@@ -9,13 +7,18 @@ from datetime import datetime
 
 import nest_asyncio
 
+# inside backend/pipelines/dma_scraper/fetch_company_data.py
 ROOT = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
 sys.path.insert(0, ROOT)
 
-from bronze.fetch_company_data import DMAScraper
-from bronze.fetch_company_detail import DMACompanyDetailScraper
+# Import pipeline metadata system for data tracing
+from pipeline_metadata import MetadataManager as PipelineMetadataManager  # noqa: E402
 
-from silver.transformation import transform_dma_json
+from bronze.fetch_company_data import DMAScraper  # noqa: E402
+from bronze.fetch_company_detail import DMACompanyDetailScraper  # noqa: E402
+from silver.transformation import transform_dma_json  # noqa: E402
+
+PIPELINE_METADATA_AVAILABLE = True
 
 
 def _get_optimized_storage():
@@ -25,14 +28,16 @@ def _get_optimized_storage():
     Returns GCSDataAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when unified_pipeline is properly installed
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        # Primary import path - should work when common.gcs is properly installed
+        from common.gcs import GCSDataAccess
 
         print("✅ Successfully imported optimized GCSDataAccess")
         return GCSDataAccess
     except ImportError as e:
         print(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-        print("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        print(
+            "⚠️ Falling back to basic storage - ensure common.gcs is installed for optimal performance"
+        )
         return None
 
 
@@ -43,7 +48,10 @@ def _get_cvr_collection_utility():
     Returns CVR collection functions if available, otherwise None.
     """
     try:
-        from unified_pipeline.util.cvr_collection import extract_cvr_numbers_from_table, save_pipeline_cvr_numbers
+        from unified_pipeline.util.cvr_collection import (
+            extract_cvr_numbers_from_table,
+            save_pipeline_cvr_numbers,
+        )
 
         print("✅ Successfully imported CVR collection utilities")
         return extract_cvr_numbers_from_table, save_pipeline_cvr_numbers
@@ -87,10 +95,10 @@ class OptimizedStorageBackend:
             self.gcs_client = storage.Client()
             self.gcs_bucket = self.gcs_client.bucket(bucket_name)
             print(f"✅ DMA Storage: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError:
-            raise ImportError("google-cloud-storage is required but not available")
+        except ImportError as e:
+            raise ImportError("google-cloud-storage is required but not available") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def save_json(self, data, blob_name: str):
         """Save JSON data to GCS."""
@@ -160,12 +168,11 @@ class OptimizedStorageBackend:
             if self.use_optimized:
                 gcs_path = f"gs://{self.bucket_name}/{blob_name}"
                 return self.gcs_access.download_json(gcs_path)
-            else:
-                blob = self.gcs_bucket.blob(blob_name)
-                json_bytes = blob.download_as_bytes()
-                import json
+            blob = self.gcs_bucket.blob(blob_name)
+            json_bytes = blob.download_as_bytes()
+            import json
 
-                return json.loads(json_bytes.decode("utf-8"))
+            return json.loads(json_bytes.decode("utf-8"))
         except Exception as e:
             print(f"Error reading JSON from {blob_name}: {e}")
             raise
@@ -203,7 +210,7 @@ class LocalStorageBackend:
 
         file_path = os.path.join(self.base_dir, blob_name)
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             return json.load(f)
 
 
@@ -215,21 +222,23 @@ PREFIX_SILVER_SAVE_PATH = os.environ.get("SILVER_OUTPUT_DIR", "silver/dma")
 # Initialize storage backend based on environment
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 if ENVIRONMENT.lower() in ("production", "container"):
-    storage_backend = OptimizedStorageBackend(os.environ.get("GCS_BUCKET", "landbrugsdata-raw-data"))
+    storage_backend = OptimizedStorageBackend(
+        os.environ.get("GCS_BUCKET", "landbrugsdata-raw-data")
+    )
 else:
     storage_backend = LocalStorageBackend(os.environ.get("BRONZE_OUTPUT_DIR", "."))
 
 scraper = DMAScraper()
 
 
-def save_data(data, timestamp, PATH):
-    timestamp_dir = os.path.join(PATH, timestamp)
+def save_data(data, timestamp, path):
+    timestamp_dir = os.path.join(path, timestamp)
     blob_name = f"{timestamp_dir}/environmental_companies_raw.json"
     storage_backend.save_json(data, blob_name)
 
 
-def save_parquet(data, timestamp, PATH):
-    timestamp_dir = os.path.join(PATH, timestamp)
+def save_parquet(data, timestamp, path):
+    timestamp_dir = os.path.join(path, timestamp)
     blob_name = f"{timestamp_dir}/environmental_companies.parquet"
     storage_backend.save_parquet(data, blob_name)
 
@@ -284,11 +293,16 @@ def _save_discovered_cvr_numbers(data, timestamp: str):
                 section_data = company.get(section, [])
                 for item in section_data:
                     cvr = item.get("cvr_number")
-                    if cvr and isinstance(cvr, str) and len(cvr.strip()) == 8 and cvr.strip().isdigit():
+                    if (
+                        cvr
+                        and isinstance(cvr, str)
+                        and len(cvr.strip()) == 8
+                        and cvr.strip().isdigit()
+                    ):
                         cvr_numbers.append(cvr.strip())
 
         # Remove duplicates and sort
-        unique_cvr_numbers = sorted(list(set(cvr_numbers)))
+        unique_cvr_numbers = sorted(set(cvr_numbers))
 
         if unique_cvr_numbers:
             # Save CVR numbers using the collection utility (with automatic GCS access initialization)
@@ -343,9 +357,13 @@ def bronze(timestamp: str):
     if args.end_date:
         end_date = datetime.strptime(args.end_date, "%Y-%m-%d")
 
-    detail_scraper = DMACompanyDetailScraper(all_page_results, start_date=start_date, end_date=end_date)
+    detail_scraper = DMACompanyDetailScraper(
+        all_page_results, start_date=start_date, end_date=end_date
+    )
     loop = asyncio.get_event_loop()
-    detailed_data = loop.run_until_complete(detail_scraper.process_miljoeaktoer_for_company_file_path())
+    detailed_data = loop.run_until_complete(
+        detail_scraper.process_miljoeaktoer_for_company_file_path()
+    )
     # Merge base and detail dicts by 'miljoeaktoerUrl'
     detail_lookup = {item.get("miljoeaktoerUrl"): item for item in detailed_data if item}
     merged_results = []
@@ -359,13 +377,26 @@ def bronze(timestamp: str):
 if __name__ == "__main__":
     pipeline_start_time = datetime.now()
     timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        print("✅ Pipeline metadata system initialized")
+    else:
+        print("⚠️ Pipeline metadata system not available - continuing without data tracing")
+
     args = parse_args()
+    data = None
+
     if args.silver:
         if not args.timestamp:
             print("Error: --timestamp is required for silver stage")
             sys.exit(1)
         data = storage_backend.read_json(
-            os.path.join(PREFIX_BRONZE_SAVE_PATH, args.timestamp, "environmental_companies_raw.json")
+            os.path.join(
+                PREFIX_BRONZE_SAVE_PATH, args.timestamp, "environmental_companies_raw.json"
+            )
         )
         silver(data, args.timestamp)
     else:
@@ -402,13 +433,15 @@ if __name__ == "__main__":
             except ImportError as e:
                 import warnings
 
-                warnings.warn(f"Schema documentation not available: {e}")
+                warnings.warn(f"Schema documentation not available: {e}", stacklevel=2)
                 SchemaDocumentationManager = None
 
             conn = duckdb.connect()
 
             # Construct path to the silver parquet file
-            parquet_path = os.path.join(PREFIX_SILVER_SAVE_PATH, timestamp, "environmental_companies.parquet")
+            parquet_path = os.path.join(
+                PREFIX_SILVER_SAVE_PATH, timestamp, "environmental_companies.parquet"
+            )
 
             # Check if running locally or in GCS environment
             if ENVIRONMENT.lower() in ("production", "container"):
@@ -418,7 +451,9 @@ if __name__ == "__main__":
                 # For local files
                 if os.path.exists(parquet_path) and SchemaDocumentationManager is not None:
                     table_name = "dma_processed"
-                    conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{parquet_path}')")
+                    conn.execute(
+                        f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{parquet_path}')"
+                    )
 
                     # Initialize schema documentation manager
                     schema_manager = SchemaDocumentationManager(
@@ -429,7 +464,9 @@ if __name__ == "__main__":
                     )
 
                     # Generate documentation for DMA table
-                    schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+                    schema_files = schema_manager.generate_all_documentation(
+                        [table_name], stage="silver"
+                    )
                     print("Generated schema documentation for DMA data")
 
                 else:
@@ -440,3 +477,40 @@ if __name__ == "__main__":
             import traceback
 
             traceback.print_exc()
+
+    # Create and save metadata for DMA companies data
+    if pipeline_metadata_manager and data:
+        try:
+            processing_duration = time.time() - pipeline_start_time.timestamp()
+
+            # Create metadata for DMA companies
+            dma_metadata = pipeline_metadata_manager.create_metadata(
+                source_key="dma_companies",
+                record_count=len(data) if data else None,
+                processing_duration=processing_duration,
+                file_size_bytes=None,  # Will be calculated automatically
+                source_datasets=None,
+            )
+
+            # Determine where to save metadata (use local storage structure)
+            if ENVIRONMENT.lower() in ("production", "container"):
+                # For GCS environment, save to the same structure
+                metadata_path = f"{PREFIX_SILVER_SAVE_PATH}/{timestamp}/dma_companies_metadata.json"
+                storage_backend.save_json(dma_metadata.model_dump(), metadata_path)
+                print(f"✅ DMA companies metadata saved to GCS: {metadata_path}")
+            else:
+                # For local environment
+                import os
+
+                metadata_dir = os.path.join(PREFIX_SILVER_SAVE_PATH, timestamp)
+                os.makedirs(metadata_dir, exist_ok=True)
+
+                from pathlib import Path
+
+                metadata_path = pipeline_metadata_manager.save_metadata(
+                    dma_metadata, Path(metadata_dir) / "dma_companies_metadata.json"
+                )
+                print(f"✅ DMA companies metadata saved to {metadata_path}")
+
+        except Exception as e:
+            print(f"❌ Failed to create DMA pipeline metadata: {e}")

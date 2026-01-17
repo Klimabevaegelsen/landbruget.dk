@@ -41,10 +41,10 @@ jobs:
   generate-timestamp:
     runs-on: ubuntu-latest
     if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
-    
+
     outputs:
       bronze-timestamp: ${{ steps.timestamp.outputs.timestamp }}
-    
+
     steps:
     - name: Generate bronze timestamp
       id: timestamp
@@ -53,10 +53,10 @@ jobs:
         BRONZE_TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
         echo "timestamp=$BRONZE_TIMESTAMP" >> $GITHUB_OUTPUT
         echo "Bronze timestamp: $BRONZE_TIMESTAMP"
-        
+
         # Create timestamp file for artifact sharing
         echo "$BRONZE_TIMESTAMP" > /tmp/bronze_timestamp.txt
-        
+
     - name: Upload bronze timestamp artifact
       uses: actions/upload-artifact@v4
       with:
@@ -69,20 +69,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: [generate-timestamp]
     if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
-    
+
     permissions:
       contents: 'read'
       id-token: 'write'
 
     env:
       ENVIRONMENT: production
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
     outputs:
       buildings-count: ${{ steps.fetch-geodanmark.outputs.buildings-count }}
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Download bronze timestamp artifact
       uses: actions/download-artifact@v4
       with:
@@ -104,7 +106,7 @@ jobs:
         # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-        
+
         # Install BBR buildings pipeline dependencies
         cd ../bbr_buildings
         sudo apt-get update
@@ -142,29 +144,29 @@ jobs:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
         echo "🚀 Starting GeoDanmark WFS bulk download..."
-        
+
         # Monitor disk space during execution
         (while true; do
           sleep 300  # Check every 5 minutes
           echo "$(date): Disk usage: $(df -h . | tail -1)"
           echo "$(date): Memory usage: $(free -h | grep Mem)"
-          
+
           AVAILABLE_MB=$(df . | tail -1 | awk '{print int($4/1024)}')
           if [ $AVAILABLE_MB -lt 2048 ]; then
             echo "⚠️ WARNING: Low disk space: ${AVAILABLE_MB}MB remaining"
           fi
         done) &
         MONITOR_PID=$!
-        
+
         # Run GeoDanmark bulk fetcher directly - this will upload to GCS
         python run_geodanmark_fetch.py || {
           EXIT_CODE=$?
           kill $MONITOR_PID 2>/dev/null || true
           exit $EXIT_CODE
         }
-        
+
         kill $MONITOR_PID 2>/dev/null || true
-        
+
         echo "✅ GeoDanmark download and GCS upload completed!"
         ls -lh data/
 
@@ -172,20 +174,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: [generate-timestamp]
     if: ${{ inputs.layer == 'bronze' || inputs.layer == 'both' }}
-    
+
     permissions:
       contents: 'read'
       id-token: 'write'
 
     env:
       ENVIRONMENT: production
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
     outputs:
       buildings-count: ${{ steps.fetch-inspire.outputs.buildings-count }}
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Download bronze timestamp artifact
       uses: actions/download-artifact@v4
       with:
@@ -207,7 +211,7 @@ jobs:
         # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-        
+
         # Install BBR buildings pipeline dependencies
         cd ../bbr_buildings
         sudo apt-get update
@@ -244,16 +248,16 @@ jobs:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
         echo "🏢 Starting INSPIRE BBR data fetch with GraphQL enrichment..."
-        
+
         # Create output directory
         mkdir -p data/bronze
-        
+
         # Run INSPIRE BBR fetcher directly - this will upload to GCS
         python run_inspire_fetch.py ${{ inputs.sample_size || 0 }} || {
           echo "❌ INSPIRE BBR fetch failed"
           exit 1
         }
-        
+
         echo "✅ INSPIRE BBR fetch and GCS upload completed!"
         ls -lh data/
 
@@ -262,13 +266,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: [generate-timestamp, fetch-geodanmark, fetch-inspire-bbr]
     if: ${{ always() && (inputs.layer == 'silver' || inputs.layer == 'both') && !cancelled() }}
-    
+
     permissions:
       contents: 'read'
       id-token: 'write'
 
     env:
       ENVIRONMENT: production
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
     steps:
     - uses: actions/checkout@v4
@@ -288,7 +294,7 @@ jobs:
         # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-        
+
         # Install BBR buildings pipeline dependencies
         cd ../bbr_buildings
         sudo apt-get update
@@ -322,15 +328,15 @@ jobs:
         GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       run: |
         echo "🥈 Starting silver layer processing..."
-        
+
         # Build silver command
         CMD="python main.py --layer silver"
-        
+
         # Determine bronze timestamp to use
         # Priority: 1) Input parameter, 2) Generated timestamp from bronze jobs, 3) Auto-detect latest
         BRONZE_TIMESTAMP="${{ inputs.bronze_timestamp }}"
         GENERATED_TIMESTAMP="${{ needs.generate-timestamp.outputs.bronze-timestamp }}"
-        
+
         if [[ -n "$BRONZE_TIMESTAMP" ]]; then
           echo "🎯 Using provided bronze timestamp: $BRONZE_TIMESTAMP"
         elif [[ -n "$GENERATED_TIMESTAMP" ]]; then
@@ -338,16 +344,16 @@ jobs:
           echo "🔗 Using generated bronze timestamp from current run: $BRONZE_TIMESTAMP"
         else
           echo "🔍 No bronze timestamp provided, finding latest available..."
-          
+
           # Find latest GeoDanmark bronze timestamp using proven CHR pipeline pattern
           LATEST_GEODANMARK=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
-          
+
           # Find latest INSPIRE bronze timestamp using the same pattern
           LATEST_INSPIRE=$(gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
-          
+
           echo "🔍 Found GeoDanmark timestamp: '$LATEST_GEODANMARK'"
           echo "🔍 Found INSPIRE timestamp: '$LATEST_INSPIRE'"
-          
+
           # Use the most recent timestamp that has both datasets
           if [[ -n "$LATEST_GEODANMARK" && "$LATEST_GEODANMARK" == "$LATEST_INSPIRE" ]]; then
             BRONZE_TIMESTAMP="$LATEST_GEODANMARK"
@@ -357,7 +363,7 @@ jobs:
             gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/geodanmark/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sed 's|.*/\([0-9_]*\)/.*|\1|' | sort -r | head -3
             echo "📋 Available INSPIRE timestamps:"
             gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sed 's|.*/\([0-9_]*\)/.*|\1|' | sort -r | head -3
-            
+
             # Use the newer of the two (they should typically match)
             if [[ "$LATEST_GEODANMARK" > "$LATEST_INSPIRE" ]]; then
               BRONZE_TIMESTAMP="$LATEST_GEODANMARK"
@@ -374,7 +380,7 @@ jobs:
             gsutil ls gs://$GCS_BUCKET/bronze/bbr_buildings/inspire/ || echo "Failed to list INSPIRE directory"
           fi
         fi
-        
+
         # Add timestamp to command
         if [[ -n "$BRONZE_TIMESTAMP" ]]; then
           CMD="$CMD --bronze-timestamp $BRONZE_TIMESTAMP"
@@ -383,18 +389,18 @@ jobs:
           echo "❌ No bronze timestamp available - pipeline will fail"
           exit 1
         fi
-        
+
         # Add enhancement flag
         if [[ "${{ inputs.enhance_classification }}" == "true" ]]; then
           CMD="$CMD --enhance-classification"
         fi
-        
+
         # Add log level
         CMD="$CMD --log-level ${{ inputs.log_level }}"
-        
+
         echo "Running command: $CMD"
         $CMD
-        
+
         echo "✅ Silver layer processing completed!"
 
     - name: Upload Silver Pipeline Artifacts
@@ -407,4 +413,3 @@ jobs:
           backend/pipelines/bbr_buildings/logs/
         retention-days: 7
         compression-level: 6
-

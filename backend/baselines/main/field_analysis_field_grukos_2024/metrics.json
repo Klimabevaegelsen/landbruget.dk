@@ -1,0 +1,18 @@
+{
+  "dataset_name": "field_analysis_field_grukos_2024",
+  "source_path": "gs://landbrugsdata-raw-data/gold/field_analysis_field_grukos_intersections_2024/20260114_194630/data.parquet",
+  "generated_at": "2026-01-17T11:15:44.867904",
+  "record_count": 126056,
+  "unique_identifiers": {
+    "field_uuid": 125043
+  },
+  "column_null_counts": {
+    "field_uuid": 0,
+    "field_id": 0,
+    "block_id": 0,
+    "cvr_number": 0,
+    "year": 0,
+    "grukos_id": 0,
+    "field_grukos_geometry": 0
+  }
+}

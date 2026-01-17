@@ -1,0 +1,222 @@
+{
+  "table_name": "Tabel 10: Beregning af standardværdi for kg CO2e per kg fjerkræfoder (Side 40-41)",
+  "data": [
+    {
+      "Kategori_Foder": "Slagtekyllinger - Fuldfoder",
+      "Fordeling_pct": 10,
+      "Fodertype": "Startfoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.839,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.719
+    },
+    {
+      "Kategori_Foder": "Slagtekyllinger - Fuldfoder",
+      "Fordeling_pct": 30,
+      "Fodertype": "Mediofoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.676,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.664
+    },
+    {
+      "Kategori_Foder": "Slagtekyllinger - Fuldfoder",
+      "Fordeling_pct": 60,
+      "Fodertype": "Voksefoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.612,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.654
+    },
+    {
+      "Kategori_Foder": "Slagtekyllinger - Fuldfoder",
+      "Fordeling_pct": 100,
+      "Fodertype": "Standard (vægtet gns.)",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.654,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.664
+    },
+    {
+      "Kategori_Foder": "Slagtekyllinger - Tilskudsfoder",
+      "Fordeling_pct": 10,
+      "Fodertype": "Startfoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.839,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.719
+    },
+    {
+      "Kategori_Foder": "Slagtekyllinger - Tilskudsfoder",
+      "Fordeling_pct": 30,
+      "Fodertype": "Mediofoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.676,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.664
+    },
+    {
+      "Kategori_Foder": "Slagtekyllinger - Tilskudsfoder",
+      "Fordeling_pct": 60,
+      "Fodertype": "Voksefoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.709,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.649
+    },
+    {
+      "Kategori_Foder": "Slagtekyllinger - Tilskudsfoder",
+      "Fordeling_pct": 100,
+      "Fodertype": "Standard (vægtet gns.)",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.712,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.661
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Fuldfoder",
+      "Fordeling_pct": 5,
+      "Fodertype": "Før æg",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.21,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.561
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Fuldfoder",
+      "Fordeling_pct": 20,
+      "Fodertype": "Ægstart",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.339,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.606
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Fuldfoder",
+      "Fordeling_pct": 75,
+      "Fodertype": "Fase 1",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.542,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.65
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Fuldfoder",
+      "Fordeling_pct": 100,
+      "Fodertype": "Standard (vægtet gns.)",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.485,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.637
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Tilskudsfoder",
+      "Fordeling_pct": 5,
+      "Fodertype": "Ægstart - Lav Ca",
+      "GWP_med_LUC_kg_CO2e_per_kg": 2.07,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.762
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Tilskudsfoder",
+      "Fordeling_pct": 20,
+      "Fodertype": "Ægstart - skal",
+      "GWP_med_LUC_kg_CO2e_per_kg": 2.269,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.787
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Tilskudsfoder",
+      "Fordeling_pct": 75,
+      "Fodertype": "Fase 1",
+      "GWP_med_LUC_kg_CO2e_per_kg": 2.448,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.799
+    },
+    {
+      "Kategori_Foder": "Konsumægshøner - Tilskudsfoder",
+      "Fordeling_pct": 100,
+      "Fodertype": "Standard (vægtet gns.)",
+      "GWP_med_LUC_kg_CO2e_per_kg": 2.393,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.795
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Fuldfoder",
+      "Fordeling_pct": 8,
+      "Fodertype": "Hanefoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.567,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.524
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Fuldfoder",
+      "Fordeling_pct": 10,
+      "Fodertype": "Overgang",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.551,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.531
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Fuldfoder",
+      "Fordeling_pct": 20,
+      "Fodertype": "Ruge 1",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.806,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.661
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Fuldfoder",
+      "Fordeling_pct": 31,
+      "Fodertype": "Ruge 2",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.799,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.654
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Fuldfoder",
+      "Fordeling_pct": 31,
+      "Fodertype": "Ruge 3",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.842,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.676
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Fuldfoder",
+      "Fordeling_pct": 100,
+      "Fodertype": "Standard (vægtet gns.)",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.77,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.64
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Tilskudsfoder",
+      "Fordeling_pct": 14,
+      "Fodertype": "Overgang",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.665,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.602
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Tilskudsfoder",
+      "Fordeling_pct": 24,
+      "Fodertype": "Ruge 1",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.939,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.638
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Tilskudsfoder",
+      "Fordeling_pct": 31,
+      "Fodertype": "Ruge2",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.864,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.71
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Tilskudsfoder",
+      "Fordeling_pct": 31,
+      "Fodertype": "Ruge 3",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.838,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.697
+    },
+    {
+      "Kategori_Foder": "Rugeægshøner - Tilskudsfoder",
+      "Fordeling_pct": 100,
+      "Fodertype": "Standard (vægtet gns.)",
+      "GWP_med_LUC_kg_CO2e_per_kg": 0.846,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.674
+    },
+    {
+      "Kategori_Foder": "Opdræt/hønniker - Fuldfoder",
+      "Fordeling_pct": 5,
+      "Fodertype": "Op Start",
+      "GWP_med_LUC_kg_CO2e_per_kg": 2.001,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.821
+    },
+    {
+      "Kategori_Foder": "Opdræt/hønniker - Fuldfoder",
+      "Fordeling_pct": 25,
+      "Fodertype": "Startefoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.811,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.763
+    },
+    {
+      "Kategori_Foder": "Opdræt/hønniker - Fuldfoder",
+      "Fordeling_pct": 70,
+      "Fodertype": "Voksefoder",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.27,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.645
+    },
+    {
+      "Kategori_Foder": "Opdræt/hønniker - Fuldfoder",
+      "Fordeling_pct": 100,
+      "Fodertype": "Standard (vægtet gns.)",
+      "GWP_med_LUC_kg_CO2e_per_kg": 1.442,
+      "GWP_uden_LUC_kg_CO2e_per_kg": 0.683
+    }
+  ]
+}

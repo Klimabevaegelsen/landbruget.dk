@@ -1,0 +1,32 @@
+{
+  "dataset_name": "nles5_nitrogen_estimation",
+  "source_path": "gs://landbrugsdata-raw-data/gold/nles5_nitrogen_estimation_nitrogen_estimates/20260116_223411/data.parquet",
+  "generated_at": "2026-01-17T11:20:49.380273",
+  "record_count": 499759,
+  "total_area_m2": null,
+  "unique_identifiers": {
+    "field_uuid": 494125
+  },
+  "column_null_counts": {
+    "field_id": 0,
+    "field_uuid": 0,
+    "block_id": 0,
+    "cvr_number": 0,
+    "year": 0,
+    "area_ha": 0,
+    "crop_type": 0,
+    "soil_code": 0,
+    "soil_description": 0,
+    "clay_content": 0,
+    "nitrogen_washout_kg_ha": 0,
+    "percolation_mm": 0,
+    "percolation_april_august": 0,
+    "percolation_sept_march": 0,
+    "percolation_april_august_prev": 0,
+    "percolation_sept_march_prev": 0,
+    "uncertainty_pct": 0,
+    "data_quality_score": 0,
+    "geometry_wkt": 0,
+    "created_at": 0
+  }
+}

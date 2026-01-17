@@ -1,0 +1,31 @@
+{
+  "dataset_name": "field_environmental_analysis_2024",
+  "source_path": "gs://landbrugsdata-raw-data/gold/field_environmental_analysis_fields_2024/20260116_235407/data.parquet",
+  "generated_at": "2026-01-17T11:15:47.053124",
+  "record_count": 617785,
+  "unique_identifiers": {
+    "field_uuid": 617785
+  },
+  "column_null_counts": {
+    "field_uuid": 0,
+    "field_id": 0,
+    "block_id": 0,
+    "cvr_number": 0,
+    "year": 0,
+    "field_area_m2": 0,
+    "field_bnbo_total_m2": 0,
+    "field_bnbo_water_covered_m2": 0,
+    "field_bnbo_coverage_pct": 0,
+    "field_bnbo_water_coverage_pct": 0,
+    "bnbo_status_count": 0,
+    "bnbo_status_categories": 607675,
+    "bnbo_action_required_hectares": 0,
+    "bnbo_completed_hectares": 0,
+    "bnbo_action_required_water_covered_hectares": 0,
+    "bnbo_completed_water_covered_hectares": 0,
+    "field_wetland_total_m2": 0,
+    "field_wetland_water_covered_m2": 0,
+    "field_wetland_coverage_pct": 0,
+    "field_wetland_water_coverage_pct": 0
+  }
+}

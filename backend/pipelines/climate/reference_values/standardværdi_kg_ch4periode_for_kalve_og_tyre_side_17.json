@@ -1,0 +1,21 @@
+{
+  "table_name": "Standardværdi, kg CH4/periode for Kalve og tyre (Side 17)",
+  "data": [
+    {
+      "dyretype": "opdræt 0-6 mdr, Tung race",
+      "Standardværdi_kg_CH4_periode": 8.48
+    },
+    {
+      "dyretype": "opdræt 0-6 mdr Jersey",
+      "Standardværdi_kg_CH4_periode": 4.65
+    },
+    {
+      "dyretype": "tyre 0-6 mdr, tung race",
+      "Standardværdi_kg_CH4_periode": 13.22
+    },
+    {
+      "dyretype": "tyre 0-6 mdr, jersey",
+      "Standardværdi_kg_CH4_periode": 8.67
+    }
+  ]
+}

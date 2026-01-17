@@ -1,0 +1,90 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "headers": [
+    {
+      "source": "/api/homepage-statistics",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=7200"
+        }
+      ]
+    },
+    {
+      "source": "/api/supabase/functions/homepage-rankings",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=7200, stale-while-revalidate=86400"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=7200"
+        }
+      ]
+    },
+    {
+      "source": "/api/supabase/functions/kommuner",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=7200, stale-while-revalidate=86400"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=7200"
+        }
+      ]
+    },
+    {
+      "source": "/api/pmtiles/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, immutable"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=604800, immutable"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "public, max-age=604800, immutable"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, HEAD, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Range, Cache-Control"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "app/api/homepage-statistics/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/supabase/functions/homepage-rankings/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/supabase/functions/kommuner/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/pmtiles/[...path]/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

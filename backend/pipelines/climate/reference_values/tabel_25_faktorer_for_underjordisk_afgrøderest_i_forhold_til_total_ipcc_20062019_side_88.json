@@ -1,0 +1,57 @@
+{
+  "table_name": "Tabel 25: Faktorer for underjordisk afgrøderest i forhold til total (IPCC 2006/2019). (Side 88)",
+  "data": [
+    {
+      "Afgrøde": "Vinterhvede",
+      "Faktor_Underjordisk_afgrøderest": 0.23
+    },
+    {
+      "Afgrøde": "Vårhvede",
+      "Faktor_Underjordisk_afgrøderest": 0.28
+    },
+    {
+      "Afgrøde": "Vinterbyg",
+      "Faktor_Underjordisk_afgrøderest": 0.22
+    },
+    {
+      "Afgrøde": "Vårbyg",
+      "Faktor_Underjordisk_afgrøderest": 0.22
+    },
+    {
+      "Afgrøde": "Havre",
+      "Faktor_Underjordisk_afgrøderest": 0.25
+    },
+    {
+      "Afgrøde": "Rug",
+      "Faktor_Underjordisk_afgrøderest": 0.22
+    },
+    {
+      "Afgrøde": "Majs",
+      "Faktor_Underjordisk_afgrøderest": 0.22
+    },
+    {
+      "Afgrøde": "Markært",
+      "Faktor_Underjordisk_afgrøderest": 0.19
+    },
+    {
+      "Afgrøde": "Hestebønner",
+      "Faktor_Underjordisk_afgrøderest": 0.19
+    },
+    {
+      "Afgrøde": "Kartofler",
+      "Faktor_Underjordisk_afgrøderest": 0.2
+    },
+    {
+      "Afgrøde": "Roer",
+      "Faktor_Underjordisk_afgrøderest": 0.2
+    },
+    {
+      "Afgrøde": "Græs",
+      "Faktor_Underjordisk_afgrøderest": 0.54
+    },
+    {
+      "Afgrøde": "Kløvergræs",
+      "Faktor_Underjordisk_afgrøderest": 0.8
+    }
+  ]
+}

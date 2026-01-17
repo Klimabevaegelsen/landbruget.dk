@@ -1,0 +1,137 @@
+# Pre-commit hooks configuration - Fixed sequencing and conflicts
+# Install with: uv add --dev pre-commit && pre-commit install
+# Run manually with: pre-commit run --all-files
+
+repos:
+  # Stage 1: Basic file validation (no modifications)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+        args: ["--unsafe"]
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: check-merge-conflict
+      - id: debug-statements
+        language_version: python3
+
+  # Stage 2: Python formatting and linting (sequenced properly)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.0
+    hooks:
+      # First: Fix code issues
+      - id: ruff
+        args: [--fix]  # Remove --exit-non-zero-on-fix to prevent rollbacks
+        types_or: [python, pyi]
+      # Second: Format code
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # Stage 3: File cleanup (after code formatting)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$|\.json$'  # Exclude files where trailing whitespace matters
+      - id: end-of-file-fixer
+        exclude: '\.md$|\.json$'
+
+  # Stage 4: Secret detection (with proper baseline)
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            .*\.lock$|
+            package-lock\.json$|
+            .*\.min\.js$|
+            .*\.min\.css$|
+            .*/test_.*\.py$|
+            .*/tests/.*\.py$|
+            .*\.md$|
+            .*\.example$|
+            .*config\.toml$|
+            .*\.parquet$|
+            .*\.json$
+          )$
+
+  # Stage 5: Frontend processing (improved reliability)
+  - repo: local
+    hooks:
+      # Frontend formatting with proper error handling
+      # Uses --prefer-offline for speed, falls back to full install if needed
+      - id: prettier-frontend
+        name: Prettier (Frontend)
+        entry: bash
+        args: [-c, "cd frontend && (npm ci --prefer-offline 2>/dev/null || npm install) && npm run format"]
+        language: system
+        files: '^frontend/.*\.(ts|tsx|js|jsx|json|md|css)$'
+        pass_filenames: false
+
+      - id: prettier-frontend-pesticide
+        name: Prettier (Frontend Pesticide)
+        entry: bash
+        args: [-c, "cd frontend-pesticide && (npm ci --prefer-offline 2>/dev/null || npm install) && npm run format"]
+        language: system
+        files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
+        pass_filenames: false
+
+      # Frontend linting with dependency check
+      - id: oxlint
+        name: Oxlint (Frontend)
+        entry: bash
+        args: [-c, "cd frontend && (npm list oxlint >/dev/null 2>&1 || npm ci --prefer-offline || npm install) && npm run lint"]
+        language: system
+        files: '^frontend/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
+      - id: oxlint-frontend-pesticide
+        name: Oxlint (Frontend Pesticide)
+        entry: bash
+        args: [-c, "cd frontend-pesticide && (npm list oxlint >/dev/null 2>&1 || npm ci --prefer-offline || npm install) && npm run lint"]
+        language: system
+        files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
+      # Playwright smoke tests (optimized for speed)
+      - id: playwright-smoke-test
+        name: Playwright Smoke Test (Fast)
+        entry: bash
+        args: [-c, "cd frontend && npm run test:smoke:fast || (echo '⚠️ Smoke tests failed - check with: npm run test:debug' && exit 1)"]
+        language: system
+        files: '^frontend/src/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
+      # Essential protection hooks (improved patterns)
+      - id: check-data-directories
+        name: Prevent data directory commits
+        entry: bash
+        args: [-c, 'files=$(git diff --cached --name-only | grep -E "^(data_cache|data_local)/"); if [ -n "$files" ]; then echo "❌ Cannot commit data files:"; echo "$files"; exit 1; fi']
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: check-debug-code
+        name: Check for debug code
+        entry: bash
+        args: [-c, 'files=$(git diff --cached --name-only | grep -v -E "(tests?/|__tests__/|\.test\.|\.spec\.|\.yaml$|\.yml$)"); if [ -n "$files" ]; then if git diff --cached -- $files | grep -E "^\+.*(console\.log|debugger|pdb\.set_trace|breakpoint\(\))"; then echo "⚠️ Debug code found in non-test files"; exit 1; fi; fi']
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+# Exclude problematic paths
+exclude: |
+  (?x)^(
+    data_cache/.*|
+    data_local/.*|
+    \.git/.*|
+    .*\.pyc|
+    __pycache__/.*|
+    \.pytest_cache/.*|
+    \.ruff_cache/.*|
+    frontend/playwright-report/.*|
+    frontend/scripts/smoke-test-fast\.sh
+  )$

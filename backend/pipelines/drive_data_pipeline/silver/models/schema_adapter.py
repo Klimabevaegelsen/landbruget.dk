@@ -8,7 +8,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger() -> logging.Logger:
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
 from .schema import ColumnSchema, DataType, TableSchema
 
@@ -19,7 +21,7 @@ logger = get_logger()
 class SchemaAdapter(DuckDBProcessor):
     """Adapter for applying schema definitions to data using DuckDB."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the schema adapter."""
         super().__init__()
         logger.info("Initialized SchemaAdapter with DuckDB")
@@ -54,7 +56,6 @@ class SchemaAdapter(DuckDBProcessor):
         result_table = f"{table_schema.name}_with_schema"
 
         # Get the schema as a dictionary
-        schema_dict = table_schema.column_dict
 
         # Get source table columns
         columns_info = self.conn.execute(f"DESCRIBE {source_table}").fetchall()
@@ -164,19 +165,20 @@ class SchemaAdapter(DuckDBProcessor):
             # Special handling for different types
             if target_type == DataType.DATE:
                 return f"TRY_CAST({expr} AS DATE)"
-            elif target_type == DataType.TIMESTAMP:
+            if target_type == DataType.TIMESTAMP:
                 return f"TRY_CAST({expr} AS TIMESTAMP)"
-            elif target_type == DataType.BOOLEAN:
+            if target_type == DataType.BOOLEAN:
                 # Handle various boolean representations
                 return f"""
-                    CASE 
-                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN ('true', '1', 'yes', 'ja', 't', 'y') THEN true
-                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN ('false', '0', 'no', 'nej', 'f', 'n') THEN false
+                    CASE
+                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN
+                            ('true', '1', 'yes', 'ja', 't', 'y') THEN true
+                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN
+                            ('false', '0', 'no', 'nej', 'f', 'n') THEN false
                         ELSE TRY_CAST({expr} AS BOOLEAN)
                     END
                 """
-            else:
-                return f"TRY_CAST({expr} AS {duckdb_type})"
+            return f"TRY_CAST({expr} AS {duckdb_type})"
 
         return expr
 
@@ -195,14 +197,13 @@ class SchemaAdapter(DuckDBProcessor):
 
         if data_type in [DataType.STRING, DataType.GEOMETRY]:
             return f"'{default_value}'"
-        elif data_type == DataType.DATE:
+        if data_type == DataType.DATE:
             return f"DATE '{default_value}'"
-        elif data_type == DataType.TIMESTAMP:
+        if data_type == DataType.TIMESTAMP:
             return f"TIMESTAMP '{default_value}'"
-        elif data_type == DataType.BOOLEAN:
+        if data_type == DataType.BOOLEAN:
             return "true" if default_value else "false"
-        else:
-            return str(default_value)
+        return str(default_value)
 
     def validate_data_against_schema(
         self, table_name_or_data: any, table_schema: TableSchema
@@ -249,7 +250,9 @@ class SchemaAdapter(DuckDBProcessor):
                     # Try to convert a sample of the data
                     sample_query = f"""
                         SELECT COUNT(*) as total_count,
-                               COUNT(CASE WHEN TRY_CAST({source_col} AS {self._get_duckdb_type(col_schema.data_type)}) IS NOT NULL THEN 1 END) as valid_count
+                               COUNT(CASE WHEN TRY_CAST({source_col} AS
+                                   {self._get_duckdb_type(col_schema.data_type)}) IS NOT NULL
+                                   THEN 1 END) as valid_count
                         FROM {table_name}
                         WHERE {source_col} IS NOT NULL
                         LIMIT 1000
@@ -263,17 +266,18 @@ class SchemaAdapter(DuckDBProcessor):
                     ):  # Allow 5% conversion failures
                         invalid_count = total_count - valid_count
                         column_errors.append(
-                            f"Data type validation failed: {invalid_count}/{total_count} values cannot be converted to {col_schema.data_type.value}"
+                            f"Data type validation failed: {invalid_count}/{total_count} "
+                            f"values cannot be converted to {col_schema.data_type.value}"
                         )
 
                 except Exception as e:
-                    column_errors.append(f"Type validation error: {str(e)}")
+                    column_errors.append(f"Type validation error: {e!s}")
 
                 # Check for null values if column is required
                 if not col_schema.nullable:
                     try:
                         null_count = self.conn.execute(f"""
-                            SELECT COUNT(*) FROM {table_name} 
+                            SELECT COUNT(*) FROM {table_name}
                             WHERE {source_col} IS NULL
                         """).fetchone()[0]
 
@@ -283,13 +287,13 @@ class SchemaAdapter(DuckDBProcessor):
                             )
 
                     except Exception as e:
-                        column_errors.append(f"Null check error: {str(e)}")
+                        column_errors.append(f"Null check error: {e!s}")
 
                 if column_errors:
                     validation_errors[col_name] = column_errors
 
         except Exception as e:
-            validation_errors["_general"] = [f"Schema validation failed: {str(e)}"]
+            validation_errors["_general"] = [f"Schema validation failed: {e!s}"]
 
         return validation_errors
 

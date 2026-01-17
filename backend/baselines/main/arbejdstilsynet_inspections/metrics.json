@@ -1,0 +1,29 @@
+{
+  "dataset_name": "arbejdstilsynet_inspections",
+  "source_path": "gs://landbrugsdata-raw-data/gold/arbejdstilsynet_inspections/20260116_223114/workplace_inspections_gold.parquet",
+  "generated_at": "2026-01-17T11:20:50.114475",
+  "record_count": 534,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "date": 0,
+    "case_count": 0,
+    "decision": 0,
+    "work_env_issue": 0,
+    "appealed": 0,
+    "complied": 0,
+    "company_name": 0,
+    "company_id": 0,
+    "industry": 0,
+    "company_address": 0,
+    "cvr_number": 4,
+    "work_env_issue_formatted": 0,
+    "industry_formatted": 0,
+    "decision_type": 0,
+    "industry_clean": 0,
+    "company_name_clean": 0,
+    "postal_code": 0,
+    "city": 0,
+    "severity_score": 0,
+    "year": 0
+  }
+}

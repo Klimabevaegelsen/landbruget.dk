@@ -3,13 +3,12 @@
 import logging
 import os
 from datetime import datetime
-from typing import Set
 
 from dotenv import load_dotenv
 
 # Import GCS access for persistent storage
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -23,7 +22,7 @@ load_dotenv()
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.persistence")
 
 # Global set to track problematic herds that consistently fail
-_PROBLEMATIC_HERDS: Set[int] = set()
+_PROBLEMATIC_HERDS: set[int] = set()
 _PROBLEMATIC_HERDS_LOADED = False
 
 
@@ -92,7 +91,9 @@ def add_problematic_herd(herd_number: int) -> None:
     _load_problematic_herds()  # Ensure we have the latest data
 
     _PROBLEMATIC_HERDS.add(herd_number)
-    logger.warning(f"Added herd {herd_number} to problematic herds list (will be skipped in future)")
+    logger.warning(
+        f"Added herd {herd_number} to problematic herds list (will be skipped in future)"
+    )
 
     # Save immediately to persist the change
     _save_problematic_herds()
@@ -104,7 +105,7 @@ def is_problematic_herd(herd_number: int) -> bool:
     return herd_number in _PROBLEMATIC_HERDS
 
 
-def get_problematic_herds() -> Set[int]:
+def get_problematic_herds() -> set[int]:
     """Get the set of problematic herds."""
     _load_problematic_herds()
     return _PROBLEMATIC_HERDS.copy()

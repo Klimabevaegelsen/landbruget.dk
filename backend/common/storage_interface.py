@@ -1,19 +1,19 @@
 import json
-import os
-from io import BytesIO
+from pathlib import Path
+from typing import Any, Never
 
 # Import the optimized GCS access layer
 try:
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from common.gcs import GCSDataAccess
 except ImportError:
-    # Fallback for when unified_pipeline is not available
+    # Fallback for when common.gcs is not available
     GCSDataAccess = None
 
 # DuckDB is required - no fallback
 try:
     import duckdb
-except ImportError:
-    raise ImportError("DuckDB is required for storage operations")
+except ImportError as e:
+    raise ImportError("DuckDB is required for storage operations") from e
 
 try:
     from google.cloud import storage
@@ -24,14 +24,14 @@ except ImportError:
 class StorageInterface:
     """Interface for saving JSON data to different storage backends."""
 
-    def save_json(self, data, dst_path):
+    def save_json(self, data: Any, dst_path: str) -> Never:
         raise NotImplementedError("save_json must be implemented by subclasses")
 
-    def save_parquet(self, data, dst_path):
+    def save_parquet(self, data: Any, dst_path: str) -> Never:
         """Save data as a Parquet file."""
         raise NotImplementedError("save_parquet must be implemented by subclasses")
 
-    def read_json(self, src_path):
+    def read_json(self, src_path: str) -> Never:
         """Load JSON data from the storage backend."""
         raise NotImplementedError("read_json must be implemented by subclasses")
 
@@ -39,19 +39,19 @@ class StorageInterface:
 class LocalStorage(StorageInterface):
     """Save JSON files to the local filesystem."""
 
-    def __init__(self, base_dir):
+    def __init__(self, base_dir: str) -> None:
         self.base_dir = base_dir
 
-    def save_json(self, data, dst_path):
-        full_path = os.path.join(self.base_dir, dst_path)
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        with open(full_path, "w", encoding="utf-8") as f:
+    def save_json(self, data: Any, dst_path: str) -> None:
+        full_path = Path(self.base_dir) / dst_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        with full_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    def save_parquet(self, data, dst_path):
+    def save_parquet(self, data: Any, dst_path: str) -> None:
         """Save data as Parquet locally using DuckDB."""
-        full_path = os.path.join(self.base_dir, dst_path)
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        full_path = Path(self.base_dir) / dst_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
 
         conn = duckdb.connect()
 
@@ -94,21 +94,22 @@ class LocalStorage(StorageInterface):
             conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
         else:
             raise ValueError(
-                f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+                f"Unsupported data type for parquet export: {type(data)}. "
+                f"Only DuckDB tables, dicts, and lists are supported."
             )
 
         conn.close()
 
-    def read_json(self, src_path):
-        full_path = os.path.join(self.base_dir, src_path)
-        with open(full_path, "r", encoding="utf-8") as f:
+    def read_json(self, src_path: str) -> Any:
+        full_path = Path(self.base_dir) / src_path
+        with full_path.open(encoding="utf-8") as f:
             return json.load(f)
 
 
 class GCSStorage(StorageInterface):
     """Save JSON files to a Google Cloud Storage bucket using optimized gcs_access.py."""
 
-    def __init__(self, bucket_name):
+    def __init__(self, bucket_name: str) -> None:
         self.bucket_name = bucket_name
 
         # Use optimized GCS access layer if available
@@ -124,7 +125,7 @@ class GCSStorage(StorageInterface):
             else:
                 raise ImportError("Neither GCSDataAccess nor google.cloud.storage is available")
 
-    def save_json(self, data, dst_path):
+    def save_json(self, data: Any, dst_path: str) -> None:
         """Save JSON data using optimized streaming approach."""
         gcs_path = f"gs://{self.bucket_name}/{dst_path}"
 
@@ -136,7 +137,7 @@ class GCSStorage(StorageInterface):
             blob = self.bucket.blob(dst_path)
             blob.upload_from_string(json.dumps(data), content_type="application/json")
 
-    def save_parquet(self, data, dst_path):
+    def save_parquet(self, data: Any, dst_path: str) -> None:
         """Save data as Parquet to GCS using DuckDB approach."""
         gcs_path = f"gs://{self.bucket_name}/{dst_path}"
 
@@ -181,7 +182,8 @@ class GCSStorage(StorageInterface):
                         conn.register("temp_parquet_data", data)
                 else:
                     raise ValueError(
-                        f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+                        f"Unsupported data type for parquet export: {type(data)}. "
+                        f"Only DuckDB tables, dicts, and lists are supported."
                     )
 
                 self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
@@ -191,14 +193,13 @@ class GCSStorage(StorageInterface):
 
             if isinstance(data, str):
                 # Table name - export to memory buffer
-                buffer = BytesIO()
-                conn.execute(f"COPY {data} TO 'buffer' (FORMAT PARQUET)")
                 # Note: This approach would need modification for actual buffer writing
+                conn.execute(f"COPY {data} TO 'buffer' (FORMAT PARQUET)")
                 # For now, raise an error suggesting the optimized path
                 raise ValueError(
                     "Non-optimized GCS storage requires optimized GCS access layer for DuckDB table uploads"
                 )
-            elif isinstance(data, (dict, list)):
+            if isinstance(data, dict | list):
                 # Convert to table first
                 if isinstance(data, dict):
                     conn.register("temp_data", [data])
@@ -207,22 +208,21 @@ class GCSStorage(StorageInterface):
 
                 # Same limitation as above
                 raise ValueError("Non-optimized GCS storage requires optimized GCS access layer for DuckDB operations")
-            else:
-                raise ValueError(
-                    f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
-                )
+            raise ValueError(
+                f"Unsupported data type for parquet export: {type(data)}. "
+                f"Only DuckDB tables, dicts, and lists are supported."
+            )
 
             conn.close()
 
-    def read_json(self, src_path):
+    def read_json(self, src_path: str) -> Any:
         """Read JSON data using optimized streaming approach."""
         gcs_path = f"gs://{self.bucket_name}/{src_path}"
 
         if self.optimized:
             # ✅ OPTIMIZED: Use gcs_access.py streaming JSON download
             return self.gcs_access.download_json(gcs_path)
-        else:
-            # Fallback to legacy approach
-            blob = self.bucket.blob(src_path)
-            content = blob.download_as_string()
-            return json.loads(content)
+        # Fallback to legacy approach
+        blob = self.bucket.blob(src_path)
+        content = blob.download_as_string()
+        return json.loads(content)

@@ -14,19 +14,20 @@ Total pipeline complexity reduction: ~10-15x improvement
 
 import asyncio
 import time
-from typing import Any, Dict
+from typing import Any
 
 from unified_pipeline.util.log_util import Logger
 
 from ..base import FieldAnalysisStageConfig
 from .bnbo_prefilter import BNBOPreFilter
+from .grukos_prefilter import GrukosPreFilter
 from .properties_prefilter import PropertiesPreFilter
 from .soil_types_prefilter import SoilTypesPreFilter
 from .water_projects_prefilter import WaterProjectsPreFilter
 from .wetlands_prefilter import WetlandsPreFilter
 
 
-async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Dict[str, Any]:
+async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> dict[str, Any]:
     """
     Run all Stage 0 pre-filtering operations.
 
@@ -105,7 +106,7 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         raise
 
     # Step 5: Soil types pre-filtering (40% reduction)
-    log.info("🏔️ Step 5/5: Soil types pre-filtering (13K → ~8K)")
+    log.info("🏔️ Step 5/6: Soil types pre-filtering (13K → ~8K)")
     soil_types_start = time.time()
     try:
         soil_types_filter = SoilTypesPreFilter(config)
@@ -115,6 +116,19 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         log.info(f"✅ Soil types pre-filtering completed in {soil_types_time:.1f}s")
     except Exception as e:
         log.error(f"❌ Soil types pre-filtering failed: {e}")
+        raise
+
+    # Step 6: Grukos pre-filtering (groundwater action areas)
+    log.info("🌊 Step 6/6: Grukos pre-filtering (indsatsområder)")
+    grukos_start = time.time()
+    try:
+        grukos_filter = GrukosPreFilter(config)
+        grukos_result = await grukos_filter.run()
+        results["grukos"] = grukos_result
+        grukos_time = time.time() - grukos_start
+        log.info(f"✅ Grukos pre-filtering completed in {grukos_time:.1f}s")
+    except Exception as e:
+        log.error(f"❌ Grukos pre-filtering failed: {e}")
         raise
 
     # Final summary
@@ -134,13 +148,17 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
         log.info(f"   Water Projects: {results['water_projects']['performance_improvement']}")
     if "soil_types" in results:
         log.info(f"   Soil Types: {results['soil_types']['performance_improvement']}")
+    if "grukos" in results:
+        log.info(f"   Grukos: {results['grukos']['performance_improvement']}")
 
     log.info("🚀 PIPELINE READY: Subsequent stages will run 10-15x faster!")
 
     return {
         "stage0_total_time": stage0_time,
         "results": results,
-        "performance_summary": "Stage 0 pre-filtering achieved 80-90% dataset reductions across all layers",
+        "performance_summary": (
+            "Stage 0 pre-filtering achieved 80-90% dataset reductions across all layers"
+        ),
     }
 
 

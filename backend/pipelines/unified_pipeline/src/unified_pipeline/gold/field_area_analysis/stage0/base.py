@@ -18,7 +18,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
         # Optimize fields table for spatial indexing
         self.conn.execute("""
             CREATE OR REPLACE TABLE fields_for_filtering AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -67,7 +67,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
 
             # Export table to temporary file using DuckDB COPY
             self.conn.execute(f"""
-                COPY {table_name} TO '{temp_path}' 
+                COPY {table_name} TO '{temp_path}'
                 (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
             """)
 
@@ -75,11 +75,10 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
             full_gcs_path = f"gs://{CONFIG.bucket}/{gcs_path}"
 
             # Use gcs_access fs to upload
-            with open(temp_path, "rb") as src:
-                with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
-                    import shutil
+            import shutil
 
-                    shutil.copyfileobj(src, dst)
+            with open(temp_path, "rb") as src, self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
             # Clean up temporary file
             if os.path.exists(temp_path):

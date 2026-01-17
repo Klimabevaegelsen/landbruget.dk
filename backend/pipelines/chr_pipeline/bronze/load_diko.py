@@ -2,8 +2,7 @@
 
 import json
 import logging
-import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from zeep import Client
 from zeep.helpers import serialize_object
@@ -11,12 +10,11 @@ from zeep.helpers import serialize_object
 # Import the exporter and auth
 from .auth import create_diko_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_diko")
 
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
 
 # Valid species codes for DIKO
 VALID_DIKO_SPECIES = {
@@ -29,22 +27,10 @@ VALID_DIKO_SPECIES = {
 # --- Base Request Structure ---
 
 
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_diko") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    # Note: Consider moving this to a shared utility module later
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
-
-
 # --- Generic SOAP Fetcher ---
 
 
-def fetch_raw_soap_response(client: Client, operation_name: str, request_data: Dict) -> Optional[Any]:
+def fetch_raw_soap_response(client: Client, operation_name: str, request_data: dict) -> Any | None:
     """Fetch raw response from a SOAP endpoint using Zeep."""
     # Note: Consider moving this to a shared utility module later
     try:
@@ -64,22 +50,27 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
 # --- DIKO Loading Functions ---
 
 
-def load_diko_flytninger(client: Client, username: str, herd_number: int, species_code: int) -> Optional[Any]:
+def load_diko_flytninger(
+    client: Client, username: str, herd_number: int, species_code: int
+) -> Any | None:
     """Load animal movements (flytninger) for a specific herd/species using the 'besaetningListFlytninger' operation."""
     # Validate species code
     if species_code not in VALID_DIKO_SPECIES:
-        logger.info(f"Skipping DIKO load for species code {species_code} - not supported by DIKO service")
+        logger.info(
+            f"Skipping DIKO load for species code {species_code} - not supported by DIKO service"
+        )
         return None
 
     logger.info(
-        f"Fetching DIKO movements (besaetningListFlytninger) for Herd: {herd_number}, Species: {species_code} ({VALID_DIKO_SPECIES[species_code]})..."
+        f"Fetching DIKO movements (besaetningListFlytninger) for Herd: {herd_number}, "
+        f"Species: {species_code} ({VALID_DIKO_SPECIES[species_code]})..."
     )
 
     # --- WSDL Confirmed ---
     # Input requires GLRCHRWSInfoInbound and Request{BesaetningsNummer, DyreArtKode}
     # Ensure parameters are strings based on successful calls in other modules
     request_structure = {
-        "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_diko_flytninger"),
+        "GLRCHRWSInfoInbound": create_base_request(username, track_id="load_diko_flytninger"),
         "Request": {
             "BesaetningsNummer": str(herd_number),
             "DyreArtKode": str(species_code),
@@ -93,10 +84,16 @@ def load_diko_flytninger(client: Client, username: str, herd_number: int, specie
 
     response = fetch_raw_soap_response(client, operation_name, request_structure)
     if not response:
-        logger.warning(f"No response received for {operation_name} (Herd: {herd_number}, Species: {species_code})")
+        logger.warning(
+            f"No response received for {operation_name} (Herd: {herd_number}, Species: {species_code})"
+        )
     else:
         # Save the raw response
-        save_raw_data(raw_response=response, data_type="diko_flytninger", identifier=f"{herd_number}_{species_code}")
+        save_raw_data(
+            raw_response=response,
+            data_type="diko_flytninger",
+            identifier=f"{herd_number}_{species_code}",
+        )
 
     return response
 
@@ -107,7 +104,9 @@ if __name__ == "__main__":
 
     # Use parameters identified from previous tests
     TEST_HERD_NUMBER = 5392
-    TEST_SPECIES_CODE = 15  # Pigs - Note: DIKO might error for pigs, expecting SvineflytningWS call instead
+    TEST_SPECIES_CODE = (
+        15  # Pigs - Note: DIKO might error for pigs, expecting SvineflytningWS call instead
+    )
     # We will test with this first to see the DIKO response/error.
     # Consider adding a test with a different species (e.g., cattle=12) if available.
 
@@ -116,8 +115,12 @@ if __name__ == "__main__":
         diko_client = create_diko_client()
 
         # Test load_diko_flytninger
-        logger.info(f"\n--- Testing load_diko_flytninger (Herd: {TEST_HERD_NUMBER}, Species: {TEST_SPECIES_CODE}) ---")
-        flytninger_raw = load_diko_flytninger(diko_client, username, TEST_HERD_NUMBER, TEST_SPECIES_CODE)
+        logger.info(
+            f"\n--- Testing load_diko_flytninger (Herd: {TEST_HERD_NUMBER}, Species: {TEST_SPECIES_CODE}) ---"
+        )
+        flytninger_raw = load_diko_flytninger(
+            diko_client, username, TEST_HERD_NUMBER, TEST_SPECIES_CODE
+        )
 
         if flytninger_raw:
             logger.info("Raw DIKO Flytninger Response (Top Level):")

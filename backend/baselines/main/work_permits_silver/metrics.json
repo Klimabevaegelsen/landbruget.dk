@@ -1,0 +1,17 @@
+{
+  "dataset_name": "work_permits_silver",
+  "source_path": "gs://landbrugsdata-raw-data/silver/work permits/20260116_234019/Landbrugsvisum_statistik_2024.parquet",
+  "generated_at": "2026-01-17T11:15:26.969249",
+  "record_count": 6864,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "company_id": 0,
+    "nationality": 0,
+    "year": 0,
+    "first_permits_count": 0,
+    "source_file": 0,
+    "extracted_at": 0,
+    "created_at": 0,
+    "updated_at": 0
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "dataset_name": "bnbo_status",
+  "source_path": "gs://landbrugsdata-raw-data/silver/bnbo_status/20260116_221853/data.parquet",
+  "generated_at": "2026-01-17T11:19:41.619628",
+  "record_count": 5394,
+  "unique_identifiers": {},
+  "geometry_bounds": {
+    "min_x": 54.60268531422189,
+    "max_x": 57.71920521638911,
+    "min_y": 8.120457399281964,
+    "max_y": 15.093184875427172
+  },
+  "detected_crs": "EPSG:4326",
+  "column_null_counts": {
+    "geometry": 0,
+    "area_ha": 0,
+    "temakode": 0,
+    "temanavn": 0,
+    "objekt_id": 0,
+    "version_id": 0,
+    "systid_fra": 0,
+    "oprettet": 0,
+    "oprindkode": 1414,
+    "oprindelse": 1414,
+    "statuskode": 0,
+    "status": 0,
+    "off_kode": 0,
+    "offentlig": 0,
+    "cvr_kode": 0,
+    "cvr_navn": 0,
+    "bruger_id": 0,
+    "shape_area": 0,
+    "shape_length": 0,
+    "status_bnbo_kode": 0
+  }
+}

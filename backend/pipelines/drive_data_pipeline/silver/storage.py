@@ -14,8 +14,11 @@ except ImportError:
     import logging
     import time
 
-    get_logger = lambda: logging.getLogger(__name__)
-    generate_timestamp = lambda: int(time.time())
+    def get_logger() -> logging.Logger:
+        return logging.getLogger(__name__)
+
+    def generate_timestamp() -> int:
+        return int(time.time())
 
     class StorageError(Exception):
         pass
@@ -34,7 +37,7 @@ class SilverStorageManager(DuckDBProcessor):
         self,
         storage_manager: Any,  # DriveStorageManager
         base_path: Path,
-    ):
+    ) -> None:
         """Initialize the Silver storage manager.
 
         Args:
@@ -63,9 +66,10 @@ class SilverStorageManager(DuckDBProcessor):
         # Store timestamp for use in create_output_directory
         # The actual directory creation happens in create_output_directory based on subfolder
         if self.storage_manager.storage_type.lower() == "gcs":
-            # GCS storage - use empty path as base since base_path already includes the silver structure
+            # GCS storage - use empty path as base since base_path already includes
+            # the silver structure
             # This prevents the nested silver/silver/... issue
-            run_dir = Path("")
+            run_dir = Path()
         else:
             # Local storage - use base_path/silver
             run_dir = self.base_path / "silver"
@@ -83,7 +87,8 @@ class SilverStorageManager(DuckDBProcessor):
 
         Args:
             run_dir: Run directory path (silver/)
-            source_subfolder: Optional subfolder name (will be reorganized to silver/{subfolder_name}/{timestamp})
+            source_subfolder: Optional subfolder name (will be reorganized to
+                silver/{subfolder_name}/{timestamp})
             content_type: Optional content type descriptor
 
         Returns:
@@ -177,7 +182,7 @@ class SilverStorageManager(DuckDBProcessor):
 
                     # Convert other columns to string to avoid PyArrow issues
                     self.conn.execute(f"""
-                        UPDATE {temp_table}_clean 
+                        UPDATE {temp_table}_clean
                         SET {col_name} = CAST({col_name} AS VARCHAR)
                     """)
 
@@ -192,7 +197,7 @@ class SilverStorageManager(DuckDBProcessor):
 
         except Exception as e:
             # Fallback to CSV if Parquet fails
-            logger.warning(f"Failed to save as Parquet: {str(e)}, falling back to CSV")
+            logger.warning(f"Failed to save as Parquet: {e!s}, falling back to CSV")
             try:
                 csv_path = output_dir / f"{filename}.csv"
                 csv_path = self._convert_to_snake_case(csv_path)
@@ -205,7 +210,7 @@ class SilverStorageManager(DuckDBProcessor):
                     table_name = temp_table
 
                 self.conn.execute(f"""
-                    COPY {table_name} TO '{csv_path}' 
+                    COPY {table_name} TO '{csv_path}'
                     (FORMAT CSV, HEADER true)
                 """)
 
@@ -213,7 +218,10 @@ class SilverStorageManager(DuckDBProcessor):
                 return csv_path
 
             except Exception as csv_error:
-                error_msg = f"Failed to save file {filename}: Parquet failed ({str(e)}), CSV failed ({str(csv_error)})"
+                error_msg = (
+                    f"Failed to save file {filename}: Parquet failed ({e!s}), "
+                    f"CSV failed ({csv_error!s})"
+                )
                 logger.error(error_msg)
                 raise StorageError(error_msg) from csv_error
 
@@ -259,7 +267,7 @@ class SilverStorageManager(DuckDBProcessor):
             return file_path
 
         except Exception as e:
-            error_msg = f"Failed to save GeoParquet file {filename}: {str(e)}"
+            error_msg = f"Failed to save GeoParquet file {filename}: {e!s}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 

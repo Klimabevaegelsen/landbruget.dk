@@ -1,9 +1,15 @@
 """Geospatial validator for Silver layer using DuckDB-spatial."""
 
+import sys
+from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
 from shapely.validation import explain_validity
+
+# Add common module to path for CRS utilities
+sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
+from common.crs_utils import DANISH_UTM, WGS84, detect_crs_from_bounds  # noqa: F401
 
 # Handle imports for both standalone and package usage
 try:
@@ -13,7 +19,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger() -> logging.Logger:
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
 from .base import BaseValidator, ValidationResult
 
@@ -31,7 +39,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
         validate_geometry: bool = True,
         auto_fix_geometry: bool = True,
         use_duckdb_spatial: bool = True,
-    ):
+    ) -> None:
         """Initialize the geospatial validator.
 
         Args:
@@ -65,8 +73,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
 
         if self.use_duckdb_spatial:
             return self._validate_with_duckdb_spatial(table_name_or_data, result)
-        else:
-            return self._validate_with_geopandas(table_name_or_data, result)
+        return self._validate_with_geopandas(table_name_or_data, result)
 
     def _validate_with_duckdb_spatial(
         self, table_name_or_data: Any, result: ValidationResult
@@ -95,7 +102,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                 # Try to interpret geometry as WKT
                 self.conn.execute(f"""
                     CREATE TABLE {spatial_table} AS
-                    SELECT 
+                    SELECT
                         * EXCLUDE {self.geometry_column},
                         ST_GeomFromText({self.geometry_column}) as {self.geometry_column}
                     FROM {table_name}
@@ -110,12 +117,12 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                         WHERE {self.geometry_column} IS NOT NULL
                     """)
                 except Exception as e:
-                    self.add_error(result, f"Failed to create spatial table: {str(e)}")
+                    self.add_error(result, f"Failed to create spatial table: {e!s}")
                     return result
 
             # Check for null geometries
             null_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {spatial_table} 
+                SELECT COUNT(*) FROM {spatial_table}
                 WHERE {self.geometry_column} IS NULL
             """).fetchone()[0]
 
@@ -127,8 +134,8 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             if self.validate_geometry:
                 try:
                     invalid_count = self.conn.execute(f"""
-                        SELECT COUNT(*) FROM {spatial_table} 
-                        WHERE {self.geometry_column} IS NOT NULL 
+                        SELECT COUNT(*) FROM {spatial_table}
+                        WHERE {self.geometry_column} IS NOT NULL
                             AND NOT ST_IsValid({self.geometry_column})
                     """).fetchone()[0]
 
@@ -140,8 +147,8 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                             invalid_details = self.conn.execute(f"""
                                 SELECT ROW_NUMBER() OVER () as row_num,
                                        ST_AsText({self.geometry_column}) as geom_wkt
-                                FROM {spatial_table} 
-                                WHERE {self.geometry_column} IS NOT NULL 
+                                FROM {spatial_table}
+                                WHERE {self.geometry_column} IS NOT NULL
                                     AND NOT ST_IsValid({self.geometry_column})
                                 LIMIT 5
                             """).fetchall()
@@ -158,22 +165,78 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                                 except Exception:
                                     self.add_error(
                                         result,
-                                        f"Invalid geometry at row {row_num}: Could not determine reason",
+                                        f"Invalid geometry at row {row_num}: "
+                                        f"Could not determine reason",
                                     )
                 except Exception as e:
-                    self.add_warning(result, f"Could not validate geometries: {str(e)}")
+                    self.add_warning(result, f"Could not validate geometries: {e!s}")
 
-            # Check coordinate system (assume EPSG:25832 for Danish data if not specified)
+            # Check coordinate system using CRS detection
             valid_geom_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {spatial_table} 
+                SELECT COUNT(*) FROM {spatial_table}
                 WHERE {self.geometry_column} IS NOT NULL
             """).fetchone()[0]
 
             if valid_geom_count > 0:
-                self.add_warning(
-                    result,
-                    f"CRS validation: Assuming geometries are in EPSG:25832, will transform to {self.target_crs}",
-                )
+                # Try to detect CRS from geometry bounds
+                try:
+                    bounds_result = self.conn.execute(f"""
+                        SELECT
+                            MIN(ST_XMin({self.geometry_column})) as min_x,
+                            MAX(ST_XMax({self.geometry_column})) as max_x,
+                            MIN(ST_YMin({self.geometry_column})) as min_y,
+                            MAX(ST_YMax({self.geometry_column})) as max_y
+                        FROM {spatial_table}
+                        WHERE {self.geometry_column} IS NOT NULL
+                        LIMIT 1000
+                    """).fetchone()
+
+                    if bounds_result and bounds_result[0] is not None:
+                        min_x, max_x, min_y, max_y = bounds_result
+                        detected_crs, coord_order = detect_crs_from_bounds(
+                            min_x, max_x, min_y, max_y
+                        )
+
+                        if detected_crs:
+                            logger.info(
+                                f"Detected CRS: {detected_crs} ({coord_order}) from bounds "
+                                f"X=[{min_x:.2f}, {max_x:.2f}], Y=[{min_y:.2f}, {max_y:.2f}]"
+                            )
+                            if detected_crs != DANISH_UTM:
+                                self.add_warning(
+                                    result,
+                                    f"CRS detection: Detected {detected_crs} but expected {DANISH_UTM}. "
+                                    f"Will assume {DANISH_UTM} and transform to {self.target_crs}",
+                                )
+                            else:
+                                self.add_warning(
+                                    result,
+                                    f"CRS validation: Detected {detected_crs}, "
+                                    f"will transform to {self.target_crs}",
+                                )
+                        else:
+                            logger.warning(
+                                f"Could not detect CRS from bounds X=[{min_x:.2f}, {max_x:.2f}], "
+                                f"Y=[{min_y:.2f}, {max_y:.2f}]. Assuming {DANISH_UTM}."
+                            )
+                            self.add_warning(
+                                result,
+                                f"CRS validation: Could not detect CRS from bounds, "
+                                f"assuming {DANISH_UTM}, will transform to {self.target_crs}",
+                            )
+                    else:
+                        self.add_warning(
+                            result,
+                            f"CRS validation: No valid bounds found, assuming {DANISH_UTM}, "
+                            f"will transform to {self.target_crs}",
+                        )
+                except Exception as e:
+                    logger.warning(f"CRS detection failed: {e!s}. Assuming {DANISH_UTM}.")
+                    self.add_warning(
+                        result,
+                        f"CRS validation: Detection failed, assuming {DANISH_UTM}, "
+                        f"will transform to {self.target_crs}",
+                    )
 
             # Clean up temporary table
             self.conn.execute(f"DROP TABLE IF EXISTS {spatial_table}")
@@ -181,7 +244,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             logger.info("DuckDB-spatial validation completed")
 
         except Exception as e:
-            self.add_error(result, f"DuckDB-spatial validation failed: {str(e)}")
+            self.add_error(result, f"DuckDB-spatial validation failed: {e!s}")
 
         return result
 
@@ -213,7 +276,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                 try:
                     data = self._convert_to_geodataframe(data)
                 except Exception as e:
-                    self.add_error(result, f"Failed to convert to GeoDataFrame: {str(e)}")
+                    self.add_error(result, f"Failed to convert to GeoDataFrame: {e!s}")
                     return result
 
             # Check coordinate reference system
@@ -229,7 +292,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                 self._validate_geometries(data, result)
 
         except Exception as e:
-            self.add_error(result, f"GeoPandas validation failed: {str(e)}")
+            self.add_error(result, f"GeoPandas validation failed: {e!s}")
 
         return result
 
@@ -244,12 +307,11 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
         """
         if self.use_duckdb_spatial:
             return self._standardize_with_duckdb_spatial(table_name_or_data)
-        else:
-            # Legacy mode - convert to GeoDataFrame, standardize, then back to DuckDB
-            gdf = self._standardize_with_geopandas(table_name_or_data)
-            result_table = "standardized_geo_data"
-            self.register_table(gdf, result_table)
-            return result_table
+        # Legacy mode - convert to GeoDataFrame, standardize, then back to DuckDB
+        gdf = self._standardize_with_geopandas(table_name_or_data)
+        result_table = "standardized_geo_data"
+        self.register_table(gdf, result_table)
+        return result_table
 
     def _standardize_with_duckdb_spatial(self, table_name_or_data: Any) -> str:
         """Standardize geospatial data using DuckDB-spatial."""
@@ -274,28 +336,34 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             # Create spatial table with standardized geometries
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
-                SELECT 
+                SELECT
                     * EXCLUDE {self.geometry_column},
-                    CASE 
+                    CASE
                         WHEN {self.geometry_column} IS NULL THEN NULL
                         WHEN ST_IsValid(ST_GeomFromText({self.geometry_column})) THEN
-                            ST_Transform(ST_GeomFromText({self.geometry_column}), 'EPSG:25832', '{self.target_crs}')
+                            ST_Transform(
+                                ST_GeomFromText({self.geometry_column}),
+                                'EPSG:25832', '{self.target_crs}'
+                            )
                         ELSE
                             -- Try to fix invalid geometries
-                            ST_Transform(ST_MakeValid(ST_GeomFromText({self.geometry_column})), 'EPSG:25832', '{self.target_crs}')
+                            ST_Transform(
+                                ST_MakeValid(ST_GeomFromText({self.geometry_column})),
+                                'EPSG:25832', '{self.target_crs}'
+                            )
                     END as {self.geometry_column}
                 FROM {source_table}
             """)
 
             # Validate the result
             valid_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {result_table} 
-                WHERE {self.geometry_column} IS NOT NULL 
+                SELECT COUNT(*) FROM {result_table}
+                WHERE {self.geometry_column} IS NOT NULL
                     AND ST_IsValid({self.geometry_column})
             """).fetchone()[0]
 
             total_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {result_table} 
+                SELECT COUNT(*) FROM {result_table}
                 WHERE {self.geometry_column} IS NOT NULL
             """).fetchone()[0]
 
@@ -303,7 +371,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             return result_table
 
         except Exception as e:
-            logger.error(f"DuckDB-spatial standardization failed: {str(e)}")
+            logger.error(f"DuckDB-spatial standardization failed: {e!s}")
             raise
 
     def _standardize_with_geopandas(self, table_name_or_data: Any) -> gpd.GeoDataFrame:
@@ -326,20 +394,44 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             if self.auto_fix_geometry:
                 data = self._fix_geometries(data)
 
-            # Reproject to target CRS
+            # Reproject to target CRS with proper CRS handling
             if data.crs is None:
-                # Assume EPSG:25832 for Danish data
-                data = data.set_crs("EPSG:25832", allow_override=True)
-                logger.warning("No CRS defined, assuming EPSG:25832")
+                # No CRS defined - try to detect from bounds, otherwise assume Danish UTM
+                bounds = data.total_bounds  # [minx, miny, maxx, maxy]
+                if len(bounds) == 4 and bounds[0] is not None:
+                    detected_crs, coord_order = detect_crs_from_bounds(
+                        bounds[0], bounds[2], bounds[1], bounds[3]
+                    )
+                    if detected_crs:
+                        logger.info(
+                            f"Detected CRS {detected_crs} ({coord_order}) from geometry bounds"
+                        )
+                        data = data.set_crs(detected_crs)
+                    else:
+                        logger.warning(
+                            f"Could not detect CRS from bounds [{bounds[0]:.2f}, {bounds[1]:.2f}, "
+                            f"{bounds[2]:.2f}, {bounds[3]:.2f}]. Assuming {DANISH_UTM} for Danish data."
+                        )
+                        data = data.set_crs(DANISH_UTM)
+                else:
+                    logger.warning(f"No CRS defined, assuming {DANISH_UTM} for Danish data")
+                    data = data.set_crs(DANISH_UTM)
+            elif str(data.crs).upper() not in ("EPSG:25832", "EPSG:4326"):
+                # CRS is defined but not one of the expected Danish CRS values
+                logger.warning(
+                    f"Data has unexpected CRS {data.crs}. "
+                    f"If this is not correct, transformation to {self.target_crs} may be invalid."
+                )
 
             if data.crs != self.target_crs:
+                original_crs = data.crs
                 data = data.to_crs(self.target_crs)
-                logger.info(f"Reprojected from {data.crs} to {self.target_crs}")
+                logger.info(f"Reprojected from {original_crs} to {self.target_crs}")
 
             return data
 
         except Exception as e:
-            logger.error(f"GeoPandas standardization failed: {str(e)}")
+            logger.error(f"GeoPandas standardization failed: {e!s}")
             raise
 
     def _has_geometry_column(self, data: Any) -> bool:
@@ -353,7 +445,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
         """
         if hasattr(data, "columns"):
             return self.geometry_column in data.columns
-        elif isinstance(data, str):
+        if isinstance(data, str):
             # It's a table name - check via DuckDB
             try:
                 columns_info = self.conn.execute(f"DESCRIBE {data}").fetchall()
@@ -391,13 +483,12 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                 lambda x: wkt.loads(x) if x and isinstance(x, str) else x
             )
         except Exception as e:
-            logger.warning(f"Failed to convert WKT to geometry: {str(e)}")
+            logger.warning(f"Failed to convert WKT to geometry: {e!s}")
 
         # Create GeoDataFrame
-        gdf = gpd.GeoDataFrame(data, geometry=self.geometry_column)
-        return gdf
+        return gpd.GeoDataFrame(data, geometry=self.geometry_column)
 
-    def _validate_geometries(self, data: gpd.GeoDataFrame, result: ValidationResult):
+    def _validate_geometries(self, data: gpd.GeoDataFrame, result: ValidationResult) -> None:
         """Validate geometries in a GeoDataFrame.
 
         Args:
@@ -455,6 +546,6 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                     logger.info("Successfully fixed all invalid geometries")
 
             except Exception as e:
-                logger.error(f"Failed to fix geometries: {str(e)}")
+                logger.error(f"Failed to fix geometries: {e!s}")
 
         return fixed_data

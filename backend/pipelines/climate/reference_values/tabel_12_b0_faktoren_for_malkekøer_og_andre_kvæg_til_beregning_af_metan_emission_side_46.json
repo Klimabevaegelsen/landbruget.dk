@@ -1,0 +1,11 @@
+{
+  "table_name": "Tabel 12: B0 faktoren for malkekøer og andre kvæg til beregning af metan emission. (Side 46)",
+  "data": [
+    {
+      "Faktorer": "B0",
+      "Malkekøer": 0.24,
+      "Andre_kvæg": 0.18,
+      "Reference": "IPCC, 2006"
+    }
+  ]
+}

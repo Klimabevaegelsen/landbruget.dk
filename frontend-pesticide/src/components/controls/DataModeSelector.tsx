@@ -1,7 +1,12 @@
 'use client';
 
 import React from 'react';
-import { useMapStore, useDataState, DataMode, DATA_MODE_CONFIG } from '@/stores/map-store';
+import {
+  useMapStore,
+  useDataState,
+  DataMode,
+  DATA_MODE_CONFIG,
+} from '@/stores/map-store';
 import { useUIStore } from '@/stores/ui-store';
 
 interface DataModeSelectorProps {
@@ -11,7 +16,7 @@ interface DataModeSelectorProps {
 
 const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
   const config = DATA_MODE_CONFIG[mode];
-  
+
   // Generate color scale for visualization
   const colorStops = [
     { value: 0, color: 'rgba(255, 255, 255, 0.8)' },
@@ -27,18 +32,21 @@ const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
   ];
 
   return (
-    <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-      <div className="text-sm font-medium text-gray-900 mb-2">
+    <div className="mt-3 rounded-lg bg-gray-50 p-3">
+      <div className="mb-2 text-sm font-medium text-gray-900">
         {config.label} Scale
       </div>
-      
+
       {/* Color gradient bar */}
-      <div className="relative h-4 rounded mb-2" style={{
-        background: `linear-gradient(to right, ${colorStops.map(stop => stop.color).join(', ')})`
-      }}>
-        <div className="absolute inset-0 border border-gray-300 rounded"></div>
+      <div
+        className="relative mb-2 h-4 rounded"
+        style={{
+          background: `linear-gradient(to right, ${colorStops.map((stop) => stop.color).join(', ')})`,
+        }}
+      >
+        <div className="absolute inset-0 rounded border border-gray-300"></div>
       </div>
-      
+
       {/* Scale labels */}
       <div className="flex justify-between text-xs text-gray-600">
         <span>0</span>
@@ -47,16 +55,21 @@ const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
         <span>High</span>
         <span>1000+ {config.unit}</span>
       </div>
-      
-      <div className="mt-2 text-xs text-gray-500">
-        {config.description}
-      </div>
+
+      <div className="mt-2 text-xs text-gray-500">{config.description}</div>
     </div>
   );
 };
 
 // Define modes with mobile-friendly labels
-const modes: { key: DataMode; label: string; shortLabel: string; mobileLabel: string; description: string; color: string }[] = [
+const modes: {
+  key: DataMode;
+  label: string;
+  shortLabel: string;
+  mobileLabel: string;
+  description: string;
+  color: string;
+}[] = [
   {
     key: 'pesticide_total',
     label: 'Total Pesticide',
@@ -91,9 +104,9 @@ const modes: { key: DataMode; label: string; shortLabel: string; mobileLabel: st
   },
 ];
 
-export const DataModeSelector: React.FC<DataModeSelectorProps> = ({ 
-  className = '', 
-  variant = 'sidebar' 
+export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
+  className = '',
+  variant = 'sidebar',
 }) => {
   const { selectedDataMode } = useDataState();
   const { setSelectedDataMode } = useMapStore();
@@ -107,10 +120,10 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
           <button
             key={mode.key}
             onClick={() => setSelectedDataMode(mode.key)}
-            className={`px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 border touch-manipulation min-w-0 ${
+            className={`min-w-0 touch-manipulation rounded-md border px-3 py-2 text-sm font-medium transition-all duration-200 ${
               selectedDataMode === mode.key
-                ? 'bg-white/20 text-white border-white/30 shadow-sm'
-                : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
+                ? 'border-white/30 bg-white/20 text-white shadow-sm'
+                : 'border-white/10 bg-black/20 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white'
             }`}
           >
             {mode.mobileLabel}
@@ -128,10 +141,10 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
           <button
             key={mode.key}
             onClick={() => setSelectedDataMode(mode.key)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 border ${
+            className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
               selectedDataMode === mode.key
-                ? 'bg-white/20 text-white border-white/30 shadow-sm'
-                : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
+                ? 'border-white/30 bg-white/20 text-white shadow-sm'
+                : 'border-white/10 bg-black/20 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white'
             }`}
           >
             {mode.shortLabel}
@@ -149,10 +162,10 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
           <button
             key={mode.key}
             onClick={() => setSelectedDataMode(mode.key)}
-            className={`w-full flex items-center justify-between p-4 rounded-lg transition-all duration-200 border touch-manipulation ${
+            className={`flex w-full touch-manipulation items-center justify-between rounded-lg border p-4 transition-all duration-200 ${
               selectedDataMode === mode.key
-                ? 'bg-white/20 text-white border-white/30 shadow-sm'
-                : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
+                ? 'border-white/30 bg-white/20 text-white shadow-sm'
+                : 'border-white/10 bg-black/20 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white'
             }`}
           >
             <div className="flex flex-col items-start">
@@ -160,7 +173,7 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
               <span className="text-xs text-white/50">{mode.description}</span>
             </div>
             {selectedDataMode === mode.key && (
-              <div className="w-2 h-2 bg-white rounded-full"></div>
+              <div className="h-2 w-2 rounded-full bg-white"></div>
             )}
           </button>
         ))}
@@ -175,18 +188,18 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
         <button
           key={mode.key}
           onClick={() => setSelectedDataMode(mode.key)}
-          className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 border ${
+          className={`flex w-full items-center justify-between rounded-lg border p-3 transition-all duration-200 ${
             selectedDataMode === mode.key
-              ? 'bg-white/20 text-white border-white/30 shadow-sm'
-              : 'bg-black/20 text-white/60 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
+              ? 'border-white/30 bg-white/20 text-white shadow-sm'
+              : 'border-white/10 bg-black/20 text-white/60 hover:border-white/20 hover:bg-white/10 hover:text-white'
           }`}
         >
           <div className="flex flex-col items-start">
-            <span className="font-medium text-sm">{mode.label}</span>
+            <span className="text-sm font-medium">{mode.label}</span>
             <span className="text-xs text-white/50">{mode.description}</span>
           </div>
           {selectedDataMode === mode.key && (
-            <div className="w-2 h-2 bg-white rounded-full"></div>
+            <div className="h-2 w-2 rounded-full bg-white"></div>
           )}
         </button>
       ))}
@@ -194,4 +207,4 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
   );
 };
 
-export default DataModeSelector; 
+export default DataModeSelector;

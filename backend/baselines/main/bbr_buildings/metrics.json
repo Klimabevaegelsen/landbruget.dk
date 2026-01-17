@@ -1,0 +1,20 @@
+{
+  "dataset_name": "bbr_buildings",
+  "source_path": "gs://landbrugsdata-raw-data/silver/bbr_buildings/20260117_023016/inspire_attributes.parquet",
+  "generated_at": "2026-01-17T11:15:13.237240",
+  "record_count": 2520557,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "current_use": 0,
+    "category_group": 0,
+    "bbr_usage_code": 2317903,
+    "dwellings": 0,
+    "construction_year": 0,
+    "external_ref": 0,
+    "floor_area": 0,
+    "building_nature": 0,
+    "address": 9482,
+    "floors": 0,
+    "building_uuid": 0
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "dataset_name": "transportation_accidents",
+  "source_path": "gs://landbrugsdata-raw-data/silver/transportation accidents/20260116_234019/Trafikuheld.med.dyretransport.og.dyreredning.2021_2023.parquet",
+  "generated_at": "2026-01-17T11:15:28.518491",
+  "record_count": 2,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "13-mar-23": 0,
+    "Bilundvej": 0,
+    "185091536179690\r2835476396352112\r65449807516352132626136350209627": 2
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "dataset_name": "pesticide_compliance",
+  "source_path": "gs://landbrugsdata-raw-data/gold/pesticide_compliance/20260114_215053/compliance_analysis_2023_2024.parquet",
+  "generated_at": "2026-01-17T11:20:39.603759",
+  "record_count": 1522718,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "field_uuid": 0,
+    "agricultural_year": 0,
+    "application_year": 0,
+    "cvr_number": 0,
+    "pesticide_name": 0,
+    "pesticide_registration_number": 0,
+    "crop_code": 0,
+    "crop_name": 0,
+    "api_crop_name_from_plante_it": 337434,
+    "restriction_date_parsed": 1522718,
+    "produktstatus": 0,
+    "suggested_valid_registration": 1522690,
+    "suggested_registration_status": 1522690,
+    "suggested_registration_expiry": 1522690,
+    "is_potential_registration_error": 0,
+    "api_max_dosage_per_ha": 337434,
+    "api_dosage_unit": 337434,
+    "actual_dosage_per_ha": 0,
+    "dosage_compliance_status": 0,
+    "dosage_ratio": 1522718
+  }
+}

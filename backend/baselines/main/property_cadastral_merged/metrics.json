@@ -1,0 +1,26 @@
+{
+  "dataset_name": "property_cadastral_merged",
+  "source_path": "gs://landbrugsdata-raw-data/gold/property_cadastral_merged/20260116_222116/property_cadastral_merged.parquet",
+  "generated_at": "2026-01-17T11:16:37.702564",
+  "record_count": 6628426,
+  "unique_identifiers": {
+    "bfe_number": 2159378
+  },
+  "column_null_counts": {
+    "bfe_number": 0,
+    "person_data": 1033609,
+    "company_data": 6024810,
+    "ownership_code": 0,
+    "ownership_denominator": 0,
+    "ownership_numerator": 0,
+    "business_event": 0,
+    "business_process": 0,
+    "authority": 0,
+    "is_worker_housing": 0,
+    "is_common_lot": 0,
+    "has_owner_apartments": 0,
+    "cadastral_registration_from": 0,
+    "cadastral_effect_from": 0,
+    "geometry": 0
+  }
+}

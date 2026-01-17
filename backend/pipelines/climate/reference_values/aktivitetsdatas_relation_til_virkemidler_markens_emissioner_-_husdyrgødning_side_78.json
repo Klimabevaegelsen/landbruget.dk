@@ -1,0 +1,15 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Markens emissioner - husdyrgødning, Side 78)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 8,
+      "Aktivitetsdata_Beskrivelse": "Mængde N",
+      "Virkemiddel": "Nitrifikationshæmmere"
+    },
+    {
+      "Aktivitetsdata_Nummer": 9,
+      "Aktivitetsdata_Beskrivelse": "Type gødning",
+      "Virkemiddel": null
+    }
+  ]
+}

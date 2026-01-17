@@ -1,0 +1,29 @@
+{
+  "dataset_name": "bmd",
+  "source_path": "gs://landbrugsdata-raw-data/silver/bmd/20260101_035218/pesticide_products.parquet",
+  "generated_at": "2026-01-17T11:15:27.506960",
+  "record_count": 10367,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "produktnavn": 0,
+    "registrerings_nr": 0,
+    "ufi_kode": 10365,
+    "eu_registrerings_nr": 10137,
+    "yderligere_handelsnavne": 10089,
+    "bek\u00e6mpelsesmiddeltype": 0,
+    "bruger_pesticid": 0,
+    "bruger_biocid": 5102,
+    "produktstatus": 0,
+    "godkendelsestype_pesticid": 7949,
+    "godkendelsestype_biocid": 4448,
+    "produktgruppe_biocid": 0,
+    "produktgruppe_pesticid": 6764,
+    "formulering": 0,
+    "produktformuleringstype": 0,
+    "aktivstoftype": 0,
+    "aktivstofnavn_e": 9,
+    "cas_nr": 413,
+    "koncentration_er": 9,
+    "enhed_er": 9
+  }
+}

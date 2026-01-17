@@ -1,0 +1,23 @@
+{
+  "dataset_name": "dst_zone_mapping",
+  "source_path": "gs://landbrugsdata-raw-data/silver/dst_zone_mapping/20260116_221933/data.parquet",
+  "generated_at": "2026-01-17T11:15:24.926319",
+  "record_count": 11,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "landsdel_code": 0,
+    "landsdel_name": 0,
+    "landsdel_dagi_id": 0,
+    "dagi_region_code": 0,
+    "dagi_region_name": 0,
+    "dagi_region_nuts2": 0,
+    "dst_regions": 0,
+    "geometry": 0,
+    "area_m2": 0,
+    "centroid_x": 0,
+    "centroid_y": 0,
+    "created_at": 0,
+    "data_source": 0,
+    "mapping_version": 0
+  }
+}

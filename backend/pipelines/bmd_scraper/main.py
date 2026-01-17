@@ -10,12 +10,17 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
 
 import dotenv
+
+# Import pipeline metadata system for data tracing
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
 from bronze import BMDScraper
 from bronze.export import GCSStorage
 from silver import BMDTransformer, upload_to_gcs
+
+PIPELINE_METADATA_AVAILABLE = True
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -31,7 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger("bmd_pipeline")
 
 
-def setup_directories() -> Tuple[Path, Path]:
+def setup_directories() -> tuple[Path, Path]:
     """Set up output directories and return their paths."""
     bronze_dir = Path(os.getenv("BRONZE_OUTPUT_DIR", "bronze/bmd/data"))
     silver_dir = Path(os.getenv("SILVER_OUTPUT_DIR", "silver/bmd/data"))
@@ -45,7 +50,7 @@ def setup_directories() -> Tuple[Path, Path]:
     return bronze_dir, silver_dir
 
 
-def run_bronze_stage(bronze_dir: Path) -> Optional[Path]:
+def run_bronze_stage(bronze_dir: Path) -> Path | None:
     """
     Run the Bronze stage of the BMD pipeline.
 
@@ -104,7 +109,7 @@ def run_bronze_stage(bronze_dir: Path) -> Optional[Path]:
         return None
 
 
-def find_latest_bronze_file(bronze_dir: Path) -> Optional[Tuple[Path, Path]]:
+def find_latest_bronze_file(bronze_dir: Path) -> tuple[Path, Path] | None:
     """
     Find the latest bronze stage output file and its directory.
 
@@ -136,7 +141,7 @@ def find_latest_bronze_file(bronze_dir: Path) -> Optional[Tuple[Path, Path]]:
         return None
 
 
-def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Optional[Path]:
+def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Path | None:
     """
     Run the Silver stage of the BMD pipeline.
 
@@ -159,7 +164,9 @@ def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Optional[Path]:
         silver_timestamp_dir = silver_dir / timestamp
         silver_timestamp_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Processing bronze file {bronze_file} to silver directory {silver_timestamp_dir}")
+        logger.info(
+            f"Processing bronze file {bronze_file} to silver directory {silver_timestamp_dir}"
+        )
 
         # Initialize and run the transformer
         transformer = BMDTransformer(input_file=bronze_file, output_dir=silver_timestamp_dir)
@@ -179,7 +186,9 @@ def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Optional[Path]:
                 success = upload_to_gcs(parquet_file, bucket_name)
 
                 if not success:
-                    logger.warning("Failed to upload silver data to GCS, but continuing with local file")
+                    logger.warning(
+                        "Failed to upload silver data to GCS, but continuing with local file"
+                    )
             else:
                 logger.warning("GCS_BUCKET not set, skipping GCS upload")
 
@@ -202,7 +211,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     """Main entry point for the BMD Scraper pipeline."""
     args = parse_args()
     logger.info(f"Starting BMD Scraper pipeline (stage: {args.stage})")
@@ -212,6 +221,14 @@ def main():
 
     # Track pipeline start time
     start_time = datetime.now()
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     # Run selected stages
     bronze_file = None
@@ -273,15 +290,20 @@ def main():
             conn = duckdb.connect()
 
             table_name = "bmd_processed"
-            conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{silver_file}')")
+            conn.execute(
+                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{silver_file}')"
+            )
 
             # Initialize schema documentation manager
             schema_manager = SchemaDocumentationManager(
-                connection=conn, pipeline_name="bmd_scraper", pipeline_start_time=pipeline_start_time, logger=logger
+                connection=conn,
+                pipeline_name="bmd_scraper",
+                pipeline_start_time=pipeline_start_time,
+                logger=logger,
             )
 
             # Generate documentation for BMD table
-            schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+            schema_manager.generate_all_documentation([table_name], stage="silver")
             logger.info("Generated schema documentation for BMD data")
 
             # Commit to GitHub
@@ -292,12 +314,59 @@ def main():
             logger.error(f"Failed to generate BMD schema documentation: {e}", exc_info=True)
             # Don't fail the pipeline if schema documentation fails
 
+    # Create and save metadata for BMD pesticide database
+    if pipeline_metadata_manager and (bronze_file or silver_file):
+        try:
+            import time
+
+            processing_duration = time.time() - start_time.timestamp()
+
+            # Determine record count if possible (from silver file)
+            record_count = None
+            if silver_file and silver_file.exists():
+                try:
+                    import duckdb
+
+                    conn = duckdb.connect()
+                    result = conn.execute(
+                        f"SELECT COUNT(*) FROM read_parquet('{silver_file}')"
+                    ).fetchone()
+                    record_count = result[0] if result else None
+                    conn.close()
+                except Exception:
+                    pass  # If we can't get count, that's okay
+
+            # Create metadata for BMD pesticide database
+            bmd_metadata = pipeline_metadata_manager.create_metadata(
+                source_key="bmd_pesticide_database",
+                record_count=record_count,
+                processing_duration=processing_duration,
+                file_size_bytes=None,  # Will be calculated automatically
+                source_datasets=None,
+            )
+
+            # Determine where to save metadata
+            metadata_dir = None
+            if silver_file:
+                metadata_dir = silver_file.parent
+            elif bronze_file:
+                metadata_dir = bronze_file.parent
+
+            if metadata_dir:
+                metadata_path = pipeline_metadata_manager.save_metadata(
+                    bmd_metadata, metadata_dir / "bmd_pesticide_database_metadata.json"
+                )
+                logger.info(f"✅ BMD pesticide database metadata saved to {metadata_path}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create BMD pipeline metadata: {e}")
+
     # Return success/failure code
-    if args.stage == "bronze" and bronze_file:
-        sys.exit(0)
-    elif args.stage == "silver" and silver_file:
-        sys.exit(0)
-    elif args.stage == "all" and bronze_file and silver_file:
+    if (
+        (args.stage == "bronze" and bronze_file)
+        or (args.stage == "silver" and silver_file)
+        or (args.stage == "all" and bronze_file and silver_file)
+    ):
         sys.exit(0)
     elif args.stage == "all" and bronze_file and not silver_file:
         # If only bronze succeeded but silver was attempted, return error

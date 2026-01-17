@@ -1,0 +1,27 @@
+{
+  "dataset_name": "animal_international_movements",
+  "source_path": "gs://landbrugsdata-raw-data/silver/animal international movements/20260116_234019/Dyr_udfoersel_2024_2025.parquet",
+  "generated_at": "2026-01-17T11:15:17.447172",
+  "record_count": 35433,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "i_2_imsoc_reference": 0,
+    "i_11_afsendelsessted": 0,
+    "i_11_afsendelsessted_land": 0,
+    "i_11_afsendelsessted_adresse": 0,
+    "i_11_afsendelsessted_by": 0,
+    "i_11_afsendelsessted_postnummer": 0,
+    "i_12_bestemmelsessted_land": 0,
+    "i_12_bestemmelsessted_iso_kode": 0,
+    "i_12_bestemmelsessted_adresse": 0,
+    "i_12_bestemmelsessted_by": 0,
+    "i_12_bestemmelsessted_postnummer": 0,
+    "column_11": 0,
+    "i_14_dato_og_klokkeslaet_for_afgang": 0,
+    "i_14_ankomstdato": 0,
+    "i_24_anslaaet_forsendelsestid_hours": 0,
+    "logbog_ja_nej": 0,
+    "i_30_commodities": 0,
+    "i_27_quantity": 0
+  }
+}

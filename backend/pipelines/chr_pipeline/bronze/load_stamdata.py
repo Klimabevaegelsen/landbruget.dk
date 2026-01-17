@@ -2,8 +2,7 @@
 
 import json
 import logging
-import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from zeep import Client
 from zeep.helpers import serialize_object
@@ -11,33 +10,15 @@ from zeep.helpers import serialize_object
 # Import the exporter and auth
 from .auth import create_stamdata_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_stamdata")
 
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
-
-
-# --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_stamdata") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    # Consider making SessionId and TrackID more dynamic if needed
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
-
-
 # --- Generic SOAP Fetcher ---
 
 
-def fetch_raw_soap_response(client: Client, operation_name: str, request_data: Dict) -> Optional[Any]:
+def fetch_raw_soap_response(client: Client, operation_name: str, request_data: dict) -> Any | None:
     """Fetch raw response from a SOAP endpoint using Zeep."""
     try:
         operation = getattr(client.service, operation_name)
@@ -58,16 +39,17 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
 # --- Stamdata Loading Functions ---
 
 
-def load_species_usage_combinations(client: Client, username: str) -> Optional[Any]:
+def load_species_usage_combinations(client: Client, username: str) -> Any | None:
     """Load raw species and usage combinations (ListDyrearterMedBrugsarter)."""
     logger.info(
         "Fetching species/usage combinations (ListDyrearterMedBrugsarter). This provides all species and usage types."
     )
     request = {
-        "GLRCHRWSInfoInbound": _create_base_request(username),
+        "GLRCHRWSInfoInbound": create_base_request(username),
         "Request": {},  # Empty request gets all combinations according to WSDL
     }
-    # Note: WSDL confirms Request key is needed, containing CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)
+    # Note: WSDL confirms Request key is needed, containing
+    # CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)
     response = fetch_raw_soap_response(client, "ListDyrearterMedBrugsarter", request)
     if not response:
         logger.warning("No response received for ListDyrearterMedBrugsarter")
@@ -77,7 +59,7 @@ def load_species_usage_combinations(client: Client, username: str) -> Optional[A
 # --- Helper Functions from original (keep if needed for parsing here, otherwise move) ---
 
 
-def safe_str(value: Any) -> Optional[str]:
+def safe_str(value: Any) -> str | None:
     """Safely convert value to string, return None if empty."""
     if value is None:
         return None
@@ -88,7 +70,7 @@ def safe_str(value: Any) -> Optional[str]:
         return None
 
 
-def safe_int(value: Any) -> Optional[int]:
+def safe_int(value: Any) -> int | None:
     """Safely convert value to int, return None if not possible."""
     if value is None:
         return None
@@ -114,12 +96,16 @@ if __name__ == "__main__":
         stamdata_client = create_stamdata_client()
 
         # Test load_species_usage_combinations
-        logger.info("\n--- Testing load_species_usage_combinations (provides all species and usage types) ---")
+        logger.info(
+            "\n--- Testing load_species_usage_combinations (provides all species and usage types) ---"
+        )
         combinations_raw = load_species_usage_combinations(stamdata_client, username)
         if combinations_raw:
             logger.info("Raw Species/Usage Combinations Response (Top Level):")
             # Save the raw data using keyword arguments
-            save_raw_data(raw_response=combinations_raw, data_type="stamdata_species_usage", identifier="all")
+            save_raw_data(
+                raw_response=combinations_raw, data_type="stamdata_species_usage", identifier="all"
+            )
 
             # Serialize and pretty print the raw response for inspection
             try:

@@ -14,14 +14,14 @@ Key filtering rules:
 """
 
 import copy
-from typing import Any, Dict, List
+from typing import Any
 
 from unified_pipeline.util.log_util import Logger
 
 logger = Logger.get_logger()
 
 
-def filter_cvr_pii(raw_cvr_data: Dict[str, Any]) -> Dict[str, Any]:
+def filter_cvr_pii(raw_cvr_data: dict[str, Any]) -> dict[str, Any]:
     """
     Filter PII from raw CVR data while preserving business information.
 
@@ -49,7 +49,7 @@ def filter_cvr_pii(raw_cvr_data: Dict[str, Any]) -> Dict[str, Any]:
     return filtered_data
 
 
-def filter_deltager_relations(deltager_relations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def filter_deltager_relations(deltager_relations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Filter PII from deltager relations while keeping business-relevant information.
 
@@ -73,7 +73,7 @@ def filter_deltager_relations(deltager_relations: List[Dict[str, Any]]) -> List[
     return filtered_relations
 
 
-def filter_deltager_data(deltager: Dict[str, Any]) -> Dict[str, Any]:
+def filter_deltager_data(deltager: dict[str, Any]) -> dict[str, Any]:
     """
     Filter PII from individual deltager (person) data.
 
@@ -121,8 +121,8 @@ def filter_deltager_data(deltager: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_pii_filtering_summary(
-    original_data: Dict[str, Any], filtered_data: Dict[str, Any]
-) -> Dict[str, Any]:
+    original_data: dict[str, Any], filtered_data: dict[str, Any]
+) -> dict[str, Any]:
     """
     Generate a summary of what PII was filtered from the data.
 
@@ -176,7 +176,7 @@ def get_pii_filtering_summary(
     return summary
 
 
-def validate_pii_filtering(filtered_data: Dict[str, Any]) -> Dict[str, Any]:
+def validate_pii_filtering(filtered_data: dict[str, Any]) -> dict[str, Any]:
     """
     Validate that PII has been properly filtered from CVR data.
 

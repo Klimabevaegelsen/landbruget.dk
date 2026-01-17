@@ -1,0 +1,15 @@
+{
+  "dataset_name": "stable_fires",
+  "source_path": "gs://landbrugsdata-raw-data/silver/stable fires/20260116_234019/Brand.i.stald.2021_2023.parquet",
+  "generated_at": "2026-01-17T11:15:28.198977",
+  "record_count": 65,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "07-feb-21": 0,
+    "511375.0": 0,
+    "6228799.0": 0,
+    "S\u00f8bjergvej": 1,
+    "78": 1,
+    "Ikast-Brande": 0
+  }
+}

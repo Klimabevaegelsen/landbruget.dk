@@ -1,8 +1,9 @@
 """
 DST Zone Mapping silver layer component for DAGI pipeline.
 
-This module creates a spatial lookup table that maps field geometries to DST (Danmarks Statistik) zones
-by combining DAGI administrative data with DST regional classifications.
+This module creates a spatial lookup table that maps field geometries
+to DST (Danmarks Statistik) zones by combining DAGI administrative
+data with DST regional classifications.
 
 The module contains:
 - DSTZoneMappingConfig: Configuration for DST zone mapping processing
@@ -16,7 +17,7 @@ The processing creates a comprehensive mapping between:
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import Field
 
@@ -49,7 +50,7 @@ class DSTZoneMappingConfig(BaseJobConfig):
         description="Target coordinate reference system - WGS84 for consistency",
     )
 
-    dst_mappings: Dict[str, Dict[str, Any]] = Field(
+    dst_mappings: dict[str, dict[str, Any]] = Field(
         default={
             "Hele landet": {
                 "landsdele_codes": [
@@ -106,7 +107,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
         super().__init__(config)
         self.data_conn = None  # Track which connection has the DAGI data
 
-    def _load_dagi_data(self, bronze_data: Optional[Dict[str, Any]] = None) -> None:
+    def _load_dagi_data(self, bronze_data: dict[str, Any] | None = None) -> None:
         """Load DAGI data and set the connection to use for all operations."""
         """
         Load DAGI data into DuckDB tables.
@@ -142,7 +143,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                         raw_json = bronze_data[layer]
                         data = json.loads(raw_json)
 
-                        if "features" in data and data["features"]:
+                        if data.get("features"):
                             # Convert GeoJSON features to table data
                             features_data = []
                             for feature in data["features"]:
@@ -175,10 +176,9 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                         f"INSERT INTO {layer}_raw VALUES ({placeholders})", values
                                     )
 
-                            # Create standardized table with spatial geometry - use layer-specific column mapping
-                            if layer == "kommuner":
-                                code_column = "kode"
-                            elif layer == "regioner":
+                            # Create standardized table with spatial geometry
+                            # - use layer-specific column mapping
+                            if layer == "kommuner" or layer == "regioner":
                                 code_column = "kode"
                             elif layer == "landsdele":
                                 code_column = "nuts3"  # landsdele uses nuts3 as the primary code
@@ -223,7 +223,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                             self.conn.execute(f"""
                                 CREATE TABLE {layer} AS
-                                SELECT 
+                                SELECT
                                     {select_clause},
                                     ST_GeomFromText(geometry_wkt) as geometry,
                                     geometry_wkt,
@@ -369,7 +369,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                     ) as tmp_file:
                                         temp_path = tmp_file.name
 
-                                    # Create a temporary view with the selected columns in the GCS connection
+                                    # Create a temporary view with the selected columns
+                                    # in the GCS connection
                                     conn.execute(f"""
                                         CREATE OR REPLACE VIEW temp_layer_view AS
                                         SELECT {select_clause}
@@ -379,13 +380,13 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                                     # Export to temporary file
                                     conn.execute(f"""
-                                        COPY temp_layer_view TO '{temp_path}' 
+                                        COPY temp_layer_view TO '{temp_path}'
                                         (FORMAT PARQUET, COMPRESSION zstd)
                                     """)
 
                                     # Import into main connection
                                     self.conn.execute(f"""
-                                        CREATE OR REPLACE TABLE {layer} AS 
+                                        CREATE OR REPLACE TABLE {layer} AS
                                         SELECT * FROM read_parquet('{temp_path}')
                                     """)
 
@@ -400,7 +401,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                                 except Exception as e:
                                     self.log.warning(
-                                        f"Failed optimized transfer for {layer}, falling back to row-by-row: {e}"
+                                        f"Failed optimized transfer for {layer}, "
+                                        f"falling back to row-by-row: {e}"
                                     )
                                     # Fallback to row-by-row copying
                                     rows = conn.execute(f"""
@@ -447,7 +449,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             self.log.error(f"Error loading DAGI data: {e}")
             raise
 
-    def _geojson_to_wkt(self, geometry: Dict) -> str:
+    def _geojson_to_wkt(self, geometry: dict) -> str:
         """Convert GeoJSON geometry to WKT format using DuckDB."""
         try:
             # Use DuckDB to convert GeoJSON to WKT
@@ -469,16 +471,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             conn = self.conn
 
             # Create DST mappings table
-            dst_mappings_data = []
-            for dst_region, mapping in self.config.dst_mappings.items():
-                for landsdel_code in mapping["landsdele_codes"]:
-                    dst_mappings_data.append(
-                        {
-                            "dst_region": dst_region,
-                            "landsdel_code": landsdel_code,
-                            "description": mapping["description"],
-                        }
-                    )
+            dst_mappings_data = [
+                {
+                    "dst_region": dst_region,
+                    "landsdel_code": landsdel_code,
+                    "description": mapping["description"],
+                }
+                for dst_region, mapping in self.config.dst_mappings.items()
+                for landsdel_code in mapping["landsdele_codes"]
+            ]
 
             # ✅ FIXED: Use pure DuckDB table creation instead of registration
             if dst_mappings_data:
@@ -506,13 +507,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             # Use the standardized table names that were created in the base connection
             conn.execute("""
                 CREATE TABLE dst_zone_lookup AS
-                SELECT 
+                SELECT
                     l.code as landsdel_code,
                     l.name as landsdel_name,
                     '' as landsdel_dagi_id,
                     l.region_code as dagi_region_code,
-                    l.name as dagi_region_name,  -- Use name as region_name since we don't have separate region names
-                    '' as dagi_region_nuts2,     -- Empty for now since regioner table might not be available
+                    l.name as dagi_region_name,
+                    -- Use name as region_name since we don't have separate region names
+                    '' as dagi_region_nuts2,
+                    -- Empty for now since regioner table might not be available
                     STRING_AGG(dm.dst_region, '|' ORDER BY dm.dst_region) as dst_regions,
                     l.geometry_wkt as geometry,
                     l.area_m2,
@@ -524,7 +527,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                 FROM landsdele l
                 LEFT JOIN dst_mappings_raw dm ON l.code = dm.landsdel_code
                 WHERE dm.landsdel_code IS NOT NULL
-                GROUP BY l.code, l.name, l.region_code, 
+                GROUP BY l.code, l.name, l.region_code,
                          l.geometry_wkt, l.area_m2, l.centroid_x, l.centroid_y
             """)
 
@@ -556,7 +559,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
             conn.execute("""
                 CREATE TABLE dst_zone_reference AS
-                SELECT 
+                SELECT
                     landsdel_code,
                     landsdel_name,
                     landsdel_dagi_id,
@@ -580,7 +583,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             self.log.error(f"Error creating reference table: {e}")
             raise
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """
         Run the DST zone mapping processing using DuckDB.
 
@@ -630,6 +633,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     f"Created lookup table with {lookup_count} records covering "
                     f"{len(self.config.dst_mappings)} DST regions"
                 )
+
+                # ✅ FIXED: Return success information to prevent "no data returned" error
+                return {
+                    "status": "completed",
+                    "lookup_table_records": lookup_count,
+                    "dst_regions_covered": len(self.config.dst_mappings),
+                    "processing_time_seconds": timer.elapsed(),
+                    "tables_created": ["dst_zone_lookup", "dst_zone_reference"],
+                }
 
         except Exception as e:
             self.log.error(f"Critical error in DST zone mapping processing: {e}")

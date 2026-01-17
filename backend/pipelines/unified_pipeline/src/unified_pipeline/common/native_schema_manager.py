@@ -9,7 +9,7 @@ comprehensive native tools that are more efficient and reliable.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import duckdb
 
@@ -19,11 +19,11 @@ from unified_pipeline.util.log_util import Logger
 class NativeSchemaManager:
     """Leverages DuckDB's native schema introspection capabilities."""
 
-    def __init__(self, connection: duckdb.DuckDBPyConnection, logger: Optional[Logger] = None):
+    def __init__(self, connection: duckdb.DuckDBPyConnection, logger: Logger | None = None):
         self.conn = connection
         self.logger = logger or Logger(__name__)
 
-    def get_table_schema(self, table_name: str, include_summary: bool = True) -> Dict[str, Any]:
+    def get_table_schema(self, table_name: str, include_summary: bool = True) -> dict[str, Any]:
         """
         Get comprehensive schema information using DuckDB's native capabilities.
 
@@ -48,17 +48,17 @@ class NativeSchemaManager:
 
         return schema_info
 
-    def _get_basic_table_info(self, table_name: str) -> Dict[str, Any]:
+    def _get_basic_table_info(self, table_name: str) -> dict[str, Any]:
         """Get basic table information using duckdb_tables()."""
         query = """
-        SELECT 
+        SELECT
             table_name,
             estimated_size,
             column_count,
             has_primary_key,
             temporary,
             sql
-        FROM duckdb_tables() 
+        FROM duckdb_tables()
         WHERE table_name = ?
         """
 
@@ -75,10 +75,10 @@ class NativeSchemaManager:
             "create_sql": result[5],
         }
 
-    def _get_column_details(self, table_name: str) -> List[Dict[str, Any]]:
+    def _get_column_details(self, table_name: str) -> list[dict[str, Any]]:
         """Get detailed column information using duckdb_columns()."""
         query = """
-        SELECT 
+        SELECT
             column_name,
             column_index,
             data_type,
@@ -88,51 +88,44 @@ class NativeSchemaManager:
             numeric_scale,
             character_maximum_length,
             comment
-        FROM duckdb_columns() 
+        FROM duckdb_columns()
         WHERE table_name = ?
         ORDER BY column_index
         """
 
         results = self.conn.execute(query, [table_name]).fetchall()
 
-        columns = []
-        for row in results:
-            columns.append(
-                {
-                    "name": row[0],
-                    "index": row[1],
-                    "data_type": row[2],
-                    "nullable": row[3],
-                    "default": row[4],
-                    "numeric_precision": row[5],
-                    "numeric_scale": row[6],
-                    "max_length": row[7],
-                    "comment": row[8],
-                }
-            )
+        return [
+            {
+                "name": row[0],
+                "index": row[1],
+                "data_type": row[2],
+                "nullable": row[3],
+                "default": row[4],
+                "numeric_precision": row[5],
+                "numeric_scale": row[6],
+                "max_length": row[7],
+                "comment": row[8],
+            }
+            for row in results
+        ]
 
-        return columns
-
-    def _get_constraints(self, table_name: str) -> List[Dict[str, Any]]:
+    def _get_constraints(self, table_name: str) -> list[dict[str, Any]]:
         """Get constraint information using duckdb_constraints()."""
         query = """
-        SELECT 
+        SELECT
             constraint_type,
             constraint_text,
             constraint_column_names
-        FROM duckdb_constraints() 
+        FROM duckdb_constraints()
         WHERE table_name = ?
         """
 
         results = self.conn.execute(query, [table_name]).fetchall()
 
-        constraints = []
-        for row in results:
-            constraints.append({"type": row[0], "definition": row[1], "columns": row[2]})
+        return [{"type": row[0], "definition": row[1], "columns": row[2]} for row in results]
 
-        return constraints
-
-    def _get_storage_info(self, table_name: str) -> Dict[str, Any]:
+    def _get_storage_info(self, table_name: str) -> dict[str, Any]:
         """Get storage information using PRAGMA storage_info."""
         try:
             query = f"PRAGMA storage_info('{table_name}')"
@@ -156,7 +149,7 @@ class NativeSchemaManager:
             self.logger.warning(f"Could not get storage info for {table_name}: {e}")
             return {}
 
-    def _get_data_summary(self, table_name: str) -> Dict[str, Any]:
+    def _get_data_summary(self, table_name: str) -> dict[str, Any]:
         """Get data summary using DuckDB's SUMMARIZE command."""
         try:
             query = f"SUMMARIZE {table_name}"
@@ -179,7 +172,7 @@ class NativeSchemaManager:
             return {}
 
     def save_schema_to_gcs(
-        self, table_name: str, schema_info: Dict[str, Any], bucket_path: str
+        self, table_name: str, schema_info: dict[str, Any], bucket_path: str
     ) -> str:
         """Save schema information to GCS in JSON format."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -187,7 +180,7 @@ class NativeSchemaManager:
         gcs_path = f"{bucket_path.rstrip('/')}/{filename}"
 
         try:
-            from unified_pipeline.util.gcs_access import GCSDataAccess
+            from common.gcs import GCSDataAccess
 
             gcs_access = GCSDataAccess()
             gcs_access.upload_json(schema_info, gcs_path)
@@ -199,7 +192,7 @@ class NativeSchemaManager:
             raise
 
     def save_schema_locally(
-        self, table_name: str, schema_info: Dict[str, Any], output_dir: str = "schemas"
+        self, table_name: str, schema_info: dict[str, Any], output_dir: str = "schemas"
     ) -> str:
         """Save schema information locally in JSON format."""
         Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -215,14 +208,17 @@ class NativeSchemaManager:
         return str(filepath)
 
     def get_all_tables_schemas(
-        self, include_summary: bool = True, save_to_gcs: bool = False, gcs_bucket_path: str = None
-    ) -> Dict[str, Dict[str, Any]]:
+        self,
+        include_summary: bool = True,
+        save_to_gcs: bool = False,
+        gcs_bucket_path: str | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Get schemas for all user tables in the database."""
         # Get all non-internal tables
         query = """
-        SELECT table_name 
-        FROM duckdb_tables() 
-        WHERE NOT internal 
+        SELECT table_name
+        FROM duckdb_tables()
+        WHERE NOT internal
         AND NOT temporary
         """
 
@@ -250,7 +246,7 @@ class SchemaMixin:
         include_summary: bool = True,
         save_to_gcs: bool = True,
         save_locally: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate and save schema using DuckDB's native capabilities.
 

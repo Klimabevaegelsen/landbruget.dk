@@ -1,0 +1,17 @@
+{
+  "dataset_name": "slurry_leaks",
+  "source_path": "gs://landbrugsdata-raw-data/silver/slurry leaks/20260116_234019/Gylleudslip.2021_2023.parquet",
+  "generated_at": "2026-01-17T11:15:27.893485",
+  "record_count": 49,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "25-jan-22": 0,
+    "Gylle": 0,
+    "2000": 0,
+    "678707.407331962": 0,
+    "6149291.71504079": 0,
+    "\u00d8stre Ringvej": 3,
+    "60": 3,
+    "Ringsted": 0
+  }
+}

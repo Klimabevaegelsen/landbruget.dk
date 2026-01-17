@@ -8,7 +8,6 @@ validating and managing CLI configuration.
 """
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -46,12 +45,16 @@ class Source(Enum):
         property_cadastral_merge: Property-Cadastral merge gold layer
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
+        nles5_nitrogen_estimation: NLES5 nitrogen washout estimation gold layer
         pesticide_disaggregation: Pesticide disaggregation gold layer
         pesticide_proximity: Pesticide proximity analysis gold layer
         pesticide_compliance: Pesticide regulatory compliance analysis gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
         arbejdstilsynet_inspections: Danish Work Environment Authority inspections data
+        drive_data: Google Drive regulatory compliance documents
+        bbr_buildings: BBR Buildings and GeoDanmark infrastructure data
+        grukos: Groundwater mapping data (indsatsområder) from MiljøGIS
     """
 
     bnbo = "bnbo"
@@ -67,16 +70,21 @@ class Source(Enum):
     water_typology = "water_typology"
     property_cadastral_merge = "property_cadastral_merge"
     field_production = "field_production"
-    field_area_analysis = "field_area_analysis" 
+    field_area_analysis = "field_area_analysis"
     pesticide_disaggregation = "pesticide_disaggregation"
+    nles5_nitrogen_estimation = "nles5_nitrogen_estimation"
     pesticide_proximity = "pesticide_proximity"
     pesticide_compliance = "pesticide_compliance"
     cvr_enrichment = "cvr_enrichment"
+    cvr_geometry_datasets = "cvr_geometry_datasets"
     dst = "dst"
     dmi = "dmi"
     arbejdstilsynet_inspections = "arbejdstilsynet_inspections"
     worker_safety = "worker_safety"
     work_permits = "work_permits"
+    drive_data = "drive_data"
+    bbr_buildings = "bbr_buildings"
+    grukos = "grukos"
 
 
 class Stage(Enum):
@@ -92,14 +100,13 @@ class Stage(Enum):
         gold: Business-ready combined datasets stage
         enrichment: Enrichment-only stage for post-processing existing silver data
         all: Process bronze, silver, and gold stages sequentially
-        
+
         # CVR Enrichment Pipeline Steps
         collection: CVR collection step (collect and batch CVR numbers)
         company_fetching: Company data fetching step
         pnumber_fetching: P-number data fetching step
         financial_documents: Financial documents fetching step
-        address_geocoding: Address geocoding step
-        data_consolidation: Data consolidation step
+        address_geocoding: Address geocoding step (final step)
     """
 
     bronze = "bronze"
@@ -107,13 +114,14 @@ class Stage(Enum):
     gold = "gold"
     enrichment = "enrichment"
     all = "all"
-    
+
     # CVR Enrichment Pipeline Steps
     collection = "collection"
     company_fetching = "company_fetching"
     pnumber_fetching = "pnumber_fetching"
     financial_documents = "financial_documents"
     address_geocoding = "address_geocoding"
+    data_parsing = "data_parsing"
     data_consolidation = "data_consolidation"
 
 
@@ -166,14 +174,17 @@ class CliConfig(BaseModel):
     env: Env = Env.prod
     source: Source
     stage: Stage
-    fvm_layer_type: Optional[FVMLayerType] = None
-    fvm_year: Optional[int] = None
-    pesticide_year: Optional[int] = None
+    fvm_layer_type: FVMLayerType | None = None
+    fvm_year: int | None = None
+    pesticide_year: int | None = None
     # CVR enrichment specific parameters
-    test_limit: Optional[int] = None
+    test_limit: int | None = None
     parse_financial_xml: bool = True
     max_financial_documents: int = 10
-    
+
     # Batch processing parameters
-    batch_number: Optional[int] = None
-    total_batches: Optional[int] = None
+    batch_number: int | None = None
+    total_batches: int | None = None
+
+    # General year parameter for matrix jobs
+    target_year: int | None = None

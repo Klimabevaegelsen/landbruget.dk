@@ -39,11 +39,76 @@ on:
 env:
   ENVIRONMENT: production
   GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
 jobs:
+  # Verify silver data availability before running stage0 prefilters
+  verify-silver-data:
+    runs-on: ubuntu-latest
+    outputs:
+      wetlands_available: ${{ steps.check.outputs.wetlands_available }}
+      soil_types_available: ${{ steps.check.outputs.soil_types_available }}
+      bnbo_available: ${{ steps.check.outputs.bnbo_available }}
+      properties_available: ${{ steps.check.outputs.properties_available }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check silver data availability
+        id: check
+        run: |
+          echo "🔍 Checking silver data availability in GCS..."
+
+          # Check wetlands_dissolved
+          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/wetlands_dissolved/" &>/dev/null; then
+            echo "  ✅ wetlands_dissolved: Available"
+            echo "wetlands_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "  ⏭️ wetlands_dissolved: Not available - skipping wetlands prefilter"
+            echo "wetlands_available=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check soil_types
+          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/soil_types/" &>/dev/null; then
+            echo "  ✅ soil_types: Available"
+            echo "soil_types_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "  ⏭️ soil_types: Not available - skipping soil types prefilter"
+            echo "soil_types_available=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check bnbo (drinking water protection areas - dissolved geometries)
+          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/bnbo_status_dissolved/" &>/dev/null; then
+            echo "  ✅ bnbo: Available"
+            echo "bnbo_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "  ⏭️ bnbo: Not available - skipping BNBO prefilter"
+            echo "bnbo_available=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check properties (merged cadastral + property owners from gold layer)
+          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/gold/property_cadastral_merged/" &>/dev/null; then
+            echo "  ✅ properties: Available"
+            echo "properties_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "  ⏭️ properties: Not available - skipping properties prefilter"
+            echo "properties_available=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo ""
+          echo "📊 Silver data check complete"
+
   # Stage 0: Pre-filtering (Concurrent - operations are independent)
   stage0-properties-prefilter:
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    needs: verify-silver-data
+    if: ${{ needs.verify-silver-data.outputs.properties_available == 'true' && (github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -82,7 +147,8 @@ jobs:
             --stage=0 --job=properties_prefilter
 
   stage0-wetlands-prefilter:
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    needs: verify-silver-data
+    if: ${{ needs.verify-silver-data.outputs.wetlands_available == 'true' && (github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -121,7 +187,8 @@ jobs:
             --stage=0 --job=wetlands_prefilter
 
   stage0-bnbo-prefilter:
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    needs: verify-silver-data
+    if: ${{ needs.verify-silver-data.outputs.bnbo_available == 'true' && (github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -199,7 +266,8 @@ jobs:
             --stage=0 --job=water_projects_prefilter
 
   stage0-soil-types-prefilter:
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    needs: verify-silver-data
+    if: ${{ needs.verify-silver-data.outputs.soil_types_available == 'true' && (github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -336,7 +404,7 @@ jobs:
         run: |
           echo "=== Initial disk usage ==="
           df -h
-          
+
           echo "=== Freeing up disk space for memory-intensive processing ==="
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
@@ -344,12 +412,12 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo rm -rf /usr/local/.ghcup
           sudo rm -rf /usr/share/swift
-          
+
           sudo docker system prune -af
           sudo docker image prune -af
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
-          
+
           echo "=== Disk usage after cleanup ==="
           df -h
 
@@ -386,8 +454,8 @@ jobs:
           find /tmp -type f -size +100M -delete 2>/dev/null || true
 
   stage1-fields-soil-types:
-    needs: [stage0-soil-types-prefilter]
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '' }}
+    needs: [verify-silver-data, stage0-soil-types-prefilter]
+    if: ${{ always() && needs.verify-silver-data.outputs.soil_types_available == 'true' && (needs.stage0-soil-types-prefilter.result == 'success' || needs.stage0-soil-types-prefilter.result == 'skipped') && (github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage1' || github.event.inputs.stage == '') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -670,8 +738,8 @@ jobs:
 
   # Stage 4A: Consolidation (Sequential mode - waits for stage 3 and needs stage 1 data)
   stage4-consolidate-sequential:
-    needs: [stage3-final-bnbo-sequential, stage3-final-wetland-sequential, stage1-fields-properties, stage1-fields-soil-types]
-    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
+    needs: [verify-silver-data, stage3-final-bnbo-sequential, stage3-final-wetland-sequential, stage1-fields-properties, stage1-fields-soil-types]
+    if: ${{ always() && (github.event.inputs.stage == 'all' || github.event.inputs.stage == '') && (needs.stage3-final-bnbo-sequential.result == 'success' || needs.stage3-final-bnbo-sequential.result == 'skipped') && (needs.stage3-final-wetland-sequential.result == 'success' || needs.stage3-final-wetland-sequential.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
@@ -700,6 +768,40 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Verify Stage 3 Outputs Exist
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          echo "🔍 Checking for required Stage 3 GCS outputs..."
+          YEAR=$AGRICULTURAL_FIELDS_YEAR
+
+          # Check stage 3A output (property × BNBO intersection)
+          echo "Checking: gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/"
+          if ! gsutil ls "gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/*/data.parquet" &>/dev/null; then
+            echo "⚠️ WARNING: Missing Stage 3A output for ${YEAR}"
+            echo "Expected: gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/*/data.parquet"
+            echo "Stage 3 may have been skipped - consolidation will likely fail"
+            # Don't exit here - let consolidation script provide detailed error
+          else
+            echo "✅ Found Stage 3A output for ${YEAR}"
+          fi
+
+          # Check stage 3B output (property × wetland intersection)
+          echo "Checking: gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/"
+          if ! gsutil ls "gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/*/data.parquet" &>/dev/null; then
+            echo "⚠️ WARNING: Missing Stage 3B output for ${YEAR}"
+            echo "Expected: gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/*/data.parquet"
+            echo "Stage 3 may have been skipped - consolidation will likely fail"
+          else
+            echo "✅ Found Stage 3B output for ${YEAR}"
+          fi
+
+          echo ""
+          echo "💡 Note: If Stage 3 outputs are missing, the consolidation will fail."
+          echo "   This is expected if Stage 3 was skipped due to workflow conditionals."
+          echo "   Re-run the workflow with stage='all' to generate missing data."
+
       - name: Consolidate Results (Sequential)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -716,7 +818,7 @@ jobs:
           echo "✅ All stages executed successfully"
           echo "📊 Final consolidated results available in GCS"
 
-  # Stage 4B: Consolidation (Independent mode - uses latest GCS data) 
+  # Stage 4B: Consolidation (Independent mode - uses latest GCS data)
   stage4-consolidate-independent:
     if: ${{ github.event.inputs.stage == 'stage4' }}
     runs-on: ubuntu-latest
@@ -760,4 +862,4 @@ jobs:
         run: |
           echo "🎉 Field Area Analysis Stage 4 Completed"
           echo "✅ Consolidation executed successfully using latest GCS data"
-          echo "📊 Final consolidated results available in GCS" 
+          echo "📊 Final consolidated results available in GCS"

@@ -1,28 +1,48 @@
+"""
+Animal Movements Silver Processing Module for CHR Pipeline
+
+This module processes animal movement data from bronze to silver layer using vanilla DuckDB.
+It handles:
+- CHR_dyr movement summaries (aggregated movement data)
+- CHR_dyr animal movements (individual animal records)
+- DIKO flytninger (animal movements from DIKO service)
+"""
+
 import logging
 from pathlib import Path
 
-import ibis
-import ibis.expr.datatypes as dt
+import duckdb
 
 # Import export module
 from . import export
 
-# Import helpers (assuming helpers.py is in the same directory)
+logger = logging.getLogger(__name__)
 
 
 def create_chr_dyr_movement_summaries_table(
-    con: ibis.BaseBackend, chr_dyr_summaries: ibis.Table | None, silver_dir: Path
-) -> ibis.Table | None:
-    """Creates the chr_dyr_movement_summaries table from aggregated CHR_dyr movement data."""
+    con: duckdb.DuckDBPyConnection, chr_dyr_summaries_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
+    """Creates the chr_dyr_movement_summaries table from aggregated CHR_dyr movement data.
+
+    Args:
+        con: DuckDB connection
+        chr_dyr_summaries_table: Name of the raw CHR_dyr summaries table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed movement summaries data or None if failed
+    """
     logging.info("Starting creation of chr_dyr_movement_summaries table from aggregated data.")
 
-    if chr_dyr_summaries is None:
+    if chr_dyr_summaries_table is None:
         logging.warning("Cannot create chr_dyr_movement_summaries: input table is None.")
         return None
 
     try:
-        # Expected columns in aggregated format:
-        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count, movement_reasons, cattle_type_breakdown, nation_codes_from, nation_codes_to, is_international
+        # Check for required columns
+        columns_result = con.execute(f"DESCRIBE {chr_dyr_summaries_table}").fetchall()
+        column_names = [col[0] for col in columns_result]
+
         required_columns = [
             "reporting_herd_number",
             "movement_date",
@@ -31,100 +51,76 @@ def create_chr_dyr_movement_summaries_table(
             "animal_count",
         ]
 
-        # Check for required columns
-        missing_columns = [col for col in required_columns if col not in chr_dyr_summaries.columns]
+        missing_columns = [col for col in required_columns if col not in column_names]
         if missing_columns:
-            logging.warning(f"Cannot create chr_dyr_movement_summaries: Missing required columns: {missing_columns}")
+            logging.warning(
+                f"Cannot create chr_dyr_movement_summaries: Missing required columns: {missing_columns}"
+            )
             return None
 
-        # Process the aggregated movement data
-        movements = chr_dyr_summaries.select(
-            movement_summary_id=ibis.uuid(),  # Generate UUID for each summary record
-            reporting_herd_number=ibis.coalesce(
-                chr_dyr_summaries.reporting_herd_number.cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            movement_date=ibis.coalesce(
-                chr_dyr_summaries.movement_date.cast(dt.date),
-                ibis.null().cast(dt.date),
-            ),
-            counterparty_herd=ibis.coalesce(
-                chr_dyr_summaries.counterparty_herd.cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            movement_type=chr_dyr_summaries.movement_type.cast(dt.string).strip().nullif(""),
-            animal_count=ibis.coalesce(
-                chr_dyr_summaries.animal_count.cast(dt.int64),
-                ibis.literal(0).cast(dt.int64),
-            ),
-            # Parse movement_reasons JSON if present, otherwise set to empty string
-            movement_reasons=ibis.coalesce(
-                chr_dyr_summaries.movement_reasons.cast(dt.string).strip().nullif(""),
-                ibis.literal("[]"),
-            ),
-            # Parse cattle_type_breakdown JSON if present, otherwise set to empty JSON object
-            cattle_type_breakdown=ibis.coalesce(
-                chr_dyr_summaries.cattle_type_breakdown.cast(dt.string).strip().nullif(""),
-                ibis.literal("{}"),
-            )
-            if "cattle_type_breakdown" in chr_dyr_summaries.columns
-            else ibis.literal("{}"),
-            # Add country/nation code fields for international movement analysis
-            nation_codes_from=ibis.coalesce(
-                chr_dyr_summaries.nation_codes_from.cast(dt.string).strip().nullif(""),
-                ibis.literal("[]"),
-            )
-            if "nation_codes_from" in chr_dyr_summaries.columns
-            else ibis.literal("[]"),
-            nation_codes_to=ibis.coalesce(
-                chr_dyr_summaries.nation_codes_to.cast(dt.string).strip().nullif(""),
-                ibis.literal("[]"),
-            )
-            if "nation_codes_to" in chr_dyr_summaries.columns
-            else ibis.literal("[]"),
-            is_international=ibis.coalesce(
-                chr_dyr_summaries.is_international.cast(dt.boolean),
-                ibis.literal(False).cast(dt.boolean),
-            )
-            if "is_international" in chr_dyr_summaries.columns
-            else ibis.literal(False).cast(dt.boolean),
-        )
+        # Build SQL for optional columns
+        has_cattle_type = "cattle_type_breakdown" in column_names
+        has_nation_from = "nation_codes_from" in column_names
+        has_nation_to = "nation_codes_to" in column_names
+        has_international = "is_international" in column_names
 
-        # Filter out records with no animal count
-        movements = movements.filter(movements.animal_count > 0)
+        # Create the cleaned and processed movement summaries table with SQL
+        con.execute(f"""
+            CREATE OR REPLACE TABLE chr_dyr_movement_summaries AS
+            WITH raw_data AS (
+                SELECT
+                    reporting_herd_number,
+                    movement_date,
+                    counterparty_herd,
+                    movement_type,
+                    animal_count,
+                    movement_reasons,
+                    {"cattle_type_breakdown," if has_cattle_type else ""}
+                    {"nation_codes_from," if has_nation_from else ""}
+                    {"nation_codes_to," if has_nation_to else ""}
+                    {"is_international" if has_international else "FALSE AS is_international"}
+                FROM {chr_dyr_summaries_table}
+            )
+            SELECT
+                uuid() AS movement_summary_id,
+                -- Basic identifiers: cast to string, trim, nullif empty, then cast to int64
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(reporting_herd_number AS VARCHAR)), '') AS BIGINT), NULL) AS reporting_herd_number,
+                TRY_CAST(movement_date AS DATE) AS movement_date,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(counterparty_herd AS VARCHAR)), '') AS BIGINT), NULL) AS counterparty_herd,
+                NULLIF(TRIM(CAST(movement_type AS VARCHAR)), '') AS movement_type,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(animal_count AS VARCHAR)), '') AS BIGINT), 0) AS animal_count,
+                -- JSON fields
+                COALESCE(NULLIF(TRIM(CAST(movement_reasons AS VARCHAR)), ''), '[]') AS movement_reasons,
+                {"COALESCE(NULLIF(TRIM(CAST(cattle_type_breakdown AS VARCHAR)), ''), '{}')" if has_cattle_type else "'{}'"} AS cattle_type_breakdown,
+                {"COALESCE(NULLIF(TRIM(CAST(nation_codes_from AS VARCHAR)), ''), '[]')" if has_nation_from else "'[]'"} AS nation_codes_from,
+                {"COALESCE(NULLIF(TRIM(CAST(nation_codes_to AS VARCHAR)), ''), '[]')" if has_nation_to else "'[]'"} AS nation_codes_to,
+                COALESCE(TRY_CAST(is_international AS BOOLEAN), FALSE) AS is_international
+            FROM raw_data
+            WHERE
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(animal_count AS VARCHAR)), '') AS BIGINT), 0) > 0
+        """)
 
-        # Select final columns in desired order
-        final_cols = [
-            "movement_summary_id",
-            "reporting_herd_number",
-            "movement_date",
-            "counterparty_herd",
-            "movement_type",
-            "animal_count",
-            "movement_reasons",
-            "cattle_type_breakdown",
-            "nation_codes_from",
-            "nation_codes_to",
-            "is_international",
-        ]
-        movements_final = movements.select(*final_cols)
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM chr_dyr_movement_summaries").fetchone()[0]
 
-        # --- Save to Parquet ---
-        output_path = silver_dir / "chr_dyr_movement_summaries.parquet"
-        rows = movements_final.count().execute()
         if rows == 0:
             logging.warning("CHR_dyr movement summaries table is empty after processing.")
             return None
 
         logging.info(f"Saving chr_dyr_movement_summaries table with {rows} rows.")
-        # Pass Ibis table directly
-        saved_path = export.save_table(output_path, movements_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "chr_dyr_movement_summaries.parquet"
+        saved_path = export.save_table(output_path, "chr_dyr_movement_summaries", con, is_geo=False)
+
         if saved_path is None:
             logging.error("Failed to save chr_dyr_movement_summaries table - no path returned")
             return None
 
         logging.info(f"Successfully saved CHR_dyr movement summaries to {saved_path}")
-        return movements_final
+
+        # Return the relation
+        return con.sql("SELECT * FROM chr_dyr_movement_summaries")
 
     except Exception as e:
         logging.error(f"Error creating chr_dyr_movement_summaries table: {e}", exc_info=True)
@@ -132,181 +128,132 @@ def create_chr_dyr_movement_summaries_table(
 
 
 def create_chr_dyr_animal_movements_table(
-    con: ibis.BaseBackend, chr_dyr_raw: ibis.Table | None, silver_dir: Path
-) -> ibis.Table | None:
+    con: duckdb.DuckDBPyConnection, chr_dyr_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
     """Creates the chr_dyr_animal_movements table from CHR_dyr service besListAktOms responses.
 
     NOTE: This function handles the old individual animal records format.
     For aggregated movement summaries, use create_chr_dyr_movement_summaries_table instead.
+
+    Args:
+        con: DuckDB connection
+        chr_dyr_raw_table: Name of the raw CHR_dyr table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed animal movements data or None if failed
     """
     logging.info("Starting creation of chr_dyr_animal_movements table (individual records format).")
 
-    # Check for nested structure
-    if chr_dyr_raw is None or "Response" not in chr_dyr_raw.columns:
-        logging.warning("Cannot create chr_dyr_animal_movements: 'Response' column missing in chr_dyr_raw.")
+    if chr_dyr_raw_table is None:
+        logging.warning("Cannot create chr_dyr_animal_movements: chr_dyr_raw_table is None.")
         return None
 
     try:
-        # Access the nested structure Response[0]
-        if not isinstance(chr_dyr_raw["Response"].type(), dt.Array):
+        # Check if table has Response column with nested structure
+        columns_result = con.execute(f"DESCRIBE {chr_dyr_raw_table}").fetchall()
+        column_names = [col[0] for col in columns_result]
+
+        if "Response" not in column_names:
             logging.warning(
-                f"Cannot create chr_dyr_animal_movements: 'Response' column is not an Array (Type: {chr_dyr_raw['Response'].type()}). Skipping."
+                "Cannot create chr_dyr_animal_movements: 'Response' column missing in chr_dyr_raw."
             )
             return None
 
-        response_struct_path = chr_dyr_raw.Response[0]
+        # Try to detect nested structure
+        try:
+            # Check if Response is an array with nested data
+            test_result = con.execute(f"""
+                SELECT typeof(Response) AS response_type
+                FROM {chr_dyr_raw_table}
+                LIMIT 1
+            """).fetchone()
 
-        # Check for required fields within the response struct path
-        if (
-            not isinstance(response_struct_path.type(), dt.Struct)
-            or "BesaetningsNummer" not in response_struct_path.type().names
-            or "Enkeltdyrsoplysninger" not in response_struct_path.type().names
-        ):
-            logging.warning(
-                "Cannot create chr_dyr_animal_movements: Missing 'BesaetningsNummer' or 'Enkeltdyrsoplysninger' in Response[0] path. Skipping."
-            )
+            if test_result is None:
+                logging.warning("Cannot create chr_dyr_animal_movements: Table is empty.")
+                return None
+
+            response_type = test_result[0] if test_result else ""
+            if not response_type.startswith("STRUCT") and "[]" not in response_type:
+                logging.warning(
+                    f"Cannot create chr_dyr_animal_movements: 'Response' column is not expected type "
+                    f"(Type: {response_type}). Skipping."
+                )
+                return None
+
+        except Exception as e:
+            logging.warning(f"Cannot detect Response type: {e}")
             return None
 
-        # Check Enkeltdyrsoplysninger is array using path
-        if not isinstance(response_struct_path.Enkeltdyrsoplysninger.type(), dt.Array):
-            logging.warning(
-                f"Cannot create chr_dyr_animal_movements: Response[0].Enkeltdyrsoplysninger path is not an Array (Type: {response_struct_path.Enkeltdyrsoplysninger.type()}). Skipping."
+        # Create the animal movements table with SQL
+        # Using DuckDB's nested data access syntax
+        con.execute(f"""
+            CREATE OR REPLACE TABLE chr_dyr_animal_movements AS
+            WITH unnested_response AS (
+                SELECT
+                    UNNEST(Response) AS r
+                FROM {chr_dyr_raw_table}
+                WHERE Response IS NOT NULL
+            ),
+            base_data AS (
+                SELECT
+                    r.BesaetningsNummer AS reporting_herd_number_raw,
+                    r.PeriodeFra AS period_fra_raw,
+                    r.PeriodeTil AS period_til_raw,
+                    r.Enkeltdyrsoplysninger AS animals_list
+                FROM unnested_response
+                WHERE r.Enkeltdyrsoplysninger IS NOT NULL
+            ),
+            unnested_animals AS (
+                SELECT
+                    reporting_herd_number_raw,
+                    period_fra_raw,
+                    period_til_raw,
+                    UNNEST(animals_list) AS animal_info
+                FROM base_data
+                WHERE animals_list IS NOT NULL
             )
-            return None
+            SELECT
+                uuid() AS animal_movement_id,
+                -- Basic identifiers
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(reporting_herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS reporting_herd_number,
+                TRY_CAST(NULLIF(TRIM(CAST(period_fra_raw AS VARCHAR)), '') AS DATE) AS period_fra,
+                TRY_CAST(NULLIF(TRIM(CAST(period_til_raw AS VARCHAR)), '') AS DATE) AS period_til,
+                -- Animal information
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(animal_info.CkrNr AS VARCHAR)), '') AS BIGINT), NULL) AS ckr_number,
+                TRY_CAST(NULLIF(TRIM(CAST(animal_info.DatoFoedt AS VARCHAR)), '') AS DATE) AS birth_date,
+                TRY_CAST(NULLIF(TRIM(CAST(animal_info.DatoIndgaaet AS VARCHAR)), '') AS DATE) AS entry_date,
+                TRY_CAST(NULLIF(TRIM(CAST(animal_info.DatoAfgaaet AS VARCHAR)), '') AS DATE) AS exit_date,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(animal_info.KildeBesaetning AS VARCHAR)), '') AS BIGINT), NULL) AS source_herd,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(animal_info.DestinationBesaetning AS VARCHAR)), '') AS BIGINT), NULL) AS destination_herd,
+                NULLIF(TRIM(CAST(animal_info.Koen AS VARCHAR)), '') AS gender,
+                NULLIF(TRIM(CAST(animal_info.Race AS VARCHAR)), '') AS breed,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(animal_info.MorCkrNr AS VARCHAR)), '') AS BIGINT), NULL) AS mother_ckr_number
+            FROM unnested_animals
+            WHERE animal_info IS NOT NULL
+        """)
 
-        # Select base fields and the list to unnest using path
-        base = chr_dyr_raw.select(
-            reporting_herd_number_raw=response_struct_path.BesaetningsNummer,
-            period_fra=response_struct_path.PeriodeFra,
-            period_til=response_struct_path.PeriodeTil,
-            animals_list=response_struct_path.Enkeltdyrsoplysninger,
-        )
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM chr_dyr_animal_movements").fetchone()[0]
 
-        # Filter before unnesting
-        base = base.filter(base.animals_list.notnull())
-
-        # Unnest the animals list
-        unpacked = base.select(
-            reporting_herd_number=base.reporting_herd_number_raw,
-            period_fra=base.period_fra,
-            period_til=base.period_til,
-            animal_info=base.animals_list.unnest(),  # animal_info is a struct
-        )
-
-        # Filter after unnesting
-        unpacked = unpacked.filter(unpacked.animal_info.notnull())
-
-        # Define source -> target mapping for fields inside the animal_info struct
-        animal_cols = {
-            "CkrNr": "ckr_number",
-            "DatoFoedt": "birth_date",
-            "DatoIndgaaet": "entry_date",
-            "DatoAfgaaet": "exit_date",
-            "KildeBesaetning": "source_herd",
-            "DestinationBesaetning": "destination_herd",
-            "Koen": "gender",
-            "Race": "breed",
-            "MorCkrNr": "mother_ckr_number",
-        }
-        available_struct_cols = unpacked.animal_info.type().names
-
-        animals = unpacked.select(
-            reporting_herd_number=unpacked.reporting_herd_number,
-            period_fra=unpacked.period_fra,
-            period_til=unpacked.period_til,
-            **{
-                target: unpacked.animal_info[source].name(target)
-                for source, target in animal_cols.items()
-                if source in available_struct_cols
-            },
-        )
-
-        for target in animal_cols.values():
-            if target not in animals.columns:
-                animals = animals.mutate(**{target: ibis.null()})
-                logging.warning(f"Column for '{target}' missing in source animal struct element, adding as null.")
-
-        # Generate UUID and clean/cast
-        animals = animals.mutate(
-            animal_movement_id=ibis.uuid(),  # Generate UUID
-            reporting_herd_number=ibis.coalesce(
-                animals.reporting_herd_number.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            period_fra=ibis.coalesce(
-                animals.period_fra.cast(dt.string).strip().nullif("").cast(dt.date),
-                ibis.null().cast(dt.date),
-            ),
-            period_til=ibis.coalesce(
-                animals.period_til.cast(dt.string).strip().nullif("").cast(dt.date),
-                ibis.null().cast(dt.date),
-            ),
-            ckr_number=ibis.coalesce(
-                animals.ckr_number.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            birth_date=ibis.coalesce(
-                animals.birth_date.cast(dt.string).strip().nullif("").cast(dt.date),
-                ibis.null().cast(dt.date),
-            ),
-            entry_date=ibis.coalesce(
-                animals.entry_date.cast(dt.string).strip().nullif("").cast(dt.date),
-                ibis.null().cast(dt.date),
-            ),
-            exit_date=ibis.coalesce(
-                animals.exit_date.cast(dt.string).strip().nullif("").cast(dt.date),
-                ibis.null().cast(dt.date),
-            ),
-            source_herd=ibis.coalesce(
-                animals.source_herd.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            destination_herd=ibis.coalesce(
-                animals.destination_herd.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            gender=animals.gender.cast(dt.string).strip().nullif(""),
-            breed=animals.breed.cast(dt.string).strip().nullif(""),
-            mother_ckr_number=ibis.coalesce(
-                animals.mother_ckr_number.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-        )
-
-        # Select final columns in desired order
-        final_cols = [
-            "animal_movement_id",
-            "reporting_herd_number",
-            "period_fra",
-            "period_til",
-            "ckr_number",
-            "birth_date",
-            "entry_date",
-            "exit_date",
-            "source_herd",
-            "destination_herd",
-            "gender",
-            "breed",
-            "mother_ckr_number",
-        ]
-        animals_final = animals.select(*final_cols)
-
-        # --- Save to Parquet ---
-        output_path = silver_dir / "chr_dyr_animal_movements.parquet"
-        rows = animals_final.count().execute()
         if rows == 0:
             logging.warning("CHR_dyr animal movements table is empty after processing.")
             return None
 
         logging.info(f"Saving chr_dyr_animal_movements table with {rows} rows.")
-        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
-        saved_path = export.save_table(output_path, animals_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "chr_dyr_animal_movements.parquet"
+        saved_path = export.save_table(output_path, "chr_dyr_animal_movements", con, is_geo=False)
+
         if saved_path is None:
             logging.error("Failed to save chr_dyr_animal_movements table - no path returned")
             return None
+
         logging.info(f"Saved chr_dyr_animal_movements table to {saved_path}")
 
-        return animals_final
+        # Return the relation
+        return con.sql("SELECT * FROM chr_dyr_animal_movements")
 
     except Exception as e:
         logging.error(f"Failed to create chr_dyr_animal_movements table: {e}", exc_info=True)
@@ -314,141 +261,119 @@ def create_chr_dyr_animal_movements_table(
 
 
 def create_animal_movements_table(
-    con: ibis.BaseBackend, diko_flyt_raw: ibis.Table | None, silver_dir: Path
-) -> ibis.Table | None:
-    """Creates the animal_movements table from the nested Flytninger list in diko_flytninger."""
+    con: duckdb.DuckDBPyConnection, diko_flyt_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
+    """Creates the animal_movements table from the nested Flytninger list in diko_flytninger.
+
+    Args:
+        con: DuckDB connection
+        diko_flyt_raw_table: Name of the raw DIKO flytninger table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed animal movements data or None if failed
+    """
     logging.info("Starting creation of animal_movements table.")
 
-    # Check for nested structure
-    if diko_flyt_raw is None or "Response" not in diko_flyt_raw.columns:
-        logging.warning("Cannot create animal_movements: 'Response' column missing in diko_flyt_raw.")
+    if diko_flyt_raw_table is None:
+        logging.warning("Cannot create animal_movements: diko_flyt_raw_table is None.")
         return None
 
     try:
-        # Access the nested structure Response[0]
-        if not isinstance(diko_flyt_raw["Response"].type(), dt.Array):
-            logging.warning(
-                f"Cannot create animal_movements: 'Response' column is not an Array (Type: {diko_flyt_raw['Response'].type()}). Skipping."
-            )
-            return None
-        # Define path
-        response_struct_path = diko_flyt_raw.Response[0]
+        # Check if table has Response column with nested structure
+        columns_result = con.execute(f"DESCRIBE {diko_flyt_raw_table}").fetchall()
+        column_names = [col[0] for col in columns_result]
 
-        # Check for required fields within the response struct path
-        if (
-            not isinstance(response_struct_path.type(), dt.Struct)
-            or "BesaetningsNummer" not in response_struct_path.type().names
-            or "Flytninger" not in response_struct_path.type().names
-        ):
+        if "Response" not in column_names:
             logging.warning(
-                "Cannot create animal_movements: Missing 'BesaetningsNummer' or 'Flytninger' in Response[0] path. Skipping."
+                "Cannot create animal_movements: 'Response' column missing in diko_flyt_raw."
             )
             return None
 
-        # Check Flytninger is array using path
-        if not isinstance(response_struct_path.Flytninger.type(), dt.Array):
-            logging.warning(
-                f"Cannot create animal_movements: Response[0].Flytninger path is not an Array (Type: {response_struct_path.Flytninger.type()}). Skipping."
-            )
+        # Try to detect nested structure
+        try:
+            # Check if Response is an array with nested data
+            test_result = con.execute(f"""
+                SELECT typeof(Response) AS response_type
+                FROM {diko_flyt_raw_table}
+                LIMIT 1
+            """).fetchone()
+
+            if test_result is None:
+                logging.warning("Cannot create animal_movements: Table is empty.")
+                return None
+
+            response_type = test_result[0] if test_result else ""
+            if not response_type.startswith("STRUCT") and "[]" not in response_type:
+                logging.warning(
+                    f"Cannot create animal_movements: 'Response' column is not expected type "
+                    f"(Type: {response_type}). Skipping."
+                )
+                return None
+
+        except Exception as e:
+            logging.warning(f"Cannot detect Response type: {e}")
             return None
 
-        # Select base fields and the list to unnest using path
-        base = diko_flyt_raw.select(  # Select from base table
-            reporting_herd_number_raw=response_struct_path.BesaetningsNummer,
-            flytninger_list=response_struct_path.Flytninger,
-        )
-
-        # Filter before unnesting
-        base = base.filter(base.flytninger_list.notnull())
-
-        # Unnest the Flytninger list.
-        unpacked = base.select(
-            reporting_herd_number=base.reporting_herd_number_raw,
-            movement_info=base.flytninger_list.unnest(),  # movement_info is a struct
-        )
-
-        # Filter after unnesting
-        unpacked = unpacked.filter(unpacked.movement_info.notnull())
-
-        # Define source -> target mapping for fields inside the movement_info struct
-        # Using field names from the head output
-        movement_cols = {
-            # 'IndberetningsBesaetning' is handled above
-            "FlytteDato": "movement_date",
-            "KontaktType": "contact_type",  # 'Til' or 'Fra'
-            "ChrNummer": "counterparty_chr_number",  # Was ModpartCHRnr
-            "BesaetningsNummer": "counterparty_herd_number",  # Was ModpartBesaetningsnr
-            "VirksomhedsArt": "counterparty_business_type",  # Was ModpartForretningstype
-        }
-        available_struct_cols = unpacked.movement_info.type().names
-
-        movements = unpacked.select(
-            reporting_herd_number=unpacked.reporting_herd_number,  # Carry reporting herd number through
-            **{
-                target: unpacked.movement_info[source].name(target)
-                for source, target in movement_cols.items()
-                if source in available_struct_cols
-            },
-        )
-
-        # Add null columns if source was missing
-        for target in movement_cols.values():
-            if target not in movements.columns:
-                movements = movements.mutate(**{target: ibis.null()})
-                logging.warning(f"Column for '{target}' missing in source Flytninger struct element, adding as null.")
-
-        # Generate UUID and clean/cast
-        movements = movements.mutate(
-            # Replace ibis.sql('uuid()') with ibis.uuid()
-            movement_id=ibis.uuid(),  # Generate UUID
-            reporting_herd_number=ibis.coalesce(
-                movements.reporting_herd_number.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),  # FK
-            movement_date=ibis.coalesce(
-                movements.movement_date.cast(dt.string).strip().nullif("").cast(dt.date),
-                ibis.null().cast(dt.date),
+        # Create the animal movements table with SQL
+        # Using DuckDB's nested data access syntax
+        con.execute(f"""
+            CREATE OR REPLACE TABLE animal_movements AS
+            WITH unnested_response AS (
+                SELECT
+                    UNNEST(Response) AS r
+                FROM {diko_flyt_raw_table}
+                WHERE Response IS NOT NULL
             ),
-            contact_type=movements.contact_type.cast(dt.string).strip().nullif(""),
-            counterparty_chr_number=ibis.coalesce(
-                movements.counterparty_chr_number.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
+            base_data AS (
+                SELECT
+                    r.BesaetningsNummer AS reporting_herd_number_raw,
+                    r.Flytninger AS flytninger_list
+                FROM unnested_response
+                WHERE r.Flytninger IS NOT NULL
             ),
-            counterparty_herd_number=ibis.coalesce(
-                movements.counterparty_herd_number.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            counterparty_business_type=movements.counterparty_business_type.cast(dt.string).strip().nullif(""),
-        )
+            unnested_movements AS (
+                SELECT
+                    reporting_herd_number_raw,
+                    UNNEST(flytninger_list) AS movement_info
+                FROM base_data
+                WHERE flytninger_list IS NOT NULL
+            )
+            SELECT
+                uuid() AS movement_id,
+                -- Basic identifiers
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(reporting_herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS reporting_herd_number,
+                -- Movement information
+                TRY_CAST(NULLIF(TRIM(CAST(movement_info.FlytteDato AS VARCHAR)), '') AS DATE) AS movement_date,
+                NULLIF(TRIM(CAST(movement_info.KontaktType AS VARCHAR)), '') AS contact_type,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(movement_info.ChrNummer AS VARCHAR)), '') AS BIGINT), NULL) AS counterparty_chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(movement_info.BesaetningsNummer AS VARCHAR)), '') AS BIGINT), NULL) AS counterparty_herd_number,
+                NULLIF(TRIM(CAST(movement_info.VirksomhedsArt AS VARCHAR)), '') AS counterparty_business_type
+            FROM unnested_movements
+            WHERE movement_info IS NOT NULL
+        """)
 
-        # Select final columns in desired order
-        final_cols = [
-            "movement_id",
-            "reporting_herd_number",
-            "movement_date",
-            "contact_type",
-            "counterparty_chr_number",
-            "counterparty_herd_number",
-            "counterparty_business_type",
-        ]
-        movements_final = movements.select(*final_cols)
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM animal_movements").fetchone()[0]
 
-        # --- Save to Parquet ---
-        output_path = silver_dir / "animal_movements.parquet"
-        rows = movements_final.count().execute()
         if rows == 0:
             logging.warning("Animal movements table is empty after processing.")
             return None
 
         logging.info(f"Saving animal_movements table with {rows} rows.")
-        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
-        saved_path = export.save_table(output_path, movements_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "animal_movements.parquet"
+        saved_path = export.save_table(output_path, "animal_movements", con, is_geo=False)
+
         if saved_path is None:
             logging.error("Failed to save animal_movements table - no path returned")
             return None
+
         logging.info(f"Saved animal_movements table to {saved_path}")
 
-        return movements_final
+        # Return the relation
+        return con.sql("SELECT * FROM animal_movements")
 
     except Exception as e:
         logging.error(f"Failed to create animal_movements table: {e}", exc_info=True)

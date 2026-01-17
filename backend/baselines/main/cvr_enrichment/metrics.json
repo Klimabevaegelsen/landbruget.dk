@@ -1,0 +1,29 @@
+{
+  "dataset_name": "cvr_enrichment",
+  "source_path": "gs://landbrugsdata-raw-data/gold/cvr_enrichment/20260116_231814/address_geocoding.parquet",
+  "generated_at": "2026-01-17T11:20:29.669685",
+  "record_count": 0,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "address_uuid": 0,
+    "cvr_number": 0,
+    "p_number": 0,
+    "company_uuid": 0,
+    "pnumber_uuid": 0,
+    "address_type": 0,
+    "full_address": 0,
+    "street_name": 0,
+    "house_number": 0,
+    "postal_code": 0,
+    "city": 0,
+    "municipality_code": 0,
+    "municipality_name": 0,
+    "country_code": 0,
+    "adresse_id": 0,
+    "period_start": 0,
+    "period_end": 0,
+    "floor": 0,
+    "door": 0,
+    "is_current": 0
+  }
+}

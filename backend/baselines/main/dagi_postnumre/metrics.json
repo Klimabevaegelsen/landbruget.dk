@@ -1,0 +1,35 @@
+{
+  "dataset_name": "dagi_postnumre",
+  "source_path": "gs://landbrugsdata-raw-data/silver/dagi_postnumre/20260116_221927/data.parquet",
+  "generated_at": "2026-01-17T11:15:22.828212",
+  "record_count": 1089,
+  "unique_identifiers": {
+    "code": 1089
+  },
+  "geometry_bounds": {
+    "min_x": 54.36236735,
+    "max_x": 58.25907367,
+    "min_y": 3.24755504,
+    "max_y": 16.5106028
+  },
+  "detected_crs": null,
+  "column_null_counts": {
+    "name": 0,
+    "code": 0,
+    "stormodtager": 0,
+    "visueltcenter_x": 0,
+    "visueltcenter_y": 0,
+    "\u00e6ndret": 0,
+    "geo_\u00e6ndret": 0,
+    "geo_version": 0,
+    "dagi_id": 0,
+    "geometry": 0,
+    "is_valid_geometry": 0,
+    "area_m2": 0,
+    "centroid_x": 0,
+    "centroid_y": 0,
+    "geometry_wkt": 0,
+    "layer_type": 0,
+    "processed_at": 0
+  }
+}

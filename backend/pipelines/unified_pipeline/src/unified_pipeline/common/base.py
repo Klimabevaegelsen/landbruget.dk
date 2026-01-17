@@ -6,21 +6,29 @@ the unified pipeline must implement. It provides common functionality and
 enforces a consistent interface across different data sources and stages.
 """
 
+import contextlib
 import json
 import os
 import re
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, Generic, Optional, TypeVar
+from pathlib import Path
+from typing import Any, Generic, TypeVar
 
 import duckdb
+from common.gcs import GCSDataAccess
+
+# Import the new data tracing system
+from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 from pydantic import BaseModel
 
 from unified_pipeline.common.native_schema_manager import NativeSchemaManager
-from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
+
+PIPELINE_METADATA_AVAILABLE = True
 
 # Import schema documentation
 try:
@@ -55,6 +63,12 @@ class BaseJobConfig(BaseModel):
     generate_schemas: bool = False
     save_schemas_locally: bool = True
 
+    # Source CRS tracking for bronze layer
+    # Records the original coordinate reference system of incoming data
+    # e.g., "EPSG:25832" for Danish UTM zone 32N data
+    # This allows silver layer to know what transformation is needed
+    source_crs: str | None = None
+
 
 T = TypeVar("T", bound=BaseJobConfig)
 
@@ -65,10 +79,17 @@ class BronzeJobInterface(ABC):
 
     Bronze jobs should implement this interface to return processed data
     that can be passed directly to silver jobs without disk I/O.
+
+    Attributes:
+        _source_crs: The source CRS of the data being processed (e.g., "EPSG:25832").
+                     Set this in bronze implementations to record the original CRS.
     """
 
+    # Instance variable for tracking source CRS
+    _source_crs: str | None = None
+
     @abstractmethod
-    async def run(self) -> Optional[Any]:
+    async def run(self) -> Any | None:
         """
         Run bronze processing and return data for silver stage.
 
@@ -77,6 +98,42 @@ class BronzeJobInterface(ABC):
                           or None if processing fails.
         """
         pass
+
+    def get_source_crs(self) -> str | None:
+        """
+        Return the source CRS of the data, if known.
+
+        Bronze layer implementations should set self._source_crs when they
+        know the CRS of incoming data. This allows the silver layer to
+        perform appropriate coordinate transformations.
+
+        Common Danish CRS values:
+        - EPSG:25832 - UTM zone 32N (most Danish government data)
+        - EPSG:4326  - WGS84 (GPS/web standard)
+        - EPSG:3857  - Web Mercator (display/maps)
+
+        Returns:
+            str | None: The EPSG code (e.g., "EPSG:25832") or None if unknown.
+        """
+        # Check instance attribute first
+        if hasattr(self, "_source_crs") and self._source_crs:
+            return self._source_crs
+        # Fall back to config if available
+        if hasattr(self, "config") and hasattr(self.config, "source_crs"):
+            return self.config.source_crs
+        return None
+
+    def set_source_crs(self, crs: str) -> None:
+        """
+        Set the source CRS of the data being processed.
+
+        Bronze layer implementations should call this when they determine
+        the CRS of incoming data, typically during fetch or initial processing.
+
+        Args:
+            crs: The EPSG code (e.g., "EPSG:25832") of the source data.
+        """
+        self._source_crs = crs
 
 
 class SilverJobInterface(ABC):
@@ -89,7 +146,7 @@ class SilverJobInterface(ABC):
     """
 
     @abstractmethod
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Run silver processing with optional in-memory bronze data.
 
@@ -113,7 +170,7 @@ class GoldJobInterface(ABC):
     """
 
     @abstractmethod
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """
         Run gold processing with optional in-memory silver data.
 
@@ -160,12 +217,147 @@ class BaseSource(Generic[T], ABC):
         # Create GCS access layer with shared connection
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
+        # Initialize pipeline metadata manager (pipeline-level data tracing)
+        if PIPELINE_METADATA_AVAILABLE:
+            self.pipeline_metadata_manager = PipelineMetadataManager()
+            self.processing_start_time = time.time()
+            self.log.info("✅ Pipeline metadata system initialized for unified pipeline")
+        else:
+            self.pipeline_metadata_manager = None
+            self.processing_start_time = None
+            self.log.warning("⚠️  Pipeline metadata system not available")
+
         # Use pipeline start time consistently (not save time)
-        self.pipeline_start_time = datetime.now()
+        # Check if shared timestamp is provided via environment variable (for GitHub Actions)
+        pipeline_start_env = os.getenv("PIPELINE_START_TIME")
+        if pipeline_start_env:
+            try:
+                # Parse GitHub's ISO timestamp format
+                self.pipeline_start_time = datetime.fromisoformat(
+                    pipeline_start_env.replace("Z", "+00:00")
+                )
+                self.log.info(
+                    f"Using shared pipeline start time from environment: {self.pipeline_start_time}"
+                )
+            except (ValueError, TypeError) as e:
+                self.log.warning(f"Failed to parse PIPELINE_START_TIME environment variable: {e}")
+                self.pipeline_start_time = datetime.now()
+        else:
+            self.pipeline_start_time = datetime.now()
+
         self.date_pattern = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Initialize schema managers with shared connection
         self._initialize_schema_managers()
+
+    def _save_data_with_metadata(
+        self,
+        data: Any,
+        dataset: str,
+        source_key: str,  # Must be in DATA_SOURCE_REGISTRY
+        bucket: str | None = None,
+        stage: str = "bronze",
+        subdataset: str | None = None,
+        conn: Any = None,
+        filename: str | None = None,
+        source_datasets: list | None = None,  # For gold layer lineage
+    ) -> str:
+        """
+        Enhanced save method with pipeline metadata for data tracing.
+
+        This method combines the existing _save_data functionality with automatic
+        pipeline metadata creation and saving for complete data traceability.
+
+        Args:
+            data: Table name (str) or data structure to save
+            dataset: Primary dataset name
+            source_key: Key from DATA_SOURCE_REGISTRY for metadata
+            bucket: GCS bucket name (optional, uses config if not provided)
+            stage: Pipeline stage (bronze/silver/gold)
+            subdataset: Optional subdataset name for multi-table outputs
+            conn: Optional DuckDB connection (deprecated - uses shared connection)
+            filename: Optional filename override
+            source_datasets: For gold datasets, list of source dataset keys
+
+        Returns:
+            str: Path where the data was saved
+        """
+        # Use the regular _save_data method first
+        self._save_data(
+            data=data,
+            dataset=dataset,
+            bucket=bucket or self.config.bucket,
+            stage=stage,
+            subdataset=subdataset,
+            conn=conn,
+            filename=filename,
+        )
+
+        # Create and save pipeline metadata if available
+        if self.pipeline_metadata_manager and self.processing_start_time:
+            try:
+                # Calculate record count if data is available
+                record_count = None
+                if isinstance(data, str):  # Table name
+                    try:
+                        result = self.conn.execute(f"SELECT COUNT(*) FROM {data}").fetchone()
+                        record_count = result[0] if result else None
+                    except Exception:
+                        pass  # Skip if table doesn't exist or other error
+                elif isinstance(data, list):
+                    record_count = len(data)
+                elif isinstance(data, dict) and "features" in data:
+                    record_count = len(data["features"])
+
+                # Calculate processing duration
+                processing_duration = time.time() - self.processing_start_time
+
+                # Create metadata
+                pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                    source_key=source_key,
+                    record_count=record_count,
+                    processing_duration=processing_duration,
+                    source_datasets=source_datasets,
+                )
+
+                # Determine save path for metadata
+                final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+                timestamp = self.date_pattern
+                metadata_filename = (
+                    f"{Path(filename).stem}_metadata.json" if filename else "pipeline_metadata.json"
+                )
+                metadata_path = Path(
+                    f"/tmp/{stage}_{final_dataset}_{timestamp}_{metadata_filename}"
+                )
+
+                # Save pipeline metadata
+                metadata_file_path = self.pipeline_metadata_manager.save_metadata(
+                    pipeline_metadata, metadata_path
+                )
+
+                self.log.info(f"✅ Pipeline metadata saved to {metadata_file_path}")
+
+                # If using GCS, also upload the metadata file
+                if not self.config.save_local:
+                    try:
+                        metadata_gcs_path = (
+                            f"{stage}/{final_dataset}/{timestamp}/{metadata_filename}"
+                        )
+                        # Read JSON metadata and upload using upload_json_string method
+                        with open(metadata_file_path, encoding="utf-8") as f:
+                            metadata_json_string = f.read()
+
+                        self.gcs_access.upload_json_string(metadata_json_string, metadata_gcs_path)
+                        self.log.info(f"✅ Pipeline metadata uploaded to GCS: {metadata_gcs_path}")
+                    except Exception as e:
+                        self.log.warning(f"⚠️  Failed to upload metadata to GCS: {e}")
+
+            except Exception as e:
+                self.log.error(f"❌ Failed to create pipeline metadata: {e}")
+
+        # Return the data path for reference
+        final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+        return f"{stage}/{final_dataset}/{self.date_pattern}/{filename or 'data.parquet'}"
 
     def _configure_duckdb(self):
         """
@@ -190,7 +382,8 @@ class BaseSource(Generic[T], ABC):
             # ✅ MIGRATION: Install latest spatial extension with SPATIAL_JOIN operator support
             # Based on DuckDB-spatial PR #545 merged in v1.2.2+
             try:
-                # Force install latest spatial extension to ensure SPATIAL_JOIN operator is available
+                # Force install latest spatial extension to ensure SPATIAL_JOIN operator
+                # is available
                 self.conn.execute("FORCE INSTALL spatial")
                 self.conn.execute("LOAD spatial")
 
@@ -203,7 +396,7 @@ class BaseSource(Generic[T], ABC):
                     test_result = self.conn.execute("""
                         EXPLAIN SELECT * FROM (
                             SELECT 1 as id, ST_Point(0, 0) as geom
-                        ) t1 
+                        ) t1
                         INNER JOIN (
                             SELECT 1 as id, ST_Point(0, 0) as geom
                         ) t2 ON ST_Intersects(t1.geom, t2.geom)
@@ -219,7 +412,8 @@ class BaseSource(Generic[T], ABC):
                         )
                     else:
                         self.log.warning(
-                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator not detected"
+                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator "
+                            "not detected"
                         )
 
                 except Exception as test_e:
@@ -259,10 +453,20 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute("""
                 CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
                     SELECT CONCAT(
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                        SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8
+                        ), '-',
+                        SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4
+                        ), '-',
+                        '5', SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3
+                        ), '-',
+                        CONCAT(
+                            '8', SUBSTR(
+                                crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3
+                            )
+                        ), '-',
                         SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
                     )
                 )
@@ -279,7 +483,9 @@ class BaseSource(Generic[T], ABC):
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
                             '5', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                            CONCAT('8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                            CONCAT(
+                                '8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)
+                            ), '-',
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
                         )
                     )
@@ -301,10 +507,8 @@ class BaseSource(Generic[T], ABC):
     def __del__(self):
         """Clean up DuckDB connection."""
         if hasattr(self, "conn") and self.conn:
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.close()
-            except:
-                pass
 
     def cleanup_resources(self):
         """
@@ -345,7 +549,7 @@ class BaseSource(Generic[T], ABC):
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table}")
                         self.log.debug(f"🧹 Dropped table: {table}")
-                    except:
+                    except Exception:
                         pass
 
                 # Force DuckDB cleanup
@@ -354,7 +558,7 @@ class BaseSource(Generic[T], ABC):
                     # Note: PRAGMA force_checkpoint may not be available in all DuckDB versions
                     # self.conn.execute("PRAGMA force_checkpoint")
                     self.conn.execute("PRAGMA wal_autocheckpoint = 1")
-                except:
+                except Exception:
                     pass
 
                 self.log.info(f"🧹 Cleaned up {len(temp_tables)} tables")
@@ -395,14 +599,14 @@ class BaseSource(Generic[T], ABC):
                     result = self.conn.execute("PRAGMA memory_usage").fetchone()
                     if result:
                         duckdb_memory["usage_mb"] = result[0]
-                except:
+                except Exception:
                     pass
 
                 # Get table count
                 try:
                     tables = self.conn.execute("SHOW TABLES").fetchall()
                     duckdb_memory["table_count"] = len(tables)
-                except:
+                except Exception:
                     duckdb_memory["table_count"] = 0
 
             return {
@@ -439,8 +643,9 @@ class BaseSource(Generic[T], ABC):
         dataset: str,
         bucket: str,
         stage: str,
-        subdataset: str = None,
+        subdataset: str | None = None,
         conn: Any = None,
+        filename: str | None = None,
     ) -> None:
         """
         Save data using unified GCS access layer.
@@ -465,7 +670,10 @@ class BaseSource(Generic[T], ABC):
 
         # Create path with timestamp
         timestamp = self.date_pattern
-        filename = "data.parquet"  # Standardized filename
+        if not filename:
+            # Default to parquet for silver/gold layers (processed data)
+            # Bronze layers should explicitly specify their file format
+            filename = "data.parquet"
         path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
 
         if self.config.save_local:
@@ -473,7 +681,7 @@ class BaseSource(Generic[T], ABC):
             local_path = f"/tmp/{filename}"
             if isinstance(data, str):  # Table name
                 self.conn.execute(f"COPY {data} TO '{local_path}' (FORMAT PARQUET)")
-            elif isinstance(data, (dict, list)):  # JSON data
+            elif isinstance(data, dict | list):  # JSON data
                 with open(local_path, "w") as f:
                     json.dump(data, f, indent=2, default=str)
             else:
@@ -484,18 +692,18 @@ class BaseSource(Generic[T], ABC):
             gcs_path = f"gs://{bucket}/{path}"
             if isinstance(data, str):  # Table name
                 self.gcs_access.upload_from_duckdb_table(data, gcs_path)
-            elif isinstance(data, (dict, list)):  # JSON data
+            elif isinstance(data, dict | list):  # JSON data
                 self.gcs_access.upload_json(data, gcs_path)
             else:
                 raise ValueError(f"Unsupported data type: {type(data)}")
             self.log.info(f"✅ Saved to GCS: {gcs_path}")
 
-    def _read_silver_data(self, dataset: str) -> Optional[Any]:
+    def _read_silver_data(self, dataset: str) -> Any | None:
         """Read data from silver layer for gold processing."""
 
         return self._read_data_from_storage(dataset, self.config.bucket, stage="silver")
 
-    def _read_data_from_storage(self, dataset: str, bucket: str, stage: str) -> Optional[Any]:
+    def _read_data_from_storage(self, dataset: str, bucket: str, stage: str) -> Any | None:
         """Read data from storage for any stage using unified connection."""
 
         try:
@@ -524,19 +732,19 @@ class BaseSource(Generic[T], ABC):
                 # Get row count for logging using shared connection
                 row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                 self.log.info(
-                    f"✅ Successfully loaded {row_count} records using unified connection from {latest_file_name}"
+                    f"✅ Successfully loaded {row_count} records using unified connection "
+                    f"from {latest_file_name}"
                 )
 
                 # Return table name - caller can use self.conn to access it
                 return table_name
 
-            elif latest_file_path.endswith(".json"):
+            if latest_file_path.endswith(".json"):
                 # ✅ MIGRATION: Use unified GCS access for JSON downloads
                 gcs_path = latest_file_path
                 return self.gcs_access.download_json(gcs_path)
-            else:
-                self.log.error(f"Unsupported file type: {latest_file_path}")
-                return None
+            self.log.error(f"Unsupported file type: {latest_file_path}")
+            return None
 
         except Exception as e:
             self.log.error(f"Failed to read {stage} data for {dataset}: {e}")
@@ -544,8 +752,8 @@ class BaseSource(Generic[T], ABC):
 
     @timed(name="Reading bronze data")  # type: ignore
     def _read_bronze_data(
-        self, dataset: str, bucket_name: str, bronze_data: Optional[Any] = None
-    ) -> Optional[str]:
+        self, dataset: str, bucket_name: str, bronze_data: Any | None = None
+    ) -> str | None:
         """
         Read data from the bronze layer, preferring in-memory data if available.
 
@@ -571,17 +779,16 @@ class BaseSource(Generic[T], ABC):
             if isinstance(bronze_data, str):
                 # Already a table name
                 return bronze_data
-            elif hasattr(bronze_data, "to_dict"):
+            if hasattr(bronze_data, "to_dict"):
                 # Convert DataFrame-like object to table
                 table_name = f"bronze_data_{dataset}"
                 # Assume it's already a table name if it's a string
                 if isinstance(bronze_data, str):
                     return bronze_data
-                else:
-                    # Try to register as table
-                    self.conn.register(table_name, bronze_data)
-                    return table_name
-            elif isinstance(bronze_data, (dict, list)):
+                # Try to register as table
+                self.conn.register(table_name, bronze_data)
+                return table_name
+            if isinstance(bronze_data, dict | list):
                 # Convert JSON data to table
                 table_name = f"bronze_data_{dataset}"
                 if isinstance(bronze_data, list) and len(bronze_data) > 0:
@@ -593,23 +800,22 @@ class BaseSource(Generic[T], ABC):
                         for item in bronze_data:
                             self.conn.execute(f"INSERT INTO {table_name} VALUES (?)", [item])
                         return table_name
-                    else:
-                        # List of dicts - use DuckDB JSON functions with temp file approach
-                        with tempfile.NamedTemporaryFile(
-                            mode="w", suffix=".json", delete=False
-                        ) as tmp_file:
-                            json.dump(bronze_data, tmp_file)
-                            tmp_file.flush()
+                    # List of dicts - use DuckDB JSON functions with temp file approach
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", suffix=".json", delete=False
+                    ) as tmp_file:
+                        json.dump(bronze_data, tmp_file)
+                        tmp_file.flush()
 
-                            self.conn.execute(f"""
-                                CREATE TABLE {table_name} AS 
+                        self.conn.execute(f"""
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
-                            # Clean up temp file
-                            os.unlink(tmp_file.name)
-                        return table_name
-                elif isinstance(bronze_data, dict):
+                        # Clean up temp file
+                        os.unlink(tmp_file.name)
+                    return table_name
+                if isinstance(bronze_data, dict):
                     # Single dict - create table with one row
                     with tempfile.NamedTemporaryFile(
                         mode="w", suffix=".json", delete=False
@@ -618,7 +824,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {table_name} AS 
+                            CREATE TABLE {table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 
@@ -633,7 +839,7 @@ class BaseSource(Generic[T], ABC):
         self.log.info("Reading bronze data from storage (fallback)")
         return self._read_bronze_data_from_storage(dataset, bucket_name)
 
-    def _read_bronze_data_from_storage(self, dataset: str, bucket_name: str) -> Optional[str]:
+    def _read_bronze_data_from_storage(self, dataset: str, bucket_name: str) -> str | None:
         """
         Read bronze data from storage using the latest timestamped directory.
 
@@ -683,78 +889,9 @@ class BaseSource(Generic[T], ABC):
                         """)
                         # ✅ MIGRATION: Return table name instead of DataFrame
                         return table_name
-                    else:
-                        with open(file_path, "r") as f:
-                            data = json.load(f)
-                        table_name = f"local_bronze_data_{dataset}"
-                        if isinstance(data, list):
-                            # Create table from list using DuckDB with temp file approach
-                            with tempfile.NamedTemporaryFile(
-                                mode="w", suffix=".json", delete=False
-                            ) as tmp_file:
-                                json.dump(data, tmp_file)
-                                tmp_file.flush()
-
-                                self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
-                                    SELECT * FROM read_json_auto('{tmp_file.name}')
-                                """)
-
-                                # Clean up temp file
-                                os.unlink(tmp_file.name)
-                            return table_name
-                        else:
-                            # Create table from single item using DuckDB with temp file approach
-                            with tempfile.NamedTemporaryFile(
-                                mode="w", suffix=".json", delete=False
-                            ) as tmp_file:
-                                json.dump([data], tmp_file)
-                                tmp_file.flush()
-
-                                self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
-                                    SELECT * FROM read_json_auto('{tmp_file.name}')
-                                """)
-
-                                # Clean up temp file
-                                os.unlink(tmp_file.name)
-                            return table_name
-
-            self.log.error(f"No data files found in {latest_dir_path}")
-            return None
-        else:
-            # Read from GCS - find latest timestamped directory
-            bronze_prefix = f"gs://{bucket_name}/bronze/{dataset}/*/*"
-            try:
-                files = self.gcs_access.list_files(bronze_prefix)
-                if not files:
-                    self.log.error(f"No bronze data found in GCS at {bronze_prefix}")
-                    return None
-
-                # Find the latest file by sorting the path (contains timestamp)
-                latest_file_path = sorted(files, reverse=True)[0]
-
-                self.log.info(f"Reading bronze data from GCS: {latest_file_path}")
-
-                if latest_file_path.endswith(".parquet"):
-                    # ✅ MIGRATION: Use modern GCS access with shared self.gcs_access
-                    gcs_path = latest_file_path
-
-                    # Use the optimized temp download with base class DuckDB connection
-                    with self.gcs_access._temp_download(gcs_path) as temp_file:
-                        table_name = f"gcs_bronze_data_{dataset}"
-                        self.conn.execute(
-                            f"""
-                            CREATE OR REPLACE TABLE {table_name} AS
-                            SELECT * FROM read_parquet('{temp_file}')
-                        """
-                        )
-                        return table_name
-                elif latest_file_path.endswith(".json"):
-                    # ✅ MIGRATION: Download JSON file using modern gcs_access
-                    data = self.gcs_access.download_json(latest_file_path)
-
-                    table_name = f"gcs_bronze_data_{dataset}"
+                    with open(file_path) as f:
+                        data = json.load(f)
+                    table_name = f"local_bronze_data_{dataset}"
                     if isinstance(data, list):
                         # Create table from list using DuckDB with temp file approach
                         with tempfile.NamedTemporaryFile(
@@ -763,41 +900,106 @@ class BaseSource(Generic[T], ABC):
                             json.dump(data, tmp_file)
                             tmp_file.flush()
 
-                            self.conn.execute(
-                                f"""
-                                CREATE TABLE {table_name} AS 
-                                SELECT * FROM read_json_auto('{tmp_file.name}')
-                            """
-                            )
+                            self.conn.execute(f"""
+                                    CREATE TABLE {table_name} AS
+                                    SELECT * FROM read_json_auto('{tmp_file.name}')
+                                """)
 
                             # Clean up temp file
                             os.unlink(tmp_file.name)
                         return table_name
-                    else:
-                        # Create table from single item using DuckDB with temp file approach
-                        with tempfile.NamedTemporaryFile(
-                            mode="w", suffix=".json", delete=False
-                        ) as tmp_file:
-                            json.dump([data], tmp_file)
-                            tmp_file.flush()
+                    # Create table from single item using DuckDB with temp file approach
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", suffix=".json", delete=False
+                    ) as tmp_file:
+                        json.dump([data], tmp_file)
+                        tmp_file.flush()
 
-                            self.conn.execute(
-                                f"""
-                                CREATE TABLE {table_name} AS 
-                                SELECT * FROM read_json_auto('{tmp_file.name}')
-                            """
-                            )
+                        self.conn.execute(f"""
+                                    CREATE TABLE {table_name} AS
+                                    SELECT * FROM read_json_auto('{tmp_file.name}')
+                                """)
 
-                            # Clean up temp file
-                            os.unlink(tmp_file.name)
-                        return table_name
-                else:
-                    self.log.error(f"Unsupported file type: {latest_file_path}")
-                    return None
+                        # Clean up temp file
+                        os.unlink(tmp_file.name)
+                    return table_name
 
-            except Exception as e:
-                self.log.error(f"Failed to read bronze data from GCS: {e}")
+            self.log.error(f"No data files found in {latest_dir_path}")
+            return None
+        # Read from GCS - find latest timestamped directory
+        bronze_prefix = f"gs://{bucket_name}/bronze/{dataset}/*/*"
+        try:
+            files = self.gcs_access.list_files(bronze_prefix)
+            if not files:
+                self.log.error(f"No bronze data found in GCS at {bronze_prefix}")
                 return None
+
+            # Find the latest file by sorting the path (contains timestamp)
+            latest_file_path = sorted(files, reverse=True)[0]
+
+            self.log.info(f"Reading bronze data from GCS: {latest_file_path}")
+
+            if latest_file_path.endswith(".parquet"):
+                # ✅ MIGRATION: Use modern GCS access with shared self.gcs_access
+                gcs_path = latest_file_path
+
+                # Use the optimized temp download with base class DuckDB connection
+                with self.gcs_access._temp_download(gcs_path) as temp_file:
+                    table_name = f"gcs_bronze_data_{dataset}"
+                    self.conn.execute(
+                        f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            SELECT * FROM read_parquet('{temp_file}')
+                        """
+                    )
+                    return table_name
+            elif latest_file_path.endswith(".json"):
+                # ✅ MIGRATION: Download JSON file using modern gcs_access
+                data = self.gcs_access.download_json(latest_file_path)
+
+                table_name = f"gcs_bronze_data_{dataset}"
+                if isinstance(data, list):
+                    # Create table from list using DuckDB with temp file approach
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", suffix=".json", delete=False
+                    ) as tmp_file:
+                        json.dump(data, tmp_file)
+                        tmp_file.flush()
+
+                        self.conn.execute(
+                            f"""
+                                CREATE TABLE {table_name} AS
+                                SELECT * FROM read_json_auto('{tmp_file.name}')
+                            """
+                        )
+
+                        # Clean up temp file
+                        os.unlink(tmp_file.name)
+                    return table_name
+                # Create table from single item using DuckDB with temp file approach
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", delete=False
+                ) as tmp_file:
+                    json.dump([data], tmp_file)
+                    tmp_file.flush()
+
+                    self.conn.execute(
+                        f"""
+                                CREATE TABLE {table_name} AS
+                                SELECT * FROM read_json_auto('{tmp_file.name}')
+                            """
+                    )
+
+                    # Clean up temp file
+                    os.unlink(tmp_file.name)
+                return table_name
+            else:
+                self.log.error(f"Unsupported file type: {latest_file_path}")
+                return None
+
+        except Exception as e:
+            self.log.error(f"Failed to read bronze data from GCS: {e}")
+            return None
 
     # Legacy methods - keeping for backward compatibility during transition
     @timed(name="Saving raw data")  # type: ignore
@@ -825,7 +1027,7 @@ class BaseSource(Generic[T], ABC):
 
     def _generate_schema_if_enabled(
         self, data: Any, dataset: str, stage: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Generate and save schema information if dev mode or schema generation is enabled.
 
@@ -847,7 +1049,7 @@ class BaseSource(Generic[T], ABC):
             if isinstance(data, str):
                 # Data is already a table name
                 temp_table_name = data
-            elif isinstance(data, (dict, list)):
+            elif isinstance(data, dict | list):
                 # Convert dict/list to table using DuckDB
                 if isinstance(data, list) and len(data) > 0:
                     if isinstance(data[0], dict):
@@ -858,7 +1060,7 @@ class BaseSource(Generic[T], ABC):
                             tmp_file.flush()
 
                             self.conn.execute(f"""
-                                CREATE TABLE {temp_table_name} AS 
+                                CREATE TABLE {temp_table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
@@ -868,7 +1070,7 @@ class BaseSource(Generic[T], ABC):
                         # List of values
                         values_str = ", ".join([f"'{v}'" for v in data])
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT unnest([{values_str}]) as value
                         """)
                 elif isinstance(data, dict):
@@ -879,7 +1081,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 
@@ -930,7 +1132,7 @@ class BaseSource(Generic[T], ABC):
             self.log.error(f"Failed to generate schema for {stage}/{dataset}: {e}")
             return None
 
-    def get_schema_for_llm(self, dataset: str, stage: str = "silver") -> Optional[str]:
+    def get_schema_for_llm(self, dataset: str, stage: str = "silver") -> str | None:
         """
         Get a concise schema description optimized for LLM consumption.
 
@@ -995,7 +1197,7 @@ class BaseSource(Generic[T], ABC):
             self.log.error(f"Failed to generate LLM schema for {stage}/{dataset}: {e}")
             return None
 
-    def list_available_schemas(self) -> Dict[str, Any]:
+    def list_available_schemas(self) -> dict[str, Any]:
         """
         List all available schemas in the local schemas directory and GCS.
 
@@ -1061,7 +1263,8 @@ class BaseSource(Generic[T], ABC):
             stage: Processing stage (should NOT be 'bronze' due to memory constraints)
 
         Note:
-            Bronze stage documentation is not supported due to memory constraints with large raw datasets.
+            Bronze stage documentation is not supported due to memory constraints with
+            large raw datasets.
             Use 'silver', 'gold', or other processed stages instead.
         """
         if not self._standardized_schema_manager:
@@ -1086,7 +1289,7 @@ class BaseSource(Generic[T], ABC):
             self.log.warning(f"Standardized schema documentation failed (non-critical): {e}")
             # Don't fail the pipeline if documentation fails
 
-    def read_silver_data_direct(self, dataset: str, table_name: str = None) -> str:
+    def read_silver_data_direct(self, dataset: str, table_name: str | None = None) -> str:
         """
         ✅ OPTIMAL: Read silver data directly into DuckDB table - NO DataFrame conversion.
 
@@ -1110,10 +1313,11 @@ class BaseSource(Generic[T], ABC):
         return table_name
 
     def read_silver_data_with_filter_direct(
-        self, dataset: str, filter_condition: str, table_name: str = None
+        self, dataset: str, filter_condition: str, table_name: str | None = None
     ) -> str:
         """
-        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table - NO DataFrame conversion.
+        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table -
+        NO DataFrame conversion.
         """
         gcs_path = self._get_latest_silver_path(dataset)
         table_name = table_name or f"silver_{dataset}_filtered"
@@ -1158,9 +1362,8 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS without loading into memory
-            with open(tmp.name, "rb") as src:
-                with self.gcs_access.fs.open(gcs_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+            with open(tmp.name, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
         self.log.info(f"✅ Saved {table_name} directly to {gcs_path} (optimized)")
         return gcs_path
@@ -1217,7 +1420,7 @@ class BaseSource(Generic[T], ABC):
                     year = int(match.group(1))
                     years.add(year)
 
-            return sorted(list(years))
+            return sorted(years)
         except Exception as e:
             self.log.error(f"Error discovering fvm_marker years: {e}")
             return []
@@ -1241,3 +1444,128 @@ class BaseSource(Generic[T], ABC):
             )
         else:
             self._standardized_schema_manager = None
+
+    # ========================================
+    # ENHANCED GCS METHODS WITH NATIVE HMAC
+    # ========================================
+
+    def load_parquet_with_native_acceleration(
+        self, gcs_path: str, table_name: str | None = None, query: str = "SELECT *"
+    ) -> str:
+        """
+        ⚡ ENHANCED: Load parquet from GCS with automatic native acceleration.
+
+        This method automatically uses native HMAC access when available, falling back
+        to the existing temp file approach when not available.
+
+        Args:
+            gcs_path: GCS path to parquet file (gs://bucket/path/file.parquet)
+            table_name: Optional table name (auto-generated if not provided)
+            query: SQL query to apply during load (default: SELECT *)
+
+        Returns:
+            Table name in DuckDB
+        """
+        if table_name is None:
+            table_name = f"enhanced_load_{int(datetime.now().timestamp())}"
+
+        try:
+            # Try native method first (3-5x faster if HMAC available)
+            return self.gcs_access.query_parquet_native(gcs_path, query, table_name)
+        except Exception as e:
+            self.log.warning(f"Native GCS load failed, using fallback: {e}")
+            # Fallback to existing method
+            return self.gcs_access.query_parquet_direct(gcs_path, query, table_name)
+
+    def save_table_with_native_acceleration(
+        self, table_name: str, gcs_path: str, **parquet_options
+    ) -> bool:
+        """
+        ⚡ ENHANCED: Save table to GCS with automatic native acceleration.
+
+        This method automatically uses native HMAC access when available, falling back
+        to the existing temp file approach when not available.
+
+        Args:
+            table_name: Name of DuckDB table to save
+            gcs_path: GCS destination path (gs://bucket/path/file.parquet)
+            **parquet_options: Parquet compression options
+
+        Returns:
+            True if native method was used, False if fallback was used
+        """
+        try:
+            # Try native method first (3-5x faster if HMAC available)
+            return self.gcs_access.export_to_gcs_native(table_name, gcs_path, **parquet_options)
+        except Exception as e:
+            self.log.warning(f"Native GCS save failed, using fallback: {e}")
+            # Fallback to existing method
+            self.gcs_access.export_table_to_gcs_direct(table_name, gcs_path, **parquet_options)
+            return False
+
+    def enhanced_save_data_direct(
+        self, table_name: str, dataset: str, bucket: str, stage: str
+    ) -> str:
+        """
+        ⚡ ENHANCED: Enhanced version of save_data_direct with native acceleration.
+
+        This method combines the existing save_data_direct logic with automatic
+        native HMAC acceleration when available.
+
+        Returns:
+            GCS path where data was saved
+        """
+        # Build GCS path using existing logic
+        gcs_path = f"gs://{bucket}/{stage}/{dataset}_{self.date_pattern}/{self.date_pattern}/{dataset}_{self.date_pattern}.parquet"
+
+        # Use enhanced save method with native acceleration
+        native_used = self.save_table_with_native_acceleration(
+            table_name,
+            gcs_path,
+            compression="zstd",  # Default compression for best performance
+            row_group_size=100000,
+        )
+
+        if native_used:
+            self.log.info(f"🚀 NATIVE: Saved {table_name} to {gcs_path} using HMAC acceleration")
+        else:
+            self.log.info(f"💾 FALLBACK: Saved {table_name} to {gcs_path} using temp file method")
+
+        return gcs_path
+
+    def load_latest_with_native_acceleration(
+        self, dataset: str, stage: str = "silver"
+    ) -> str | None:
+        """
+        ⚡ ENHANCED: Load latest dataset with native acceleration.
+
+        This method finds the latest file for a dataset and loads it using
+        native HMAC acceleration when available.
+
+        Args:
+            dataset: Dataset name to load
+            stage: Data stage (silver, gold, bronze)
+
+        Returns:
+            Table name in DuckDB, or None if not found
+        """
+        try:
+            # Find latest file using existing logic
+            pattern = f"gs://{self.config.bucket}/{stage}/{dataset}_*/*/{dataset}_*.parquet"
+            files = self.gcs_access.list_files_with_timestamps(pattern)
+
+            if not files:
+                self.log.warning(f"No files found for pattern: {pattern}")
+                return None
+
+            # Get latest file
+            latest_file = max(files, key=lambda x: x[1])[0]  # Sort by timestamp
+            self.log.info(f"Loading latest {dataset} from: {latest_file}")
+
+            # Load with native acceleration
+            table_name = f"{dataset}_latest"
+            return self.load_parquet_with_native_acceleration(latest_file, table_name)
+
+        except Exception as e:
+            self.log.error(f"Failed to load latest {dataset} with native acceleration: {e}")
+            return None

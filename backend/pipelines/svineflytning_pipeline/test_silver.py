@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def create_test_data():
     """Create a small sample of test data that matches the bronze data structure."""
-    test_data = [
+    return [
         {
             "timestamp": "2025-01-15T10:00:00.000000",
             "start_date": "2025-01-14",
@@ -116,8 +116,6 @@ def create_test_data():
         }
     ]
 
-    return test_data
-
 
 def test_silver_processing():
     """Test the silver processing with sample data."""
@@ -175,7 +173,9 @@ def test_silver_processing():
                     movements_path = output_path / "movements.parquet"
                     if movements_path.exists():
                         df = conn.execute(f"SELECT * FROM '{movements_path}' LIMIT 5").fetchdf()
-                        logger.info(f"✅ Successfully read movements table: {len(df)} rows, {len(df.columns)} columns")
+                        logger.info(
+                            f"✅ Successfully read movements table: {len(df)} rows, {len(df.columns)} columns"
+                        )
                         logger.info(f"Columns: {list(df.columns)}")
 
                 except Exception as e:

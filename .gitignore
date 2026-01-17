@@ -64,11 +64,16 @@ backend/pipelines/vetstat.p12
 *.prj
 *.zip
 *.pmtiles
+*.pdf
+*.gif
 backend/data/
 data/bronze/
 temp_data/
 temp_carbon/
 cadastral_schema.txt
+**/data_local/
+backend/pipelines/**/data_local/
+backend/pipelines/drive_data_pipeline/data_local/
 
 # Node
 node_modules/
@@ -81,6 +86,13 @@ build/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Next.js
+.next/
+out/
+.next/**
+**/.next/cache/
+**/.next/static/
 
 # IDE
 .idea/
@@ -129,7 +141,51 @@ backend/test_wfs.py
 .secrets
 .secrets.*
 *.secrets
+!.secrets.baseline
 
+# Additional credential patterns
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*_rsa
+*_dsa
+*_ecdsa
+*_ed25519
+.aws/
+.gcp/
+.azure/
+credentials.json
+service-account*.json
+*-key.json
+*-credentials.json
+*.env.prod
+*.env.production
+
+# Devevnv (devenv.sh)
+devenv.*
+.devenv.flake.nix
+devenv.yaml
+
+.envrc
+# For direnv integration
+.direnv/
+
+.env
+.direnv
+.env
+.envrc
+.direnv
+.env
+.envrc
+.direnv
+.env
+.envrc
+
+.devenv
+.direnv
 # Analysis directories and generated content
 /src/
 /docs/
@@ -137,9 +193,31 @@ backend/test_wfs.py
 /cvr_analysis_31373077/
 /scripts/
 
+# Devenv (devenv.sh)
+.devenv.flake.nix
+.devenv
+devenv.nix
+devenv.yaml
+devenv.lock
+.direnv
+
 # PMTiles (generated files, should be stored in GCS)
 pmtiles/
 *.pmtiles
+
+# Caching
+.pytest_cache/
+.ruff_cache/
+data_cache/
+
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
+
+# Data samples directory (contains large analysis files)
+data_samples/
 
 # Root level files that shouldn't be committed
 /Landbrugsstoette_2023.xlsx
@@ -167,3 +245,6 @@ pmtiles/
 
 # Testing directory (already covered by /scripts/ but being explicit)
 /scripts/testing/
+
+# Claude Code local settings (not committed, agent-specific)
+.claude/settings.local.json

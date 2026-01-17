@@ -20,7 +20,6 @@ Root Cause Fixed: Fields dataset coordinate swapping fixed in silver layer pipel
 
 import os
 import time
-from typing import Dict, Optional
 
 from ..util.gcs_access import GCSDataAccess
 from ..util.log_util import Logger
@@ -31,7 +30,7 @@ class FieldAreaAnalysisRedesigned:
     Redesigned field area analysis using DuckDB Spatial v1.2.2 optimizations with coordinate fix.
 
     Key improvements:
-    - COORDINATE FIX: ST_FlipCoordinates applied to fix swapped lat/lon coordinates
+    - COORDINATE FIX: ST_Area_Spheroid calls use (LAT, LON) data directly for accuracy
     - Single DuckDB connection shared across all operations
     - Native spatial joins with automatic spatial indexing
     - Optimal join ordering (smallest to largest build side)
@@ -53,7 +52,7 @@ class FieldAreaAnalysisRedesigned:
 
         self.log.info("🚀 Field Area Analysis Redesigned - DuckDB Spatial v1.2.2 Optimized")
 
-    def run_analysis(self) -> Dict[str, any]:
+    def run_analysis(self) -> dict[str, any]:
         """
         Execute the complete field area analysis with optimal performance.
 
@@ -113,34 +112,32 @@ class FieldAreaAnalysisRedesigned:
         column_names = [col[0] for col in columns_info]
 
         if "geometry" in column_names:
-            geometry_column = "geometry"
             self.log.info("Using 'geometry' column for field geometries")
             self.conn.execute("""
                 CREATE TABLE fields_clean AS
-                SELECT 
-                    field_id, 
-                    block_id, 
+                SELECT
+                    field_id,
+                    block_id,
                     cvr_number,
                     geometry as geom,
                     ST_Area(geometry) as field_area_m2
                 FROM fields_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
                 AND ST_IsValid(geometry)
                 AND crop_code IS NOT NULL
             """)
         elif "geometry_wkt" in column_names:
-            geometry_column = "geometry_wkt"
             self.log.info("Using 'geometry_wkt' column for field geometries")
             self.conn.execute("""
                 CREATE TABLE fields_clean AS
-                SELECT 
-                    field_id, 
-                    block_id, 
+                SELECT
+                    field_id,
+                    block_id,
                     cvr_number,
                     ST_GeomFromText(geometry_wkt) as geom,
                     ST_Area(ST_GeomFromText(geometry_wkt)) as field_area_m2
                 FROM fields_raw
-                WHERE geometry_wkt IS NOT NULL 
+                WHERE geometry_wkt IS NOT NULL
                 AND ST_IsValid(ST_GeomFromText(geometry_wkt))
                 AND crop_code IS NOT NULL
             """)
@@ -180,7 +177,7 @@ class FieldAreaAnalysisRedesigned:
             # Split multipolygons into individual polygons for optimal spatial indexing
             self.conn.execute("""
                 CREATE TABLE bnbo_polygons AS
-                SELECT 
+                SELECT
                     status_category,
                     (unnest(ST_Dump(geometry))).geom as geom,
                     ROW_NUMBER() OVER () as polygon_id
@@ -235,7 +232,7 @@ class FieldAreaAnalysisRedesigned:
 
         self.conn.execute("""
             CREATE TABLE fields_with_soil AS
-            SELECT 
+            SELECT
                 f.*,
                 s.soil_code,
                 s.soil_description
@@ -252,7 +249,7 @@ class FieldAreaAnalysisRedesigned:
 
         self.conn.execute("""
             CREATE TABLE fields_with_bnbo AS
-            SELECT 
+            SELECT
                 f.*,
                 b.status_category
             FROM fields_with_soil f
@@ -268,7 +265,7 @@ class FieldAreaAnalysisRedesigned:
 
         self.conn.execute("""
             CREATE TABLE fields_with_water AS
-            SELECT 
+            SELECT
                 f.*,
                 wp.project_id
             FROM fields_with_bnbo f
@@ -284,7 +281,7 @@ class FieldAreaAnalysisRedesigned:
 
         self.conn.execute("""
             CREATE TABLE fields_with_wetlands AS
-            SELECT 
+            SELECT
                 f.*,
                 w.id as wetland_id
             FROM fields_with_water f
@@ -353,13 +350,14 @@ class FieldAreaAnalysisRedesigned:
             chunk_properties = min(chunk_size, total_properties - offset)
 
             self.log.info(
-                f"   Processing properties chunk {offset // chunk_size + 1}: {chunk_properties:,} properties"
+                f"   Processing properties chunk {offset // chunk_size + 1}: "
+                f"{chunk_properties:,} properties"
             )
 
             # Create current properties chunk (build side) - stream directly from GCS
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE properties_chunk AS
-                SELECT 
+                SELECT
                     bestemtFastEjendomBFENr as bfe_number,
                     geometry as geom
                 FROM read_parquet('{properties_path}')
@@ -370,7 +368,7 @@ class FieldAreaAnalysisRedesigned:
             # This is ~305 billion comparisons per chunk, but with spatial indexing it's manageable
             self.conn.execute("""
                 INSERT INTO field_property_results
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -383,7 +381,8 @@ class FieldAreaAnalysisRedesigned:
 
             processed_properties += chunk_properties
             self.log.info(
-                f"   Processed {processed_properties:,}/{total_properties:,} properties ({processed_properties / total_properties * 100:.1f}%)"
+                f"   Processed {processed_properties:,}/{total_properties:,} properties "
+                f"({processed_properties / total_properties * 100:.1f}%)"
             )
 
         properties_time = time.time() - chunk_start
@@ -391,7 +390,7 @@ class FieldAreaAnalysisRedesigned:
 
         return properties_time
 
-    def _generate_final_results(self) -> Dict[str, any]:
+    def _generate_final_results(self) -> dict[str, any]:
         """
         Phase 3: Generate final consolidated results.
         """
@@ -404,13 +403,13 @@ class FieldAreaAnalysisRedesigned:
         try:
             self.conn.execute("SELECT COUNT(*) FROM field_property_results").fetchone()
             has_properties = True
-        except:
+        except Exception:
             pass
 
         if has_properties:
             self.conn.execute("""
                 CREATE TABLE field_area_analysis_final AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -423,13 +422,13 @@ class FieldAreaAnalysisRedesigned:
                     p.bfe_number,
                     p.area_share as property_area_share
                 FROM fields_with_wetlands f
-                LEFT JOIN field_property_results p 
+                LEFT JOIN field_property_results p
                     ON f.field_uuid = p.field_uuid
             """)
         else:
             self.conn.execute("""
                 CREATE TABLE field_area_analysis_final AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -522,25 +521,26 @@ class FieldAreaAnalysisRedesigned:
         )
         self.log.info(f"New implementation (with coordinate fix): {total_time / 60:.1f} minutes")
         self.log.info(f"Improvement: {improvement:.0f}x faster!")
-        self.log.info("🎯 Root cause: Fields dataset had swapped lat/lon coordinates")
-        self.log.info("✅ Solution: ST_FlipCoordinates applied to fix coordinate system")
+        self.log.info("🎯 Root cause: ST_Area_Spheroid expected LAT/LON but data was LON/LAT")
+        self.log.info(
+            "✅ Solution: ST_Area_Spheroid calls use (LAT, LON) data directly - no flipping needed"
+        )
         self.log.info("=" * 80)
 
-    def _get_latest_dataset_path(self, dataset_name: str) -> Optional[str]:
+    def _get_latest_dataset_path(self, dataset_name: str) -> str | None:
         """Get the latest path for a specific dataset."""
         try:
             pattern = f"gs://{self.bucket}/silver/{dataset_name}/*/*.parquet"
             files = self.gcs_access.list_files(pattern)
             if files:
                 return sorted(files, reverse=True)[0]
-            else:
-                self.log.warning(f"No data found for {dataset_name}")
-                return None
+            self.log.warning(f"No data found for {dataset_name}")
+            return None
         except Exception as e:
             self.log.error(f"Error finding {dataset_name}: {e}")
             return None
 
-    def _get_latest_fvm_marker_path(self) -> Optional[str]:
+    def _get_latest_fvm_marker_path(self) -> str | None:
         """Get the latest FVM marker dataset."""
         try:
             pattern = f"gs://{self.bucket}/silver/fvm_marker_*/*/*.parquet"
@@ -561,8 +561,7 @@ class FieldAreaAnalysisRedesigned:
             if year_files:
                 latest_year = max(year_files.keys())
                 return year_files[latest_year]
-            else:
-                return None
+            return None
         except Exception as e:
             self.log.error(f"Error finding FVM marker data: {e}")
             return None

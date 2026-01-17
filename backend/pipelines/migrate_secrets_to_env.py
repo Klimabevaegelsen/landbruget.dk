@@ -9,7 +9,6 @@ Requires:
 
 import logging
 import os
-from typing import Dict, Optional
 
 from dotenv import load_dotenv
 from github import Github
@@ -21,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-def get_google_secrets(project_id: str) -> Dict[str, str]:
+def get_google_secrets(project_id: str) -> dict[str, str]:
     """Get all secrets from Google Secret Manager."""
     client = secretmanager.SecretManagerServiceClient()
     secrets = {}
@@ -48,7 +47,7 @@ def get_google_secrets(project_id: str) -> Dict[str, str]:
         raise
 
 
-def get_github_repo(token: str, repo_name: str) -> Optional[Repository]:
+def get_github_repo(token: str, repo_name: str) -> Repository | None:
     """Get GitHub repository object."""
     try:
         g = Github(token)
@@ -58,7 +57,7 @@ def get_github_repo(token: str, repo_name: str) -> Optional[Repository]:
         raise
 
 
-def update_github_secrets(repo: Repository, secrets: Dict[str, str]) -> None:
+def update_github_secrets(repo: Repository, secrets: dict[str, str]) -> None:
     """Update GitHub repository secrets."""
     try:
         # Get existing secrets first

@@ -1,0 +1,17 @@
+{
+  "dataset_name": "worker_safety_silver",
+  "source_path": "gs://landbrugsdata-raw-data/silver/worker safety/20260116_234019/worker_safety_2020-2024_mv.parquet",
+  "generated_at": "2026-01-17T11:15:26.627165",
+  "record_count": 194,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer": 0,
+    "column_1": 0,
+    "column_2": 0,
+    "column_3": 0,
+    "column_4": 0,
+    "column_5": 0,
+    "column_6": 0,
+    "column_7": 0
+  }
+}

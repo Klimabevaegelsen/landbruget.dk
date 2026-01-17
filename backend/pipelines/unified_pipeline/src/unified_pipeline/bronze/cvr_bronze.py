@@ -14,7 +14,7 @@ async processing, and retry logic for robustness.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 from pydantic import ConfigDict
 
@@ -52,7 +52,7 @@ class CVRBronzeConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
 
     # CVR-specific configuration
-    cvr_numbers: List[str] = []
+    cvr_numbers: ClassVar[list[str]] = []
     fetch_mode: str = "basic"  # 'full' or 'basic'
     include_financial_docs: bool = False
     max_concurrent_fetches: int = 5
@@ -87,7 +87,7 @@ class CVRBronze(BaseSource[CVRBronzeConfig], BronzeJobInterface):
         self.cvr_client = CVRAPIClient()
 
     @timed(name="Fetching CVR company data")
-    def _fetch_company_data(self, cvr_number: str) -> Optional[Dict[str, Any]]:
+    def _fetch_company_data(self, cvr_number: str) -> dict[str, Any] | None:
         """
         Fetch data for a specific CVR number.
 
@@ -147,9 +147,9 @@ class CVRBronze(BaseSource[CVRBronzeConfig], BronzeJobInterface):
     def _save_company_data(
         self,
         cvr_number: str,
-        company_data: Dict[str, Any],
-        financial_docs: List[Dict[str, Any]],
-        metadata: Dict[str, Any],
+        company_data: dict[str, Any],
+        financial_docs: list[dict[str, Any]],
+        metadata: dict[str, Any],
     ) -> None:
         """
         Save company data and metadata to storage.
@@ -180,7 +180,7 @@ class CVRBronze(BaseSource[CVRBronzeConfig], BronzeJobInterface):
             self.log.error(f"Error saving data for CVR {cvr_number}: {e}")
             raise
 
-    async def run(self) -> Optional[Dict[str, Any]]:
+    async def run(self) -> dict[str, Any] | None:
         """
         Run bronze processing for all configured CVR numbers.
 

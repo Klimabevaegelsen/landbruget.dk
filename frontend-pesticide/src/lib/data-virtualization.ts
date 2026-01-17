@@ -63,14 +63,14 @@ export class DataVirtualizer {
 
     // Update viewport bounds
     this.updateViewport(viewport);
-    
+
     if (!this.viewportBounds) return data;
 
     // Filter by viewport with buffer
     const buffer = this.calculateBuffer(viewport.zoom);
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
-    
-    let filteredData = data.filter(item => 
+
+    let filteredData = data.filter((item) =>
       this.isPointInBounds(item.centroid_lon, item.centroid_lat, bufferedBounds)
     );
 
@@ -90,14 +90,14 @@ export class DataVirtualizer {
     if (!data || data.length === 0) return [];
 
     this.updateViewport(viewport);
-    
+
     if (!this.viewportBounds) return data;
 
     // Filter by viewport intersection
     const buffer = this.calculateBuffer(viewport.zoom);
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
-    
-    let filteredData = data.filter(area => 
+
+    let filteredData = data.filter((area) =>
       this.isGeometryInBounds(area.geometry, bufferedBounds)
     );
 
@@ -117,14 +117,14 @@ export class DataVirtualizer {
     if (!data || data.length === 0) return [];
 
     this.updateViewport(viewport);
-    
+
     if (!this.viewportBounds) return data;
 
     // Filter by viewport with buffer
     const buffer = this.calculateBuffer(viewport.zoom);
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
-    
-    let filteredData = data.filter(building => {
+
+    let filteredData = data.filter((building) => {
       const coords = building.geometry.coordinates;
       return this.isPointInBounds(coords[0], coords[1], bufferedBounds);
     });
@@ -153,7 +153,7 @@ export class DataVirtualizer {
         h3Aggregation: 'sum',
         maxH3Points: Math.floor(2000 * performanceMultiplier),
         maxBNBOPolygons: 0,
-        maxBBRPoints: 0
+        maxBBRPoints: 0,
       };
     } else if (zoom < 12) {
       // County level - show H3 + BNBO
@@ -164,7 +164,7 @@ export class DataVirtualizer {
         h3Aggregation: 'average',
         maxH3Points: Math.floor(5000 * performanceMultiplier),
         maxBNBOPolygons: Math.floor(1000 * performanceMultiplier),
-        maxBBRPoints: 0
+        maxBBRPoints: 0,
       };
     } else {
       // Local level - show all layers
@@ -173,9 +173,15 @@ export class DataVirtualizer {
         showBNBO: true,
         showBBR: true,
         h3Aggregation: 'individual',
-        maxH3Points: Math.floor(VISUALIZATION_LIMITS.MAX_H3_HEXAGONS * performanceMultiplier),
-        maxBNBOPolygons: Math.floor(VISUALIZATION_LIMITS.MAX_BNBO_POLYGONS * performanceMultiplier),
-        maxBBRPoints: Math.floor(VISUALIZATION_LIMITS.MAX_BBR_POINTS * performanceMultiplier)
+        maxH3Points: Math.floor(
+          VISUALIZATION_LIMITS.MAX_H3_HEXAGONS * performanceMultiplier
+        ),
+        maxBNBOPolygons: Math.floor(
+          VISUALIZATION_LIMITS.MAX_BNBO_POLYGONS * performanceMultiplier
+        ),
+        maxBBRPoints: Math.floor(
+          VISUALIZATION_LIMITS.MAX_BBR_POINTS * performanceMultiplier
+        ),
       };
     }
   }
@@ -192,7 +198,7 @@ export class DataVirtualizer {
       minLon: viewport.longitude - lonDelta,
       maxLon: viewport.longitude + lonDelta,
       minLat: viewport.latitude - latDelta,
-      maxLat: viewport.latitude + latDelta
+      maxLat: viewport.latitude + latDelta,
     };
   }
 
@@ -212,53 +218,69 @@ export class DataVirtualizer {
       minLon: bounds.minLon - buffer,
       maxLon: bounds.maxLon + buffer,
       minLat: bounds.minLat - buffer,
-      maxLat: bounds.maxLat + buffer
+      maxLat: bounds.maxLat + buffer,
     };
   }
 
   /**
    * Check if point is within bounds
    */
-  private isPointInBounds(lon: number, lat: number, bounds: BoundingBox): boolean {
-    return lon >= bounds.minLon && 
-           lon <= bounds.maxLon && 
-           lat >= bounds.minLat && 
-           lat <= bounds.maxLat;
+  private isPointInBounds(
+    lon: number,
+    lat: number,
+    bounds: BoundingBox
+  ): boolean {
+    return (
+      lon >= bounds.minLon &&
+      lon <= bounds.maxLon &&
+      lat >= bounds.minLat &&
+      lat <= bounds.maxLat
+    );
   }
 
   /**
    * Check if geometry intersects with bounds
    */
-  private isGeometryInBounds(geometry: GeoJSON.Geometry, bounds: BoundingBox): boolean {
+  private isGeometryInBounds(
+    geometry: GeoJSON.Geometry,
+    bounds: BoundingBox
+  ): boolean {
     // Simplified bounds checking - in production would use proper geometry intersection
     if (geometry.type === 'Point') {
       const coords = geometry.coordinates as [number, number];
       return this.isPointInBounds(coords[0], coords[1], bounds);
     }
-    
+
     if (geometry.type === 'Polygon') {
       const coords = geometry.coordinates[0] as [number, number][];
       // Check if any point of the polygon is within bounds
-      return coords.some(coord => this.isPointInBounds(coord[0], coord[1], bounds));
+      return coords.some((coord) =>
+        this.isPointInBounds(coord[0], coord[1], bounds)
+      );
     }
-    
+
     if (geometry.type === 'MultiPolygon') {
       const coords = geometry.coordinates as [number, number][][][];
       // Check if any polygon intersects with bounds
-      return coords.some(polygon => 
-        polygon[0].some(coord => this.isPointInBounds(coord[0], coord[1], bounds))
+      return coords.some((polygon) =>
+        polygon[0].some((coord) =>
+          this.isPointInBounds(coord[0], coord[1], bounds)
+        )
       );
     }
-    
+
     return true; // Default to include if we can't determine
   }
 
   /**
    * Get maximum points allowed for zoom level and layer type
    */
-  private getMaxPointsForZoom(zoom: number, layerType: 'h3' | 'bnbo' | 'bbr'): number {
+  private getMaxPointsForZoom(
+    zoom: number,
+    layerType: 'h3' | 'bnbo' | 'bbr'
+  ): number {
     const config = this.getLayerConfigForZoom(zoom);
-    
+
     switch (layerType) {
       case 'h3':
         return config.maxH3Points;
@@ -290,62 +312,75 @@ export class DataVirtualizer {
   /**
    * Prioritize H3 data based on importance metrics
    */
-  private prioritizeH3Data(data: H3DataPoint[], maxPoints: number): H3DataPoint[] {
+  private prioritizeH3Data(
+    data: H3DataPoint[],
+    maxPoints: number
+  ): H3DataPoint[] {
     // Sort by combined importance score (PFAS + pesticide load)
-    const scored = data.map(item => ({
+    const scored = data.map((item) => ({
       ...item,
-      importance: (item.total_pfas_grams || 0) + (item.total_pesticide_load || 0)
+      importance:
+        (item.total_pfas_grams || 0) + (item.total_pesticide_load || 0),
     }));
 
     scored.sort((a, b) => b.importance - a.importance);
-    
+
     return scored.slice(0, maxPoints);
   }
 
   /**
    * Prioritize BNBO data based on importance metrics
    */
-  private prioritizeBNBOData(data: BNBOArea[], maxPolygons: number): BNBOArea[] {
+  private prioritizeBNBOData(
+    data: BNBOArea[],
+    maxPolygons: number
+  ): BNBOArea[] {
     // Sort by area and protection status importance
     const statusPriority = {
-      'protected': 5,
-      'buffer': 4,
-      'agricultural': 3,
-      'transition': 2,
-      'unprotected': 1
+      protected: 5,
+      buffer: 4,
+      agricultural: 3,
+      transition: 2,
+      unprotected: 1,
     };
 
-    const scored = data.map(area => ({
+    const scored = data.map((area) => ({
       ...area,
-      importance: (statusPriority[area.status_code] || 1) * Math.log(area.area_ha + 1)
+      importance:
+        (statusPriority[area.status_code] || 1) * Math.log(area.area_ha + 1),
     }));
 
     scored.sort((a, b) => b.importance - a.importance);
-    
+
     return scored.slice(0, maxPolygons);
   }
 
   /**
    * Prioritize BBR data based on importance metrics
    */
-  private prioritizeBBRData(data: BBRBuilding[], maxPoints: number): BBRBuilding[] {
+  private prioritizeBBRData(
+    data: BBRBuilding[],
+    maxPoints: number
+  ): BBRBuilding[] {
     // Sort by building type importance and floor area
     const typePriority = {
-      'Agricultural': 5,
-      'Industrial': 4,
-      'Commercial': 3,
-      'Residential': 2,
-      'Public': 2,
-      'Other': 1
+      Agricultural: 5,
+      Industrial: 4,
+      Commercial: 3,
+      Residential: 2,
+      Public: 2,
+      Other: 1,
     };
 
-    const scored = data.map(building => ({
+    const scored = data.map((building) => ({
       ...building,
-      importance: (typePriority[building.building_type] || 1) * Math.log((building.floor_area || 0) + 1)
+      importance:
+        (typePriority[building.building_type] || 1) *
+        Math.log((building.floor_area || 0) + 1),
     }));
 
     scored.sort((a, b) => b.importance - a.importance);
-    
+
     return scored.slice(0, maxPoints);
   }
 
@@ -364,9 +399,9 @@ export class DataVirtualizer {
     const thresholds = {
       h3: 5000,
       bnbo: 2000,
-      bbr: 10000
+      bbr: 10000,
     };
 
     return data.length > thresholds[layerType];
   }
-} 
+}

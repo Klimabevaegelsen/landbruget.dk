@@ -17,7 +17,7 @@ with proper error handling and retry logic for robustness.
 import asyncio
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
-from typing import Dict, List, Optional
+from typing import ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
@@ -81,7 +81,7 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     request_semaphore: Semaphore = Semaphore(max_concurrent)
 
     # WFS namespaces for parsing responses
-    namespaces: Dict[str, str] = {
+    namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "gml": "http://www.opengis.net/gml/3.2",
         "Jordbrugsanalyser": "Jordbrugsanalyser",
@@ -133,7 +133,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
         year_suffix = str(year)[-2:]  # Get last 2 digits
         return f"Jordbrugsanalyser:Marker{year_suffix}"
 
-    def _get_base_wfs_params(self, layer_name: str) -> Dict[str, str]:
+    def _get_base_wfs_params(self, layer_name: str) -> dict[str, str]:
         """
         Get base WFS request parameters for a specific layer.
 
@@ -152,7 +152,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
             "OUTPUTFORMAT": "application/gml+xml; version=3.2",
         }
 
-    def _get_count_params(self, layer_name: str) -> Dict[str, str]:
+    def _get_count_params(self, layer_name: str) -> dict[str, str]:
         """
         Get WFS parameters for counting total features.
 
@@ -166,7 +166,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
         params.update({"RESULTTYPE": "hits"})
         return params
 
-    def _get_feature_params(self, layer_name: str, start_index: int = 0) -> Dict[str, str]:
+    def _get_feature_params(self, layer_name: str, start_index: int = 0) -> dict[str, str]:
         """
         Get WFS parameters for fetching features.
 
@@ -207,43 +207,44 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
 
         try:
             self.log.info(f"Getting total count for layer {layer_name}")
-            async with session.get(self.config.wfs_url, params=params) as response:
-                async with AsyncTimer(f"Count request for {layer_name}"):
-                    if response.status == 200:
-                        # Handle Danish characters properly by reading as bytes first
-                        content_bytes = await response.read()
-                        try:
-                            content = content_bytes.decode("utf-8")
-                        except UnicodeDecodeError:
-                            # Fallback to latin-1 for Danish characters
-                            content = content_bytes.decode("latin-1")
-                        root = ET.fromstring(content)
+            async with (
+                session.get(self.config.wfs_url, params=params) as response,
+                AsyncTimer(f"Count request for {layer_name}"),
+            ):
+                if response.status == 200:
+                    # Handle Danish characters properly by reading as bytes first
+                    content_bytes = await response.read()
+                    try:
+                        content = content_bytes.decode("utf-8")
+                    except UnicodeDecodeError:
+                        # Fallback to latin-1 for Danish characters
+                        content = content_bytes.decode("latin-1")
+                    root = ET.fromstring(content)
 
-                        # Parse numberMatched from WFS response
-                        number_matched = root.get("numberMatched", "0")
-                        if number_matched == "*":
-                            # If server doesn't provide exact count, return a large number
-                            # and let pagination handle the actual data
-                            self.log.warning(
-                                f"Server returned '*' for {layer_name}, using estimated count"
-                            )
-                            return 100000  # Conservative estimate
-
-                        total = int(number_matched)
-                        self.log.info(f"Layer {layer_name}: {total:,} features available")
-                        return total
-                    else:
-                        # Handle encoding for error messages too
-                        try:
-                            response_text = await response.text(encoding="utf-8")
-                        except UnicodeDecodeError:
-                            response_bytes = await response.read()
-                            response_text = response_bytes.decode("latin-1", errors="replace")
-                        raise Exception(
-                            f"Error getting count for {layer_name}: {response.status} - {response_text}"
+                    # Parse numberMatched from WFS response
+                    number_matched = root.get("numberMatched", "0")
+                    if number_matched == "*":
+                        # If server doesn't provide exact count, return a large number
+                        # and let pagination handle the actual data
+                        self.log.warning(
+                            f"Server returned '*' for {layer_name}, using estimated count"
                         )
+                        return 100000  # Conservative estimate
+
+                    total = int(number_matched)
+                    self.log.info(f"Layer {layer_name}: {total:,} features available")
+                    return total
+                # Handle encoding for error messages too
+                try:
+                    response_text = await response.text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    response_bytes = await response.read()
+                    response_text = response_bytes.decode("latin-1", errors="replace")
+                raise Exception(
+                    f"Error getting count for {layer_name}: {response.status} - {response_text}"
+                )
         except Exception as e:
-            self.log.error(f"Error getting total count for {layer_name}: {str(e)}")
+            self.log.error(f"Error getting total count for {layer_name}: {e!s}")
             raise
 
     @retry(
@@ -283,41 +284,43 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
             "Full dataset" if self.config.batch_size == 0 else f"Chunk at index {start_index}"
         )
 
-        async with self.config.request_semaphore:
-            async with AsyncTimer(f"{request_type} request for {layer_name}"):
-                self.log.debug(f"Fetching {layer_name} {request_type.lower()}")
-                async with session.get(self.config.wfs_url, params=params) as response:
-                    if response.status == 200:
-                        # Handle Danish characters properly by reading as bytes first
-                        content_bytes = await response.read()
-                        try:
-                            content = content_bytes.decode("utf-8")
-                        except UnicodeDecodeError:
-                            # Fallback to latin-1 for Danish characters
-                            content = content_bytes.decode("latin-1")
+        async with (
+            self.config.request_semaphore,
+            AsyncTimer(f"{request_type} request for {layer_name}"),
+        ):
+            self.log.debug(f"Fetching {layer_name} {request_type.lower()}")
+            async with session.get(self.config.wfs_url, params=params) as response:
+                if response.status == 200:
+                    # Handle Danish characters properly by reading as bytes first
+                    content_bytes = await response.read()
+                    try:
+                        content = content_bytes.decode("utf-8")
+                    except UnicodeDecodeError:
+                        # Fallback to latin-1 for Danish characters
+                        content = content_bytes.decode("latin-1")
 
-                        # Basic validation - check if we got a valid WFS response
-                        if "wfs:FeatureCollection" not in content:
-                            raise Exception(
-                                f"Invalid WFS response for {layer_name} ({request_type.lower()})"
-                            )
-
-                        return content
-                    else:
-                        # Handle encoding for error messages too
-                        try:
-                            response_text = await response.text(encoding="utf-8")
-                        except UnicodeDecodeError:
-                            response_bytes = await response.read()
-                            response_text = response_bytes.decode("latin-1", errors="replace")
-                        err_msg = (
-                            f"Error response {response.status} for {layer_name} ({request_type.lower()}). "
-                            f"Response: {response_text[:500]}..."
+                    # Basic validation - check if we got a valid WFS response
+                    if "wfs:FeatureCollection" not in content:
+                        raise Exception(
+                            f"Invalid WFS response for {layer_name} ({request_type.lower()})"
                         )
-                        self.log.error(err_msg)
-                        raise Exception(err_msg)
 
-    async def _process_year_data(self, session: aiohttp.ClientSession, year: int) -> List[str]:
+                    return content
+                # Handle encoding for error messages too
+                try:
+                    response_text = await response.text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    response_bytes = await response.read()
+                    response_text = response_bytes.decode("latin-1", errors="replace")
+                err_msg = (
+                    f"Error response {response.status} for {layer_name} "
+                    f"({request_type.lower()}). "
+                    f"Response: {response_text[:500]}..."
+                )
+                self.log.error(err_msg)
+                raise Exception(err_msg)
+
+    async def _process_year_data(self, session: aiohttp.ClientSession, year: int) -> list[str]:
         """
         Process data for a specific year and return raw WFS responses.
 
@@ -355,13 +358,13 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                     if raw_response:
                         # 🧹 CLEANUP: Return single response immediately, don't hold in memory
                         return [raw_response]
-                    else:
-                        return []
+                    return []
 
                 # Otherwise, use chunked downloading
-                tasks = []
-                for start_index in range(0, total_count, self.config.batch_size):
-                    tasks.append(self._fetch_chunk(session, layer_name, start_index))
+                tasks = [
+                    self._fetch_chunk(session, layer_name, start_index)
+                    for start_index in range(0, total_count, self.config.batch_size)
+                ]
 
                 # Execute all tasks and collect results
                 raw_responses = await asyncio.gather(*tasks)
@@ -377,10 +380,10 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 return valid_responses
 
             except Exception as e:
-                self.log.error(f"Error processing year {year}: {str(e)}")
+                self.log.error(f"Error processing year {year}: {e!s}")
                 raise
 
-    async def run(self) -> Optional[Dict[str, List[str]]]:
+    async def run(self) -> dict[str, list[str]] | None:
         """
         Run the data source processing pipeline.
 
@@ -413,13 +416,16 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                         memory_info = self.get_memory_usage()
                         if "system" in memory_info:
                             self.log.info(
-                                f"Year {year}: Memory usage before processing: {memory_info['system']['used_gb']:.1f}GB ({memory_info['system']['percent']:.1f}%)"
+                                f"Year {year}: Memory usage before processing: "
+                                f"{memory_info['system']['used_gb']:.1f}GB "
+                                f"({memory_info['system']['percent']:.1f}%)"
                             )
 
                         raw_responses = await self._process_year_data(session, year)
 
                         if raw_responses:
-                            # Save data with year suffix for easy identification using new unified method
+                            # Save data with year suffix for easy identification using
+                            # new unified method
                             dataset_name = f"{self.config.dataset}_{year}"
                             self.log.info(f"Saving {len(raw_responses)} responses for year {year}")
                             self._save_data(
@@ -427,15 +433,18 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                             )
                             self.log.info(f"Year {year}: Data saved successfully")
 
-                            # 🧹 CLEANUP: Only store data for in-memory passing if save_local is True
+                            # 🧹 CLEANUP: Only store data for in-memory passing if
+                            # save_local is True
                             # On GitHub runners, we don't need to accumulate all data in memory
                             if self.config.save_local:
                                 # Store data for in-memory passing (local development)
                                 all_year_data[str(year)] = raw_responses
                             else:
-                                # 🧹 CLEANUP: For GitHub runners, immediately clear raw_responses to free memory
+                                # 🧹 CLEANUP: For GitHub runners, immediately clear
+                                # raw_responses to free memory
                                 self.log.info(
-                                    f"Year {year}: Clearing raw responses from memory (GitHub runner optimization)"
+                                    f"Year {year}: Clearing raw responses from memory "
+                                    f"(GitHub runner optimization)"
                                 )
                                 raw_responses.clear()
                                 raw_responses = None
@@ -448,20 +457,23 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                                 # Store minimal reference for in-memory passing (just the year)
                                 all_year_data[str(year)] = [f"saved_to_gcs_{dataset_name}"]
 
-                            # 🧹 CLEANUP: Clean up any temporary tables and force memory cleanup after each year
+                            # 🧹 CLEANUP: Clean up any temporary tables and force memory
+                            # cleanup after each year
                             self.cleanup_resources()
 
                             # 🧹 CLEANUP: Log memory usage after cleanup
                             memory_info = self.get_memory_usage()
                             if "system" in memory_info:
                                 self.log.info(
-                                    f"Year {year}: Memory usage after cleanup: {memory_info['system']['used_gb']:.1f}GB ({memory_info['system']['percent']:.1f}%)"
+                                    f"Year {year}: Memory usage after cleanup: "
+                                    f"{memory_info['system']['used_gb']:.1f}GB "
+                                    f"({memory_info['system']['percent']:.1f}%)"
                                 )
                         else:
                             self.log.warning(f"Year {year}: No data to save")
 
                     except Exception as e:
-                        self.log.error(f"Failed to process year {year}: {str(e)}")
+                        self.log.error(f"Failed to process year {year}: {e!s}")
                         # Continue with next year instead of failing completely
                         continue
 

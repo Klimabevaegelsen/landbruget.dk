@@ -4,7 +4,7 @@ Multi-Stage Field Area Analysis Pipeline
 Optimized for GitHub Actions with massive parallelization and proper DuckDB spatial joins.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.log_util import Logger
@@ -31,7 +31,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
     Field Area Analysis Gold Pipeline
 
     This pipeline performs comprehensive field area analysis including:
-    - BNBO (Biodiversity and Nature) status coverage
+    - BNBO (Boringsnære Beskyttelsesområder - Well-adjacent Protection Areas) status coverage
     - Wetland coverage analysis
     - Water project intersections
     - Soil type analysis
@@ -42,7 +42,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         super().__init__(config)
         self.log = Logger.get_logger()
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Execute the complete field area analysis pipeline."""
         self.log.info("🚀 Starting Field Area Analysis Gold Pipeline")
 

@@ -7,6 +7,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from tqdm import tqdm
 
@@ -16,15 +17,15 @@ from utils.logger import setup_logger
 
 # GCS upload functionality
 try:
+    from common.gcs import GCSDataAccess  # noqa: F401
     from google.cloud import storage
-    from unified_pipeline.util.gcs_access import GCSDataAccess
 
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
 
 
-def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str):
+def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str) -> bool | None:
     """Upload file to GCS using the standard pattern from other pipelines."""
     if not GCS_AVAILABLE:
         print("⚠️ GCS not available - skipping upload")
@@ -46,7 +47,7 @@ def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str):
         return False
 
 
-def upload_inspire_data_to_gcs(output_dir: Path, gcs_bucket: str, timestamp: str):
+def upload_inspire_data_to_gcs(output_dir: Path, gcs_bucket: str, timestamp: str) -> None:
     """Upload INSPIRE BBR data files to GCS."""
     if not gcs_bucket or not GCS_AVAILABLE:
         print("ℹ️ Not uploading to GCS (no bucket specified or GCS not available)")
@@ -76,7 +77,7 @@ def upload_inspire_data_to_gcs(output_dir: Path, gcs_bucket: str, timestamp: str
                 upload_to_gcs(str(bronze_file), gcs_bucket, gcs_path)
 
 
-def _save_attributes_to_parquet(attributes_data, output_dir):
+def _save_attributes_to_parquet(attributes_data: list[dict[str, Any]], output_dir: Path) -> None:
     """Save attributes data to parquet using DuckDB streaming approach."""
     if not attributes_data:
         print("⚠️ No attributes data to save")
@@ -103,20 +104,20 @@ def _save_attributes_to_parquet(attributes_data, output_dir):
         print("💾 Copied attributes to data root for GitHub Actions compatibility")
 
 
-def _save_attributes_streaming(attributes_data, output_dir):
+def _save_attributes_streaming(attributes_data: list[dict[str, Any]], output_dir: Path) -> None:
     """Save large attributes dataset using streaming approach with better memory management."""
     import duckdb
 
     # SCHEMA NORMALIZATION FIX: Ensure all records have the same fields
     print("🔧 Normalizing schema to prevent parquet write errors...")
-    
+
     # Collect all possible keys from all records
     all_keys = set()
     for record in attributes_data:
         all_keys.update(record.keys())
-    
+
     print(f"   📋 Found {len(all_keys)} unique fields across all records")
-    
+
     # Normalize all records to have the same schema
     normalized_data = []
     for record in attributes_data:
@@ -124,7 +125,7 @@ def _save_attributes_streaming(attributes_data, output_dir):
         for key in all_keys:
             normalized_record[key] = record.get(key, None)  # Use None for missing fields
         normalized_data.append(normalized_record)
-    
+
     print(f"   ✅ Normalized {len(normalized_data):,} records with consistent schema")
 
     # Process in smaller chunks to avoid memory issues
@@ -179,7 +180,7 @@ def _save_attributes_streaming(attributes_data, output_dir):
 
                 # Append to existing parquet file
                 conn.execute("""
-                    INSERT INTO buildings 
+                    INSERT INTO buildings
                     SELECT * FROM temp_chunk
                 """)
 
@@ -208,7 +209,7 @@ def _save_attributes_streaming(attributes_data, output_dir):
         conn.close()
 
 
-def _save_attributes_standard(attributes_data, output_dir):
+def _save_attributes_standard(attributes_data: list[dict[str, Any]], output_dir: Path) -> None:
     """Save small attributes dataset using standard approach."""
     import duckdb
 
@@ -229,7 +230,12 @@ def _save_attributes_standard(attributes_data, output_dir):
         conn.close()
 
 
-def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_start_time):
+def _process_with_streaming(
+    inspire_fetcher: InspireBBRFetcher,
+    output_dir: Path,
+    sample_size: int | None,
+    pipeline_start_time: datetime,
+) -> dict[str, Any] | None:
     """Process INSPIRE BBR data using streaming approach to manage memory."""
     print("🌊 Using streaming processing for large dataset...")
 
@@ -295,7 +301,8 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
         else:
             # Medium-sized dataset - use standard processing with memory optimizations
             print(
-                f"📊 Medium dataset ({sample_size:,}) - using standard processing with optimizations"
+                f"📊 Medium dataset ({sample_size:,}) - using standard processing "
+                "with optimizations"
             )
             result = inspire_fetcher.fetch_data(
                 output_dir,
@@ -353,11 +360,10 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
                 "timestamp": pipeline_start_time.strftime("%Y%m%d_%H%M%S"),
                 "error": str(e),
             }
-        else:
-            raise
+        raise
 
 
-def _get_building_count_from_files(output_dir=None):
+def _get_building_count_from_files(output_dir: Path | None = None) -> int:
     """Get building count from saved files after streaming processing."""
     building_count = 0
 
@@ -393,7 +399,7 @@ def _get_building_count_from_files(output_dir=None):
     return building_count
 
 
-def main():
+def main() -> None:
     try:
         settings = get_settings()
         # Use WARNING level by default to reduce log output for GitHub Actions

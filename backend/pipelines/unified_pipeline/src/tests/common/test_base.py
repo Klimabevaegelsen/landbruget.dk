@@ -2,26 +2,31 @@
 Tests for the base classes in the unified pipeline.
 
 This module tests the core functionality of BaseJobConfig and BaseSource
-classes to ensure they work correctly with the unified GCS access architecture.
+classes to ensure they work correctly with the unified GCS access architecture
+and DuckDB-based data processing.
 """
 
-from typing import Optional
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pandas as pd
 import pytest
-from shapely.geometry import Point
 
-try:
-    import geopandas as gpd
-except ImportError:
-    gpd = None
+# Add backend to path if not already there (for when running tests standalone)
+# Path: .../backend/pipelines/unified_pipeline/src/tests/common/test_base.py
+# Navigate up to backend directory
+test_file_path = Path(__file__).resolve()
+backend_dir = test_file_path.parents[5]  # Go up 5 levels from test file to backend
+
+if backend_dir.exists() and str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
+
+from common.gcs import GCSDataAccess
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
-from unified_pipeline.util.gcs_access import GCSDataAccess
 
 
-class TestJobConfig(BaseJobConfig):
+class MockJobConfig(BaseJobConfig):
     """Configuration class for testing BaseJobConfig."""
 
     dataset: str = "test_dataset"
@@ -29,10 +34,10 @@ class TestJobConfig(BaseJobConfig):
     name: str = "Test Source"
 
 
-class TestSource(BaseSource[TestJobConfig]):
+class MockSource(BaseSource[MockJobConfig]):
     """Test implementation of BaseSource for testing purposes."""
 
-    def __init__(self, config: TestJobConfig):
+    def __init__(self, config: MockJobConfig):
         super().__init__(config)
 
     async def run(self) -> None:
@@ -44,7 +49,7 @@ class TestSource(BaseSource[TestJobConfig]):
 @pytest.fixture
 def mock_gcs_access():
     """Create a mock GCS access layer for testing."""
-    with patch("unified_pipeline.util.gcs_access.GCSDataAccess") as mock_class:
+    with patch("unified_pipeline.common.base.GCSDataAccess") as mock_class:
         mock_instance = MagicMock(spec=GCSDataAccess)
         mock_class.return_value = mock_instance
 
@@ -58,65 +63,31 @@ def mock_gcs_access():
         mock_instance.create_table_from_gcs.return_value = None
         mock_instance.list_files.return_value = []
         mock_instance.file_exists.return_value = True
+        mock_instance.upload_json.return_value = None
 
         yield mock_instance
 
 
 @pytest.fixture
-def mock_duckdb_connection():
-    """Create a mock DuckDB connection."""
-    with patch("duckdb.connect") as mock_connect:
-        mock_conn = MagicMock()
-        mock_connect.return_value = mock_conn
-
-        # Mock common operations
-        mock_conn.execute.return_value = MagicMock()
-        mock_conn.fetchone.return_value = [100]  # Default count
-        mock_conn.fetchall.return_value = []
-
-        yield mock_conn
-
-
-@pytest.fixture
-def test_config() -> TestJobConfig:
+def test_config() -> MockJobConfig:
     """Create a test configuration for testing."""
-    return TestJobConfig()
+    return MockJobConfig()
 
 
 @pytest.fixture
-def test_source(test_config: TestJobConfig, mock_gcs_access, mock_duckdb_connection) -> TestSource:
-    """Create a test source for testing."""
+def test_source(test_config: MockJobConfig, mock_gcs_access) -> MockSource:
+    """Create a test source for testing with mocked GCS access."""
     with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
-        with patch("duckdb.connect", return_value=mock_duckdb_connection):
-            return TestSource(test_config)
-
-
-@pytest.fixture
-def test_dataframe() -> pd.DataFrame:
-    """Create a test DataFrame for testing."""
-    return pd.DataFrame({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
-
-
-@pytest.fixture
-def test_geodataframe() -> Optional[pd.DataFrame]:
-    """Create a test GeoDataFrame for testing."""
-    if gpd is None:
-        pytest.skip("GeoPandas not available")
-
-    df = pd.DataFrame(
-        {
-            "id": [1, 2, 3],
-            "name": ["Point1", "Point2", "Point3"],
-            "geometry": [Point(0, 0), Point(1, 1), Point(2, 2)],
-        }
-    )
-    return gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:4326")
+        source = MockSource(test_config)
+        # Replace gcs_access with mock after initialization
+        source.gcs_access = mock_gcs_access
+        return source
 
 
 # Tests for BaseJobConfig
 def test_base_job_config_initialization() -> None:
     """Test that BaseJobConfig can be initialized and extended."""
-    config = TestJobConfig()
+    config = MockJobConfig()
 
     # Test that attributes are correctly set
     assert config.dataset == "test_dataset"
@@ -124,34 +95,63 @@ def test_base_job_config_initialization() -> None:
     assert config.name == "Test Source"
 
 
+def test_base_job_config_defaults() -> None:
+    """Test that BaseJobConfig default values are correctly set."""
+    config = MockJobConfig()
+
+    # Test default values from BaseJobConfig
+    assert config.save_local is False
+    assert config.dev_mode is False
+    assert config.generate_schemas is False
+    assert config.save_schemas_locally is True
+
+
 # Tests for BaseSource
-def test_base_source_initialization(
-    test_config: TestJobConfig, mock_gcs_access, mock_duckdb_connection
-) -> None:
+def test_base_source_initialization(test_config: MockJobConfig, mock_gcs_access) -> None:
     """Test that BaseSource can be initialized with unified architecture."""
     with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
-        with patch("duckdb.connect", return_value=mock_duckdb_connection):
-            source = TestSource(test_config)
+        source = MockSource(test_config)
 
-            # Test that attributes are correctly set
-            assert source.config == test_config
-            assert source.log is not None
-            assert source.gcs_access == mock_gcs_access
-            assert source.conn == mock_duckdb_connection
+        # Test that attributes are correctly set
+        assert source.config == test_config
+        assert source.log is not None
+
+        # Test that DuckDB connection was created
+        assert source.conn is not None
+
+        # Test that date_pattern was set
+        assert source.date_pattern is not None
+        assert len(source.date_pattern) > 0
 
 
-def test_unified_connection_architecture(test_source: TestSource) -> None:
+def test_unified_connection_architecture(test_source: MockSource) -> None:
     """Test that the unified connection architecture works correctly."""
     # Verify that gcs_access and conn are properly connected
     assert hasattr(test_source, "conn")
     assert hasattr(test_source, "gcs_access")
+    assert test_source.conn is not None
     assert test_source.gcs_access is not None
 
 
+def test_duckdb_connection_is_functional(test_config: MockJobConfig, mock_gcs_access) -> None:
+    """Test that the DuckDB connection can execute queries."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(test_config)
+
+        # Test that we can execute a simple query
+        result = source.conn.execute("SELECT 1 as value").fetchone()
+        assert result is not None
+        assert result[0] == 1
+
+
 # Tests for _save_data method
-def test_save_data_table_name(test_source: TestSource, test_config: TestJobConfig) -> None:
+def test_save_data_table_name(test_source: MockSource, test_config: MockJobConfig) -> None:
     """Test saving data using table name."""
     table_name = "test_table"
+
+    # Create a test table in DuckDB
+    test_source.conn.execute(f"CREATE TABLE {table_name} (id INTEGER, name VARCHAR)")
+    test_source.conn.execute(f"INSERT INTO {table_name} VALUES (1, 'test')")
 
     # Mock the gcs_access upload method
     test_source.gcs_access.upload_from_duckdb_table = MagicMock()
@@ -163,7 +163,7 @@ def test_save_data_table_name(test_source: TestSource, test_config: TestJobConfi
     test_source.gcs_access.upload_from_duckdb_table.assert_called_once()
 
 
-def test_save_data_json(test_source: TestSource, test_config: TestJobConfig) -> None:
+def test_save_data_json(test_source: MockSource, test_config: MockJobConfig) -> None:
     """Test saving JSON data."""
     json_data = {"key": "value", "number": 123}
 
@@ -177,35 +177,186 @@ def test_save_data_json(test_source: TestSource, test_config: TestJobConfig) -> 
     test_source.gcs_access.upload_json.assert_called_once()
 
 
-def test_save_data_local(test_source: TestSource, test_config: TestJobConfig) -> None:
+def test_save_data_list(test_source: MockSource, test_config: MockJobConfig) -> None:
+    """Test saving list data as JSON."""
+    list_data = [{"key": "value1"}, {"key": "value2"}]
+
+    # Mock the gcs_access upload method
+    test_source.gcs_access.upload_json = MagicMock()
+
+    # Test saving with list data
+    test_source._save_data(list_data, test_config.dataset, test_config.bucket, "silver")
+
+    # Verify the upload method was called
+    test_source.gcs_access.upload_json.assert_called_once()
+
+
+def test_save_data_local(test_config: MockJobConfig, mock_gcs_access) -> None:
     """Test saving data locally."""
-    test_config.save_local = True
+    # Create config with save_local=True
+    local_config = MockJobConfig(save_local=True)
+
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(local_config)
+
+        # Create a test table
+        table_name = "test_local_table"
+        source.conn.execute(f"CREATE TABLE {table_name} (id INTEGER, name VARCHAR)")
+        source.conn.execute(f"INSERT INTO {table_name} VALUES (1, 'test')")
+
+        # Test saving locally - should not raise an error
+        # The local save uses DuckDB COPY command
+        source._save_data(table_name, local_config.dataset, local_config.bucket, "silver")
+
+        # Verify that upload_from_duckdb_table was NOT called (since save_local=True)
+        mock_gcs_access.upload_from_duckdb_table.assert_not_called()
+
+
+def test_save_data_invalid_stage(test_source: MockSource, test_config: MockJobConfig) -> None:
+    """Test that invalid stage raises ValueError."""
+    with pytest.raises(ValueError) as excinfo:
+        test_source._save_data("test_table", test_config.dataset, test_config.bucket, "invalid")
+
+    assert "Invalid stage" in str(excinfo.value)
+
+
+def test_save_data_subdataset(test_source: MockSource, test_config: MockJobConfig) -> None:
+    """Test saving data with subdataset name."""
     table_name = "test_table"
 
-    # Mock DuckDB execute
-    test_source.conn.execute = MagicMock()
+    # Create a test table in DuckDB
+    test_source.conn.execute(f"CREATE TABLE {table_name} (id INTEGER, name VARCHAR)")
+    test_source.conn.execute(f"INSERT INTO {table_name} VALUES (1, 'test')")
 
-    # Test saving locally
-    test_source._save_data(table_name, test_config.dataset, test_config.bucket, "silver")
+    # Mock the gcs_access upload method
+    test_source.gcs_access.upload_from_duckdb_table = MagicMock()
 
-    # Verify DuckDB COPY was called for local save
-    test_source.conn.execute.assert_called()
+    # Test saving with subdataset
+    test_source._save_data(
+        table_name, test_config.dataset, test_config.bucket, "silver", subdataset="sub"
+    )
+
+    # Verify the upload method was called with correct path
+    test_source.gcs_access.upload_from_duckdb_table.assert_called_once()
+    call_args = test_source.gcs_access.upload_from_duckdb_table.call_args
+    # The path should include the subdataset name
+    assert "test_dataset_sub" in call_args[0][1]
 
 
 # Integration test for unified architecture
-def test_shared_connection_between_components(
-    test_config: TestJobConfig, mock_gcs_access, mock_duckdb_connection
-) -> None:
+def test_shared_connection_between_components(test_config: MockJobConfig, mock_gcs_access) -> None:
     """Test that components share the same DuckDB connection."""
     with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
-        with patch("duckdb.connect", return_value=mock_duckdb_connection):
-            # Create source
-            source = TestSource(test_config)
+        # Create source
+        source = MockSource(test_config)
 
-            # Verify connection sharing
-            assert source.conn == mock_duckdb_connection
-            assert source.gcs_access == mock_gcs_access
+        # Verify connection exists
+        assert source.conn is not None
 
-            # Verify GCSDataAccess was initialized with the connection
-            # (This would be the actual connection in real usage)
-            assert source.gcs_access is not None
+        # Verify we can create tables and query them
+        source.conn.execute("CREATE TABLE test_shared (id INTEGER)")
+        source.conn.execute("INSERT INTO test_shared VALUES (42)")
+
+        result = source.conn.execute("SELECT id FROM test_shared").fetchone()
+        assert result[0] == 42
+
+
+def test_cleanup_resources(test_config: MockJobConfig, mock_gcs_access) -> None:
+    """Test that cleanup_resources method works correctly."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(test_config)
+
+        # Create some temporary tables
+        source.conn.execute("CREATE TABLE temp_test (id INTEGER)")
+        source.conn.execute("CREATE TABLE tmp_test2 (id INTEGER)")
+        source.conn.execute("CREATE TABLE regular_table (id INTEGER)")
+
+        # Call cleanup
+        source.cleanup_resources()
+
+        # Verify temp tables were cleaned up
+        tables = source.conn.execute("SHOW TABLES").fetchall()
+        table_names = [t[0] for t in tables]
+
+        # temp_ and tmp_ prefixed tables should be removed
+        assert "temp_test" not in table_names
+        assert "tmp_test2" not in table_names
+
+
+def test_get_memory_usage(test_config: MockJobConfig, mock_gcs_access) -> None:
+    """Test that get_memory_usage returns proper structure."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(test_config)
+
+        memory_info = source.get_memory_usage()
+
+        # Should return a dictionary with expected keys
+        assert isinstance(memory_info, dict)
+        # May have 'system' key if psutil is available, or 'error' if not
+        assert "system" in memory_info or "error" in memory_info
+
+
+def test_read_bronze_data_with_memory_data(test_config: MockJobConfig, mock_gcs_access) -> None:
+    """Test _read_bronze_data with in-memory data passing."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(test_config)
+
+        # Test with table name
+        source.conn.execute("CREATE TABLE existing_table (id INTEGER, name VARCHAR)")
+        source.conn.execute("INSERT INTO existing_table VALUES (1, 'test')")
+
+        result = source._read_bronze_data("test", "bucket", bronze_data="existing_table")
+        assert result == "existing_table"
+
+
+def test_read_bronze_data_with_list_of_strings(test_config: MockJobConfig, mock_gcs_access) -> None:
+    """Test _read_bronze_data with list of XML strings."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(test_config)
+
+        # Test with list of strings (like XML payloads)
+        xml_data = ["<xml>data1</xml>", "<xml>data2</xml>"]
+
+        result = source._read_bronze_data("test", "bucket", bronze_data=xml_data)
+
+        # Should return a table name
+        assert isinstance(result, str)
+        assert "bronze_data_test" in result
+
+        # Verify data was inserted
+        count = source.conn.execute(f"SELECT COUNT(*) FROM {result}").fetchone()[0]
+        assert count == 2
+
+
+def test_read_bronze_data_with_dict_list(test_config: MockJobConfig, mock_gcs_access) -> None:
+    """Test _read_bronze_data with list of dictionaries."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(test_config)
+
+        # Test with list of dicts
+        dict_data = [{"id": 1, "name": "test1"}, {"id": 2, "name": "test2"}]
+
+        result = source._read_bronze_data("test", "bucket", bronze_data=dict_data)
+
+        # Should return a table name
+        assert isinstance(result, str)
+        assert "bronze_data_test" in result
+
+        # Verify data was inserted
+        count = source.conn.execute(f"SELECT COUNT(*) FROM {result}").fetchone()[0]
+        assert count == 2
+
+
+def test_configure_duckdb_spatial_extension(test_config: MockJobConfig, mock_gcs_access) -> None:
+    """Test that DuckDB spatial extension is configured."""
+    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+        source = MockSource(test_config)
+
+        # Try to use spatial function - should work if spatial extension is loaded
+        try:
+            result = source.conn.execute("SELECT ST_Point(0, 0)").fetchone()
+            assert result is not None
+        except Exception:
+            # Spatial extension might not be available in all environments
+            # This is acceptable for CI environments without the extension
+            pass

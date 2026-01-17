@@ -7,11 +7,13 @@ maintainability, and debuggability.
 
 Pipeline Steps:
 1. CVR Collection - Collect and deduplicate CVR numbers from all pipelines
-2. Company Fetching - Fetch comprehensive company data from CVR register
-3. P-Number Fetching - Fetch P-number (production unit) data for additional addresses
-4. Financial Documents - Fetch and parse financial documents and XML data
-5. Address Geocoding - Enrich all addresses with geometry via DAWA API
-6. Data Consolidation - Merge and normalize all data into final tables
+2. Company Fetching - Fetch raw company data from CVR register (Bronze layer)
+3. Data Parsing - Parse raw JSON into structured tables (Silver layer)
+4. Data Consolidation - Consolidate Silver data into Gold format
+5. P-Number Fetching - Fetch P-number (production unit) data for additional addresses
+6. Financial Documents - Fetch and parse financial documents and XML data
+7. Address Geocoding - Enrich all addresses with geometry via DAWA API and apply primary address
+   selection
 
 Each step can be run independently and supports batch processing for
 parallel execution via GitHub Actions job matrices.
@@ -20,25 +22,25 @@ parallel execution via GitHub Actions job matrices.
 # Note: Legacy CVREnrichmentGold classes are imported directly in app.py to avoid circular imports
 
 # New modular CVR enrichment steps
-from .cvr_collection import CVRCollection, CVRCollectionConfig
-from .company_fetching import CompanyFetching, CompanyFetchingConfig
-from .pnumber_fetching import PNumberFetching, PNumberFetchingConfig
-from .financial_documents import FinancialDocuments, FinancialDocumentsConfig
 from .address_geocoding import AddressGeocoding, AddressGeocodingConfig
+from .company_fetching import CompanyFetching, CompanyFetchingConfig
+from .cvr_collection import CVRCollection, CVRCollectionConfig
 from .data_consolidation import DataConsolidation, DataConsolidationConfig
+from .financial_documents import FinancialDocuments, FinancialDocumentsConfig
+from .pnumber_fetching import PNumberFetching, PNumberFetchingConfig
 
 __all__ = [
-    # New modular steps
-    "CVRCollection",
-    "CVRCollectionConfig", 
-    "CompanyFetching",
-    "CompanyFetchingConfig",
-    "PNumberFetching", 
-    "PNumberFetchingConfig",
-    "FinancialDocuments",
-    "FinancialDocumentsConfig",
     "AddressGeocoding",
     "AddressGeocodingConfig",
+    # New modular steps
+    "CVRCollection",
+    "CVRCollectionConfig",
+    "CompanyFetching",
+    "CompanyFetchingConfig",
     "DataConsolidation",
     "DataConsolidationConfig",
+    "FinancialDocuments",
+    "FinancialDocumentsConfig",
+    "PNumberFetching",
+    "PNumberFetchingConfig",
 ]

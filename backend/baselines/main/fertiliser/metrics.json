@@ -1,0 +1,25 @@
+{
+  "dataset_name": "fertiliser",
+  "source_path": "gs://landbrugsdata-raw-data/silver/fertiliser/20260116_234019/Efterafgr\u00f8der 2020.parquet",
+  "generated_at": "2026-01-17T11:15:25.886304",
+  "record_count": 51535,
+  "unique_identifiers": {
+    "cvr_number": 10155
+  },
+  "column_null_counts": {
+    "data_source": 0,
+    "year": 0,
+    "cvr_number": 0,
+    "capnumber": 0,
+    "markbloknummer": 0,
+    "marknummer": 51535,
+    "indberet_alternativ": 0,
+    "faktisk_areal_ha": 0,
+    "omregnet_areal_ha": 0,
+    "journal_nummer": 51535,
+    "total_n_kvote": 51535,
+    "fosfortal": 51535,
+    "data_type": 0,
+    "data_source_file": 0
+  }
+}
