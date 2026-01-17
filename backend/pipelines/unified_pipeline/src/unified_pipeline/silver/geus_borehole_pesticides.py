@@ -46,7 +46,7 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
     namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "ms": "http://mapserver.gis.umn.edu/mapserver",  # Actual feature namespace
-        "gml": "http://www.opengis.net/gml",  # GML 3.1.1, not 3.2
+        "gml": "http://www.opengis.net/gml/3.2",  # GML 3.2 (verified from GEUS API response)
     }
 
     # Tracked pesticides (stofnr -> substance name)
