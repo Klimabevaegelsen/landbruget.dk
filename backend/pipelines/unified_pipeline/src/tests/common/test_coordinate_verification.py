@@ -180,12 +180,12 @@ class TestCoordinateOrderVerification:
         first_vals = [pair[0] for pair in coords]  # Should be longitudes
         second_vals = [pair[1] for pair in coords]  # Should be latitudes
 
-        assert all(
-            8 <= val <= 15 for val in first_vals
-        ), "First values should be in longitude range"
-        assert all(
-            54 <= val <= 58 for val in second_vals
-        ), "Second values should be in latitude range"
+        assert all(8 <= val <= 15 for val in first_vals), (
+            "First values should be in longitude range"
+        )
+        assert all(54 <= val <= 58 for val in second_vals), (
+            "Second values should be in latitude range"
+        )
 
     def test_incorrect_lat_lon_order(self, incorrect_geometry_data):
         """Test that incorrect (LAT, LON) order is detected."""
@@ -295,9 +295,9 @@ class TestPipelineCoordinateConsistency:
         # polygon in Denmark
         # (approximately 0.1° x 0.1° should be roughly 100-200 km²)
         assert area_correct > 0, "Area should be positive"
-        assert (
-            50_000_000 < area_correct < 500_000_000
-        ), f"Area {area_correct} m² should be reasonable for small Denmark polygon"
+        assert 50_000_000 < area_correct < 500_000_000, (
+            f"Area {area_correct} m² should be reasonable for small Denmark polygon"
+        )
 
         # The flipped calculation should be different (and incorrect for our LAT/LON data)
         assert area_incorrect > 0, "Flipped area should still be positive"
@@ -326,9 +326,9 @@ class TestSampleDatasetCoordinates:
             is_correct, status, coords = verifier.verify_coordinate_order(table_name)
             expected_correct = expected_results[dataset_name]
 
-            assert (
-                is_correct == expected_correct
-            ), f"Dataset '{dataset_name}' coordinate order verification failed.\nExpected: {'correct' if expected_correct else 'incorrect'}\nGot: {'correct' if is_correct else 'incorrect'}\nStatus: {status}"
+            assert is_correct == expected_correct, (
+                f"Dataset '{dataset_name}' coordinate order verification failed.\nExpected: {'correct' if expected_correct else 'incorrect'}\nGot: {'correct' if is_correct else 'incorrect'}\nStatus: {status}"
+            )
 
             # Verify we got some coordinate pairs
             assert len(coords) > 0, f"No coordinates found for {dataset_name}"
@@ -336,12 +336,12 @@ class TestSampleDatasetCoordinates:
             # For correct datasets, verify coordinates are in Denmark bounds
             if expected_correct:
                 for lon, lat in coords:
-                    assert (
-                        8 <= lon <= 15
-                    ), f"Longitude {lon} out of Denmark range for {dataset_name}"
-                    assert (
-                        54 <= lat <= 58
-                    ), f"Latitude {lat} out of Denmark range for {dataset_name}"
+                    assert 8 <= lon <= 15, (
+                        f"Longitude {lon} out of Denmark range for {dataset_name}"
+                    )
+                    assert 54 <= lat <= 58, (
+                        f"Latitude {lat} out of Denmark range for {dataset_name}"
+                    )
 
     def test_wrong_coordinates_detection(self, duck_conn):
         """Test that datasets with wrong coordinate order are properly detected."""

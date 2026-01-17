@@ -42,9 +42,9 @@ def test_h3_cell_format(duckdb_conn):
 
     for h3_cell in valid_h3_cells:
         assert len(h3_cell) == 15, f"H3 cell should be 15 characters, got {len(h3_cell)}"
-        assert all(
-            c in "0123456789abcdef" for c in h3_cell
-        ), f"H3 cell should be hexadecimal: {h3_cell}"
+        assert all(c in "0123456789abcdef" for c in h3_cell), (
+            f"H3 cell should be hexadecimal: {h3_cell}"
+        )
 
 
 def test_h3_resolution(config):
@@ -257,15 +257,15 @@ def test_h3_resolution_area_ranges(config):
         test_config = H3SpatialConfig(h3_resolution=resolution)
         resolution_config = test_config.h3_resolution_areas[resolution]
 
-        assert (
-            resolution_config["min_area_ha"] == areas["min"]
-        ), f"Resolution {resolution} min area mismatch"
-        assert (
-            resolution_config["max_area_ha"] == areas["max"]
-        ), f"Resolution {resolution} max area mismatch"
-        assert (
-            abs(resolution_config["theoretical_avg_area_ha"] - areas["avg"]) < 0.1
-        ), f"Resolution {resolution} avg area mismatch"
+        assert resolution_config["min_area_ha"] == areas["min"], (
+            f"Resolution {resolution} min area mismatch"
+        )
+        assert resolution_config["max_area_ha"] == areas["max"], (
+            f"Resolution {resolution} max area mismatch"
+        )
+        assert abs(resolution_config["theoretical_avg_area_ha"] - areas["avg"]) < 0.1, (
+            f"Resolution {resolution} avg area mismatch"
+        )
 
 
 def test_h3_area_validation_thresholds(duckdb_conn, config):

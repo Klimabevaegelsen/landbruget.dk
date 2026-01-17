@@ -62,9 +62,9 @@ class TestDataSourceRegistryCompleteness:
         import re
 
         for source_name in DATA_SOURCE_REGISTRY.keys():
-            assert re.match(
-                r"^[a-z][a-z0-9_]*$", source_name
-            ), f"Invalid source key format: {source_name} (expected snake_case)"
+            assert re.match(r"^[a-z][a-z0-9_]*$", source_name), (
+                f"Invalid source key format: {source_name} (expected snake_case)"
+            )
 
     def test_data_source_types_are_valid(self):
         """All data source types should be from the enum."""
@@ -72,9 +72,9 @@ class TestDataSourceRegistryCompleteness:
 
         valid_types = set(DataSourceType)
         for source_name, info in DATA_SOURCE_REGISTRY.items():
-            assert (
-                info.data_source_type in valid_types
-            ), f"{source_name}: invalid data_source_type {info.data_source_type}"
+            assert info.data_source_type in valid_types, (
+                f"{source_name}: invalid data_source_type {info.data_source_type}"
+            )
 
     @pytest.mark.skip(reason="Enable after all pipelines are registered")
     def test_major_pipelines_are_registered(self):
@@ -120,22 +120,22 @@ class TestDataSourceRegistryQuality:
 
         for source_name, info in DATA_SOURCE_REGISTRY.items():
             if info.update_frequency:
-                assert (
-                    info.update_frequency in valid_frequencies
-                ), f"{source_name}: non-standard update_frequency '{info.update_frequency}'"
+                assert info.update_frequency in valid_frequencies, (
+                    f"{source_name}: non-standard update_frequency '{info.update_frequency}'"
+                )
 
     def test_descriptions_are_meaningful(self):
         """Descriptions should be more than just placeholders."""
         min_description_length = 20
 
         for source_name, info in DATA_SOURCE_REGISTRY.items():
-            assert (
-                len(info.data_description) >= min_description_length
-            ), f"{source_name}: data_description too short ({len(info.data_description)} chars)"
+            assert len(info.data_description) >= min_description_length, (
+                f"{source_name}: data_description too short ({len(info.data_description)} chars)"
+            )
 
-            assert (
-                len(info.display_description) >= min_description_length
-            ), f"{source_name}: display_description too short ({len(info.display_description)} chars)"
+            assert len(info.display_description) >= min_description_length, (
+                f"{source_name}: display_description too short ({len(info.display_description)} chars)"
+            )
 
     def test_no_placeholder_text(self):
         """Entries should not contain obvious placeholder text."""
@@ -146,6 +146,6 @@ class TestDataSourceRegistryQuality:
                 value = getattr(info, field_name, "")
                 if value:
                     for placeholder in placeholders:
-                        assert (
-                            placeholder not in value.upper()
-                        ), f"{source_name}.{field_name} contains placeholder text: {placeholder}"
+                        assert placeholder not in value.upper(), (
+                            f"{source_name}.{field_name} contains placeholder text: {placeholder}"
+                        )

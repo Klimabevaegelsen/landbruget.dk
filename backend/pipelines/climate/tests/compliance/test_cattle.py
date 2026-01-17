@@ -63,9 +63,9 @@ class TestCattleDigestionCompliance:
 
         # Verify per-animal CH4
         expected_ch4_per_animal = test_case["expected_outputs"]["ch4_per_animal_kg"]
-        assert (
-            abs(csharp_result["ch4_per_animal"] - expected_ch4_per_animal) < 0.1
-        ), f"Per-animal CH4 mismatch: expected {expected_ch4_per_animal}, got {csharp_result['ch4_per_animal']}"
+        assert abs(csharp_result["ch4_per_animal"] - expected_ch4_per_animal) < 0.1, (
+            f"Per-animal CH4 mismatch: expected {expected_ch4_per_animal}, got {csharp_result['ch4_per_animal']}"
+        )
 
         # Verify total CH4
         expected_ch4_total = test_case["expected_outputs"]["ch4_total_kg"]
@@ -106,9 +106,9 @@ class TestCattleDigestionCompliance:
         jersey_ch4_per_animal = jersey_case["expected_outputs"]["ch4_per_animal_kg"]
 
         # Jersey should have lower emissions (0.207 vs 0.304 dry period factor)
-        assert (
-            jersey_ch4_per_animal < heavy_ch4_per_animal
-        ), "Jersey breed should have lower CH4 emissions than heavy breed"
+        assert jersey_ch4_per_animal < heavy_ch4_per_animal, (
+            "Jersey breed should have lower CH4 emissions than heavy breed"
+        )
 
         difference_pct = (
             (heavy_ch4_per_animal - jersey_ch4_per_animal) / heavy_ch4_per_animal
@@ -129,9 +129,9 @@ class TestCattleDigestionCompliance:
         # AR6 uses 27 for biogenic CH4 (livestock), not 30 (fossil)
         calculated_co2e = ch4_total * gwp_ar6["CH4_biogenic"]
 
-        assert (
-            abs(calculated_co2e - expected_co2e_ar6) < 100
-        ), f"AR6 biogenic CH4 conversion mismatch: expected {expected_co2e_ar6}, got {calculated_co2e}"
+        assert abs(calculated_co2e - expected_co2e_ar6) < 100, (
+            f"AR6 biogenic CH4 conversion mismatch: expected {expected_co2e_ar6}, got {calculated_co2e}"
+        )
 
         # Document difference from AR4
         expected_co2e_ar4 = test_case["expected_outputs"]["co2e_kg_gwp_ar4"]
@@ -161,9 +161,9 @@ class TestPigDigestionCompliance:
 
         from formulas.svin import enterisk_metan
 
-        assert (
-            gwp_ar6["CH4_biogenic"] == enterisk_metan.GWP_CH4
-        ), f"Pig CH4 GWP should be {gwp_ar6['CH4_biogenic']} (AR6 biogenic)"
+        assert gwp_ar6["CH4_biogenic"] == enterisk_metan.GWP_CH4, (
+            f"Pig CH4 GWP should be {gwp_ar6['CH4_biogenic']} (AR6 biogenic)"
+        )
 
 
 class TestManureEmissionsCompliance:

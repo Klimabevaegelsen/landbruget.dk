@@ -205,18 +205,18 @@ def test_coordinate_system_consistency(duckdb_conn, spatial_joiner, transformer,
 
     # WGS84 coordinates for Denmark: Lon ~8-15, Lat ~54-58
     # The test data uses coordinates around Copenhagen (lon ~12.5, lat ~55.6)
-    assert (
-        7.5 <= result[0] <= 15.5
-    ), f"Min longitude should be within Denmark WGS84 bounds, got {result[0]}"
-    assert (
-        7.5 <= result[1] <= 15.5
-    ), f"Max longitude should be within Denmark WGS84 bounds, got {result[1]}"
-    assert (
-        54.5 <= result[2] <= 58
-    ), f"Min latitude should be within Denmark WGS84 bounds, got {result[2]}"
-    assert (
-        54.5 <= result[3] <= 58
-    ), f"Max latitude should be within Denmark WGS84 bounds, got {result[3]}"
+    assert 7.5 <= result[0] <= 15.5, (
+        f"Min longitude should be within Denmark WGS84 bounds, got {result[0]}"
+    )
+    assert 7.5 <= result[1] <= 15.5, (
+        f"Max longitude should be within Denmark WGS84 bounds, got {result[1]}"
+    )
+    assert 54.5 <= result[2] <= 58, (
+        f"Min latitude should be within Denmark WGS84 bounds, got {result[2]}"
+    )
+    assert 54.5 <= result[3] <= 58, (
+        f"Max latitude should be within Denmark WGS84 bounds, got {result[3]}"
+    )
 
     # Run pipeline and check final coordinates (H3 cell centers are in WGS84 lat/lon)
     result_table = spatial_joiner.perform_chunked_spatial_join(
@@ -336,9 +336,9 @@ def test_pfas_intensity_calculations(duckdb_conn, spatial_joiner, full_test_data
         # Verify intensity calculation is correct
         if area_ha > 0:
             diff = abs(reported_intensity - calculated_intensity)
-            assert (
-                diff < 0.01
-            ), f"Intensity mismatch for {h3_cell}: reported={reported_intensity}, calculated={calculated_intensity}"
+            assert diff < 0.01, (
+                f"Intensity mismatch for {h3_cell}: reported={reported_intensity}, calculated={calculated_intensity}"
+            )
 
 
 def test_pesticide_application_counts(duckdb_conn, spatial_joiner, full_test_dataset):
@@ -367,9 +367,9 @@ def test_pesticide_application_counts(duckdb_conn, spatial_joiner, full_test_dat
 
     # PFAS apps should be <= total apps
     if app_stats[0] > 0:
-        assert (
-            app_stats[1] <= app_stats[0]
-        ), "PFAS applications should not exceed total applications"
+        assert app_stats[1] <= app_stats[0], (
+            "PFAS applications should not exceed total applications"
+        )
 
 
 def test_crop_diversity_metrics(duckdb_conn, spatial_joiner, full_test_dataset):

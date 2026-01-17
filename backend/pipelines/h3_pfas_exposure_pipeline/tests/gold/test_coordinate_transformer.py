@@ -103,9 +103,9 @@ def test_transform_wgs84_to_utm(duckdb_conn, transformer, sample_wgs84_data):
     easting_like = 200000 < x_coord < 900000 or 200000 < y_coord < 900000
     northing_like = 6000000 < x_coord < 6400000 or 6000000 < y_coord < 6400000
 
-    assert (
-        easting_like and northing_like
-    ), f"Transformed coordinates should be in UTM ranges, got {x_coord}, {y_coord}"
+    assert easting_like and northing_like, (
+        f"Transformed coordinates should be in UTM ranges, got {x_coord}, {y_coord}"
+    )
 
 
 def test_transform_utm_to_wgs84(duckdb_conn, transformer, sample_utm_data):
@@ -275,9 +275,9 @@ def test_spherical_calculations(duckdb_conn, transformer):
 
     # Distance should be approximately 150-200 km
     distance = result[0]
-    assert (
-        140 < distance < 210
-    ), f"Distance Copenhagen-Aarhus should be ~150-200 km, got {distance:.1f} km"
+    assert 140 < distance < 210, (
+        f"Distance Copenhagen-Aarhus should be ~150-200 km, got {distance:.1f} km"
+    )
 
 
 # Denmark Bounds Tests
