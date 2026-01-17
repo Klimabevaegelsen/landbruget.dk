@@ -3,7 +3,7 @@ Tests for the GEUSBoreholePesticidesSilver class.
 """
 
 import xml.etree.ElementTree as ET
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 

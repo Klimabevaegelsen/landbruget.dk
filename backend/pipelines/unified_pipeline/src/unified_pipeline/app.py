@@ -24,6 +24,10 @@ from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
 from unified_pipeline.bronze.dmi import DMIBronze, DMIBronzeConfig
 from unified_pipeline.bronze.dst import DSTBronze, DSTBronzeConfig
 from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
+from unified_pipeline.bronze.geus_borehole_pesticides import (
+    GEUSBoreholePesticidesBronze,
+    GEUSBoreholePesticidesBronzeConfig,
+)
 from unified_pipeline.bronze.grukos import GrukosBronze, GrukosBronzeConfig
 from unified_pipeline.bronze.jordbrugsanalyser import (
     JordbrugsanalyserBronze,
@@ -33,10 +37,6 @@ from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeC
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
-from unified_pipeline.bronze.geus_borehole_pesticides import (
-    GEUSBoreholePesticidesBronze,
-    GEUSBoreholePesticidesBronzeConfig,
-)
 from unified_pipeline.cli_scheduling import scheduling
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
 from unified_pipeline.gold.arbejdstilsynet_inspections import (
@@ -125,6 +125,10 @@ from unified_pipeline.silver.dmi import DMISilver, DMISilverConfig
 from unified_pipeline.silver.dst import DSTSilver, DSTSilverConfig
 from unified_pipeline.silver.dst_zone_mapping import DSTZoneMapping, DSTZoneMappingConfig
 from unified_pipeline.silver.fvm_wfs import FVMWFSSilver, FVMWFSSilverConfig
+from unified_pipeline.silver.geus_borehole_pesticides import (
+    GEUSBoreholePesticidesSilver,
+    GEUSBoreholePesticidesSilverConfig,
+)
 from unified_pipeline.silver.grukos import GrukosSilver, GrukosSilverConfig
 from unified_pipeline.silver.jordbrugsanalyser import (
     JordbrugsanalyserSilver,
@@ -134,10 +138,6 @@ from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverC
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTypologySilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
-from unified_pipeline.silver.geus_borehole_pesticides import (
-    GEUSBoreholePesticidesSilver,
-    GEUSBoreholePesticidesSilverConfig,
-)
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
