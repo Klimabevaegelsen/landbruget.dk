@@ -294,9 +294,9 @@ def test_spatial_join_accuracy(duckdb_conn, config, spatial_joiner):
 
     if result:
         coverage = result[0]
-        assert 0.8 <= coverage <= 1.0, (
-            f"Perfect overlap should have coverage close to 1.0, got {coverage}"
-        )
+        assert (
+            0.8 <= coverage <= 1.0
+        ), f"Perfect overlap should have coverage close to 1.0, got {coverage}"
 
 
 def test_spatial_join_denmark_bounds(duckdb_conn, config, spatial_joiner):

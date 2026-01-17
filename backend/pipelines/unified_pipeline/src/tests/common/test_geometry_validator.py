@@ -143,9 +143,9 @@ class TestCRSTransformation:
 
         # Coordinates should remain essentially unchanged (within small tolerance)
         for before, after in zip(bounds_before, bounds_after):
-            assert abs(before - after) < 0.01, (
-                "Coordinates should not change significantly when already in WGS84"
-            )
+            assert (
+                abs(before - after) < 0.01
+            ), "Coordinates should not change significantly when already in WGS84"
 
     def test_validate_transform_preserves_attributes(self, duck_conn):
         """Test that non-geometry columns are preserved during transformation."""
@@ -677,9 +677,9 @@ class TestTypeDetection:
             FROM test_varchar
             LIMIT 1
         """).fetchone()[0]
-        assert "GEOMETRY" in geom_type_after or "POINT" in geom_type_after, (
-            "Should convert to spatial type"
-        )
+        assert (
+            "GEOMETRY" in geom_type_after or "POINT" in geom_type_after
+        ), "Should convert to spatial type"
 
     def test_detect_spatial_geometry(self, duck_conn):
         """Test detection of native spatial geometry types."""

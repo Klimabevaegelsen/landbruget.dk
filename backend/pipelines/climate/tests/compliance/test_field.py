@@ -40,9 +40,9 @@ class TestNitrateLeachingCompliance:
         # Verify intermediate N2O calculation matches C# exactly
         # This is GWP-independent - formula logic only
         expected_n2o = test_case["expected_outputs"]["n2o_kg"]
-        assert abs(n2o_kg - expected_n2o) < 0.01, (
-            f"N2O calculation mismatch: expected {expected_n2o}, got {n2o_kg}"
-        )
+        assert (
+            abs(n2o_kg - expected_n2o) < 0.01
+        ), f"N2O calculation mismatch: expected {expected_n2o}, got {n2o_kg}"
 
     @pytest.mark.compliance
     @pytest.mark.field
@@ -57,9 +57,9 @@ class TestNitrateLeachingCompliance:
 
         # Verify AR6 GWP is used
         expected_co2e_ar6 = test_case["expected_outputs"]["co2e_kg_gwp_ar6"]
-        assert abs(co2e_kg - expected_co2e_ar6) < 1.0, (
-            f"AR6 CO2e mismatch: expected {expected_co2e_ar6}, got {co2e_kg}"
-        )
+        assert (
+            abs(co2e_kg - expected_co2e_ar6) < 1.0
+        ), f"AR6 CO2e mismatch: expected {expected_co2e_ar6}, got {co2e_kg}"
 
         # Document difference from C# AR4 values
         expected_co2e_ar4 = test_case["expected_outputs"]["co2e_kg_gwp_ar4"]
@@ -125,9 +125,9 @@ class TestLimingCompliance:
         expected_co2 = test_case["expected_outputs"]["co2_kg"]
         tolerance = expected_co2 * test_case["tolerance_pct"] / 100
 
-        assert abs(co2_kg - expected_co2) <= tolerance, (
-            f"Liming CO2 mismatch: expected {expected_co2:.2f}, got {co2_kg:.2f}"
-        )
+        assert (
+            abs(co2_kg - expected_co2) <= tolerance
+        ), f"Liming CO2 mismatch: expected {expected_co2:.2f}, got {co2_kg:.2f}"
 
 
 class TestCropResidueCompliance:
@@ -155,9 +155,9 @@ class TestCropResidueCompliance:
         above_ground = crop_yield * slope + intercept
 
         expected = test_case["expected_outputs"]["above_ground_kg_ts_ha"]
-        assert abs(above_ground - expected) < 0.1, (
-            f"Above-ground residue mismatch: expected {expected}, got {above_ground}"
-        )
+        assert (
+            abs(above_ground - expected) < 0.1
+        ), f"Above-ground residue mismatch: expected {expected}, got {above_ground}"
 
     @pytest.mark.compliance
     @pytest.mark.field
@@ -175,9 +175,9 @@ class TestCropResidueCompliance:
         below_ground = (crop_yield + above_ground) * biomass_ratio
 
         expected = test_case["expected_outputs"]["below_ground_kg_ts_ha"]
-        assert abs(below_ground - expected) < 0.1, (
-            f"Below-ground residue mismatch: expected {expected}, got {below_ground}"
-        )
+        assert (
+            abs(below_ground - expected) < 0.1
+        ), f"Below-ground residue mismatch: expected {expected}, got {below_ground}"
 
     @pytest.mark.compliance
     @pytest.mark.field
@@ -195,9 +195,9 @@ class TestCropResidueCompliance:
         n_with = test_with_straw["expected_outputs"]["n_above_kg_ha"]
         n_without = test_without_straw["expected_outputs"]["n_above_kg_ha"]
 
-        assert n_without < n_with, (
-            "N content should be lower when straw is removed (not ploughed in)"
-        )
+        assert (
+            n_without < n_with
+        ), "N content should be lower when straw is removed (not ploughed in)"
 
 
 class TestFormulaParity:
@@ -236,11 +236,11 @@ class TestFormulaParity:
         python_n2o, python_co2e = nitratudvaskning.calculate_n2o_nitratudvaskning(typetal, area)
 
         # N2O should match exactly (GWP-independent)
-        assert abs(python_n2o - csharp_result["n2o"]) < 0.01, (
-            f"N2O mismatch: C#={csharp_result['n2o']}, Python={python_n2o}"
-        )
+        assert (
+            abs(python_n2o - csharp_result["n2o"]) < 0.01
+        ), f"N2O mismatch: C#={csharp_result['n2o']}, Python={python_n2o}"
 
         # CO2e should match when using same GWP
-        assert abs(python_co2e - csharp_result["co2e"]) < 10, (
-            f"CO2e mismatch: C#={csharp_result['co2e']}, Python={python_co2e}"
-        )
+        assert (
+            abs(python_co2e - csharp_result["co2e"]) < 10
+        ), f"CO2e mismatch: C#={csharp_result['co2e']}, Python={python_co2e}"

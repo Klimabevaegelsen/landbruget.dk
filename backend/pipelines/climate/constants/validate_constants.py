@@ -39,12 +39,12 @@ def validate_gwp_factors():
     assert abs(mw["N2O_N_factor"] - 44.0 / 28.0) < 0.001, "N2O_N_factor should be 44/28"
 
     # Check indirect N2O factors
-    assert 0 < data["indirect_n2o_factors"]["atmospheric_deposition"] < 1, (
-        "Atmospheric deposition EF should be between 0 and 1"
-    )
-    assert 0 < data["indirect_n2o_factors"]["leaching_runoff"] < 1, (
-        "Leaching/runoff EF should be between 0 and 1"
-    )
+    assert (
+        0 < data["indirect_n2o_factors"]["atmospheric_deposition"] < 1
+    ), "Atmospheric deposition EF should be between 0 and 1"
+    assert (
+        0 < data["indirect_n2o_factors"]["leaching_runoff"] < 1
+    ), "Leaching/runoff EF should be between 0 and 1"
 
     # Check metadata
     assert "source" in data["metadata"], "Missing source in metadata"
