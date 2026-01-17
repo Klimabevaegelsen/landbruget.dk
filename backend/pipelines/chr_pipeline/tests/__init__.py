@@ -1,1 +1,0 @@
-"""CHR Pipeline test suite."""

@@ -18,9 +18,7 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_stamdata"
 # --- Generic SOAP Fetcher ---
 
 
-def fetch_raw_soap_response(
-    client: Client, operation_name: str, request_data: dict
-) -> Any | None:
+def fetch_raw_soap_response(client: Client, operation_name: str, request_data: dict) -> Any | None:
     """Fetch raw response from a SOAP endpoint using Zeep."""
     try:
         operation = getattr(client.service, operation_name)

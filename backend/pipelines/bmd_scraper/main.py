@@ -13,12 +13,12 @@ from pathlib import Path
 
 import dotenv
 
+# Import pipeline metadata system for data tracing
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
 from bronze import BMDScraper
 from bronze.export import GCSStorage
 from silver import BMDTransformer, upload_to_gcs
-
-# Import pipeline metadata system for data tracing
-from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 PIPELINE_METADATA_AVAILABLE = True
 

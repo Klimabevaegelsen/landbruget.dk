@@ -42,11 +42,13 @@ This project uses Playwright for both E2E (end-to-end) and component testing. Pl
 Tests complete user workflows in a real browser environment.
 
 **When to use:**
+
 - Testing critical user journeys (search, navigation, data display)
 - Testing integration between multiple components
 - Testing page-level functionality
 
 **Example:**
+
 ```typescript
 // tests/homepage.spec.ts
 import { test, expect } from '@playwright/test';
@@ -71,11 +73,13 @@ test('should allow user to search for company', async ({ page }) => {
 Tests individual React components in isolation.
 
 **When to use:**
+
 - Testing complex component logic
 - Testing component variants and states
 - Faster feedback than E2E tests
 
 **Example:**
+
 ```typescript
 // tests/components/Button.spec.tsx
 import { test, expect } from '@playwright/experimental-ct-react';
@@ -123,6 +127,7 @@ npm run test:debug
 ### CI/CD Integration
 
 Tests run automatically in GitHub Actions on:
+
 - Every pull request
 - Every push to main branch
 - Manual workflow dispatch
@@ -196,6 +201,7 @@ test('should search using utilities', async ({ page }) => {
 **Pattern:** `{component}-{element}-{descriptor}`
 
 **Examples:**
+
 - `global-search-input` - Main search input field
 - `search-result-card` - Individual search result
 - `layer-switch-fields` - Layer toggle switch for fields
@@ -248,7 +254,10 @@ interface ComponentProps {
   'data-testid'?: string;
 }
 
-export function Component({ className, 'data-testid': testId }: ComponentProps) {
+export function Component({
+  className,
+  'data-testid': testId,
+}: ComponentProps) {
   return (
     <div className={className} data-testid={testId}>
       {/* content */}
@@ -278,7 +287,11 @@ await expectTestIdVisible(page, 'result');
 ### Wait Utilities
 
 ```typescript
-import { waitForTestId, waitForApiResponse, waitForNetworkIdle } from './utils/test-helpers';
+import {
+  waitForTestId,
+  waitForApiResponse,
+  waitForNetworkIdle,
+} from './utils/test-helpers';
 
 // Wait for element by testid
 await waitForTestId(page, 'search-results', { timeout: 5000 });
@@ -440,7 +453,11 @@ Organize complex page interactions:
 ```typescript
 // tests/pages/SearchPage.ts
 import { Page } from '@playwright/test';
-import { fillTestId, clickTestId, expectTestIdVisible } from '../utils/test-helpers';
+import {
+  fillTestId,
+  clickTestId,
+  expectTestIdVisible,
+} from '../utils/test-helpers';
 
 export class SearchPage {
   constructor(private page: Page) {}
@@ -536,11 +553,13 @@ test.describe('Mobile Navigation', () => {
 ### 1. Use data-testid for Selectors
 
 **Good:**
+
 ```typescript
 await page.click('[data-testid="submit-button"]');
 ```
 
 **Bad:**
+
 ```typescript
 await page.click('.btn.btn-primary'); // Breaks if CSS changes
 await page.click('button:nth-child(3)'); // Fragile position-based selector
@@ -549,13 +568,17 @@ await page.click('button:nth-child(3)'); // Fragile position-based selector
 ### 2. Write Descriptive Test Names
 
 **Good:**
+
 ```typescript
-test('should display error message when search returns no results', async ({ page }) => {
+test('should display error message when search returns no results', async ({
+  page,
+}) => {
   // test implementation
 });
 ```
 
 **Bad:**
+
 ```typescript
 test('test search', async ({ page }) => {
   // test implementation
@@ -567,6 +590,7 @@ test('test search', async ({ page }) => {
 Each test should be able to run alone without depending on other tests.
 
 **Good:**
+
 ```typescript
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
@@ -583,6 +607,7 @@ test('test B', async ({ page }) => {
 ```
 
 **Bad:**
+
 ```typescript
 test('create user', async ({ page }) => {
   // Creates user...
@@ -596,12 +621,14 @@ test('login as user', async ({ page }) => {
 ### 4. Use Appropriate Waits
 
 **Good:**
+
 ```typescript
 await page.waitForSelector('[data-testid="results"]');
 await expect(page.locator('[data-testid="results"]')).toBeVisible();
 ```
 
 **Bad:**
+
 ```typescript
 await page.waitForTimeout(5000); // Arbitrary wait
 ```
@@ -609,16 +636,22 @@ await page.waitForTimeout(5000); // Arbitrary wait
 ### 5. Test User Behavior, Not Implementation
 
 **Good:**
+
 ```typescript
-test('should show filtered results when user applies filter', async ({ page }) => {
+test('should show filtered results when user applies filter', async ({
+  page,
+}) => {
   await clickTestId(page, 'organic-filter');
   await expectTestIdVisible(page, 'filtered-results');
 });
 ```
 
 **Bad:**
+
 ```typescript
-test('should call setFilter function when checkbox clicked', async ({ page }) => {
+test('should call setFilter function when checkbox clicked', async ({
+  page,
+}) => {
   // Testing implementation details
 });
 ```
@@ -685,11 +718,13 @@ test.describe('Search Functionality', () => {
 #### 1. Element Not Found
 
 **Error:**
+
 ```
 Timeout 30000ms exceeded waiting for selector "[data-testid='element']"
 ```
 
 **Solutions:**
+
 - Verify the data-testid exists in the component
 - Check if element is conditionally rendered
 - Increase timeout if needed: `{ timeout: 60000 }`
@@ -700,6 +735,7 @@ Timeout 30000ms exceeded waiting for selector "[data-testid='element']"
 **Symptoms:** Tests pass sometimes, fail other times
 
 **Solutions:**
+
 - Add explicit waits: `waitForSelector`, `waitForLoadState`
 - Avoid `waitForTimeout` - use event-based waits instead
 - Use `test.beforeEach` to ensure clean state
@@ -708,6 +744,7 @@ Timeout 30000ms exceeded waiting for selector "[data-testid='element']"
 #### 3. Slow Tests
 
 **Solutions:**
+
 - Use `test:smoke` for quick feedback
 - Mock API responses instead of real network calls
 - Parallelize tests: `fullyParallel: true` in config
@@ -716,6 +753,7 @@ Timeout 30000ms exceeded waiting for selector "[data-testid='element']"
 #### 4. Tests Work Locally but Fail in CI
 
 **Solutions:**
+
 - Check viewport size (CI may use different size)
 - Increase timeouts in CI environment
 - Use `webServer` in playwright.config.ts to ensure dev server is running
@@ -771,12 +809,14 @@ test('screenshot on fail', async ({ page }, testInfo) => {
 ## Additional Resources
 
 ### Playwright Documentation
+
 - [Playwright API](https://playwright.dev/docs/api/class-playwright)
 - [Best Practices](https://playwright.dev/docs/best-practices)
 - [Selectors](https://playwright.dev/docs/selectors)
 - [Component Testing](https://playwright.dev/docs/test-components)
 
 ### Project-Specific
+
 - Main README: `../README.md`
 - Frontend Guide: `../CLAUDE.md`
 - Component Guidelines: `../src/components/CLAUDE.md`
@@ -794,6 +834,7 @@ When adding new features:
 4. **Run tests** before committing: `npm test`
 
 **Testing Checklist:**
+
 - [ ] Added data-testid to new components
 - [ ] Wrote E2E tests for user flows
 - [ ] Tests pass locally: `npm test`

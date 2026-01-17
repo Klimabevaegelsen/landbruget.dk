@@ -59,9 +59,10 @@ export async function waitForApiResponse(
   return await page.waitForResponse(
     (response) => {
       const url = response.url();
-      const matches = typeof urlPattern === 'string'
-        ? url.includes(urlPattern)
-        : urlPattern.test(url);
+      const matches =
+        typeof urlPattern === 'string'
+          ? url.includes(urlPattern)
+          : urlPattern.test(url);
       return matches && response.status() === 200;
     },
     { timeout }
@@ -111,11 +112,7 @@ export async function typeTestId(
 /**
  * Select option by data-testid
  */
-export async function selectTestId(
-  page: Page,
-  testId: string,
-  value: string
-) {
+export async function selectTestId(page: Page, testId: string, value: string) {
   await page.selectOption(`[data-testid="${testId}"]`, value);
 }
 
@@ -216,7 +213,9 @@ export interface MockCompany {
   type: string;
 }
 
-export function generateMockCompany(overrides?: Partial<MockCompany>): MockCompany {
+export function generateMockCompany(
+  overrides?: Partial<MockCompany>
+): MockCompany {
   const cvr = generateMockCVR();
   return {
     id: `company-${cvr}`,
@@ -340,7 +339,10 @@ export async function checkAccessibility(page: Page) {
   for (const img of images) {
     const alt = await img.getAttribute('alt');
     if (alt === null) {
-      console.warn('Image missing alt attribute:', await img.getAttribute('src'));
+      console.warn(
+        'Image missing alt attribute:',
+        await img.getAttribute('src')
+      );
     }
   }
 }
@@ -352,10 +354,7 @@ export async function checkAccessibility(page: Page) {
 /**
  * Fill form fields by data-testid mapping
  */
-export async function fillForm(
-  page: Page,
-  fields: Record<string, string>
-) {
+export async function fillForm(page: Page, fields: Record<string, string>) {
   for (const [testId, value] of Object.entries(fields)) {
     await fillTestId(page, testId, value);
   }

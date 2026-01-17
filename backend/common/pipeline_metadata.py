@@ -3,7 +3,7 @@ import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -15,14 +15,14 @@ class ProcessingMetadata(BaseModel):
 
     # Processing Context (AUTOMATIC)
     processing_timestamp: datetime = Field(default_factory=datetime.now)
-    git_commit_hash: Optional[str] = Field(None, description="Git commit when processed")
-    git_branch: Optional[str] = Field(None)
-    git_tag: Optional[str] = Field(None)
+    git_commit_hash: str | None = Field(None, description="Git commit when processed")
+    git_branch: str | None = Field(None)
+    git_tag: str | None = Field(None)
 
     # Processing Stats (AUTOMATIC)
-    record_count: Optional[int] = Field(None)
-    processing_duration_seconds: Optional[float] = Field(None)
-    file_size_bytes: Optional[int] = Field(None)
+    record_count: int | None = Field(None)
+    processing_duration_seconds: float | None = Field(None)
+    file_size_bytes: int | None = Field(None)
 
     # Environment (AUTOMATIC)
     environment: str = Field(..., description="local/dev/prod")
@@ -39,9 +39,9 @@ class DatasetMetadata(BaseModel):
     processing: ProcessingMetadata
 
     # For combined datasets (MANUAL SPECIFICATION)
-    source_datasets: Optional[List[str]] = Field(None, description="If this combines other datasets")
+    source_datasets: list[str] | None = Field(None, description="If this combines other datasets")
 
-    def to_frontend_display(self) -> Dict[str, Any]:
+    def to_frontend_display(self) -> dict[str, Any]:
         """Format for frontend consumption"""
         return {
             "source": self.source_info.source_authority,
@@ -70,7 +70,7 @@ class MetadataManager:
         self.git_context = self._get_git_context()
         self.environment = self._detect_environment()
 
-    def _get_git_context(self) -> Dict[str, Optional[str]]:
+    def _get_git_context(self) -> dict[str, str | None]:
         """Get current git context (AUTOMATIC)"""
         try:
             commit_hash = (
@@ -105,18 +105,17 @@ class MetadataManager:
         """Detect execution environment (AUTOMATIC)"""
         if os.getenv("GITHUB_ACTIONS"):
             return "prod"
-        elif os.getenv("ENVIRONMENT") == "dev":
+        if os.getenv("ENVIRONMENT") == "dev":
             return "dev"
-        else:
-            return "local"
+        return "local"
 
     def create_metadata(
         self,
         source_key: str,
-        record_count: Optional[int] = None,
-        processing_duration: Optional[float] = None,
-        file_size_bytes: Optional[int] = None,
-        source_datasets: Optional[List[str]] = None,
+        record_count: int | None = None,
+        processing_duration: float | None = None,
+        file_size_bytes: int | None = None,
+        source_datasets: list[str] | None = None,
     ) -> DatasetMetadata:
         """Create complete metadata for a dataset"""
 
@@ -143,13 +142,13 @@ class MetadataManager:
         metadata_path = data_file_path.parent / f"{data_file_path.stem}_metadata.json"
 
         # Save metadata
-        with open(metadata_path, "w", encoding="utf-8") as f:
+        with metadata_path.open("w", encoding="utf-8") as f:
             json.dump(metadata.model_dump(mode="json"), f, indent=2, default=str)
 
         return metadata_path
 
     def load_metadata(self, metadata_path: Path) -> DatasetMetadata:
         """Load metadata from file"""
-        with open(metadata_path, "r", encoding="utf-8") as f:
+        with metadata_path.open(encoding="utf-8") as f:
             data = json.load(f)
         return DatasetMetadata.model_validate(data)

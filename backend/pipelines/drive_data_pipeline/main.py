@@ -27,11 +27,11 @@ from drive_data_pipeline.utils.storage import get_storage_manager  # noqa: E402
 
 # Try to import CVR collection utilities
 try:
+    from common.gcs import GCSDataAccess
     from unified_pipeline.util.cvr_collection import (
         extract_cvr_numbers_from_table,
         save_pipeline_cvr_numbers,
     )
-    from common.gcs import GCSDataAccess
 
     CVR_COLLECTION_AVAILABLE = True
     print("✅ CVR collection utilities imported successfully")

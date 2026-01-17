@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from drive_data_pipeline.config import Settings
 from drive_data_pipeline.silver import SilverProcessor
-from drive_data_pipeline.utils.storage import LocalStorageManager
+from drive_data_pipeline.utils.storage import DriveStorageManager
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def test_settings() -> Generator[Settings, None, None]:
 
 
 @pytest.fixture
-def mock_bronze_data(test_settings: Settings) -> Generator[LocalStorageManager, None, None]:
+def mock_bronze_data(test_settings: Settings) -> Generator[DriveStorageManager, None, None]:
     """Create mock bronze data for testing."""
     # Create a mock bronze run directory
     bronze_run_dir = Path(test_settings.bronze_path) / "20230101_000000"
@@ -90,10 +90,10 @@ def mock_bronze_data(test_settings: Settings) -> Generator[LocalStorageManager, 
 
 
 @pytest.mark.integration
-def test_silver_processor(test_settings: Settings, mock_bronze_data: LocalStorageManager) -> None:
+def test_silver_processor(test_settings: Settings, mock_bronze_data: DriveStorageManager) -> None:
     """Test silver processor end-to-end functionality."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Mock the transformers
     with (
@@ -150,11 +150,11 @@ def test_silver_processor(test_settings: Settings, mock_bronze_data: LocalStorag
 
 @pytest.mark.integration
 def test_silver_specific_subfolders(
-    test_settings: Settings, mock_bronze_data: LocalStorageManager
+    test_settings: Settings, mock_bronze_data: DriveStorageManager
 ) -> None:
     """Test silver processor with specific subfolders filter."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Mock the transformers
     with (
@@ -201,11 +201,11 @@ def test_silver_specific_subfolders(
 
 @pytest.mark.integration
 def test_silver_specific_file_types(
-    test_settings: Settings, mock_bronze_data: LocalStorageManager
+    test_settings: Settings, mock_bronze_data: DriveStorageManager
 ) -> None:
     """Test silver processor with specific file types filter."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Mock the transformers
     with (
@@ -250,11 +250,11 @@ def test_silver_specific_file_types(
 
 @pytest.mark.integration
 def test_silver_error_handling(
-    test_settings: Settings, mock_bronze_data: LocalStorageManager
+    test_settings: Settings, mock_bronze_data: DriveStorageManager
 ) -> None:
     """Test silver processor error handling capabilities."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Mock the transformers
     with (

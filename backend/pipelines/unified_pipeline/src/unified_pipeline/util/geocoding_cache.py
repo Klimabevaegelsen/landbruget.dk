@@ -19,8 +19,8 @@ from datetime import datetime
 from typing import Any
 
 import duckdb
-
 from common.gcs import GCSDataAccess
+
 from unified_pipeline.util.log_util import Logger
 
 

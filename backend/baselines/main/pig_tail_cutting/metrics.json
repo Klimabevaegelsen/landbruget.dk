@@ -1,0 +1,16 @@
+{
+  "dataset_name": "pig_tail_cutting",
+  "source_path": "gs://landbrugsdata-raw-data/silver/pig tail cutting/20260116_234019/Datatraek.halekuperingskampagne.2023.til.udlevering.parquet",
+  "generated_at": "2026-01-17T11:15:28.919063",
+  "record_count": 395,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "dikonoegle": 0,
+    "chrnr": 0,
+    "besaetningnr": 0,
+    "dato_kontrol": 0,
+    "kontrol_kriterie": 0,
+    "esdh_sags_nr": 0,
+    "resultat_samlet_pr_diko_opgave": 0
+  }
+}

@@ -218,4 +218,3 @@ class BaseTransformer(abc.ABC):
         # for col in df.columns:
         #     dtype = str(df[col].type())
         #     schema[col] = dtype
-

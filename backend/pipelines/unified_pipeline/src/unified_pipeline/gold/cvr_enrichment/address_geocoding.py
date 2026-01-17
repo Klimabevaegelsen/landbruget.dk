@@ -918,10 +918,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         company_table = "cvr_companies_with_geocoding"
 
         # Get the company data path - find most recent company data
+        from common.gcs import GCSDataAccess
+
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
             _find_latest_file_with_pattern,
         )
-        from common.gcs import GCSDataAccess
 
         gcs_access = GCSDataAccess()
         company_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/*/data.parquet"
@@ -1204,10 +1205,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         pnumber_table = "cvr_pnumbers_with_geocoding"
 
         # Get the pnumber data path - find most recent pnumber data
+        from common.gcs import GCSDataAccess
+
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
             _find_latest_file_with_pattern,
         )
-        from common.gcs import GCSDataAccess
 
         gcs_access = GCSDataAccess()
         pnumber_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"

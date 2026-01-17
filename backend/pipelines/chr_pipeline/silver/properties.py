@@ -5,9 +5,10 @@ from pathlib import Path
 
 import duckdb
 
+from . import export
+
 # Import config constants and export module
 from .config import SOURCE_CRS, TARGET_CRS
-from . import export
 
 
 def create_properties_table(

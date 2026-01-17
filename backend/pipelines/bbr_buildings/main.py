@@ -26,12 +26,12 @@ except ImportError:
     DataFrame = Any
 
 # Updated imports for bulk approach
+# Import pipeline metadata system for data tracing
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 from config import Settings, get_settings
 from utils.logger import setup_logger
-
-# Import pipeline metadata system for data tracing
-from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 PIPELINE_METADATA_AVAILABLE = True
 

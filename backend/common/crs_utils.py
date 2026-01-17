@@ -13,7 +13,6 @@ Key patterns:
 - ST_Area_Spheroid expects LAT/LON order (not lon/lat)
 """
 
-from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,7 +57,7 @@ DENMARK_BOUNDS_UTM = {
 # =============================================================================
 
 # At 56°N latitude:
-# - 1 degree longitude ≈ 62 km (cos(56°) × 111km)
+# - 1 degree longitude ≈ 62 km (cos(56°) * 111km)
 # - 1 degree latitude ≈ 111 km
 DEGREES_TO_METERS_LON = 62000  # meters per degree longitude
 DEGREES_TO_METERS_LAT = 111000  # meters per degree latitude
@@ -102,7 +101,7 @@ def degrees_to_meters(degrees: float) -> float:
 # =============================================================================
 
 
-def detect_crs_from_bounds(min_x: float, max_x: float, min_y: float, max_y: float) -> tuple[Optional[str], str]:
+def detect_crs_from_bounds(min_x: float, max_x: float, min_y: float, max_y: float) -> tuple[str | None, str]:
     """
     Detect CRS from coordinate bounds.
 
@@ -374,13 +373,12 @@ def sql_buffer_meters(geometry_expr: str, meters: float, source_crs: str = WGS84
     if source_crs == DANISH_UTM:
         # Already in UTM, just buffer
         return f"ST_Buffer({geometry_expr}, {meters})"
-    else:
-        # Transform to UTM, buffer, transform back
-        return (
-            f"ST_Transform("
-            f"ST_Buffer(ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}'), {meters}), "
-            f"'{DANISH_UTM}', '{source_crs}')"
-        )
+    # Transform to UTM, buffer, transform back
+    return (
+        f"ST_Transform("
+        f"ST_Buffer(ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}'), {meters}), "
+        f"'{DANISH_UTM}', '{source_crs}')"
+    )
 
 
 def sql_intersects_with_buffer_meters(geom1_expr: str, geom2_expr: str, meters: float, source_crs: str = WGS84) -> str:
@@ -398,11 +396,10 @@ def sql_intersects_with_buffer_meters(geom1_expr: str, geom2_expr: str, meters: 
     """
     if source_crs == DANISH_UTM:
         return f"ST_Intersects({geom1_expr}, ST_Buffer({geom2_expr}, {meters}))"
-    else:
-        # Transform both to UTM for the operation
-        geom1_utm = f"ST_Transform({geom1_expr}, '{source_crs}', '{DANISH_UTM}')"
-        geom2_utm = f"ST_Transform({geom2_expr}, '{source_crs}', '{DANISH_UTM}')"
-        return f"ST_Intersects({geom1_utm}, ST_Buffer({geom2_utm}, {meters}))"
+    # Transform both to UTM for the operation
+    geom1_utm = f"ST_Transform({geom1_expr}, '{source_crs}', '{DANISH_UTM}')"
+    geom2_utm = f"ST_Transform({geom2_expr}, '{source_crs}', '{DANISH_UTM}')"
+    return f"ST_Intersects({geom1_utm}, ST_Buffer({geom2_utm}, {meters}))"
 
 
 def sql_transform_for_supabase(geometry_expr: str, source_crs: str = DANISH_UTM) -> str:

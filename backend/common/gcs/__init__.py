@@ -32,7 +32,7 @@ from common.gcs.monitoring import ResourceMonitor
 
 __all__ = [
     "GCSDataAccess",
-    "get_gcs_filesystem",
-    "get_duckdb_with_gcs",
     "ResourceMonitor",
+    "get_duckdb_with_gcs",
+    "get_gcs_filesystem",
 ]

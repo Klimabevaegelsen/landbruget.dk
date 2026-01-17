@@ -1,7 +1,7 @@
 {
   "dataset_name": "subsidies",
   "source_path": "gs://landbrugsdata-raw-data/silver/subsidies/20260116_234019/Dataudtr\u00e6k projekttilskud.parquet",
-  "generated_at": "2026-01-17T11:11:30.688211",
+  "generated_at": "2026-01-17T11:20:29.398093",
   "record_count": 197,
   "unique_identifiers": {},
   "column_null_counts": {

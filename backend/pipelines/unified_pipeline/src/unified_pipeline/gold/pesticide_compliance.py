@@ -56,12 +56,12 @@ from typing import Any
 
 import duckdb
 import requests
+from common.gcs import GCSDataAccess
 from pydantic import ConfigDict, Field
 from requests.auth import HTTPBasicAuth
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.gold.pesticide_unit_sanitization import PesticideUnitSanitizer
-from common.gcs import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 

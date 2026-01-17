@@ -21,8 +21,8 @@ logger = Logger.get_logger()
 try:
     from common.crs_utils import (
         DANISH_UTM,
-        WGS84,
         TARGET_CRS_PROCESSING,
+        WGS84,
         sql_transform_to_processing_crs,
     )
 except ImportError:
@@ -90,7 +90,7 @@ def validate_and_transform_geometries_duckdb(
         # Handle empty tables gracefully
         if initial_count == 0:
             logger.info(f"{dataset_name}: Table is empty, nothing to validate")
-            return
+            return None
 
         # Check if geometry column exists
         columns = [row[0] for row in conn.execute(f"DESCRIBE {table_name}").fetchall()]

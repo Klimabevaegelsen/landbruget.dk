@@ -1,5 +1,3 @@
-
-
 def beregn_produktaftryk_aeg_pr_kg(
     co2e_total_pr_holdhoene: float,
     co2e_slagt_pr_holdhoene: float,
@@ -67,7 +65,6 @@ def beregn_co2e_total_holdhoene(
         + co2e_stroelse
         + co2e_varme
     )
-
 
 
 def beregn_bedriftsaftryk_aeg(hold_data: list[dict[str, float]]) -> float:

@@ -19,7 +19,6 @@ Scheme Code Format:
 - DEMINIMIS: De minimis aid
 """
 
-
 # EU CAP Scheme mapping from støtteoplysninger "Scheme" column
 # Maps English scheme names to standardized Danish codes
 EU_SCHEME_MAPPING = {

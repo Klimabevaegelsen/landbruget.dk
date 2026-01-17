@@ -1,7 +1,7 @@
 {
   "dataset_name": "worker_safety",
   "source_path": "gs://landbrugsdata-raw-data/gold/worker_safety/20260116_221618/worker_safety_clean.parquet",
-  "generated_at": "2026-01-17T11:11:52.360012",
+  "generated_at": "2026-01-17T11:20:49.725043",
   "record_count": 1245,
   "unique_identifiers": {},
   "column_null_counts": {

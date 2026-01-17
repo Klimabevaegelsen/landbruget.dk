@@ -19,7 +19,9 @@ test.describe('useMapTheme', () => {
       return MAP_STYLES.light;
     });
 
-    expect(result).toBe('https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json');
+    expect(result).toBe(
+      'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
+    );
   });
 
   test('should return dark style for dark theme', async ({ page }) => {
@@ -37,14 +39,18 @@ test.describe('useMapTheme', () => {
       return MAP_STYLES[effectiveTheme];
     });
 
-    expect(result).toBe('https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json');
+    expect(result).toBe(
+      'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
+    );
   });
 
   test('should detect system preference for system theme', async ({ page }) => {
     await page.goto('/');
 
     const result = await page.evaluate(() => {
-      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const systemPrefersDark = window.matchMedia(
+        '(prefers-color-scheme: dark)'
+      ).matches;
       return typeof systemPrefersDark === 'boolean';
     });
 
@@ -85,8 +91,12 @@ test.describe('useMapTheme', () => {
       };
     });
 
-    expect(result.light).toBe('https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json');
-    expect(result.dark).toBe('https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json');
+    expect(result.light).toBe(
+      'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
+    );
+    expect(result.dark).toBe(
+      'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
+    );
   });
 
   test('should provide alternative map styles', async ({ page }) => {
@@ -95,13 +105,17 @@ test.describe('useMapTheme', () => {
     const result = await page.evaluate(() => {
       const ALTERNATIVE_MAP_STYLES = {
         light: {
-          voyager: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-          positron: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+          voyager:
+            'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+          positron:
+            'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
           osm: 'https://tiles.stadiamaps.com/styles/osm_bright.json',
         },
         dark: {
-          darkMatter: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-          osmDark: 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json',
+          darkMatter:
+            'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+          osmDark:
+            'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json',
         },
       };
 
@@ -114,6 +128,8 @@ test.describe('useMapTheme', () => {
 
     expect(result.hasLightStyles).toBe(true);
     expect(result.hasDarkStyles).toBe(true);
-    expect(result.voyagerUrl).toBe('https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json');
+    expect(result.voyagerUrl).toBe(
+      'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
+    );
   });
 });

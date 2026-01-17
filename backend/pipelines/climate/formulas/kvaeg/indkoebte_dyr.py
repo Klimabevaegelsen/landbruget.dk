@@ -45,7 +45,8 @@ ANIMAL_TYPE_DATA = {
 def calculate_co2e_single_purchase_group(
     animal_type_key: str,
     number_purchased: int,
-    actual_average_lv_kg: float | None = None,  # Actual average live weight for this specific purchase group
+    actual_average_lv_kg: float
+    | None = None,  # Actual average live weight for this specific purchase group
 ) -> float:
     """
     Calculates CO2e for a single group of purchased cattle of the same type.

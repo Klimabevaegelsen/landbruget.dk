@@ -1,7 +1,7 @@
 {
   "dataset_name": "field_analysis_field_bnbo_2025",
   "source_path": "gs://landbrugsdata-raw-data/gold/field_analysis_field_bnbo_intersections_2025/20260116_232448/data.parquet",
-  "generated_at": "2026-01-17T11:11:32.602153",
+  "generated_at": "2026-01-17T11:20:31.053222",
   "record_count": 10811,
   "total_area_m2": null,
   "unique_identifiers": {

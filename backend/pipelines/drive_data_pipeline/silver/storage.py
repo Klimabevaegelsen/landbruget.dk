@@ -69,7 +69,7 @@ class SilverStorageManager(DuckDBProcessor):
             # GCS storage - use empty path as base since base_path already includes
             # the silver structure
             # This prevents the nested silver/silver/... issue
-            run_dir = Path("")
+            run_dir = Path()
         else:
             # Local storage - use base_path/silver
             run_dir = self.base_path / "silver"

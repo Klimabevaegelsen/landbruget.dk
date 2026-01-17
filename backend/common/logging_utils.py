@@ -10,13 +10,12 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 
 def setup_pipeline_logger(
     name: str,
     level: str = "INFO",
-    log_file: Optional[str] = None,
+    log_file: str | None = None,
     console_output: bool = True,
     include_timestamp: bool = True,
 ) -> logging.Logger:
@@ -142,7 +141,7 @@ def log_stage_end(
     logger: logging.Logger,
     stage_name: str,
     start_time: datetime,
-    records_processed: Optional[int] = None,
+    records_processed: int | None = None,
     success: bool = True,
 ) -> None:
     """Log standardized stage completion message."""
@@ -162,7 +161,7 @@ class PipelineLogger:
     with automatic start/end messages and duration tracking.
     """
 
-    def __init__(self, pipeline_name: str, version: str = "1.0.0", logger: Optional[logging.Logger] = None) -> None:
+    def __init__(self, pipeline_name: str, version: str = "1.0.0", logger: logging.Logger | None = None) -> None:
         self.pipeline_name = pipeline_name
         self.version = version
         self.logger = logger or get_pipeline_logger(pipeline_name)
@@ -195,7 +194,7 @@ class StageLogger:
         success = exc_type is None
         log_stage_end(self.logger, self.stage_name, self.start_time, success=success)
 
-    def log_progress(self, message: str, records_processed: Optional[int] = None) -> None:
+    def log_progress(self, message: str, records_processed: int | None = None) -> None:
         """Log progress message with optional record count."""
         if records_processed is not None:
             message += f" ({records_processed:,} records)"

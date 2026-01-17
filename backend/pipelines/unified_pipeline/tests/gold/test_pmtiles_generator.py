@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import duckdb
 import pytest
 
-from unified_pipeline.core.gcs_data_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 from unified_pipeline.gold.pmtiles_generator.config import PMTilesGeneratorConfig
 from unified_pipeline.gold.pmtiles_generator.data_loader import PMTilesDataLoader
 from unified_pipeline.gold.pmtiles_generator.field_analysis_generator import (

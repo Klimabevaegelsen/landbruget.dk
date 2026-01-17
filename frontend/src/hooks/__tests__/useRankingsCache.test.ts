@@ -116,9 +116,12 @@ test.describe('useRankingsCache', () => {
       const now = Date.now();
 
       // Add multiple categories
-      ['category1', 'category2', 'category3'].forEach(cat => {
+      ['category1', 'category2', 'category3'].forEach((cat) => {
         cache.set(cat, {
-          data: { rankings: [], metadata: { generated_at: '', total_tables: 0 } },
+          data: {
+            rankings: [],
+            metadata: { generated_at: '', total_tables: 0 },
+          },
           timestamp: now,
           expiresAt: now + 86400000,
           category: cat,
@@ -177,16 +180,18 @@ test.describe('useRankingsCache', () => {
 
       const data = {
         data: {
-          rankings: [{
-            id: 'table-1',
-            title: 'Test Table',
-            category: 'test',
-            description: 'Test description',
-            unit: 'units',
-            last_updated: new Date().toISOString(),
-            company_count: 5,
-            items: [],
-          }],
+          rankings: [
+            {
+              id: 'table-1',
+              title: 'Test Table',
+              category: 'test',
+              description: 'Test description',
+              unit: 'units',
+              last_updated: new Date().toISOString(),
+              company_count: 5,
+              items: [],
+            },
+          ],
           metadata: {
             generated_at: new Date().toISOString(),
             total_tables: 1,

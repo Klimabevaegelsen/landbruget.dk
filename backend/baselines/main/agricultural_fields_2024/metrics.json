@@ -1,9 +1,9 @@
 {
   "dataset_name": "agricultural_fields_2024",
   "source_path": "gs://landbrugsdata-raw-data/silver/agricultural_fields_2024/20260116_230917/data.parquet",
-  "generated_at": "2026-01-17T11:10:05.745052",
+  "generated_at": "2026-01-17T11:19:08.337609",
   "record_count": 616919,
-  "total_area_m2": 2655694.6000000346,
+  "total_area_m2": 2655694.600000034,
   "unique_identifiers": {
     "field_id": 27187,
     "journal_number": 32543,

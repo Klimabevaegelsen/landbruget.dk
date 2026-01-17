@@ -6,7 +6,6 @@ managing settings and environment variables. It uses Pydantic for validation
 and automatic parsing of environment variables.
 """
 
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

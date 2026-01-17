@@ -1,7 +1,7 @@
 {
   "dataset_name": "wetlands",
   "source_path": "gs://landbrugsdata-raw-data/silver/wetlands/20260116_224018/data.parquet",
-  "generated_at": "2026-01-17T11:10:47.589655",
+  "generated_at": "2026-01-17T11:19:47.943530",
   "record_count": 1702479,
   "unique_identifiers": {},
   "geometry_bounds": {

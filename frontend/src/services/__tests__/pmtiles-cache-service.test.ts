@@ -21,7 +21,9 @@ test.describe('PMTiles Cache Service', () => {
       cache.set(filename, { url, timestamp: now });
 
       const cached = cache.get(filename);
-      return cached && cached.url === url && (now - cached.timestamp) < CACHE_DURATION;
+      return (
+        cached && cached.url === url && now - cached.timestamp < CACHE_DURATION
+      );
     });
 
     expect(result).toBe(true);
@@ -42,7 +44,7 @@ test.describe('PMTiles Cache Service', () => {
 
       // Simulate cache hit
       const cached = cache.get(filename);
-      if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
         return { hit: true, url: cached.url };
       }
 
@@ -78,8 +80,8 @@ test.describe('PMTiles Cache Service', () => {
       const newTimestamp = now; // Valid
 
       return {
-        oldExpired: (now - oldTimestamp) > CACHE_DURATION,
-        newValid: (now - newTimestamp) < CACHE_DURATION,
+        oldExpired: now - oldTimestamp > CACHE_DURATION,
+        newValid: now - newTimestamp < CACHE_DURATION,
       };
     });
 
@@ -151,7 +153,7 @@ test.describe('PMTiles Cache Service', () => {
         });
       });
 
-      const timestamps = Array.from(cache.values()).map(v => v.timestamp);
+      const timestamps = Array.from(cache.values()).map((v) => v.timestamp);
 
       return {
         size: cache.size,
@@ -174,8 +176,14 @@ test.describe('PMTiles Cache Service', () => {
       const cache = new Map<string, { url: string; timestamp: number }>();
 
       // Add entries
-      cache.set('file1.pmtiles', { url: 'https://example.com/file1.pmtiles', timestamp: Date.now() });
-      cache.set('file2.pmtiles', { url: 'https://example.com/file2.pmtiles', timestamp: Date.now() });
+      cache.set('file1.pmtiles', {
+        url: 'https://example.com/file1.pmtiles',
+        timestamp: Date.now(),
+      });
+      cache.set('file2.pmtiles', {
+        url: 'https://example.com/file2.pmtiles',
+        timestamp: Date.now(),
+      });
 
       const sizeBefore = cache.size;
 
@@ -239,11 +247,13 @@ test.describe('PMTiles Cache Service', () => {
       const currentYear = 2024;
       const availableYears = [2022, 2023, 2024, 2025];
 
-      const adjacentYears = [currentYear - 1, currentYear + 1].filter(year =>
+      const adjacentYears = [currentYear - 1, currentYear + 1].filter((year) =>
         availableYears.includes(year)
       );
 
-      const filenames = adjacentYears.map(year => `field_analysis_${year}.pmtiles`);
+      const filenames = adjacentYears.map(
+        (year) => `field_analysis_${year}.pmtiles`
+      );
 
       return {
         adjacentYears,

@@ -14,7 +14,6 @@ from pathlib import Path
 
 # Add common utilities to path for CRS constants
 sys.path.insert(0, str(Path(__file__).resolve().parents[6]))
-from common.crs_utils import DANISH_UTM, WGS84
 
 from unified_pipeline.util.timing import timed
 
@@ -84,7 +83,7 @@ class NLES5SpatialOperations:
                 # to ensure no data loss. This triggers DuckDB's spatial indexing
                 # while maintaining result consistency. Denmark max width ~400km,
                 # so 100km radius should cover all reasonable cases
-                self.conn.execute(f"""
+                self.conn.execute("""
                     CREATE OR REPLACE TABLE fields_climate_candidates AS
                     SELECT
                         f.field_id, f.geom, f.geometry, f.area_ha, f.crop_code, f.crop_name,

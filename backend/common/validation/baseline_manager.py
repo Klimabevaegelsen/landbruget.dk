@@ -12,7 +12,7 @@ Used in pre-merge validation to detect data accuracy regressions.
 import hashlib
 import json
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -277,8 +277,7 @@ class BaselineManager:
         """
         if self._is_gcs:
             return self._save_to_gcs(metrics)
-        else:
-            return self._save_to_local(metrics)
+        return self._save_to_local(metrics)
 
     def load_baseline(self, dataset_name: str) -> BaselineMetrics | None:
         """
@@ -292,8 +291,7 @@ class BaselineManager:
         """
         if self._is_gcs:
             return self._load_from_gcs(dataset_name)
-        else:
-            return self._load_from_local(dataset_name)
+        return self._load_from_local(dataset_name)
 
     def compare(
         self,
@@ -417,8 +415,8 @@ class BaselineManager:
     def _check_geometry_bounds(self, bounds: dict[str, float]) -> dict[str, Any]:
         """Check if geometry bounds are within Denmark."""
         from common.crs_utils import (
-            DENMARK_BOUNDS_WGS84,
             DENMARK_BOUNDS_UTM,
+            DENMARK_BOUNDS_WGS84,
             detect_crs_from_bounds,
         )
 
@@ -470,7 +468,7 @@ class BaselineManager:
         """Save baseline to local filesystem."""
         path = Path(self.baseline_path) / metrics.dataset_name / "metrics.json"
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
+        with path.open("w") as f:
             json.dump(metrics.to_dict(), f, indent=2)
         logger.info(f"Saved baseline to {path}")
         return str(path)
@@ -481,7 +479,7 @@ class BaselineManager:
         if not path.exists():
             logger.warning(f"No baseline found at {path}")
             return None
-        with open(path) as f:
+        with path.open() as f:
             data = json.load(f)
         return BaselineMetrics.from_dict(data)
 

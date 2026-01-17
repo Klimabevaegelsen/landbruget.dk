@@ -446,13 +446,13 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         # ✅ COORDINATE FIX: Apply geometry validation
         # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
         from unified_pipeline.common.geometry_validator import (
-            validate_and_transform_geometries_duckdb,
             validate_and_normalize_to_utm,
+            validate_and_transform_geometries_duckdb,
         )
 
-        USE_UTM_PROCESSING = True  # Local flag for this file
+        use_utm_processing = True  # Local flag for this file
 
-        if USE_UTM_PROCESSING:
+        if use_utm_processing:
             # Keep in UTM - preserves perfect adjacency
             validate_and_normalize_to_utm(
                 conn, table_name, f"silver.{self.config.dataset}", geometry_column="geometry"

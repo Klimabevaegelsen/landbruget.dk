@@ -6,7 +6,6 @@ Used for pre-merge validation tests.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 import duckdb
 
@@ -109,13 +108,11 @@ class FieldAreaValidator:
         after_area = self.conn.execute(after_query).fetchone()[0]
 
         # Calculate difference
-        if before_area == 0:
-            if after_area == 0:
-                diff_pct = 0.0
-            else:
-                diff_pct = 100.0  # From 0 to non-zero is 100% change
-        else:
-            diff_pct = ((after_area - before_area) / before_area) * 100
+        diff_pct = (
+            0.0
+            if before_area == 0 and after_area == 0
+            else (100.0 if before_area == 0 else ((after_area - before_area) / before_area) * 100)
+        )
 
         area_diff = after_area - before_area
         is_valid = abs(diff_pct) <= self.tolerance_pct

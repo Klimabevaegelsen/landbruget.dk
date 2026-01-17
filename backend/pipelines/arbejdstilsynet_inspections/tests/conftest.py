@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 # Add parent directory to Python path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+pipeline_dir = Path(__file__).resolve().parent.parent
+if str(pipeline_dir) not in sys.path:
+    sys.path.insert(0, str(pipeline_dir))
 
 
 @pytest.fixture(autouse=True)

@@ -1,7 +1,7 @@
 {
   "dataset_name": "nles5_nitrogen_estimation",
   "source_path": "gs://landbrugsdata-raw-data/gold/nles5_nitrogen_estimation_nitrogen_estimates/20260116_223411/data.parquet",
-  "generated_at": "2026-01-17T11:11:51.910979",
+  "generated_at": "2026-01-17T11:20:49.380273",
   "record_count": 499759,
   "total_area_m2": null,
   "unique_identifiers": {

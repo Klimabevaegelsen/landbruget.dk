@@ -33,7 +33,6 @@ def load_nh3_factors() -> dict[str, dict]:
         return json.load(f)
 
 
-
 # Load constants once at module import
 NH3_FACTORS_DATA = load_nh3_factors()
 NH3_FERTILIZER_TYPES = NH3_FACTORS_DATA["fertilizer_types"]

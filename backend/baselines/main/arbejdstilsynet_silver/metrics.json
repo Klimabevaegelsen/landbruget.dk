@@ -1,0 +1,22 @@
+{
+  "dataset_name": "arbejdstilsynet_silver",
+  "source_path": "gs://landbrugsdata-raw-data/silver/arbejdstilsynet_inspections/20260112_063605/workplace_inspections.parquet",
+  "generated_at": "2026-01-17T11:15:26.299374",
+  "record_count": 534,
+  "unique_identifiers": {
+    "cvr_number": 312
+  },
+  "column_null_counts": {
+    "date": 0,
+    "case_count": 0,
+    "decision": 0,
+    "work_env_issue": 0,
+    "appealed": 0,
+    "complied": 0,
+    "company_name": 0,
+    "company_id": 0,
+    "industry": 0,
+    "company_address": 0,
+    "cvr_number": 4
+  }
+}

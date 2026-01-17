@@ -10,7 +10,7 @@ import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import duckdb
 
@@ -22,8 +22,8 @@ class SchemaDocumentationManager:
         self,
         connection: duckdb.DuckDBPyConnection,
         pipeline_name: str,
-        pipeline_start_time: Optional[datetime] = None,
-        logger: Optional[Any] = None,
+        pipeline_start_time: datetime | None = None,
+        logger: Any | None = None,
     ) -> None:
         """
         Initialize schema documentation manager.
@@ -46,7 +46,7 @@ class SchemaDocumentationManager:
         if self.logger:
             self.logger.info(f"Schema documentation initialized for {pipeline_name}")
 
-    def get_table_schema_info(self, table_name: str) -> Dict[str, Any]:
+    def get_table_schema_info(self, table_name: str) -> dict[str, Any]:
         """
         Get comprehensive schema information for a table using DuckDB native functions.
 
@@ -240,7 +240,7 @@ class SchemaDocumentationManager:
 
         # Save the file with table name (latest schema only)
         doc_file = stage_dir / f"{table_name}.md"
-        with open(doc_file, "w") as f:
+        with doc_file.open("w") as f:
             f.write("\n".join(lines))
 
         if self.logger:
@@ -248,7 +248,7 @@ class SchemaDocumentationManager:
 
         return str(doc_file)
 
-    def generate_overview_documentation(self, tables: List[str], stage: str = "processed") -> str:
+    def generate_overview_documentation(self, tables: list[str], stage: str = "processed") -> str:
         """
         Generate overview documentation with all table schemas.
 
@@ -318,7 +318,7 @@ class SchemaDocumentationManager:
 
         # Save overview file
         overview_file = stage_dir / "overview.md"
-        with open(overview_file, "w") as f:
+        with overview_file.open("w") as f:
             f.write("\n".join(lines))
 
         if self.logger:
@@ -326,7 +326,7 @@ class SchemaDocumentationManager:
 
         return str(overview_file)
 
-    def generate_all_documentation(self, tables: List[str], stage: str = "processed") -> List[str]:
+    def generate_all_documentation(self, tables: list[str], stage: str = "processed") -> list[str]:
         """
         Generate documentation for all tables and create overview.
 
@@ -372,7 +372,7 @@ class SchemaDocumentationManager:
         }
 
         metadata_file = stage_dir / "metadata.json"
-        with open(metadata_file, "w") as f:
+        with metadata_file.open("w") as f:
             json.dump(metadata, f, indent=2)
 
         generated_files.append(str(metadata_file))
@@ -382,7 +382,7 @@ class SchemaDocumentationManager:
 
         return generated_files
 
-    def commit_to_github(self, commit_message: Optional[str] = None) -> bool:
+    def commit_to_github(self, commit_message: str | None = None) -> bool:
         """
         Commit generated schema files to GitHub.
 
@@ -446,7 +446,7 @@ class SchemaDocumentationMixin:
     """Mixin to add schema documentation to any pipeline class."""
 
     def init_schema_documentation(
-        self, pipeline_name: str, pipeline_start_time: Optional[datetime] = None, enable_auto_commit: bool = False
+        self, pipeline_name: str, pipeline_start_time: datetime | None = None, enable_auto_commit: bool = False
     ) -> None:
         """
         Initialize schema documentation for this pipeline.
@@ -471,7 +471,7 @@ class SchemaDocumentationMixin:
 
         return self._schema_doc_manager.generate_table_documentation(table_name, stage)
 
-    def document_all_schemas(self, tables: List[str], stage: str = "processed") -> List[str]:
+    def document_all_schemas(self, tables: list[str], stage: str = "processed") -> list[str]:
         """Generate documentation for all tables."""
         if not hasattr(self, "_schema_doc_manager"):
             raise RuntimeError("Schema documentation not initialized. Call init_schema_documentation() first.")

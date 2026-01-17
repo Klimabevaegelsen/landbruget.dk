@@ -25,7 +25,7 @@ class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder for handling datetime and date objects."""
 
     def default(self, obj: Any) -> str:
-        if isinstance(obj, (datetime, date)):
+        if isinstance(obj, datetime | date):
             return obj.isoformat()
         # Handle any other custom types that might come from the SOAP response
         try:

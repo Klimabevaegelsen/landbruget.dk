@@ -238,7 +238,7 @@ def _serialize_data(data: Any) -> str | None:
         from datetime import date, datetime
         from decimal import Decimal
 
-        if isinstance(obj, (datetime, date)):
+        if isinstance(obj, datetime | date):
             return obj.isoformat()
         if isinstance(obj, Decimal):
             return str(obj)

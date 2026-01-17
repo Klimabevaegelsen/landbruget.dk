@@ -30,9 +30,7 @@ VALID_DIKO_SPECIES = {
 # --- Generic SOAP Fetcher ---
 
 
-def fetch_raw_soap_response(
-    client: Client, operation_name: str, request_data: dict
-) -> Any | None:
+def fetch_raw_soap_response(client: Client, operation_name: str, request_data: dict) -> Any | None:
     """Fetch raw response from a SOAP endpoint using Zeep."""
     # Note: Consider moving this to a shared utility module later
     try:

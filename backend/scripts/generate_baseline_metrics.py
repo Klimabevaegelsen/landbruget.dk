@@ -15,7 +15,6 @@ Run on main branch after significant data updates to refresh baselines.
 import argparse
 import json
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -216,7 +215,6 @@ def generate_metrics_for_dataset(
     import tempfile
 
     import gcsfs
-    import pyarrow.parquet as pq
 
     logger.info(f"Generating metrics for {dataset_name}...")
 
@@ -253,11 +251,11 @@ def generate_metrics_for_dataset(
         """)
 
         # Clean up temp file
-        os.unlink(tmp_path)
+        Path(tmp_path).unlink()
     except Exception as e:
         logger.error(f"Failed to load {dataset_name}: {e}")
-        if "tmp_path" in locals() and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
+        if "tmp_path" in locals() and Path(tmp_path).exists():
+            Path(tmp_path).unlink()
         return None
 
     # Use sql_table_name for queries
@@ -313,12 +311,8 @@ def generate_metrics_for_dataset(
                 WHERE table_name = '{table_name}' AND column_name = '{geom_col}'
             """).fetchone()
 
-            if col_type and col_type[0] == "VARCHAR":
-                # WKT string - need to cast to geometry
-                geom_expr = f"ST_GeomFromText({geom_col})"
-            else:
-                # Native geometry type
-                geom_expr = geom_col
+            # WKT string - need to cast to geometry if VARCHAR, else native geometry type
+            geom_expr = f"ST_GeomFromText({geom_col})" if col_type and col_type[0] == "VARCHAR" else geom_col
 
             result = conn.execute(f"""
                 SELECT
@@ -385,7 +379,7 @@ def save_metrics(metrics: dict, output_path: str) -> str:
         local_path = Path(output_path) / dataset_name / "metrics.json"
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(local_path, "w") as f:
+        with local_path.open("w") as f:
             json.dump(metrics, f, indent=2)
 
         file_path = str(local_path)
@@ -423,10 +417,7 @@ def main():
     args = parser.parse_args()
 
     # Determine which datasets to process
-    if args.datasets == "all":
-        datasets = list(DATASET_CONFIGS.keys())
-    else:
-        datasets = [d.strip() for d in args.datasets.split(",")]
+    datasets = list(DATASET_CONFIGS.keys()) if args.datasets == "all" else [d.strip() for d in args.datasets.split(",")]
 
     # Validate datasets
     for ds in datasets:

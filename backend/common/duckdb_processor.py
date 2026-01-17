@@ -6,10 +6,11 @@ all agricultural data pipelines, ensuring consistency in connection management,
 extension loading, and common operations.
 """
 
+import contextlib
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import duckdb
 
@@ -67,7 +68,7 @@ class SharedDuckDBProcessor:
                 """)
                 print("✅ DuckDB GCS HMAC authentication configured")
             else:
-                print("ℹ️  GCS HMAC credentials not found")
+                print("INFO: GCS HMAC credentials not found")
         except Exception as e:
             print(f"Warning: Could not setup GCS HMAC authentication: {e}")
 
@@ -79,7 +80,7 @@ class SharedDuckDBProcessor:
         except Exception:
             return False
 
-    def create_table_from_parquet(self, parquet_path: Union[str, Path], table_name: Optional[str] = None) -> str:
+    def create_table_from_parquet(self, parquet_path: str | Path, table_name: str | None = None) -> str:
         """Create a table from parquet file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_{int(time.time())}"
@@ -90,7 +91,7 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def create_table_from_csv(self, csv_path: Union[str, Path], table_name: Optional[str] = None) -> str:
+    def create_table_from_csv(self, csv_path: str | Path, table_name: str | None = None) -> str:
         """Create a table from CSV file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_{int(time.time())}"
@@ -101,7 +102,7 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def create_spatial_table(self, geospatial_path: Union[str, Path], table_name: Optional[str] = None) -> str:
+    def create_spatial_table(self, geospatial_path: str | Path, table_name: str | None = None) -> str:
         """Create a table from geospatial file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_geo_{int(time.time())}"
@@ -112,19 +113,19 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def save_table_to_parquet(self, table_name: str, output_path: Union[str, Path]) -> None:
+    def save_table_to_parquet(self, table_name: str, output_path: str | Path) -> None:
         """Save table to parquet file."""
         self.conn.execute(f"""
             COPY {table_name} TO '{output_path}' (FORMAT PARQUET)
         """)
 
-    def save_table_to_csv(self, table_name: str, output_path: Union[str, Path]) -> None:
+    def save_table_to_csv(self, table_name: str, output_path: str | Path) -> None:
         """Save table to CSV file."""
         self.conn.execute(f"""
             COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)
         """)
 
-    def create_table_from_gcs_parquet(self, gcs_path: str, table_name: Optional[str] = None) -> str:
+    def create_table_from_gcs_parquet(self, gcs_path: str, table_name: str | None = None) -> str:
         """Create a table directly from GCS parquet file using native DuckDB access."""
         if table_name is None:
             table_name = f"{self.dataset_name}_gcs_{int(time.time())}"
@@ -145,7 +146,7 @@ class SharedDuckDBProcessor:
         options_str = ", ".join(copy_options)
         self.conn.execute(f"COPY {table_name} TO '{gcs_path}' ({options_str})")
 
-    def get_table_info(self, table_name: str) -> List[Dict[str, Any]]:
+    def get_table_info(self, table_name: str) -> list[dict[str, Any]]:
         """Get information about a table."""
         return [
             {
@@ -164,24 +165,20 @@ class SharedDuckDBProcessor:
         result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
         return result[0] if result else 0
 
-    def execute_query(self, query: str) -> List[Any]:
+    def execute_query(self, query: str) -> list[Any]:
         """Execute a query and return results."""
         return self.conn.execute(query).fetchall()
 
     def drop_table_if_exists(self, table_name: str) -> None:
         """Drop a table if it exists."""
-        try:
+        with contextlib.suppress(Exception):
             self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-        except Exception:
-            pass  # Table doesn't exist or other error
 
     def close(self) -> None:
         """Close database connection."""
         if self.conn:
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.close()
-            except Exception:
-                pass
 
     def __enter__(self) -> "SharedDuckDBProcessor":
         return self
@@ -236,7 +233,7 @@ class PipelineProcessor(SharedDuckDBProcessor):
         else:
             print(f"ERROR: {message}")
 
-    def safe_execute(self, query: str, description: str = "Query") -> Optional[List[Any]]:
+    def safe_execute(self, query: str, description: str = "Query") -> list[Any] | None:
         """
         Execute query with error handling and logging.
 
@@ -253,7 +250,7 @@ class PipelineProcessor(SharedDuckDBProcessor):
             self.log_info(f"✅ {description} completed successfully")
             return result
         except Exception as e:
-            self.log_error(f"❌ {description} failed: {str(e)}")
+            self.log_error(f"❌ {description} failed: {e!s}")
             return None
 
     def process_with_memory_monitoring(self, operation_func, description: str = "Operation") -> Any:
@@ -285,5 +282,5 @@ class PipelineProcessor(SharedDuckDBProcessor):
             self.log_warning("psutil not available, memory monitoring disabled")
             return operation_func()
         except Exception as e:
-            self.log_error(f"❌ {description} failed: {str(e)}")
+            self.log_error(f"❌ {description} failed: {e!s}")
             raise

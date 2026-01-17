@@ -6,23 +6,66 @@
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 100; // requests per window
+const RATE_LIMIT_MAX_ENTRIES = 10000; // Maximum entries before cleanup
 const RATE_LIMIT_STORAGE = new Map<string, { count: number; resetTime: number }>();
 
 /**
+ * Clean up expired rate limit entries to prevent memory leak
+ * Called periodically when storage grows too large
+ */
+function cleanupRateLimitStorage(): void {
+  const now = Date.now();
+  for (const [key, value] of RATE_LIMIT_STORAGE.entries()) {
+    if (now > value.resetTime) {
+      RATE_LIMIT_STORAGE.delete(key);
+    }
+  }
+}
+
+/**
+ * Extract client identifier for rate limiting
+ * Uses a combination of factors to reduce IP spoofing risk
+ */
+function getClientIdentifier(request: Request): string {
+  // Get forwarded IP - prefer rightmost (closest to our edge) to reduce spoofing
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  let clientIP = 'unknown';
+
+  if (forwardedFor) {
+    // Take the rightmost IP (added by our trusted proxy/edge)
+    // This is harder to spoof than the leftmost IP
+    const ips = forwardedFor.split(',').map(ip => ip.trim());
+    clientIP = ips[ips.length - 1] || 'unknown';
+  } else {
+    clientIP = request.headers.get('x-real-ip') || 'unknown';
+  }
+
+  // Combine with user agent to make spoofing harder
+  // An attacker would need to spoof both IP AND user agent consistently
+  const userAgent = request.headers.get('user-agent') || 'unknown';
+  const userAgentHash = userAgent.substring(0, 50); // Use first 50 chars as fingerprint
+
+  return `${clientIP}:${userAgentHash}`;
+}
+
+/**
  * Rate limiter for public API endpoints
+ * Includes memory leak prevention and improved client identification
  */
 export function rateLimit(request: Request): { allowed: boolean; remaining: number } {
-  const clientIP = request.headers.get('x-forwarded-for') ||
-                   request.headers.get('x-real-ip') ||
-                   'unknown';
+  // Cleanup if storage is getting too large (prevents memory leak)
+  if (RATE_LIMIT_STORAGE.size > RATE_LIMIT_MAX_ENTRIES) {
+    cleanupRateLimitStorage();
+  }
 
+  const clientId = getClientIdentifier(request);
   const now = Date.now();
-  const key = `rate_limit:${clientIP}`;
+  const key = `rate_limit:${clientId}`;
 
   const current = RATE_LIMIT_STORAGE.get(key);
 
   if (!current || now > current.resetTime) {
-    // New window or expired window
+    // New window or expired window - also clean up this specific expired entry
     RATE_LIMIT_STORAGE.set(key, {
       count: 1,
       resetTime: now + RATE_LIMIT_WINDOW
@@ -82,14 +125,21 @@ export function validateCompanyId(id: string | null): { valid: boolean; error?: 
 
 /**
  * Input sanitization for text parameters
+ *
+ * Note: This function provides defense-in-depth but should NOT be the primary
+ * protection against injection. Always use parameterized queries (Supabase does this).
+ *
+ * We intentionally allow hyphens, apostrophes, and other legitimate characters
+ * that appear in company names (e.g., "Arla Foods A/S", "Co-operative", "O'Brien").
  */
 export function sanitizeTextInput(input: string | null, maxLength = 100): string | null {
   if (!input) return null;
 
-  // Remove potentially dangerous characters
+  // Only remove characters that are never valid in company names/addresses
+  // and could indicate injection attempts
   const sanitized = input
-    .replace(/[<>'"&]/g, '') // Remove HTML/JS injection chars
-    .replace(/[;\-]/g, '')   // Remove SQL injection chars
+    .replace(/[<>]/g, '')     // Remove HTML tags
+    .replace(/[\x00-\x1F]/g, '') // Remove control characters
     .trim()
     .substring(0, maxLength);
 
@@ -104,7 +154,7 @@ export function createErrorResponse(
   status: number = 400,
   rateLimitInfo?: { remaining: number }
 ): Response {
-  const headers = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
 
   if (rateLimitInfo) {
     headers['X-RateLimit-Remaining'] = rateLimitInfo.remaining.toString();
@@ -120,10 +170,10 @@ export function createErrorResponse(
  * Create standardized success response
  */
 export function createSuccessResponse(
-  data: any,
+  data: unknown,
   rateLimitInfo?: { remaining: number }
 ): Response {
-  const headers = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { ...SECURITY_HEADERS, 'Content-Type': 'application/json' };
 
   if (rateLimitInfo) {
     headers['X-RateLimit-Remaining'] = rateLimitInfo.remaining.toString();

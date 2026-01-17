@@ -775,7 +775,6 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
             "environmental_coverage_by_water_projects": environmental_stats,
         }
 
-
     def _log_performance_summary(self, total_time: float, results: dict[str, any]):
         """Log performance summary."""
         self.log.info("\n" + "=" * 80)

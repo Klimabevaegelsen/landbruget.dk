@@ -39,7 +39,9 @@ def get_diesel_scope1_factor_from_table() -> float:
 O_SCOPE1_DIESEL = get_diesel_scope1_factor_from_table()
 
 
-def beregn_co2e_diesel_scope1_kvaeg(n_ko: float, d_ko: float, o_scope1: float | None = None) -> float:
+def beregn_co2e_diesel_scope1_kvaeg(
+    n_ko: float, d_ko: float, o_scope1: float | None = None
+) -> float:
     """
     Beregner CO2e fra diesel (scope 1) for kvæg.
 

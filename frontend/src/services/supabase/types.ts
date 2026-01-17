@@ -209,7 +209,7 @@ export interface IteratedSection {
 
 export interface ClimateKPIs {
   _key: string;
-  _type: "climateKPIs";
+  _type: 'climateKPIs';
   title: string;
   cvr: string;
   year?: number;
@@ -217,7 +217,7 @@ export interface ClimateKPIs {
 
 export interface ClimateBreakdown {
   _key: string;
-  _type: "climateBreakdown";
+  _type: 'climateBreakdown';
   title: string;
   cvr: string;
   yearRange?: {

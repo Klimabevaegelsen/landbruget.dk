@@ -1,5 +1,3 @@
-
-
 def beregn_produktaftryk_slagtekyllinger_pr_kg(
     co2e_total_pr_kylling: float, v_slagt_gram: float
 ) -> float:
@@ -21,7 +19,6 @@ def beregn_produktaftryk_slagtekyllinger_pr_kg(
 
     # P_h = CO2e_tot / (V_slagt * 1000) - men V_slagt er allerede i gram, så vi deler med 1000 for at få kg
     return co2e_total_pr_kylling / v_slagt_kg
-
 
 
 def beregn_co2e_total_slagtekylling(
@@ -60,7 +57,6 @@ def beregn_co2e_total_slagtekylling(
         + co2e_stroelse
         + co2e_varme
     )
-
 
 
 def beregn_bedriftsaftryk_slagtekyllinger(hold_data: list[dict[str, float]]) -> float:

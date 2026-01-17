@@ -36,8 +36,12 @@ jobs:
 
     - name: Run ruff linting (critical errors only)
       run: |
-        # Focus on critical errors that break functionality
-        ruff check . --select E722,F401,F841,E402,F811 --output-format github
+        # Block ALL F errors (undefined names, unused vars, etc.) + critical E/W errors
+        # F = All Pyflakes errors (F821 undefined names, F401 unused imports, etc.)
+        # E9 = Runtime/syntax errors
+        # E711/E712/E713/E714 = Wrong None/True/False comparisons
+        # W605 = Invalid escape sequences
+        ruff check . --select E9,F,E711,E712,E713,E714,W605 --output-format github
       continue-on-error: false
 
     - name: Run ruff linting (all errors, informational)

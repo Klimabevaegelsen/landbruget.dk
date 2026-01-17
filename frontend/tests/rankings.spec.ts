@@ -44,7 +44,9 @@ test.describe('Ranking Tables', () => {
     const firstTable = tables.first();
 
     // Look for table rows
-    const rows = firstTable.locator('tr, [role="row"], [data-testid="ranking-row"]');
+    const rows = firstTable.locator(
+      'tr, [role="row"], [data-testid="ranking-row"]'
+    );
     const rowCount = await rows.count();
 
     expect(rowCount).toBeGreaterThan(0);
@@ -59,7 +61,7 @@ test.describe('Ranking Tables', () => {
     // Look for company links/names
     const companyLinks = firstTable.locator('[data-testid="company-link"]');
 
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       await expect(companyLinks.first()).toBeVisible();
 
       const text = await companyLinks.first().textContent();
@@ -76,7 +78,7 @@ test.describe('Ranking Tables', () => {
     // Look for rank numbers
     const rankCells = firstTable.locator('text=/^[1-9]\\d*$/');
 
-    if (await rankCells.count() > 0) {
+    if ((await rankCells.count()) > 0) {
       await expect(rankCells.first()).toBeVisible();
     }
   });
@@ -92,7 +94,7 @@ test.describe('Ranking Tables', () => {
       'text=/\\d+[.,]?\\d*\\s*(kr|kg|ha|ton|%)?/i'
     );
 
-    if (await valueCells.count() > 0) {
+    if ((await valueCells.count()) > 0) {
       await expect(valueCells.first()).toBeVisible();
     }
   });
@@ -108,7 +110,7 @@ test.describe('Ranking Tables', () => {
       '[role="columnheader"] button, th button, [data-testid*="sort"]'
     );
 
-    if (await sortableHeaders.count() > 0) {
+    if ((await sortableHeaders.count()) > 0) {
       const firstHeader = sortableHeaders.first();
       await firstHeader.click();
 
@@ -131,7 +133,7 @@ test.describe('Ranking Tables', () => {
       '[data-testid="ranking-description"], p, .description'
     );
 
-    if (await description.count() > 0) {
+    if ((await description.count()) > 0) {
       await expect(description.first()).toBeVisible();
     }
   });
@@ -147,8 +149,10 @@ test.describe('Ranking Tables', () => {
       '[data-testid*="pagination"], button[aria-label*="next"], button[aria-label*="previous"]'
     );
 
-    if (await paginationButtons.count() > 0) {
-      const nextButton = paginationButtons.filter({ hasText: /next|næste/i }).first();
+    if ((await paginationButtons.count()) > 0) {
+      const nextButton = paginationButtons
+        .filter({ hasText: /next|næste/i })
+        .first();
 
       if (await nextButton.isEnabled()) {
         await nextButton.click();
@@ -171,7 +175,7 @@ test.describe('Ranking Tables', () => {
       'text=/opdateret|updated|\\d{1,2}\\/\\d{1,2}\\/\\d{4}/i'
     );
 
-    if (await timestamp.count() > 0) {
+    if ((await timestamp.count()) > 0) {
       await expect(timestamp.first()).toBeVisible();
     }
   });
@@ -184,7 +188,7 @@ test.describe('Ranking Tables', () => {
       '[data-testid*="category-tab"], [role="tab"]'
     );
 
-    if (await categoryTabs.count() > 1) {
+    if ((await categoryTabs.count()) > 1) {
       const secondTab = categoryTabs.nth(1);
       await secondTab.click();
 
@@ -207,20 +211,20 @@ test.describe('Ranking Tables', () => {
       'text=/\\d+\\s+(virksomheder|companies|entries)/i'
     );
 
-    if (await countIndicator.count() > 0) {
+    if ((await countIndicator.count()) > 0) {
       await expect(countIndicator.first()).toBeVisible();
     }
   });
 
   test('should handle empty state gracefully', async ({ page }) => {
     // Mock empty rankings response
-    await page.route('**/api/rankings**', route => {
+    await page.route('**/api/rankings**', (route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           rankings: [],
-          metadata: { generated_at: new Date().toISOString(), total_tables: 0 }
+          metadata: { generated_at: new Date().toISOString(), total_tables: 0 },
         }),
       });
     });
@@ -229,10 +233,13 @@ test.describe('Ranking Tables', () => {
     await page.waitForLoadState('networkidle');
 
     // Should show empty state or no tables
-    const emptyState = page.locator('text=/ingen data|no data|ingen resultater/i');
-    const hasTables = await page.locator('[data-testid="ranking-table"]').count() > 0;
+    const emptyState = page.locator(
+      'text=/ingen data|no data|ingen resultater/i'
+    );
+    const hasTables =
+      (await page.locator('[data-testid="ranking-table"]').count()) > 0;
 
-    const hasEmptyState = await emptyState.count() > 0;
+    const hasEmptyState = (await emptyState.count()) > 0;
 
     expect(hasEmptyState || !hasTables).toBe(true);
   });

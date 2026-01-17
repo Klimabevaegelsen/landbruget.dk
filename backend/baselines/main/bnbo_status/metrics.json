@@ -1,7 +1,7 @@
 {
   "dataset_name": "bnbo_status",
   "source_path": "gs://landbrugsdata-raw-data/silver/bnbo_status/20260116_221853/data.parquet",
-  "generated_at": "2026-01-17T11:10:41.434303",
+  "generated_at": "2026-01-17T11:19:41.619628",
   "record_count": 5394,
   "unique_identifiers": {},
   "geometry_bounds": {

@@ -252,9 +252,7 @@ def load_animal_movements(
             )
             if attempt < max_retries:
                 continue
-            logger.error(
-                f"❌ Max retries exceeded for herd {herd_number} due to connection error"
-            )
+            logger.error(f"❌ Max retries exceeded for herd {herd_number} due to connection error")
             return None
 
         except Fault as soap_fault:

@@ -106,9 +106,9 @@ class PropertyDataProcessor:
             def flatten_coords(obj):
                 if isinstance(obj, list):
                     for item in obj:
-                        if isinstance(item, (list, tuple)):
+                        if isinstance(item, list | tuple):
                             flatten_coords(item)
-                        elif isinstance(item, (int, float)):
+                        elif isinstance(item, int | float):
                             flat_coords.append(item)
 
             flatten_coords(coords)
@@ -302,7 +302,7 @@ class PropertyDataProcessor:
                 # Only keep non-empty values
                 if True:
                     # Keep primitive values and non-empty containers
-                    if not isinstance(cleaned_value, (dict, list)) or cleaned_value:
+                    if not isinstance(cleaned_value, dict | list) or cleaned_value:
                         cleaned[key] = cleaned_value
             return cleaned
         if isinstance(obj, list):

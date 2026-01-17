@@ -103,9 +103,7 @@ class DuckDBProcessor:
         """)
         return table_name
 
-    def create_table_from_csv(
-        self, csv_path: str | Path, table_name: str | None = None
-    ) -> str:
+    def create_table_from_csv(self, csv_path: str | Path, table_name: str | None = None) -> str:
         """Create a table from CSV file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_{int(time.time())}"

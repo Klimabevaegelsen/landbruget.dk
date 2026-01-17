@@ -28,7 +28,8 @@ test.describe('Cache Utilities', () => {
       return {
         milliseconds,
         isPositive: milliseconds > 0,
-        isReasonable: milliseconds > 0 && milliseconds <= 7 * 24 * 60 * 60 * 1000,
+        isReasonable:
+          milliseconds > 0 && milliseconds <= 7 * 24 * 60 * 60 * 1000,
       };
     });
 
@@ -36,7 +37,9 @@ test.describe('Cache Utilities', () => {
     expect(result.isReasonable).toBe(true);
   });
 
-  test('should return next Tuesday if today is Tuesday before 9 AM', async ({ page }) => {
+  test('should return next Tuesday if today is Tuesday before 9 AM', async ({
+    page,
+  }) => {
     await page.goto('/');
 
     const result = await page.evaluate(() => {
@@ -63,7 +66,9 @@ test.describe('Cache Utilities', () => {
     expect(result.isNineAM).toBe(true);
   });
 
-  test('should return next week Tuesday if today is Tuesday after 9 AM', async ({ page }) => {
+  test('should return next week Tuesday if today is Tuesday after 9 AM', async ({
+    page,
+  }) => {
     await page.goto('/');
 
     const result = await page.evaluate(() => {
@@ -80,7 +85,9 @@ test.describe('Cache Utilities', () => {
 
       nextTuesday.setHours(9, 0, 0, 0);
 
-      const daysDiff = Math.floor((nextTuesday.getTime() - testDate.getTime()) / (24 * 60 * 60 * 1000));
+      const daysDiff = Math.floor(
+        (nextTuesday.getTime() - testDate.getTime()) / (24 * 60 * 60 * 1000)
+      );
 
       return {
         isNextWeek: daysDiff >= 6 && daysDiff <= 7,
@@ -148,7 +155,9 @@ test.describe('Cache Utilities', () => {
       const formatCacheAge = (timestamp: number): string => {
         const ageMs = now - timestamp;
         const ageDays = Math.floor(ageMs / (24 * 60 * 60 * 1000));
-        const ageHours = Math.floor((ageMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+        const ageHours = Math.floor(
+          (ageMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000)
+        );
 
         if (ageDays > 0) {
           return `${ageDays} dag${ageDays > 1 ? 'e' : ''} gammel`;
@@ -191,7 +200,9 @@ test.describe('Cache Utilities', () => {
 
       nextTuesday.setHours(9, 0, 0, 0);
 
-      const secondsUntilTuesday = Math.floor((nextTuesday.getTime() - now.getTime()) / 1000);
+      const secondsUntilTuesday = Math.floor(
+        (nextTuesday.getTime() - now.getTime()) / 1000
+      );
       const maxAge = Math.max(3600, secondsUntilTuesday);
       const staleWhileRevalidate = 7 * 24 * 60 * 60;
 
@@ -202,7 +213,9 @@ test.describe('Cache Utilities', () => {
       return {
         maxAgeIsPositive: maxAge > 0,
         maxAgeIsReasonable: maxAge >= 3600 && maxAge <= 7 * 24 * 60 * 60,
-        hasStaleWhileRevalidate: headers['Cache-Control'].includes('stale-while-revalidate'),
+        hasStaleWhileRevalidate: headers['Cache-Control'].includes(
+          'stale-while-revalidate'
+        ),
       };
     });
 

@@ -18,15 +18,15 @@ from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 import duckdb
-from pydantic import BaseModel
-
-from unified_pipeline.common.native_schema_manager import NativeSchemaManager
 from common.gcs import GCSDataAccess
-from unified_pipeline.util.log_util import Logger
-from unified_pipeline.util.timing import timed
 
 # Import the new data tracing system
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from pydantic import BaseModel
+
+from unified_pipeline.common.native_schema_manager import NativeSchemaManager
+from unified_pipeline.util.log_util import Logger
+from unified_pipeline.util.timing import timed
 
 PIPELINE_METADATA_AVAILABLE = True
 

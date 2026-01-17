@@ -1,6 +1,6 @@
-import { ClimateKPIs } from "@/services/supabase/types";
-import { getClimateEmissions } from "@/services/supabase/climate";
-import { CarbonAccountingKPIs } from "@/components/climate";
+import { ClimateKPIs } from '@/services/supabase/types';
+import { getClimateEmissions } from '@/services/supabase/climate';
+import { CarbonAccountingKPIs } from '@/components/climate';
 
 export async function BlockClimateKPIs({ block }: { block: ClimateKPIs }) {
   try {
@@ -19,7 +19,7 @@ export async function BlockClimateKPIs({ block }: { block: ClimateKPIs }) {
 
     return <CarbonAccountingKPIs emission={emission} />;
   } catch (error) {
-    console.error("Error loading climate KPIs:", error);
+    console.error('Error loading climate KPIs:', error);
     return (
       <div className="rounded bg-red-50 p-4 text-red-600">
         Fejl ved indlæsning af klimadata

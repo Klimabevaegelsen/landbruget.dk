@@ -36,4 +36,3 @@ def beregn_bedriftsaftryk_kvaeg(farmahead_data: dict, mark_data: dict) -> float:
 
     # Samlet bedriftsaftryk
     return farmahead_total + mark_total
-

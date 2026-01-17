@@ -21,9 +21,11 @@ test.describe('Search Functionality', () => {
   });
 
   test('should accept text input in search field', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     await searchInput.fill('Arla');
 
@@ -32,9 +34,11 @@ test.describe('Search Functionality', () => {
   });
 
   test('should show search results when typing', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     // Type search query
     await searchInput.fill('test');
@@ -48,16 +52,21 @@ test.describe('Search Functionality', () => {
     );
 
     // Results should appear or no results message should show
-    const hasResults = await resultsContainer.count() > 0;
-    const hasNoResults = await page.locator('text=/ingen resultater|no results/i').count() > 0;
+    const hasResults = (await resultsContainer.count()) > 0;
+    const hasNoResults =
+      (await page.locator('text=/ingen resultater|no results/i').count()) > 0;
 
     expect(hasResults || hasNoResults).toBe(true);
   });
 
-  test('should navigate to company when clicking search result', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+  test('should navigate to company when clicking search result', async ({
+    page,
+  }) => {
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     await searchInput.fill('Arla');
     await page.waitForTimeout(500);
@@ -67,7 +76,7 @@ test.describe('Search Functionality', () => {
       '[data-testid="search-result"], [role="option"]'
     );
 
-    if (await resultItems.count() > 0) {
+    if ((await resultItems.count()) > 0) {
       const firstResult = resultItems.first();
       await firstResult.click();
 
@@ -80,9 +89,11 @@ test.describe('Search Functionality', () => {
   });
 
   test('should clear search input with clear button', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     await searchInput.fill('test query');
 
@@ -91,7 +102,7 @@ test.describe('Search Functionality', () => {
       '[data-testid="search-clear"], button[aria-label*="clear"], button[aria-label*="ryd"]'
     );
 
-    if (await clearButton.count() > 0) {
+    if ((await clearButton.count()) > 0) {
       await clearButton.first().click();
 
       const value = await searchInput.inputValue();
@@ -100,9 +111,11 @@ test.describe('Search Functionality', () => {
   });
 
   test('should handle empty search gracefully', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     await searchInput.fill('');
     await searchInput.press('Enter');
@@ -116,14 +129,16 @@ test.describe('Search Functionality', () => {
 
   test('should show loading state while searching', async ({ page }) => {
     // Slow down network to see loading state
-    await page.route('**/api/**', async route => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    await page.route('**/api/**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await route.continue();
     });
 
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     await searchInput.fill('test');
 
@@ -133,14 +148,16 @@ test.describe('Search Functionality', () => {
     );
 
     // Should show loading state briefly
-    const hasLoading = await loadingIndicator.count() > 0;
+    const hasLoading = (await loadingIndicator.count()) > 0;
     expect(hasLoading).toBe(true);
   });
 
   test('should filter results by category tabs', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     await searchInput.fill('test');
     await page.waitForTimeout(500);
@@ -150,7 +167,7 @@ test.describe('Search Functionality', () => {
       '[data-testid*="category-tab"], [role="tab"]'
     );
 
-    if (await categoryTabs.count() > 1) {
+    if ((await categoryTabs.count()) > 1) {
       // Click second tab
       await categoryTabs.nth(1).click();
 
@@ -159,17 +176,20 @@ test.describe('Search Functionality', () => {
 
       // Tab should be active
       const secondTab = categoryTabs.nth(1);
-      const isActive = await secondTab.getAttribute('aria-selected') === 'true' ||
-                      await secondTab.getAttribute('data-state') === 'active';
+      const isActive =
+        (await secondTab.getAttribute('aria-selected')) === 'true' ||
+        (await secondTab.getAttribute('data-state')) === 'active';
 
       expect(isActive).toBe(true);
     }
   });
 
   test('should highlight search terms in results', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     const searchTerm = 'test';
     await searchInput.fill(searchTerm);
@@ -181,15 +201,17 @@ test.describe('Search Functionality', () => {
     );
 
     // If results have highlighting, check it
-    if (await highlightedText.count() > 0) {
+    if ((await highlightedText.count()) > 0) {
       await expect(highlightedText.first()).toBeVisible();
     }
   });
 
   test('should show recent searches if available', async ({ page }) => {
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    ).first();
+    const searchInput = page
+      .locator(
+        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
+      )
+      .first();
 
     // Perform a search
     await searchInput.fill('test search');
@@ -197,7 +219,7 @@ test.describe('Search Functionality', () => {
 
     // Click a result if available
     const resultItems = page.locator('[data-testid="search-result"]');
-    if (await resultItems.count() > 0) {
+    if ((await resultItems.count()) > 0) {
       await resultItems.first().click();
       await page.waitForLoadState('networkidle');
 
@@ -211,7 +233,7 @@ test.describe('Search Functionality', () => {
       );
 
       // If recent searches feature exists, it should be visible
-      if (await recentSearches.count() > 0) {
+      if ((await recentSearches.count()) > 0) {
         await expect(recentSearches.first()).toBeVisible();
       }
     }

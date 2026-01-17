@@ -29,8 +29,8 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import (
-    validate_and_transform_geometries_duckdb,
     validate_and_normalize_to_utm,
+    validate_and_transform_geometries_duckdb,
 )
 from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
@@ -50,9 +50,9 @@ except ImportError:
     extract_cvr_numbers_from_table = None
     save_pipeline_cvr_numbers = None
     CVR_COLLECTION_AVAILABLE = False
-import contextlib
+import contextlib  # noqa: E402
 
-from unified_pipeline.util.timing import AsyncTimer
+from unified_pipeline.util.timing import AsyncTimer  # noqa: E402
 
 
 class FVMWFSSilverConfig(BaseJobConfig):

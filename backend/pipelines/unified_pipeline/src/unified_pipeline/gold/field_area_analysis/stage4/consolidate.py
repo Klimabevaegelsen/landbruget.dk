@@ -591,7 +591,14 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
 
         self.log.info("   Environmental category breakdown:")
-        for category, count, avg_props, avg_env, _avg_prop_env, total_relationships in env_breakdown:
+        for (
+            category,
+            count,
+            avg_props,
+            avg_env,
+            _avg_prop_env,
+            total_relationships,
+        ) in env_breakdown:
             avg_props_str = f"{avg_props:.1f}" if avg_props is not None else "0.0"
             avg_env_str = f"{avg_env:.1f}" if avg_env is not None else "0.0"
             self.log.info(

@@ -9,7 +9,7 @@ from shapely.validation import explain_validity
 
 # Add common module to path for CRS utilities
 sys.path.insert(0, str(Path(__file__).resolve().parents[5]))
-from common.crs_utils import detect_crs_from_bounds, DANISH_UTM, WGS84  # noqa: F401
+from common.crs_utils import DANISH_UTM, WGS84, detect_crs_from_bounds  # noqa: F401
 
 # Handle imports for both standalone and package usage
 try:

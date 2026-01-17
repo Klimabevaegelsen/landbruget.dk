@@ -60,11 +60,12 @@ repos:
   # Stage 5: Frontend processing (improved reliability)
   - repo: local
     hooks:
-      # Frontend formatting with better error handling
+      # Frontend formatting with proper error handling
+      # Uses --prefer-offline for speed, falls back to full install if needed
       - id: prettier-frontend
         name: Prettier (Frontend)
         entry: bash
-        args: [-c, "cd frontend && npm ci --silent 2>/dev/null || true && npm run format"]
+        args: [-c, "cd frontend && (npm ci --prefer-offline 2>/dev/null || npm install) && npm run format"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
@@ -72,7 +73,7 @@ repos:
       - id: prettier-frontend-pesticide
         name: Prettier (Frontend Pesticide)
         entry: bash
-        args: [-c, "cd frontend-pesticide && npm ci --silent 2>/dev/null || true && npm run format"]
+        args: [-c, "cd frontend-pesticide && (npm ci --prefer-offline 2>/dev/null || npm install) && npm run format"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
@@ -81,7 +82,7 @@ repos:
       - id: oxlint
         name: Oxlint (Frontend)
         entry: bash
-        args: [-c, "cd frontend && (npm list oxlint >/dev/null 2>&1 || npm ci --silent) && npm run lint"]
+        args: [-c, "cd frontend && (npm list oxlint >/dev/null 2>&1 || npm ci --prefer-offline || npm install) && npm run lint"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
@@ -89,7 +90,7 @@ repos:
       - id: oxlint-frontend-pesticide
         name: Oxlint (Frontend Pesticide)
         entry: bash
-        args: [-c, "cd frontend-pesticide && (npm list oxlint >/dev/null 2>&1 || npm ci --silent) && npm run lint"]
+        args: [-c, "cd frontend-pesticide && (npm list oxlint >/dev/null 2>&1 || npm ci --prefer-offline || npm install) && npm run lint"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false

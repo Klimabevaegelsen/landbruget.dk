@@ -1,7 +1,7 @@
 {
   "dataset_name": "arbejdstilsynet_inspections",
   "source_path": "gs://landbrugsdata-raw-data/gold/arbejdstilsynet_inspections/20260116_223114/workplace_inspections_gold.parquet",
-  "generated_at": "2026-01-17T11:11:52.751753",
+  "generated_at": "2026-01-17T11:20:50.114475",
   "record_count": 534,
   "unique_identifiers": {},
   "column_null_counts": {

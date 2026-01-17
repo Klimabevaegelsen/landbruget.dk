@@ -298,8 +298,7 @@ class GoogleDriveFetcher:
 
                 except Exception as chunk_error:
                     logger.warning(
-                        f"Error downloading chunk {chunk_count} for file {file_id}: "
-                        f"{chunk_error!s}"
+                        f"Error downloading chunk {chunk_count} for file {file_id}: {chunk_error!s}"
                     )
                     raise
 

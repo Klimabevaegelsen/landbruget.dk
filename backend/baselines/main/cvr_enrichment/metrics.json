@@ -1,7 +1,7 @@
 {
   "dataset_name": "cvr_enrichment",
   "source_path": "gs://landbrugsdata-raw-data/gold/cvr_enrichment/20260116_231814/address_geocoding.parquet",
-  "generated_at": "2026-01-17T11:11:31.008710",
+  "generated_at": "2026-01-17T11:20:29.669685",
   "record_count": 0,
   "unique_identifiers": {},
   "column_null_counts": {

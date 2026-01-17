@@ -17,8 +17,8 @@ from utils.logger import setup_logger
 
 # GCS upload functionality
 try:
-    from google.cloud import storage
     from common.gcs import GCSDataAccess  # noqa: F401
+    from google.cloud import storage
 
     GCS_AVAILABLE = True
 except ImportError:

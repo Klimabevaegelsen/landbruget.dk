@@ -27,8 +27,8 @@ from typing import Any, ClassVar
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import (
-    validate_and_transform_geometries_duckdb,
     validate_and_normalize_to_utm,
+    validate_and_transform_geometries_duckdb,
 )
 from unified_pipeline.util.timing import AsyncTimer, timed
 

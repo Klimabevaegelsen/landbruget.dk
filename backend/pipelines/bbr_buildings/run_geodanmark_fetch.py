@@ -10,8 +10,8 @@ from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 
 # GCS upload functionality
 try:
-    from google.cloud import storage
     from common.gcs import GCSDataAccess  # noqa: F401
+    from google.cloud import storage
 
     GCS_AVAILABLE = True
 except ImportError:

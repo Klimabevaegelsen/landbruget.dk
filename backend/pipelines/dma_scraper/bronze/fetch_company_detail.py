@@ -52,7 +52,9 @@ class DMACompanyDetailScraper:
                 section_div = soup.find("div", string=section)
                 if section_div:
                     section_body = section_div.find_next("div", class_="card-body")
-                    for dt, dd in zip(section_body.find_all("dt"), section_body.find_all("dd"), strict=False):
+                    for dt, dd in zip(
+                        section_body.find_all("dt"), section_body.find_all("dd"), strict=False
+                    ):
                         key = dt.text.strip(":")
                         value = dd.text.strip()
                         data[key] = value

@@ -7,6 +7,8 @@ import sys
 from datetime import date, datetime
 from typing import Any
 
+# Import pipeline metadata system for data tracing
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from bronze.load_svineflytning import (
@@ -15,9 +17,6 @@ from bronze.load_svineflytning import (
     fetch_all_movements,
     get_fvm_credentials,
 )
-
-# Import pipeline metadata system for data tracing
-from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 PIPELINE_METADATA_AVAILABLE = True
 

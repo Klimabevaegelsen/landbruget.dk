@@ -8,6 +8,7 @@ suitable for posting as GitHub PR comments.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from .baseline_manager import ComparisonResult
@@ -106,8 +107,8 @@ class ValidationReportGenerator:
         # Summary
         lines.append("### Summary")
         lines.append("")
-        lines.append(f"| Status | Passed | Failed |")
-        lines.append(f"|--------|--------|--------|")
+        lines.append("| Status | Passed | Failed |")
+        lines.append("|--------|--------|--------|")
         status = "PASSED" if self.report.overall_passed else "**FAILED**"
         lines.append(f"| {status} | {self.report.passed_count} | {self.report.failed_count} |")
         lines.append("")
@@ -265,7 +266,8 @@ class ValidationReportGenerator:
 
     def save_markdown(self, path: str):
         """Save markdown report to file."""
-        with open(path, "w") as f:
+        file_path = Path(path)
+        with file_path.open("w") as f:
             f.write(self.generate_markdown())
         logger.info(f"Saved validation report to {path}")
 
@@ -273,6 +275,7 @@ class ValidationReportGenerator:
         """Save JSON report to file."""
         import json
 
-        with open(path, "w") as f:
+        file_path = Path(path)
+        with file_path.open("w") as f:
             json.dump(self.generate_json(), f, indent=2)
         logger.info(f"Saved validation report to {path}")

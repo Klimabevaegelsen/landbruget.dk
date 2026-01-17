@@ -110,9 +110,7 @@ def get_fvm_credentials() -> tuple[str, str, Any, Any]:
                 logger.debug(f"Successfully read certificate file. Length: {len(p12_data)} bytes")
             except Exception as file_error:
                 logger.error(f"Failed to read certificate file {cert_path}: {file_error!s}")
-                raise ValueError(
-                    f"Failed to read certificate file: {file_error!s}"
-                ) from file_error
+                raise ValueError(f"Failed to read certificate file: {file_error!s}") from file_error
 
         if not p12_data:
             raise ValueError(

@@ -46,8 +46,9 @@ import re
 import tempfile
 from typing import Any
 
-from unified_pipeline.common.base import BaseSource, GoldJobInterface
 from common.gcs import GCSDataAccess
+
+from unified_pipeline.common.base import BaseSource, GoldJobInterface
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 

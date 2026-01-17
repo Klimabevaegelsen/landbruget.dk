@@ -23,7 +23,8 @@ import shutil
 import tempfile
 import time
 import warnings
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
+from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -196,7 +197,7 @@ class GCSDataAccess:
                     self.log.debug(f"Downloading {gcs_path} to {temp_file}")
 
                     # Fast download with gcsfs (5x faster than HTTPFS)
-                    with self.fs.open(gcs_path, "rb") as src, open(temp_file, "wb") as dst:
+                    with self.fs.open(gcs_path, "rb") as src, Path(temp_file).open("wb") as dst:
                         shutil.copyfileobj(src, dst)
 
                     self.monitor.check_resources("post_download")
@@ -204,9 +205,9 @@ class GCSDataAccess:
                 yield temp_file
             finally:
                 # GUARANTEED cleanup - even if DuckDB operation fails
-                if temp_file and os.path.exists(temp_file):
+                if temp_file and Path(temp_file).exists():
                     try:
-                        os.unlink(temp_file)
+                        Path(temp_file).unlink()
                         self.log.debug(f"Cleaned up temp file: {temp_file}")
                     except Exception as e:
                         warnings.warn(f"Failed to cleanup temp file {temp_file}: {e}", stacklevel=2)
@@ -303,7 +304,7 @@ class GCSDataAccess:
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
             # Stream copy to GCS without loading into memory
-            with open(tmp.name, "rb") as src, self.fs.open(gcs_path, "wb") as dst:
+            with Path(tmp.name).open("rb") as src, self.fs.open(gcs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_direct_export")
@@ -520,8 +521,8 @@ class GCSDataAccess:
             # Cleanup temp files
             for tmp_file in temp_files:
                 try:
-                    if os.path.exists(tmp_file):
-                        os.unlink(tmp_file)
+                    if Path(tmp_file).exists():
+                        Path(tmp_file).unlink()
                 except Exception as e:
                     self.log.warning(f"Failed to cleanup {tmp_file}: {e}")
 
@@ -705,11 +706,11 @@ class GCSDataAccess:
             self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp_path}' ({options_str})")
 
             # Get file size for verification
-            local_size = os.path.getsize(tmp_path)
+            local_size = Path(tmp_path).stat().st_size
             self.log.info(f"Created local temp file: {local_size:,} bytes")
 
             # Stream copy to GCS without loading into memory
-            with open(tmp_path, "rb") as src, self.fs.open(gcs_path, "wb") as dst:
+            with Path(tmp_path).open("rb") as src, self.fs.open(gcs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             self.log.info(f"Uploaded {local_size:,} bytes to GCS")
@@ -733,10 +734,8 @@ class GCSDataAccess:
                 raise
         finally:
             # Clean up temp file
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+            with suppress(Exception):
+                Path(tmp_path).unlink()
 
         self.monitor.check_resources("post_duckdb_upload")
         format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
@@ -817,7 +816,7 @@ class GCSDataAccess:
             self.duckdb_conn.execute(f"COPY ({query}) TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS
-            with open(tmp.name, "rb") as src, self.fs.open(gcs_path, "wb") as dst:
+            with Path(tmp.name).open("rb") as src, self.fs.open(gcs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_query_upload")
@@ -909,10 +908,7 @@ class GCSDataAccess:
         """
         try:
             # Build the pattern for gcsfs
-            if prefix:
-                pattern = f"{bucket_name}/{prefix}*"
-            else:
-                pattern = f"{bucket_name}/*"
+            pattern = f"{bucket_name}/{prefix}*" if prefix else f"{bucket_name}/*"
 
             # Get file paths
             files = self.fs.glob(pattern)

@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, Mock, patch
 import duckdb
 import pytest
 
-from silver.chr_silver_processing import (
+from chr_pipeline.silver.chr_silver_processing import (
     _save_discovered_cvr_numbers,
     download_bronze_data_from_gcs,
     process_chr_data,
@@ -40,7 +40,7 @@ class TestSilverOrchestration:
         (bronze_dir / "ejendom_vet_events.json").write_text("[]")
 
         # Mock config
-        with patch("silver.chr_silver_processing.config") as mock_config:
+        with patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config:
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
 
@@ -135,7 +135,7 @@ class TestSilverOrchestration:
         (bronze_dir / "ejendom_oplysninger.json").write_text(json.dumps(ejendom_oplysninger))
         (bronze_dir / "ejendom_vet_events.json").write_text("[]")
 
-        with patch("silver.chr_silver_processing.config") as mock_config:
+        with patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config:
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
 
@@ -165,8 +165,8 @@ class TestDataLoading:
 
         # Mock GCS access
         with (
-            patch("silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
-            patch("silver.chr_silver_processing.GCSDataAccess") as mock_gcs_class,
+            patch("chr_pipeline.silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
+            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess") as mock_gcs_class,
             patch.dict("os.environ", {"GCS_BUCKET": "test-bucket"}),
         ):
             mock_gcs = Mock()
@@ -188,7 +188,7 @@ class TestDataLoading:
         bronze_timestamp = "20240101_120000"
 
         with (
-            patch("silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
+            patch("chr_pipeline.silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
             patch.dict("os.environ", {}, clear=True),
         ):
             result = download_bronze_data_from_gcs(bronze_timestamp, local_bronze_dir)
@@ -239,10 +239,14 @@ class TestCVRCollection:
         """)
 
         with (
-            patch("silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
-            patch("silver.chr_silver_processing.extract_cvr_numbers_from_table") as mock_extract,
-            patch("silver.chr_silver_processing.save_pipeline_cvr_numbers") as mock_save,
-            patch("silver.chr_silver_processing.GCSDataAccess") as mock_gcs,
+            patch("chr_pipeline.silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
+            patch(
+                "chr_pipeline.silver.chr_silver_processing.extract_cvr_numbers_from_table"
+            ) as mock_extract,
+            patch(
+                "chr_pipeline.silver.chr_silver_processing.save_pipeline_cvr_numbers"
+            ) as mock_save,
+            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess") as mock_gcs,
         ):
             mock_extract.side_effect = [
                 ["12345678", "87654321"],  # property_owners
@@ -268,9 +272,11 @@ class TestCVRCollection:
         con.execute("CREATE TABLE property_owners AS SELECT NULL AS owner_cvr WHERE FALSE")
 
         with (
-            patch("silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
-            patch("silver.chr_silver_processing.extract_cvr_numbers_from_table") as mock_extract,
-            patch("silver.chr_silver_processing.GCSDataAccess") as mock_gcs,
+            patch("chr_pipeline.silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
+            patch(
+                "chr_pipeline.silver.chr_silver_processing.extract_cvr_numbers_from_table"
+            ) as mock_extract,
+            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess") as mock_gcs,
         ):
             mock_extract.return_value = []
 
@@ -293,7 +299,7 @@ class TestErrorHandling:
         (bronze_dir / "besaetning_details.json").write_text('{"Response": []}')
 
         with (
-            patch("silver.chr_silver_processing.config") as mock_config,
+            patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config,
             pytest.raises(SystemExit),
         ):
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
@@ -334,7 +340,7 @@ class TestErrorHandling:
         (bronze_dir / "ejendom_oplysninger.json").write_text(json.dumps(ejendom_oplysninger))
         (bronze_dir / "ejendom_vet_events.json").write_text("[]")
 
-        with patch("silver.chr_silver_processing.config") as mock_config:
+        with patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config:
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
 
@@ -373,7 +379,7 @@ class TestDataTransformation:
             SELECT '2', 'Slagtesvin'
         """)
 
-        from silver.helpers import _create_and_save_lookup
+        from chr_pipeline.silver.helpers import _create_and_save_lookup
 
         result = _create_and_save_lookup(
             con,

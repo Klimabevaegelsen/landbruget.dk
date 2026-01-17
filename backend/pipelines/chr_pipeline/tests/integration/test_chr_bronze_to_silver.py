@@ -14,8 +14,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from silver.chr_silver_processing import process_chr_data
-from silver.herds import create_herds_table
+from chr_pipeline.silver.chr_silver_processing import process_chr_data
+from chr_pipeline.silver.herds import create_herds_table
 
 
 @pytest.mark.chr_integration
@@ -107,8 +107,10 @@ class TestBronzeToSilverFlow:
 
         # Process silver
         with (
-            patch("silver.chr_silver_processing.config") as mock_config,
-            patch("silver.chr_silver_processing.upload_silver_data_to_gcs") as mock_upload,
+            patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config,
+            patch(
+                "chr_pipeline.silver.chr_silver_processing.upload_silver_data_to_gcs"
+            ) as mock_upload,
         ):
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
@@ -196,8 +198,10 @@ class TestBronzeToSilverFlow:
 
         # Process to silver
         with (
-            patch("silver.chr_silver_processing.config") as mock_config,
-            patch("silver.chr_silver_processing.upload_silver_data_to_gcs") as mock_upload,
+            patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config,
+            patch(
+                "chr_pipeline.silver.chr_silver_processing.upload_silver_data_to_gcs"
+            ) as mock_upload,
         ):
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
@@ -317,7 +321,7 @@ class TestDataValidation:
             }] AS Response
         """)
 
-        from silver.herds import create_herd_owners_table
+        from chr_pipeline.silver.herds import create_herd_owners_table
 
         result = create_herd_owners_table(con, "bes_details", silver_dir)
 
@@ -415,7 +419,7 @@ class TestErrorPropagation:
         (bronze_dir / "ejendom_vet_events.json").write_text("[]")
 
         with (
-            patch("silver.chr_silver_processing.config") as mock_config,
+            patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config,
             pytest.raises(SystemExit),
         ):
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent

@@ -1011,9 +1011,7 @@ class NLES5DataLoader:
             self.log.warning("   Continuing with standard GKEA field processing...")
 
     @timed(name="Loading required silver datasets")
-    def _load_required_silver_datasets(
-        self, silver_data: dict[str, Any] | None
-    ) -> dict[str, str]:
+    def _load_required_silver_datasets(self, silver_data: dict[str, Any] | None) -> dict[str, str]:
         """
         Load all required silver datasets for NLES5 processing.
 
@@ -1868,9 +1866,7 @@ class NLES5DataLoader:
             raise ValueError("No agricultural fields data could be loaded")
 
         # Combine all yearly tables
-        combined_table = self._combine_yearly_fvm_data(
-            dict(yearly_tables)
-        )
+        combined_table = self._combine_yearly_fvm_data(dict(yearly_tables))
 
         self.log.info(
             f"✅ Agricultural fields data loading completed: {len(yearly_tables)} years processed"

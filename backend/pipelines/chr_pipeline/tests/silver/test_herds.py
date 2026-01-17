@@ -12,7 +12,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from silver.herds import (
+from chr_pipeline.silver.herds import (
     create_herd_owners_table,
     create_herd_sizes_table,
     create_herd_users_table,

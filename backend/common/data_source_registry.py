@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -23,16 +23,16 @@ class DataSourceInfo(BaseModel):
 
     # Business Context (YOU MUST FILL THESE IN)
     source_authority: str = Field(..., description="Who provided the data (e.g., 'Miljøstyrelsen', 'SEGES')")
-    source_contact: Optional[str] = Field(None, description="Contact person/email at the authority")
-    data_acquisition_date: Optional[datetime] = Field(None, description="When we obtained this data (manual entry)")
+    source_contact: str | None = Field(None, description="Contact person/email at the authority")
+    data_acquisition_date: datetime | None = Field(None, description="When we obtained this data (manual entry)")
     data_acquisition_method: str = Field(
         ..., description="How we got it: 'API', 'Manual Upload', 'SFTP', 'Email', etc."
     )
 
     # Documentation (OPTIONAL - made documentation_url optional as requested)
-    documentation_url: Optional[str] = Field(None, description="Link to README/docs explaining this pipeline")
+    documentation_url: str | None = Field(None, description="Link to README/docs explaining this pipeline")
     data_description: str = Field(..., description="What this data represents")
-    update_frequency: Optional[str] = Field(None, description="How often this data is updated")
+    update_frequency: str | None = Field(None, description="How often this data is updated")
 
     # Technical Context
     pipeline_name: str = Field(..., description="Pipeline that processes this data")
@@ -44,12 +44,12 @@ class DataSourceInfo(BaseModel):
     display_description: str = Field(..., description="User-friendly description for frontend")
 
     # Custom metadata per source
-    custom_fields: Dict[str, Any] = Field(default_factory=dict)
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
 
 
 # Central registry - YOU MUST CONFIGURE EACH DATA SOURCE HERE
 # 🚨 MANUAL INPUT REQUIRED: Configure all your data sources below
-DATA_SOURCE_REGISTRY: Dict[str, DataSourceInfo] = {
+DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     # ========================================
     # UNIFIED PIPELINE SOURCES
     # ========================================
@@ -703,6 +703,6 @@ def get_source_info(source_key: str) -> DataSourceInfo:
     return DATA_SOURCE_REGISTRY[source_key]
 
 
-def list_available_sources() -> List[str]:
+def list_available_sources() -> list[str]:
     """List all available source keys"""
     return list(DATA_SOURCE_REGISTRY.keys())

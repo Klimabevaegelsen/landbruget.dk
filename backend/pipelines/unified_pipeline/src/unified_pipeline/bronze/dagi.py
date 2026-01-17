@@ -17,11 +17,11 @@ import asyncio
 from asyncio import Semaphore
 
 import aiohttp
+from common.gcs import GCSDataAccess
 from pydantic import Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
-from common.gcs import GCSDataAccess
 from unified_pipeline.util.timing import AsyncTimer
 
 

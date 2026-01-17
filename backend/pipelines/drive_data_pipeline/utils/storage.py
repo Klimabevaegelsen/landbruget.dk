@@ -50,7 +50,7 @@ class DriveStorageManager:
         """
         self.storage_type = storage_type
         self.bucket_name = bucket_name
-        self.base_dir = Path(base_dir) if base_dir else Path(".")
+        self.base_dir = Path(base_dir) if base_dir else Path()
 
         if storage_type.lower() == "gcs":
             if not bucket_name:

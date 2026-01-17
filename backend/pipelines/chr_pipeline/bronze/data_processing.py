@@ -69,7 +69,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> dict:
         if animals is None:
             logger.info(f"Herd {reporting_herd}: No animals found")
             animals = []
-        elif not hasattr(animals, "__iter__") or isinstance(animals, (str, bytes)):
+        elif not hasattr(animals, "__iter__") or isinstance(animals, str | bytes):
             logger.warning(
                 f"Herd {reporting_herd}: Invalid animals data type ({type(animals)}) - using empty list"
             )
@@ -137,8 +137,8 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> dict:
 
         # Process animals safely
         try:
-            if not isinstance(animals, (list, tuple)):
-                if hasattr(animals, "__iter__") and not isinstance(animals, (str, bytes)):
+            if not isinstance(animals, list | tuple):
+                if hasattr(animals, "__iter__") and not isinstance(animals, str | bytes):
                     try:
                         animals = list(animals)
                     except (TypeError, ValueError) as e:

@@ -14,7 +14,7 @@ from pathlib import Path
 
 # Add common module to path for CRS utilities
 sys.path.insert(0, str(Path(__file__).resolve().parents[6]))
-from common.crs_utils import DANISH_UTM, WGS84  # noqa: E402
+from common.crs_utils import DANISH_UTM, WGS84
 
 from unified_pipeline.util.timing import timed
 

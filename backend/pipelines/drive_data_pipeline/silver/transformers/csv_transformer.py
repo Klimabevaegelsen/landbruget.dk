@@ -414,9 +414,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
                 )
 
         except Exception as e:
-            logger.warning(
-                f"Failed to add backward compatibility columns to {table_name}: {e!s}"
-            )
+            logger.warning(f"Failed to add backward compatibility columns to {table_name}: {e!s}")
 
     def _standardize_data_types_duckdb(self, table_name: str) -> str:
         """Apply data type standardization using DuckDB operations.

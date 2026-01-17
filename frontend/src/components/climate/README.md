@@ -7,11 +7,13 @@ Frontend components for displaying farm carbon emissions data.
 ### CarbonAccountingKPIs
 
 Displays key performance indicators for farm emissions including:
+
 - Total CO₂e (kg)
 - CO₂e per hectare (kg/ha)
 - CO₂e per animal unit (kg/DE)
 
 **Usage:**
+
 ```typescript
 import { CarbonAccountingKPIs } from '@/components/climate';
 
@@ -23,6 +25,7 @@ import { CarbonAccountingKPIs } from '@/components/climate';
 Displays a horizontal stacked bar chart showing emissions by category over multiple years.
 
 Categories include:
+
 - Enteric fermentation (Fordøjelse)
 - Manure management (Gødningshåndtering)
 - Fertilizer (Gødning)
@@ -35,6 +38,7 @@ Categories include:
 - Other (Andet)
 
 **Usage:**
+
 ```typescript
 import { CarbonAccountingBreakdown } from '@/components/climate';
 
@@ -81,6 +85,7 @@ The climate service (`frontend/src/services/supabase/climate.ts`) provides:
 Fetches carbon emissions data for a given CVR number, optionally filtered by year.
 
 **Example:**
+
 ```typescript
 import { getClimateEmissions } from '@/services/supabase/climate';
 
@@ -116,6 +121,7 @@ interface ClimateEmission {
 ## Database
 
 Data is stored in the `farm_carbon_emissions` table with the following key fields:
+
 - `cvr_number`: Company CVR (8 digits)
 - `year`: Calendar year
 - `total_co2e_kg`: Total emissions in kg CO₂ equivalents
@@ -125,5 +131,6 @@ Data is stored in the `farm_carbon_emissions` table with the following key field
 - `data_completeness`: Quality metric (0.00-1.00)
 
 See migrations:
+
 - `supabase/migrations/20260110225256_create_farm_climate_emissions.sql` (original)
 - `supabase/migrations/20260116000000_rename_climate_to_carbon_emissions.sql` (rename)

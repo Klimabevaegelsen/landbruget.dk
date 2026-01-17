@@ -12,10 +12,18 @@ const mockLocalStorage = () => {
 
   return {
     getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => { store[key] = value; },
-    removeItem: (key: string) => { delete store[key]; },
-    clear: () => { Object.keys(store).forEach(key => delete store[key]); },
-    get length() { return Object.keys(store).length; },
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      Object.keys(store).forEach((key) => delete store[key]);
+    },
+    get length() {
+      return Object.keys(store).length;
+    },
     key: (index: number) => Object.keys(store)[index] || null,
   };
 };
@@ -37,7 +45,9 @@ test.describe('useCompanyCache', () => {
     expect(result).toBe(true);
   });
 
-  test('should cache company basic info with Tuesday expiration', async ({ page }) => {
+  test('should cache company basic info with Tuesday expiration', async ({
+    page,
+  }) => {
     await page.goto('/');
 
     const nextTuesday = await page.evaluate(() => {
@@ -195,7 +205,9 @@ test.describe('useCompanyCache', () => {
     expect(result).toBe(true);
   });
 
-  test('should preserve most accessed entries during cleanup', async ({ page }) => {
+  test('should preserve most accessed entries during cleanup', async ({
+    page,
+  }) => {
     await page.goto('/');
 
     const result = await page.evaluate(() => {
@@ -207,7 +219,9 @@ test.describe('useCompanyCache', () => {
       accessCounts.set('company-3', 1);
 
       // Sort by access count
-      const sorted = Array.from(accessCounts.entries()).sort((a, b) => b[1] - a[1]);
+      const sorted = Array.from(accessCounts.entries()).sort(
+        (a, b) => b[1] - a[1]
+      );
 
       return sorted[0][0] === 'company-1' && sorted[0][1] === 10;
     });
@@ -220,26 +234,28 @@ test.describe('useCompanyCache', () => {
 
     const result = await page.evaluate(() => {
       const cache = new Map();
-      const rankings = [{
-        items: [
-          {
-            company_id: 'company-1',
-            cvr_number: '12345678',
-            company_name: 'Company 1',
-            municipality: 'Test Municipality',
-          },
-          {
-            company_id: 'company-2',
-            cvr_number: '87654321',
-            company_name: 'Company 2',
-            municipality: 'Test Municipality 2',
-          },
-        ],
-      }];
+      const rankings = [
+        {
+          items: [
+            {
+              company_id: 'company-1',
+              cvr_number: '12345678',
+              company_name: 'Company 1',
+              municipality: 'Test Municipality',
+            },
+            {
+              company_id: 'company-2',
+              cvr_number: '87654321',
+              company_name: 'Company 2',
+              municipality: 'Test Municipality 2',
+            },
+          ],
+        },
+      ];
 
       // Cache companies from rankings
-      rankings.forEach(ranking => {
-        ranking.items.forEach(item => {
+      rankings.forEach((ranking) => {
+        ranking.items.forEach((item) => {
           if (!cache.has(item.company_id)) {
             cache.set(item.company_id, {
               basic_info: item,
@@ -294,14 +310,22 @@ test.describe('useCompanyCache', () => {
 
       // Add companies
       cache.set('company-1', {
-        basic_info: { company_id: 'company-1', cvr_number: '12345678', company_name: 'Company 1' },
+        basic_info: {
+          company_id: 'company-1',
+          cvr_number: '12345678',
+          company_name: 'Company 1',
+        },
         timestamp: now - 2000,
         expiresAt: now + 86400000,
         last_accessed: now - 2000,
       });
 
       cache.set('company-2', {
-        basic_info: { company_id: 'company-2', cvr_number: '87654321', company_name: 'Company 2' },
+        basic_info: {
+          company_id: 'company-2',
+          cvr_number: '87654321',
+          company_name: 'Company 2',
+        },
         details: {
           company_id: 'company-2',
           cvr_number: '87654321',
@@ -314,7 +338,9 @@ test.describe('useCompanyCache', () => {
       });
 
       const totalCompanies = cache.size;
-      const companiesWithDetails = Array.from(cache.values()).filter(c => c.details).length;
+      const companiesWithDetails = Array.from(cache.values()).filter(
+        (c) => c.details
+      ).length;
 
       return { totalCompanies, companiesWithDetails };
     });

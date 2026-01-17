@@ -127,7 +127,10 @@ export function DynamicDataTable<TData, TValue>({
     <div className="" data-testid="dynamic-table">
       {/* Year Filter and Search Controls */}
       {(yearFilter?.enabled || filterable) && (
-        <div className="flex items-center gap-4 py-4" data-testid="table-controls">
+        <div
+          className="flex items-center gap-4 py-4"
+          data-testid="table-controls"
+        >
           {yearFilter?.enabled && (
             <div className="flex items-center gap-2" data-testid="year-filter">
               <span className="text-sm font-medium">År:</span>
@@ -173,7 +176,10 @@ export function DynamicDataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id} data-testid={`table-header-${header.id}`}>
+                    <TableHead
+                      key={header.id}
+                      data-testid={`table-header-${header.id}`}
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -229,7 +235,9 @@ export function DynamicDataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {rowCount > 10 && <DataTablePagination table={table} data-testid="table-pagination" />}
+      {rowCount > 10 && (
+        <DataTablePagination table={table} data-testid="table-pagination" />
+      )}
     </div>
   );
 }

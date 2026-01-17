@@ -123,6 +123,4 @@ def beregn_produktaftryk_diesel_afgroede(
 
     fordelingsnoegle = (h_a_hektar * t_a_typetal_diesel_pr_ha) / sum_h_i_t_i
 
-    return (
-        fordelingsnoegle * d_total_liter_bedrift_korrigeret * theta_d_total_kg_co2e_pr_l
-    )
+    return fordelingsnoegle * d_total_liter_bedrift_korrigeret * theta_d_total_kg_co2e_pr_l

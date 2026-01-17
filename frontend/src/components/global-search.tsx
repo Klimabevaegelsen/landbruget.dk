@@ -236,7 +236,10 @@ function SearchOverlay({
           endIcon={<MagnifyingGlassIcon className="size-6" />}
           data-testid="search-overlay-input"
         />
-        <div className="bg-primary-foreground flex items-stretch gap-2 overflow-x-auto" data-testid="search-tabs">
+        <div
+          className="bg-primary-foreground flex items-stretch gap-2 overflow-x-auto"
+          data-testid="search-tabs"
+        >
           {tabs.map((tab, i) => (
             <div
               key={tab}
@@ -252,9 +255,15 @@ function SearchOverlay({
             </div>
           ))}
         </div>
-        <div className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg" data-testid="search-results-container">
+        <div
+          className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg"
+          data-testid="search-results-container"
+        >
           {isLoading && (
-            <div className="flex items-center justify-center p-8" data-testid="search-loading">
+            <div
+              className="flex items-center justify-center p-8"
+              data-testid="search-loading"
+            >
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
               <span className="text-muted-foreground ml-3 text-sm">
                 Søger...
@@ -263,7 +272,10 @@ function SearchOverlay({
           )}
 
           {error && (
-            <div className="flex items-center justify-center p-8" data-testid="search-error">
+            <div
+              className="flex items-center justify-center p-8"
+              data-testid="search-error"
+            >
               <div className="text-destructive text-sm">{error}</div>
             </div>
           )}
@@ -272,7 +284,10 @@ function SearchOverlay({
             !error &&
             searchResults.length === 0 &&
             search.trim().length >= 2 && (
-              <div className="flex items-center justify-center p-8" data-testid="search-no-results">
+              <div
+                className="flex items-center justify-center p-8"
+                data-testid="search-no-results"
+              >
                 <div className="text-muted-foreground text-sm">
                   Ingen resultater fundet for &ldquo;{search}&rdquo;
                 </div>
@@ -280,7 +295,10 @@ function SearchOverlay({
             )}
 
           {!isLoading && !error && search.trim().length < 2 && (
-            <div className="flex items-center justify-center p-8" data-testid="search-min-chars">
+            <div
+              className="flex items-center justify-center p-8"
+              data-testid="search-min-chars"
+            >
               <div className="text-muted-foreground text-sm">
                 Indtast mindst 2 tegn for at søge
               </div>
@@ -324,7 +342,11 @@ function SearchResultCard({
   };
 
   return (
-    <Link href={`/virksomhed/${result.id}`} onClick={handleClick} data-testid="search-result-card">
+    <Link
+      href={`/virksomhed/${result.id}`}
+      onClick={handleClick}
+      data-testid="search-result-card"
+    >
       <div className="group hover:bg-muted/50 flex items-center justify-between gap-2 p-4">
         <div className="flex items-center gap-2">
           <Image
@@ -336,16 +358,27 @@ function SearchResultCard({
           />
 
           <div className="flex-col text-left">
-            <div className="text-sm font-medium group-hover:underline" data-testid="search-result-name">
+            <div
+              className="text-sm font-medium group-hover:underline"
+              data-testid="search-result-name"
+            >
               {result.name}
             </div>
-            <div className="text-muted-foreground text-xs" data-testid="search-result-address">
+            <div
+              className="text-muted-foreground text-xs"
+              data-testid="search-result-address"
+            >
               {result.address}
             </div>
           </div>
         </div>
         <div className="flex-col">
-          <div className="text-muted-foreground text-xs" data-testid="search-result-cvr">CVR: {result.cvr}</div>
+          <div
+            className="text-muted-foreground text-xs"
+            data-testid="search-result-cvr"
+          >
+            CVR: {result.cvr}
+          </div>
         </div>
       </div>
     </Link>

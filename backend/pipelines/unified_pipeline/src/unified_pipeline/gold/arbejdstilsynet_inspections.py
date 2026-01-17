@@ -11,8 +11,9 @@ import os
 from datetime import datetime
 from typing import Any
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from common.gcs import GCSDataAccess
+
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 
 
 class ArbjdstilsynetInspectionsGoldConfig(BaseJobConfig):

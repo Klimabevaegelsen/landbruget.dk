@@ -7,15 +7,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from threading import Lock
 
+# Import the new data tracing system
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
 from ..config.settings import Settings
 from ..utils.logging import get_logger, set_context
 from ..utils.storage import DriveStorageManager
 from .drive import DriveFile, DriveFolder, GoogleDriveFetcher
 from .metadata import MetadataManager
 from .storage import BronzeStorageManager
-
-# Import the new data tracing system
-from pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 PIPELINE_METADATA_AVAILABLE = True
 

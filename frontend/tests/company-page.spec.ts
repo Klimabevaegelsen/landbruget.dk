@@ -12,13 +12,15 @@ test.describe('Company Page', () => {
     await page.goto('/');
   });
 
-  test('should navigate to company page from ranking table', async ({ page }) => {
+  test('should navigate to company page from ranking table', async ({
+    page,
+  }) => {
     // Wait for ranking tables to load
     await waitForTestId(page, 'ranking-table', { timeout: 15000 });
 
     // Click on the first company link
     const companyLinks = page.locator('[data-testid="company-link"]');
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       const href = await companyLinks.first().getAttribute('href');
       expect(href).toContain('/company/');
 
@@ -37,7 +39,7 @@ test.describe('Company Page', () => {
     await waitForTestId(page, 'ranking-table', { timeout: 15000 });
 
     const companyLinks = page.locator('[data-testid="company-link"]');
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       await companyLinks.first().click();
       await page.waitForLoadState('networkidle');
 
@@ -46,7 +48,7 @@ test.describe('Company Page', () => {
 
       // Check for CVR number if displayed
       const cvrText = page.locator('text=/CVR|\\d{8}/i');
-      if (await cvrText.count() > 0) {
+      if ((await cvrText.count()) > 0) {
         await expect(cvrText.first()).toBeVisible();
       }
     }
@@ -56,7 +58,7 @@ test.describe('Company Page', () => {
     await waitForTestId(page, 'ranking-table', { timeout: 15000 });
 
     const companyLinks = page.locator('[data-testid="company-link"]');
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       await companyLinks.first().click();
       await page.waitForLoadState('networkidle');
 
@@ -71,15 +73,15 @@ test.describe('Company Page', () => {
 
   test('should show loading state while fetching data', async ({ page }) => {
     // Intercept API calls to simulate slow loading
-    await page.route('**/api/**', async route => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    await page.route('**/api/**', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await route.continue();
     });
 
     await waitForTestId(page, 'ranking-table', { timeout: 15000 });
 
     const companyLinks = page.locator('[data-testid="company-link"]');
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       await companyLinks.first().click();
 
       // Check for loading indicator (could be skeleton, spinner, etc.)
@@ -88,7 +90,7 @@ test.describe('Company Page', () => {
       );
 
       // At least one loading indicator should be visible initially
-      const hasLoading = await loadingIndicators.count() > 0;
+      const hasLoading = (await loadingIndicators.count()) > 0;
       expect(hasLoading).toBe(true);
     }
   });
@@ -99,7 +101,7 @@ test.describe('Company Page', () => {
     await waitForTestId(page, 'ranking-table', { timeout: 15000 });
 
     const companyLinks = page.locator('[data-testid="company-link"]');
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       await companyLinks.first().click();
       await page.waitForLoadState('networkidle');
 
@@ -119,7 +121,7 @@ test.describe('Company Page', () => {
     await waitForTestId(page, 'ranking-table', { timeout: 15000 });
 
     const companyLinks = page.locator('[data-testid="company-link"]');
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       await companyLinks.first().click();
       await page.waitForLoadState('networkidle');
 
@@ -129,7 +131,7 @@ test.describe('Company Page', () => {
       );
 
       // If address exists, check it's visible
-      if (await addressElements.count() > 0) {
+      if ((await addressElements.count()) > 0) {
         await expect(addressElements.first()).toBeVisible();
       }
     }
@@ -146,7 +148,7 @@ test.describe('Company Page', () => {
     );
 
     // Either shows error or redirects to homepage
-    const hasError = await errorIndicators.count() > 0;
+    const hasError = (await errorIndicators.count()) > 0;
     const isRedirected = page.url() === 'http://localhost:3000/';
 
     expect(hasError || isRedirected).toBe(true);
@@ -156,13 +158,13 @@ test.describe('Company Page', () => {
     await waitForTestId(page, 'ranking-table', { timeout: 15000 });
 
     const companyLinks = page.locator('[data-testid="company-link"]');
-    if (await companyLinks.count() > 0) {
+    if ((await companyLinks.count()) > 0) {
       await companyLinks.first().click();
       await page.waitForLoadState('networkidle');
 
       // Look for tab navigation
       const tabs = page.locator('[role="tab"], [data-testid*="tab"]');
-      if (await tabs.count() > 0) {
+      if ((await tabs.count()) > 0) {
         await expect(tabs.first()).toBeVisible();
       }
     }

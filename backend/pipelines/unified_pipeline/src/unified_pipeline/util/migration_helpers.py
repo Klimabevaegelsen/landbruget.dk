@@ -7,8 +7,8 @@ consistent patterns and reduce migration complexity.
 """
 
 import duckdb
-
 from common.gcs import GCSDataAccess
+
 from unified_pipeline.util.log_util import Logger
 
 

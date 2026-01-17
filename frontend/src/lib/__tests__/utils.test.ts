@@ -72,7 +72,9 @@ test.describe('Utility Functions', () => {
       return {
         isArray: Array.isArray(VizColors),
         hasCorrectLength: VizColors.length === 8,
-        allAreHexColors: VizColors.every(color => /^#[0-9A-F]{6}$/i.test(color)),
+        allAreHexColors: VizColors.every((color) =>
+          /^#[0-9A-F]{6}$/i.test(color)
+        ),
         firstColor: VizColors[0],
       };
     });

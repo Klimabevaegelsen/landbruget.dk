@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from drive_data_pipeline.bronze import BronzeProcessor
 from drive_data_pipeline.config import Settings
-from drive_data_pipeline.utils.storage import LocalStorageManager
+from drive_data_pipeline.utils.storage import DriveStorageManager
 
 
 @pytest.fixture
@@ -114,7 +114,7 @@ def test_settings() -> Generator[Settings, None, None]:
 def test_bronze_processor(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor end-to-end functionality."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Initialize BronzeProcessor
     bronze_processor = BronzeProcessor(
@@ -155,7 +155,7 @@ def test_bronze_processor(test_settings: Settings, mock_drive_fetcher: MagicMock
 def test_bronze_specific_subfolders(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor with specific subfolders filter."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Configure mock_drive_fetcher to simulate folder structure
     def mock_list_contents(folder_id: str, recursive: bool = False) -> list[dict[str, Any]]:
@@ -238,7 +238,7 @@ def test_bronze_specific_subfolders(test_settings: Settings, mock_drive_fetcher:
 def test_bronze_specific_file_types(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor with specific file types filter."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Initialize BronzeProcessor
     bronze_processor = BronzeProcessor(
@@ -270,7 +270,7 @@ def test_bronze_specific_file_types(test_settings: Settings, mock_drive_fetcher:
 def test_bronze_error_handling(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor error handling capabilities."""
     # Create storage manager
-    storage_manager = LocalStorageManager()
+    storage_manager = DriveStorageManager("local")
 
     # Make one file download fail
     original_download = mock_drive_fetcher.download_file.side_effect

@@ -22,6 +22,11 @@ warnings.warn(
 )
 
 # Re-export from the new canonical location
-from common.gcs import GCSDataAccess, ResourceMonitor, get_duckdb_with_gcs, get_gcs_filesystem
+from common.gcs import (  # noqa: E402
+    GCSDataAccess,
+    ResourceMonitor,
+    get_duckdb_with_gcs,
+    get_gcs_filesystem,
+)
 
-__all__ = ["GCSDataAccess", "get_gcs_filesystem", "get_duckdb_with_gcs", "ResourceMonitor"]
+__all__ = ["GCSDataAccess", "ResourceMonitor", "get_duckdb_with_gcs", "get_gcs_filesystem"]

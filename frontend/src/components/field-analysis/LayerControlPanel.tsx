@@ -121,13 +121,20 @@ export function LayerControlPanelEnhanced({
             Lag Synlighed
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4" data-testid="layer-visibility-controls">
+        <CardContent
+          className="space-y-4"
+          data-testid="layer-visibility-controls"
+        >
           {layerConfigs.map((layer) => {
             const Icon = layer.icon;
             const isVisible = layerVisibility[layer.key];
 
             return (
-              <div key={layer.key} className="flex items-start space-x-3" data-testid={`layer-toggle-${layer.key}`}>
+              <div
+                key={layer.key}
+                className="flex items-start space-x-3"
+                data-testid={`layer-toggle-${layer.key}`}
+              >
                 <Switch
                   id={layer.key}
                   checked={isVisible}
@@ -212,17 +219,28 @@ export function LayerControlPanelEnhanced({
               className="justify-start"
               data-testid="color-unit-group"
             >
-              <ToggleGroupItem value="belastning" aria-label="Belastning" data-testid="color-unit-belastning">
+              <ToggleGroupItem
+                value="belastning"
+                aria-label="Belastning"
+                data-testid="color-unit-belastning"
+              >
                 Belastning
               </ToggleGroupItem>
-              <ToggleGroupItem value="dosage" aria-label="Dosering" data-testid="color-unit-dosage">
+              <ToggleGroupItem
+                value="dosage"
+                aria-label="Dosering"
+                data-testid="color-unit-dosage"
+              >
                 Dosering
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
 
           {/* Organic Filter */}
-          <div className="flex items-center space-x-3" data-testid="organic-filter">
+          <div
+            className="flex items-center space-x-3"
+            data-testid="organic-filter"
+          >
             <Switch
               id="organic-only"
               checked={filterState.organicOnly}
@@ -241,7 +259,10 @@ export function LayerControlPanelEnhanced({
           </div>
 
           {/* Decile Coloring */}
-          <div className="flex items-center space-x-3" data-testid="decile-coloring-filter">
+          <div
+            className="flex items-center space-x-3"
+            data-testid="decile-coloring-filter"
+          >
             <Switch
               id="decile-coloring"
               checked={filterState.useDecileColoring}
@@ -322,7 +343,10 @@ export function LayerControlPanelEnhanced({
               </Button>
             </div>
 
-            <div className="text-muted-foreground text-xs" data-testid="zoom-level-info">
+            <div
+              className="text-muted-foreground text-xs"
+              data-testid="zoom-level-info"
+            >
               Zoom niveau: {currentZoom.toFixed(1)}
               {currentZoom < 10 && ' (zoom ind for at aktivere)'}
             </div>

@@ -4,7 +4,6 @@ import asyncio
 import logging
 
 import duckdb
-
 from common.gcs import GCSDataAccess
 
 from .config import PMTilesGeneratorConfig

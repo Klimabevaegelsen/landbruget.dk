@@ -35,6 +35,12 @@ function validateSearchQuery(query: string): { isValid: boolean; error?: string 
   return { isValid: true };
 }
 
+// --- Helper: Validate CVR Input ---
+function isValidCVRInput(query: string): boolean {
+  // CVR input must be digits only (1-8 digits)
+  return /^\d{1,8}$/.test(query);
+}
+
 // --- Helper: Detect Search Type ---
 function detectSearchType(query: string): string {
   const trimmedQuery = query.trim();
@@ -44,8 +50,9 @@ function detectSearchType(query: string): string {
     return 'cvr';
   }
 
-  // Check if it contains mostly numbers (could be partial CVR)
-  if (/^\d+$/.test(trimmedQuery) && trimmedQuery.length <= 8) {
+  // Check if it contains only digits (could be partial CVR)
+  // Must pass validation to be treated as CVR search
+  if (isValidCVRInput(trimmedQuery)) {
     return 'cvr_partial';
   }
 
@@ -64,19 +71,21 @@ function buildSearchQuery(supabase: any, query: string, searchType: string, limi
 
   switch (searchType) {
     case 'cvr':
-      // Exact CVR match
-      dbQuery = dbQuery.eq('cvr_number', parseInt(trimmedQuery));
+      // Exact CVR match - validated to be 8 digits by detectSearchType
+      dbQuery = dbQuery.eq('cvr_number', parseInt(trimmedQuery, 10));
       break;
 
     case 'cvr_partial':
-      // Partial CVR match (convert to text and use like)
-      dbQuery = dbQuery.like('cvr_number::text', `${trimmedQuery}%`);
+      // Partial CVR match - validated to be digits only by isValidCVRInput
+      // Safe to use in like pattern since we've verified it's only digits
+      dbQuery = dbQuery.like('cvr_number::text', trimmedQuery + '%');
       break;
 
     case 'company_name':
     default:
       // Company name search (case-insensitive, contains)
-      dbQuery = dbQuery.ilike('company_name', `%${trimmedQuery}%`);
+      // Supabase client handles parameterization, so this is safe
+      dbQuery = dbQuery.ilike('company_name', '%' + trimmedQuery + '%');
       break;
   }
 
