@@ -49,15 +49,43 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
         "gml": "http://www.opengis.net/gml/3.2",  # GML 3.2 (verified from GEUS API response)
     }
 
-    # Tracked pesticides (stofnr -> substance name)
-    # These are the most common pesticides found in Danish groundwater
+    # Tracked pesticides and groundwater contaminants (stofnr -> substance name)
+    # Based on substances available in GEUS jupiter_anlaegsanalyser WFS layer
+    # Note: The WFS layer contains a subset of all monitored substances.
+    # For comprehensive pesticide data, the full Jupiter database should be queried.
+    #
+    # Currently tracking ALL pesticide-related substances available in the WFS:
     tracked_pesticides: ClassVar[dict[int, str]] = {
-        438: "2,6-Dichlorbenzamid (BAM)",  # Most common in DK groundwater
-        846: "Atrazin",  # Banned triazine herbicide
-        613: "Chloridazon",  # Herbicide
-        1448: "Desphenyl chloridazon",  # Degradation product
-        1534: "Methyl-desphenyl-chloridazon",  # Degradation product
+        # === Pesticides and metabolites (verified in WFS data) ===
+        438: "2,6-Dichlorbenzamid (BAM)",  # From dichlobenil - most detected in DK
+        846: "Atrazin",  # Triazine herbicide, banned 1994
+        613: "Chloridazon",  # Herbicide (beet crops)
+        1448: "Desphenyl chloridazon (DPC)",  # Chloridazon metabolite - high detection
+        1534: "Methyl-desphenyl-chloridazon (MDPC)",  # Chloridazon metabolite
+        2251: "Trifluoreddikesyre (TFA)",  # PFAS-related degradation product
+        # === Chlorinated solvents (industrial contamination, often co-located) ===
+        374: "Trichlormethan (chloroform)",  # Chlorinated solvent
+        379: "Tetrachlorethylen (PCE)",  # Dry cleaning solvent
+        380: "Trichlorethylen (TCE)",  # Industrial degreaser
+        1171: "Vinylchlorid",  # TCE/PCE degradation product, carcinogenic
+        # === Fuel-related contaminants ===
+        166: "Methyl-tert-butylether (MTBE)",  # Gasoline additive
+        215: "Benzen",  # BTEX component, carcinogenic
+        218: "Toluen",  # BTEX component
     }
+
+    # Note: Additional pesticides commonly found in Danish groundwater that are NOT
+    # in the jupiter_anlaegsanalyser WFS layer but are in the full Jupiter database:
+    # - Simazin, DEA, DIA, DEIA (triazine metabolites)
+    # - Bentazon (mandatory monitoring since 1998)
+    # - MCPA, Mecoprop, Dichlorprop (phenoxy acids)
+    # - Glyphosat, AMPA
+    # - 1,2,4-Triazol (fungicide metabolite)
+    # - DMS (N,N-dimethylsulfamid)
+    # - Isoproturon, Diuron (urea herbicides)
+    #
+    # To track these, the bronze layer would need to query additional Jupiter APIs
+    # or use a different data source (e.g., direct Jupiter database access).
 
 
 class GEUSBoreholePesticidesSilver(
