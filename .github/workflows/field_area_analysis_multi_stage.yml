@@ -128,9 +128,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -168,9 +168,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -208,9 +208,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -247,9 +247,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -287,9 +287,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -328,9 +328,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -368,9 +368,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -429,9 +429,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -475,9 +475,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -516,9 +516,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -556,9 +556,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -597,9 +597,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -637,9 +637,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -678,9 +678,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -718,9 +718,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -759,9 +759,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -840,9 +840,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
