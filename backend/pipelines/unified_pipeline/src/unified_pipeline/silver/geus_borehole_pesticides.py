@@ -136,6 +136,18 @@ class GEUSBoreholePesticidesSilver(
                 if not hasattr(self, "_debug_no_point_logged"):
                     self._debug_no_point_logged = True
                     self.log.warning(f"First feature missing gml:Point. dgunr={dgunr}")
+                    # Debug: show children and try different XPath
+                    children = list(feature)[:10]
+                    self.log.warning(f"  Feature children tags: {[c.tag for c in children]}")
+                    # Try without namespace
+                    point_no_ns = feature.find(".//{http://www.opengis.net/gml}Point")
+                    self.log.warning(f"  Point with explicit NS: {point_no_ns}")
+                    # Try via ms:msGeometry
+                    geom = feature.find("ms:msGeometry", self.config.namespaces)
+                    self.log.warning(f"  ms:msGeometry element: {geom}")
+                    if geom is not None:
+                        geom_children = list(geom)
+                        self.log.warning(f"  msGeometry children: {[c.tag for c in geom_children]}")
                 return None
 
             pos = point.find("gml:pos", self.config.namespaces)
