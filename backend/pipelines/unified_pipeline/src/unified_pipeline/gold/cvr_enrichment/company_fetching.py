@@ -927,16 +927,31 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
     def _create_batch_persons_table(self, json_strings: list[str], table_name: str) -> None:
         """Create persons table for a single batch."""
+        # Note: Filter for leadership_count > 0 BEFORE generate_series to avoid
+        # UINT64 overflow when computing (0 - 1) on empty arrays
         self.conn.execute(
             f"""
             CREATE TABLE {table_name} AS
-            WITH leadership_flattened AS (
+            WITH raw_with_leadership_count AS (
                 SELECT
+                    json_data,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    idx as leadership_idx
+                    json_array_length(json_extract(json_data, '$.leadership')) as leadership_count
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN unnest(generate_series(0, json_array_length(json_extract(json_data, '$.leadership')) - 1)) as t2(idx)
-                WHERE json_array_length(json_extract(json_data, '$.leadership')) > 0
+            ),
+            filtered_with_leadership AS (
+                -- Filter BEFORE generate_series to avoid UINT64 overflow on (0-1)
+                SELECT *
+                FROM raw_with_leadership_count
+                WHERE leadership_count > 0
+            ),
+            leadership_flattened AS (
+                SELECT
+                    cvr_number,
+                    json_data,
+                    idx as leadership_idx
+                FROM filtered_with_leadership
+                CROSS JOIN unnest(generate_series(0, (leadership_count - 1)::BIGINT)) as t2(idx)
             )
             SELECT
                 uuid() as person_uuid,
@@ -947,24 +962,38 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 json_extract_string(json_extract(json_data, '$.leadership[' || leadership_idx || ']'), '$.relation_type') as person_relation_type,
                 json_data as person_data_json,
                 json_extract_string(json_data, '$.processing_timestamp') as processing_timestamp
-            FROM leadership_flattened lf
-            JOIN unnest($1) as t(json_data) ON json_extract(json_data, '$.cvr_number')::INTEGER = lf.cvr_number
+            FROM leadership_flattened
         """,
             [json_strings],
         )
 
     def _create_batch_employment_table(self, json_strings: list[str], table_name: str) -> None:
         """Create employment table for a single batch."""
+        # Note: Filter for employment_count > 0 BEFORE generate_series to avoid
+        # UINT64 overflow when computing (0 - 1) on empty arrays
         self.conn.execute(
             f"""
             CREATE TABLE {table_name} AS
-            WITH employment_flattened AS (
+            WITH raw_with_employment_count AS (
                 SELECT
+                    json_data,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    idx as employment_idx
+                    json_array_length(json_extract(json_data, '$.employment')) as employment_count
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN unnest(generate_series(0, json_array_length(json_extract(json_data, '$.employment')) - 1)) as t2(idx)
-                WHERE json_array_length(json_extract(json_data, '$.employment')) > 0
+            ),
+            filtered_with_employment AS (
+                -- Filter BEFORE generate_series to avoid UINT64 overflow on (0-1)
+                SELECT *
+                FROM raw_with_employment_count
+                WHERE employment_count > 0
+            ),
+            employment_flattened AS (
+                SELECT
+                    cvr_number,
+                    json_data,
+                    idx as employment_idx
+                FROM filtered_with_employment
+                CROSS JOIN unnest(generate_series(0, (employment_count - 1)::BIGINT)) as t2(idx)
             )
             SELECT
                 uuid() as employment_uuid,
@@ -977,8 +1006,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 json_extract(json_extract(json_data, '$.employment[' || employment_idx || ']'), '$.is_current')::BOOLEAN as is_current,
                 json_data as employment_data_json,
                 json_extract_string(json_data, '$.processing_timestamp') as processing_timestamp
-            FROM employment_flattened ef
-            JOIN unnest($1) as t(json_data) ON json_extract(json_data, '$.cvr_number')::INTEGER = ef.cvr_number
+            FROM employment_flattened
         """,
             [json_strings],
         )
