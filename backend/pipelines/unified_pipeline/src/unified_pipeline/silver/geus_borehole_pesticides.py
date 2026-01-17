@@ -220,7 +220,8 @@ class GEUSBoreholePesticidesSilver(
         """
         Parse an analysis feature from GML.
 
-        Extracts substance information, measurements, and sample dates.
+        Extracts substance information, measurements, sample dates, and coordinates.
+        Each analysis record includes its own location data.
 
         Args:
             feature: XML element containing analysis data
@@ -244,6 +245,12 @@ class GEUSBoreholePesticidesSilver(
             if not anlaegid_str:
                 return None
 
+            # Extract coordinates - each analysis has its own location
+            x_str = self._get_element_text(feature, "ms:xutm32euref89")
+            y_str = self._get_element_text(feature, "ms:yutm32euref89")
+            x = float(x_str) if x_str else None
+            y = float(y_str) if y_str else None
+
             # Extract measurement data
             maengde_str = self._get_element_text(feature, "ms:maengde_num")
             maengde = float(maengde_str) if maengde_str else None
@@ -256,8 +263,11 @@ class GEUSBoreholePesticidesSilver(
                 "maengde": maengde,
                 "enhed": self._get_element_text(feature, "ms:enhed"),
                 "proevedato": self._get_element_text(feature, "ms:proevedato"),
-                "indtastdato": None,  # Not available in jupiter_anlaegsanalyser
-                "dgunr": None,  # Not directly available, need to join with boreholes via anlaegid
+                "x": x,  # UTM32 EUREF89 easting
+                "y": y,  # UTM32 EUREF89 northing
+                "anlaeg": self._get_element_text(feature, "ms:anlaeg"),  # Facility name
+                "kommune": self._get_element_text(feature, "ms:kommune"),
+                "virksomhedstype": self._get_element_text(feature, "ms:virksomhedstype"),
             }
         except Exception as e:
             self.log.debug(f"Error parsing analysis feature: {e}")
@@ -466,7 +476,7 @@ class GEUSBoreholePesticidesSilver(
 
         self.log.info(f"Created geus_boreholes table with {len(boreholes):,} records")
 
-        # Create analyses table
+        # Create analyses table with coordinates (each analysis has its own location)
         self.log.info("Creating pesticide analyses table...")
         conn.execute("DROP TABLE IF EXISTS geus_pesticide_analyses")
         conn.execute("""
@@ -478,8 +488,12 @@ class GEUSBoreholePesticidesSilver(
                 maengde DOUBLE,
                 enhed VARCHAR,
                 proevedato VARCHAR,
-                indtastdato VARCHAR,
-                dgunr VARCHAR
+                x DOUBLE,
+                y DOUBLE,
+                anlaeg VARCHAR,
+                kommune VARCHAR,
+                virksomhedstype VARCHAR,
+                geometry GEOMETRY
             )
         """)
 
@@ -487,9 +501,16 @@ class GEUSBoreholePesticidesSilver(
         for i in range(0, len(analyses), batch_size):
             batch = analyses[i : i + batch_size]
             for an in batch:
+                x = an.get("x")
+                y = an.get("y")
                 conn.execute(
                     """
-                    INSERT INTO geus_pesticide_analyses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO geus_pesticide_analyses VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        CASE WHEN ? IS NOT NULL AND ? IS NOT NULL
+                             THEN ST_Point(?, ?)
+                             ELSE NULL END
+                    )
                     """,
                     [
                         an["anlaegid"],
@@ -499,8 +520,15 @@ class GEUSBoreholePesticidesSilver(
                         an.get("maengde"),
                         an.get("enhed"),
                         an.get("proevedato"),
-                        an.get("indtastdato"),
-                        an.get("dgunr"),
+                        x,
+                        y,
+                        an.get("anlaeg"),
+                        an.get("kommune"),
+                        an.get("virksomhedstype"),
+                        x,
+                        y,
+                        x,
+                        y,  # For CASE WHEN and ST_Point
                     ],
                 )
 
