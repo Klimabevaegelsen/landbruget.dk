@@ -228,6 +228,15 @@ class GEUSBoreholePesticidesSilver(
             try:
                 root = ET.fromstring(gml_chunk)
 
+                # Debug: Log first chunk structure to understand format
+                if i == 0:
+                    self.log.info(f"First chunk root tag: {root.tag}")
+                    members = root.findall(".//wfs:member", self.config.namespaces)
+                    self.log.info(f"Found {len(members)} wfs:member elements in first chunk")
+                    if members:
+                        for child in members[0]:
+                            self.log.info(f"  First member child tag: {child.tag}")
+
                 # Find all borehole features via wfs:member path (most reliable)
                 for member in root.findall(".//wfs:member", self.config.namespaces):
                     for child in member:

@@ -679,11 +679,11 @@ def execute(cli_config: cli_models.CliConfig) -> int:
         log.error(f"❌ Pipeline failed: No jobs completed successfully (0/{total_jobs})")
         return 1
     if successful_jobs < total_jobs:
-        log.warning(
-            f"⚠️  Pipeline completed with partial success: "
-            f"{successful_jobs}/{total_jobs} jobs completed successfully"
+        log.error(
+            f"❌ Pipeline failed: Only {successful_jobs}/{total_jobs} jobs completed successfully. "
+            f"All jobs must succeed for a complete pipeline run."
         )
-        return 0  # Still consider it a success if at least one job completed
+        return 1  # Fail if any job failed - partial success is still a failure
     log.info(
         f"✅ Pipeline completed successfully: "
         f"{successful_jobs}/{total_jobs} jobs completed successfully"
