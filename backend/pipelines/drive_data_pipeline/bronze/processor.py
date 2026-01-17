@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import Lock
 
 # Import the new data tracing system
-from pipeline_metadata import MetadataManager as PipelineMetadataManager
+from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 from ..config.settings import Settings
 from ..utils.logging import get_logger, set_context

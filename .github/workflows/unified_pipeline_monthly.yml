@@ -182,28 +182,33 @@ jobs:
               echo "   - Geometry validation: Skipped (coordinate bug fixed)"
             fi
 
-            (while true; do
-              sleep 900  # Check every 15 minutes for detailed monitoring
-              echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
-              echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+            {
+              while true; do
+                sleep 900  # Check every 15 minutes for detailed monitoring
+                TIMESTAMP=$(date)
+                MEMORY_INFO=$(free -h | grep Mem | awk '{print $3"/"$2}')
+                DISK_INFO=$(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')
+                echo "${TIMESTAMP}: Memory: ${MEMORY_INFO}"
+                echo "${TIMESTAMP}: Disk: ${DISK_INFO}"
 
-              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
-              DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+                MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+                DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
 
-              if [ $MEMORY_USED_PCT -gt 85 ]; then
-                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
-              fi
-              if [ $DISK_USED_PCT -gt 85 ]; then
-                echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
-              fi
-
-              # Check for checkpoint files (cadastral progress monitoring)
-              if [ "${{ matrix.source }}" = "cadastral" ]; then
-                if ls /tmp/cadastral_checkpoint_*.json 1> /dev/null 2>&1; then
-                  echo "📍 Cadastral checkpoint files found - processing in progress"
+                if [ $MEMORY_USED_PCT -gt 85 ]; then
+                  echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
                 fi
-              fi
-            done) &
+                if [ $DISK_USED_PCT -gt 85 ]; then
+                  echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+                fi
+
+                # Check for checkpoint files (cadastral progress monitoring)
+                if [ "${{ matrix.source }}" = "cadastral" ]; then
+                  if ls /tmp/cadastral_checkpoint_*.json 1> /dev/null 2>&1; then
+                    echo "📍 Cadastral checkpoint files found - processing in progress"
+                  fi
+                fi
+              done
+            } &
             MONITOR_PID=$!
           fi
 
@@ -216,7 +221,7 @@ jobs:
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
-              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"layer_types\":\"all\",\"years\":\"all\"}}")
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}')
 
             if [ "$HTTP_CODE" = "204" ]; then
               echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"
@@ -233,7 +238,7 @@ jobs:
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/drive_pipeline.yml/dispatches" \
-              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"log_level\":\"INFO\",\"max_workers\":\"4\"}}")
+              -d '{"ref":"${{ github.ref }}","inputs":{"log_level":"INFO","max_workers":"4"}}')
 
             if [ "$HTTP_CODE" = "204" ]; then
               echo "✅ Google Drive pipeline triggered successfully (HTTP $HTTP_CODE)"
@@ -250,7 +255,7 @@ jobs:
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/bbr_buildings_pipeline.yml/dispatches" \
-              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"layer\":\"both\",\"sample_size\":\"0\",\"log_level\":\"INFO\"}}")
+              -d '{"ref":"${{ github.ref }}","inputs":{"layer":"both","sample_size":"0","log_level":"INFO"}}')
 
             if [ "$HTTP_CODE" = "204" ]; then
               echo "✅ BBR Buildings pipeline triggered successfully (HTTP $HTTP_CODE)"
@@ -404,21 +409,26 @@ jobs:
           # Resource monitoring for memory-intensive jobs
           if [ "${{ matrix.source }}" = "property_cadastral_merge" ] || [ "${{ matrix.source }}" = "field_area_analysis" ] || [ "${{ matrix.source }}" = "cvr_enrichment" ]; then
             echo "🔍 Starting resource monitoring for ${{ matrix.source }}"
-            (while true; do
-              sleep 120  # Check every 2 minutes
-              echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
-              echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+            {
+              while true; do
+                sleep 120  # Check every 2 minutes
+                TIMESTAMP=$(date)
+                MEMORY_INFO=$(free -h | grep Mem | awk '{print $3"/"$2}')
+                DISK_INFO=$(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')
+                echo "${TIMESTAMP}: Memory: ${MEMORY_INFO}"
+                echo "${TIMESTAMP}: Disk: ${DISK_INFO}"
 
-              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
-              DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+                MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+                DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
 
-              if [ $MEMORY_USED_PCT -gt 90 ]; then
-                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
-              fi
-              if [ $DISK_USED_PCT -gt 85 ]; then
-                echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
-              fi
-            done) &
+                if [ $MEMORY_USED_PCT -gt 90 ]; then
+                  echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+                fi
+                if [ $DISK_USED_PCT -gt 85 ]; then
+                  echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+                fi
+              done
+            } &
             MONITOR_PID=$!
           fi
 
@@ -451,7 +461,7 @@ jobs:
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
-              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"agricultural_fields_year\":\"both\"}}"
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","agricultural_fields_year":"both"}}'
             echo "✅ Field Area Analysis matrix workflow triggered successfully"
           elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
             # FVM WFS - trigger the dedicated matrix workflow
@@ -461,7 +471,7 @@ jobs:
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
-              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"layer_types\":\"all\",\"years\":\"all\"}}")
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}')
 
             if [ "$HTTP_CODE" = "204" ]; then
               echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"

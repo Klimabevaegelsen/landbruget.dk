@@ -18,7 +18,7 @@ from .validators.pii_validator import PIIAction, PIIType, PIIValidator
 logger = get_logger()
 
 # Import the new data tracing system
-from pipeline_metadata import MetadataManager as PipelineMetadataManager  # noqa: E402
+from common.pipeline_metadata import MetadataManager as PipelineMetadataManager  # noqa: E402
 
 PIPELINE_METADATA_AVAILABLE = True
 
