@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { Button } from './ui/button';
 import { apiFetch } from '@/services/supabase/config';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
+import { useReducedMotion } from '@/hooks/use-reduced-motion';
 
 export function GlobalSearch({
   className,
@@ -120,6 +121,7 @@ function SearchOverlay({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const { showLoadingToast, hideLoadingToast } = useLoadingToast();
 
@@ -211,10 +213,10 @@ function SearchOverlay({
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
+      initial={{ opacity: prefersReducedMotion ? 1 : 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.1 }}
+      exit={{ opacity: prefersReducedMotion ? 1 : 0 }}
+      transition={{ duration: prefersReducedMotion ? 0 : 0.1 }}
       className="absolute top-0 right-0 bottom-0 left-0 z-50 flex flex-col items-center justify-start"
       ref={overlayRef}
     >
@@ -233,28 +235,50 @@ function SearchOverlay({
           className="h-12 rounded-t-lg rounded-b-none border-none focus:ring-0 focus-visible:ring-0"
           endIcon={<MagnifyingGlassIcon className="size-6" />}
         />
-        <div className="bg-primary-foreground flex items-stretch gap-2 overflow-x-auto">
+        <div
+          className="bg-primary-foreground flex items-stretch gap-2 overflow-x-auto"
+          role="tablist"
+        >
           {tabs.map((tab, i) => (
-            <div
+            <button
               key={tab}
+              type="button"
+              role="tab"
+              id={`search-tab-${i}`}
+              aria-selected={activeTab === i}
+              aria-controls={`search-tabpanel-${i}`}
+              tabIndex={activeTab === i ? 0 : -1}
               onClick={() => setActiveTab(i)}
               className={cn(
-                'flex-1 cursor-pointer px-4 py-4 text-center text-xs hover:font-semibold',
+                'flex-1 px-4 py-4 text-center text-xs hover:font-semibold',
+                'focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-none',
                 activeTab === i &&
                   'border-b-primary border-b-2 font-bold hover:font-bold'
               )}
             >
               {tab}
-            </div>
+            </button>
           ))}
         </div>
-        <div className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg">
+        <div
+          id={`search-tabpanel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`search-tab-${activeTab}`}
+          className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg"
+        >
           {isLoading && (
-            <div className="flex items-center justify-center p-8">
-              <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
-              <span className="text-muted-foreground ml-3 text-sm">
-                Søger...
-              </span>
+            <div className="space-y-2 p-4">
+              {/* Skeleton loading state matching search result structure */}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-3 p-2">
+                  <div className="h-6 w-6 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 w-3/4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                    <div className="h-3 w-1/2 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                  </div>
+                  <div className="h-3 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+                </div>
+              ))}
             </div>
           )}
 

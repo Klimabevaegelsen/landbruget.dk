@@ -273,7 +273,7 @@ export default function FieldAnalysisVisualization() {
   }
 
   return (
-    <div className="relative flex h-screen touch-pan-x touch-pan-y flex-col overflow-hidden lg:flex-row">
+    <div className="relative flex h-dvh touch-pan-x touch-pan-y flex-col overflow-hidden lg:flex-row">
       {/* Mobile Control Panel Toggle */}
       <div
         className="pointer-events-auto absolute top-4 left-4 z-40 lg:hidden"

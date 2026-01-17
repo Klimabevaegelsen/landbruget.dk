@@ -4,7 +4,7 @@ import { Container } from '../layout/container';
 export function TractorLoader() {
   return (
     <Container className="bg-primary-foreground">
-      <div className="flex h-screen flex-col items-center">
+      <div className="flex h-dvh flex-col items-center">
         <div className="font-display relative my-12 text-4xl font-bold">
           <div className="flex overflow-hidden whitespace-nowrap">
             Henter Data

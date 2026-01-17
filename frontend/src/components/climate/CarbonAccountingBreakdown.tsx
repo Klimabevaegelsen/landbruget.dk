@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { ClimateEmission } from "@/services/supabase/climate";
-import { HorizontalStackedBarChart } from "@/services/supabase/types";
-import { BlockBarChart } from "@/components/pagebuilder/pageBlocks/block-bar-chart";
+import { ClimateEmission } from '@/services/supabase/climate';
+import { HorizontalStackedBarChart } from '@/services/supabase/types';
+import { BlockBarChart } from '@/components/pagebuilder/pageBlocks/block-bar-chart';
 
 interface CarbonAccountingBreakdownProps {
   emissions: ClimateEmission[];
@@ -13,16 +13,16 @@ export function CarbonAccountingBreakdown({
 }: CarbonAccountingBreakdownProps) {
   // Transform emissions data into chart format
   const chartData: HorizontalStackedBarChart = {
-    _key: "climate-breakdown",
-    _type: "horizontalStackedBarChart",
-    title: "CO₂-udledning fordelt på kategorier",
+    _key: 'climate-breakdown',
+    _type: 'horizontalStackedBarChart',
+    title: 'CO₂-udledning fordelt på kategorier',
     data: {
       xAxis: {
-        label: "CO₂e (kg)",
+        label: 'CO₂e (kg)',
         values: [],
       },
       yAxis: {
-        label: "År",
+        label: 'År',
         values: emissions.map((e) => e.year),
       },
       series: [],
@@ -55,16 +55,16 @@ export function CarbonAccountingBreakdown({
 // Helper function to convert category keys to readable labels
 function getCategoryLabel(category: string): string {
   const labels: Record<string, string> = {
-    enteric_fermentation: "Fordøjelse (mave)",
-    manure_management: "Gødningshåndtering",
-    fertilizer: "Gødning",
-    crop_residues: "Afgrøderester",
-    fuel_machinery: "Brændstof & maskiner",
-    electricity: "Elektricitet",
-    transport: "Transport",
-    purchased_feed: "Indkøbt foder",
-    land_use_change: "Arealanvendelsesændringer",
-    other: "Andet",
+    enteric_fermentation: 'Fordøjelse (mave)',
+    manure_management: 'Gødningshåndtering',
+    fertilizer: 'Gødning',
+    crop_residues: 'Afgrøderester',
+    fuel_machinery: 'Brændstof & maskiner',
+    electricity: 'Elektricitet',
+    transport: 'Transport',
+    purchased_feed: 'Indkøbt foder',
+    land_use_change: 'Arealanvendelsesændringer',
+    other: 'Andet',
   };
 
   return labels[category] || category;
