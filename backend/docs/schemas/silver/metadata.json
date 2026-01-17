@@ -1,0 +1,12 @@
+{
+  "pipeline": "chr_pipeline",
+  "stage": "silver",
+  "generated_at": "2024-01-01T12:00:00",
+  "tables": [
+    "empty_antibiotic_usage"
+  ],
+  "files_generated": [
+    "docs/schemas/silver/empty_antibiotic_usage.md",
+    "docs/schemas/silver/overview.md"
+  ]
+}
