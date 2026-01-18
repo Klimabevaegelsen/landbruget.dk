@@ -85,7 +85,7 @@ class Source(Enum):
     drive_data = "drive_data"
     bbr_buildings = "bbr_buildings"
     grukos = "grukos"
-    geus_borehole_pesticides = "geus_borehole_pesticides"
+    geus_dataverse_pesticides = "geus_dataverse_pesticides"
 
 
 class Stage(Enum):
