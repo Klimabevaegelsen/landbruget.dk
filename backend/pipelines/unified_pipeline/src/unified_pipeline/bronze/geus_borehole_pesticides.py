@@ -667,6 +667,34 @@ class GEUSBoreholePesticidesBronze(
             )
             self.gcs_access.upload_json(manifest, manifest_path)
 
+            # Create and save pipeline metadata for data tracing
+            if self.pipeline_metadata_manager and self.processing_start_time:
+                try:
+                    import time
+
+                    total_records = (
+                        boreholes_meta["total_features"]
+                        + analyses_meta["total_features"]
+                        + pesticide_meta["total_features"]
+                    )
+                    processing_duration = time.time() - self.processing_start_time
+
+                    pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                        source_key="geus_borehole_pesticides",
+                        record_count=total_records,
+                        processing_duration=processing_duration,
+                    )
+
+                    # Save pipeline metadata alongside manifest
+                    metadata_path = (
+                        f"gs://{self.config.bucket}/bronze/{self.config.dataset}/"
+                        f"{run_timestamp}/pipeline_metadata.json"
+                    )
+                    self.gcs_access.upload_json(pipeline_metadata.model_dump(), metadata_path)
+                    self.log.info(f"✅ Pipeline metadata saved to {metadata_path}")
+                except Exception as e:
+                    self.log.warning(f"⚠️ Failed to create pipeline metadata: {e}")
+
             self.log.info("GEUS Borehole Pesticides bronze job completed successfully")
 
             # Return metadata for silver layer (or it can read from GCS manifest)
