@@ -110,8 +110,10 @@ class GEUSDataversePesticidesSilver(
         tmp_path = Path(tmp_file.name)
         tmp_file.close()
 
-        # Download using gcs_access
-        self.gcs_access.download_file(gcs_full_path, str(tmp_path))
+        # Download using gcsfs directly (binary read)
+        with self.gcs_access.fs.open(gcs_full_path, "rb") as gcs_file:
+            with open(tmp_path, "wb") as local_file:
+                local_file.write(gcs_file.read())
 
         self.log.info(f"Downloaded .rds to {tmp_path}")
         return tmp_path
