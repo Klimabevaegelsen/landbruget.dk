@@ -277,6 +277,16 @@ class GEUSBoreholePesticidesSilver(
         filtered by stofgruppe=50 (pesticides). This layer has different field names
         than jupiter_anlaegsanalyser.
 
+        Field mapping (mc_analyse WFS fields):
+        - dgu_nr: DGU borehole number (e.g., "212. 2283")
+        - anlaeg_id: Facility ID (may be null)
+        - stofnr: Substance number
+        - stof_tekst: Substance name
+        - seneste_analysevaerdi: Latest analysis value
+        - dato_seneste_analyse: Date of latest analysis
+        - xutm32euref89, yutm32euref89: Coordinates in UTM32 EUREF89
+        - kommune_navn: Municipality name
+
         Args:
             feature: XML element containing mc_analyse data
 
@@ -291,17 +301,22 @@ class GEUSBoreholePesticidesSilver(
 
             stofnr = int(stofnr_str)
 
-            # Get borehole/facility identifier (boringsid or anlaegsid)
-            boringsid = self._get_element_text(feature, "ms:boringsid")
-            anlaegsid = self._get_element_text(feature, "ms:anlaegsid")
-            # Use boringsid if available, fall back to anlaegsid
-            identifier = boringsid or anlaegsid
+            # Get DGU number (primary identifier for boreholes in mc_analyse)
+            # Note: Field is dgu_nr (with underscore), not dgunr
+            dgunr = self._get_element_text(feature, "ms:dgu_nr")
+
+            # Get facility ID as fallback identifier
+            anlaeg_id = self._get_element_text(feature, "ms:anlaeg_id")
+
+            # Use dgunr if available, fall back to anlaeg_id
+            # Note: dgunr may contain spaces (e.g., "212. 2283")
+            identifier = dgunr or anlaeg_id
             if not identifier:
                 return None
 
-            # Extract coordinates - mc_analyse uses xutm/yutm fields
-            x_str = self._get_element_text(feature, "ms:xutm")
-            y_str = self._get_element_text(feature, "ms:yutm")
+            # Extract coordinates - mc_analyse uses xutm32euref89/yutm32euref89
+            x_str = self._get_element_text(feature, "ms:xutm32euref89")
+            y_str = self._get_element_text(feature, "ms:yutm32euref89")
             x = float(x_str) if x_str else None
             y = float(y_str) if y_str else None
 
@@ -312,18 +327,18 @@ class GEUSBoreholePesticidesSilver(
             # Get substance name - mc_analyse uses stof_tekst
             stof = self._get_element_text(feature, "ms:stof_tekst")
 
-            # Get sample date
-            proevedato = self._get_element_text(feature, "ms:seneste_dato")
+            # Get sample date - field is dato_seneste_analyse
+            proevedato = self._get_element_text(feature, "ms:dato_seneste_analyse")
 
-            # Get location info
-            kommune = self._get_element_text(feature, "ms:kommune_tekst")
+            # Get location info - field is kommune_navn
+            kommune = self._get_element_text(feature, "ms:kommune_navn")
 
-            # Get DGU number if available
-            dgunr = self._get_element_text(feature, "ms:dgunr")
+            # Get facility name
+            anlaeg_navn = self._get_element_text(feature, "ms:anlaegs_navn")
 
             return {
-                "anlaegid": identifier,
-                "dgunr": dgunr,
+                "anlaegid": anlaeg_id,  # Facility ID (may be null)
+                "dgunr": dgunr,  # DGU borehole number (primary identifier)
                 "stofnr": stofnr,
                 "stof": stof,
                 "stof_status": None,  # Not available in mc_analyse
@@ -332,9 +347,9 @@ class GEUSBoreholePesticidesSilver(
                 "proevedato": proevedato,
                 "x": x,  # UTM32 EUREF89 easting
                 "y": y,  # UTM32 EUREF89 northing
-                "anlaeg": None,  # Not available in mc_analyse
+                "anlaeg": anlaeg_navn,  # Facility name
                 "kommune": kommune,
-                "virksomhedstype": None,  # Not available in mc_analyse
+                "virksomhedstype": self._get_element_text(feature, "ms:virksomhedstype_tekst"),
                 "data_source": "mc_analyse",
             }
         except Exception as e:
