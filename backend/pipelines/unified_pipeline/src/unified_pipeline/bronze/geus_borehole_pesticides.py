@@ -15,8 +15,9 @@ Data sources:
 - jupiter_anlaegsanalyser: Facility substance analyses (limited to 48 substances)
 - mc_analyse: Full groundwater chemical analyses (stofgruppe 50 = pesticides)
 
-The data is fetched in parallel batches to optimize performance, with proper
-error handling and retry logic for robustness.
+The data is fetched in batches with incremental saving to GCS to avoid memory issues.
+Each batch is saved as a separate parquet file, which the silver layer reads in
+chunks for processing.
 """
 
 import asyncio
@@ -85,6 +86,9 @@ class GEUSBoreholePesticidesBronzeConfig(BaseJobConfig):
     max_concurrent: int = 2
     request_timeout: int = 600
     storage_batch_size: int = 5000
+    # Save to GCS every N chunks to avoid memory accumulation
+    # With batch_size=5000, this saves every 50k records
+    save_interval: int = 10
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=600, connect=60, sock_read=600
     )
@@ -239,17 +243,74 @@ class GEUSBoreholePesticidesBronze(
                 self.log.error(err_msg)
                 raise Exception(err_msg) from e
 
-    async def _fetch_layer_data(
-        self, session: aiohttp.ClientSession, typename: str, cql_filter: str | None = None
-    ) -> list[str]:
+    def _save_intermediate_chunk(self, layer_type: str, chunk_num: int, gml_data: list[str]) -> str:
         """
-        Fetch all data for a specific WFS layer.
+        Save intermediate GML chunks to GCS to avoid memory accumulation.
+
+        Args:
+            layer_type: Type of layer (boreholes, analyses, pesticide_analyses)
+            chunk_num: Chunk number for filename
+            gml_data: List of GML strings to save
+
+        Returns:
+            GCS path where the chunk was saved
+        """
+        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+
+        # Create temporary table for this chunk
+        temp_table = f"temp_chunk_{layer_type}_{chunk_num}"
+        self.conn.execute(f"CREATE OR REPLACE TABLE {temp_table} (payload VARCHAR)")
+
+        for data_str in gml_data:
+            self.conn.execute(f"INSERT INTO {temp_table} VALUES (?)", [data_str])
+
+        # Create table with metadata
+        chunk_table = f"chunk_{layer_type}_{chunk_num}"
+        self.conn.execute(
+            f"""
+            CREATE OR REPLACE TABLE {chunk_table} AS
+            SELECT
+                '{layer_type}' as layer_type,
+                payload,
+                ? as source,
+                ? as source_crs,
+                ? as created_at,
+                ? as updated_at
+            FROM {temp_table}
+            """,
+            [
+                self.config.name,
+                self.config.source_crs,
+                current_timestamp,
+                current_timestamp,
+            ],
+        )
+
+        # Save to GCS
+        gcs_path = f"{self.config.dataset}/chunks/{layer_type}/chunk_{chunk_num:04d}"
+        self._save_data(chunk_table, gcs_path, self.config.bucket, stage="bronze")
+
+        # Clean up tables
+        self.conn.execute(f"DROP TABLE {temp_table}")
+        self.conn.execute(f"DROP TABLE {chunk_table}")
+
+        self.log.info(
+            f"Saved intermediate chunk {chunk_num} for {layer_type} "
+            f"({len(gml_data)} GML responses) to {gcs_path}"
+        )
+
+        return gcs_path
+
+    async def _fetch_layer_data_streaming(
+        self, session: aiohttp.ClientSession, typename: str, cql_filter: str | None = None
+    ) -> dict:
+        """
+        Fetch all data for a specific WFS layer with incremental saving to GCS.
 
         This method orchestrates the data retrieval for a single layer:
-        1. Fetches the first chunk to determine total features available
-        2. If total is known, fetches remaining data in parallel chunks
-        3. If total is unknown, fetches sequentially until no more data
-        4. Returns all responses as a list of GML strings
+        1. Fetches chunks sequentially
+        2. Saves to GCS every save_interval chunks to avoid memory accumulation
+        3. Returns metadata about saved chunks instead of raw data
 
         Args:
             session (aiohttp.ClientSession): HTTP session for making requests
@@ -257,28 +318,38 @@ class GEUSBoreholePesticidesBronze(
             cql_filter (str, optional): CQL filter to apply to the request
 
         Returns:
-            list[str]: List of GML responses
+            dict: Metadata about the fetched data including chunk paths
 
         Raises:
             Exception: If there are issues with data fetching or processing
         """
-        raw_features = []
+        # Map typename to layer_type for storage
+        layer_type_map = {
+            self.config.boreholes_typename: "boreholes",
+            self.config.analyses_typename: "analyses",
+            self.config.mc_analyse_typename: "pesticide_analyses",
+        }
+        layer_type = layer_type_map.get(typename, typename)
+
+        pending_chunks: list[str] = []  # GML strings pending save
+        saved_paths: list[str] = []  # GCS paths of saved chunks
+        chunk_save_num = 0
         filter_desc = f" (filter: {cql_filter})" if cql_filter else ""
 
-        async with AsyncTimer(f"Fetching all {typename}{filter_desc} data"):
+        async with AsyncTimer(f"Fetching all {typename}{filter_desc} data (streaming)"):
             # Fetch first chunk to get total count
             first_chunk = await self._fetch_chunk(session, typename, 0, cql_filter)
             total_features = first_chunk["total_features"]
             returned_features = first_chunk["returned_features"]
-            raw_features.append(first_chunk["text"])
+            pending_chunks.append(first_chunk["text"])
             fetched_count = returned_features
+            chunk_count = 1
 
             if total_features is None:
                 # Total is unknown - fetch sequentially until we get fewer than batch_size
                 self.log.info(
                     f"[{typename}]{filter_desc} Total features unknown, fetching until exhausted..."
                 )
-                self.log.debug(f"[{typename}] First chunk returned {fetched_count} features")
 
                 current_index = returned_features
                 while returned_features >= self.config.batch_size:
@@ -286,12 +357,22 @@ class GEUSBoreholePesticidesBronze(
                     returned_features = chunk["returned_features"]
 
                     if returned_features > 0:
-                        raw_features.append(chunk["text"])
+                        pending_chunks.append(chunk["text"])
                         fetched_count += returned_features
-                        self.log.debug(
-                            f"[{typename}] Fetched chunk at index {current_index} "
-                            f"with {returned_features} features (total so far: {fetched_count:,})"
-                        )
+                        chunk_count += 1
+
+                        # Save intermediate results every save_interval chunks
+                        if len(pending_chunks) >= self.config.save_interval:
+                            path = self._save_intermediate_chunk(
+                                layer_type, chunk_save_num, pending_chunks
+                            )
+                            saved_paths.append(path)
+                            pending_chunks = []  # Clear memory
+                            chunk_save_num += 1
+                            self.log.info(
+                                f"[{typename}] Progress: {fetched_count:,} features fetched, "
+                                f"{len(saved_paths)} chunks saved to GCS"
+                            )
 
                     current_index += self.config.batch_size
 
@@ -299,57 +380,63 @@ class GEUSBoreholePesticidesBronze(
                     f"[{typename}] Fetched all {fetched_count:,} features (total was unknown)"
                 )
             else:
-                # Total is known - can fetch remaining chunks in parallel
+                # Total is known - fetch sequentially with intermediate saves
                 self.log.info(
                     f"[{typename}]{filter_desc} Total features to fetch: {total_features:,}"
                 )
-                self.log.debug(f"[{typename}] Fetched {fetched_count} out of {total_features}")
 
-                # Create tasks for remaining chunks
-                tasks = [
-                    self._fetch_chunk(session, typename, start_index, cql_filter)
-                    for start_index in range(
-                        returned_features, total_features, self.config.batch_size
-                    )
-                ]
+                for start_index in range(returned_features, total_features, self.config.batch_size):
+                    chunk = await self._fetch_chunk(session, typename, start_index, cql_filter)
 
-                if tasks:
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    if chunk["returned_features"] > 0:
+                        pending_chunks.append(chunk["text"])
+                        fetched_count += chunk["returned_features"]
+                        chunk_count += 1
 
-                    for result in results:
-                        if isinstance(result, Exception):
-                            self.log.error(f"Error fetching {typename} chunk: {result}")
-                            raise result
-
-                        if isinstance(result, dict):
-                            raw_features.append(result["text"])
-                            fetched_count += result["returned_features"]
-                            self.log.debug(
-                                f"[{typename}] Processed chunk with {result['returned_features']} features"
+                        # Save intermediate results every save_interval chunks
+                        if len(pending_chunks) >= self.config.save_interval:
+                            path = self._save_intermediate_chunk(
+                                layer_type, chunk_save_num, pending_chunks
                             )
-                        else:
-                            self.log.error(f"Unexpected result type: {type(result)}")
+                            saved_paths.append(path)
+                            pending_chunks = []  # Clear memory
+                            chunk_save_num += 1
+                            self.log.info(
+                                f"[{typename}] Progress: {fetched_count:,}/{total_features:,} "
+                                f"features, {len(saved_paths)} chunks saved to GCS"
+                            )
 
                 self.log.info(
                     f"[{typename}] Fetched all {fetched_count:,} out of {total_features:,} features"
                 )
 
-        return raw_features
+            # Save any remaining pending chunks
+            if pending_chunks:
+                path = self._save_intermediate_chunk(layer_type, chunk_save_num, pending_chunks)
+                saved_paths.append(path)
+                pending_chunks = []
 
-    async def _fetch_raw_data(self) -> dict[str, list[str]] | None:
+        return {
+            "layer_type": layer_type,
+            "typename": typename,
+            "total_features": fetched_count,
+            "chunk_count": chunk_count,
+            "saved_paths": saved_paths,
+        }
+
+    async def _fetch_raw_data_streaming(self) -> dict | None:
         """
-        Fetch all raw data from the GEUS WFS service.
+        Fetch all raw data from the GEUS WFS service with streaming saves to GCS.
 
-        This method orchestrates the data retrieval workflow:
+        This method orchestrates the data retrieval workflow with memory optimization:
         1. Establishes an HTTP session with proper SSL and header configuration
-        2. Fetches boreholes data
-        3. Fetches analyses data
-        4. Returns both datasets as a dictionary
+        2. Fetches boreholes data with incremental saves
+        3. Fetches analyses data with incremental saves
+        4. Returns metadata about saved chunks (not raw data)
 
         Returns:
-            Optional[dict[str, list[str]]]: Dictionary with 'boreholes' and 'analyses' keys,
-                                           each containing a list of GML strings,
-                                           or None if fetching fails
+            Optional[dict]: Metadata about saved chunks for each layer,
+                           or None if fetching fails
 
         Raises:
             Exception: If there are issues with data fetching, parsing, or processing
@@ -370,18 +457,20 @@ class GEUSBoreholePesticidesBronze(
                 connector=connector,
                 timeout=self.config.request_timeout_config,
             ) as session,
-            AsyncTimer("Fetching raw data for GEUS Borehole Pesticides bronze job"),
+            AsyncTimer("Fetching raw data for GEUS Borehole Pesticides bronze job (streaming)"),
         ):
             try:
-                # Fetch boreholes data
-                self.log.info("Fetching boreholes data...")
-                boreholes_data = await self._fetch_layer_data(
+                # Fetch boreholes data with incremental saves
+                self.log.info("Fetching boreholes data (streaming mode)...")
+                boreholes_meta = await self._fetch_layer_data_streaming(
                     session, self.config.boreholes_typename
                 )
 
                 # Fetch facility analyses data (jupiter_anlaegsanalyser - 48 substances)
-                self.log.info("Fetching facility analyses data (jupiter_anlaegsanalyser)...")
-                facility_analyses_data = await self._fetch_layer_data(
+                self.log.info(
+                    "Fetching facility analyses data (jupiter_anlaegsanalyser, streaming mode)..."
+                )
+                facility_analyses_meta = await self._fetch_layer_data_streaming(
                     session, self.config.analyses_typename
                 )
 
@@ -389,16 +478,16 @@ class GEUSBoreholePesticidesBronze(
                 # mc_analyse contains ALL groundwater chemical analyses with full substance list
                 pesticide_filter = f"stofgruppe={self.config.pesticide_stofgruppe}"
                 self.log.info(
-                    f"Fetching full pesticide analyses data (mc_analyse, {pesticide_filter})..."
+                    f"Fetching full pesticide analyses data (mc_analyse, {pesticide_filter}, streaming mode)..."
                 )
-                pesticide_analyses_data = await self._fetch_layer_data(
+                pesticide_analyses_meta = await self._fetch_layer_data_streaming(
                     session, self.config.mc_analyse_typename, cql_filter=pesticide_filter
                 )
 
                 return {
-                    "boreholes": boreholes_data,
-                    "analyses": facility_analyses_data,  # Legacy name for compatibility
-                    "pesticide_analyses": pesticide_analyses_data,  # New: full pesticide data
+                    "boreholes": boreholes_meta,
+                    "analyses": facility_analyses_meta,
+                    "pesticide_analyses": pesticide_analyses_meta,
                 }
 
             except Exception as e:
@@ -492,47 +581,79 @@ class GEUSBoreholePesticidesBronze(
 
         return "final_dataframe"
 
-    async def run(self) -> dict[str, list[str]] | None:
+    async def run(self) -> dict | None:
         """
-        Run the data source processing pipeline.
+        Run the data source processing pipeline with streaming saves.
 
         This method orchestrates the entire data retrieval process:
         1. Fetches all raw borehole and analyses data from the WFS service
-        2. Saves the retrieved GML data to Google Cloud Storage
-        3. Returns the raw data for in-memory passing to silver stage
+        2. Incrementally saves chunks to GCS to avoid memory issues
+        3. Returns metadata about saved chunks for silver layer to read
 
         Returns:
-            Optional[dict[str, list[str]]]: Raw GML data that can be passed to silver stage,
-                                           or None if processing fails
+            Optional[dict]: Metadata about saved chunks that silver layer can use
+                           to read data from GCS, or None if processing fails
 
         Note:
             This is the main entry point for the bronze layer processing of GEUS data.
+            Uses streaming mode to handle large datasets (400k+ records) without OOM.
         """
         async with AsyncTimer("Running GEUS Borehole Pesticides bronze job"):
-            self.log.info("Running GEUS Borehole Pesticides bronze job")
+            self.log.info("Running GEUS Borehole Pesticides bronze job (streaming mode)")
 
             # Set source CRS for tracking
             self.set_source_crs(self.config.source_crs)
 
-            raw_data = await self._fetch_raw_data()
-            if not raw_data:
-                self.log.error("No raw data fetched")
+            # Use streaming fetch which saves incrementally to GCS
+            metadata = await self._fetch_raw_data_streaming()
+            if not metadata:
+                self.log.error("No data fetched")
                 return None
 
+            boreholes_meta = metadata["boreholes"]
+            analyses_meta = metadata["analyses"]
+            pesticide_meta = metadata["pesticide_analyses"]
+
             self.log.info(
-                f"Fetched raw data successfully: "
-                f"{len(raw_data['boreholes'])} borehole chunks, "
-                f"{len(raw_data['analyses'])} facility analyses chunks, "
-                f"{len(raw_data.get('pesticide_analyses', []))} pesticide analyses chunks"
+                f"Fetched and saved data successfully: "
+                f"{boreholes_meta['total_features']:,} boreholes in {len(boreholes_meta['saved_paths'])} chunks, "
+                f"{analyses_meta['total_features']:,} facility analyses in {len(analyses_meta['saved_paths'])} chunks, "
+                f"{pesticide_meta['total_features']:,} pesticide analyses in {len(pesticide_meta['saved_paths'])} chunks"
             )
 
-            # Create dataframe for storage
-            table_name = self.create_dataframe(raw_data)
+            # Save metadata manifest for silver layer
+            manifest = {
+                "dataset": self.config.dataset,
+                "bucket": self.config.bucket,
+                "source_crs": self.config.source_crs,
+                "layers": {
+                    "boreholes": {
+                        "total_features": boreholes_meta["total_features"],
+                        "chunk_count": boreholes_meta["chunk_count"],
+                        "saved_paths": boreholes_meta["saved_paths"],
+                    },
+                    "analyses": {
+                        "total_features": analyses_meta["total_features"],
+                        "chunk_count": analyses_meta["chunk_count"],
+                        "saved_paths": analyses_meta["saved_paths"],
+                    },
+                    "pesticide_analyses": {
+                        "total_features": pesticide_meta["total_features"],
+                        "chunk_count": pesticide_meta["chunk_count"],
+                        "saved_paths": pesticide_meta["saved_paths"],
+                    },
+                },
+            }
 
-            # Save using unified method
-            self._save_data(table_name, self.config.dataset, self.config.bucket, stage="bronze")
-            self.log.info("Saved raw data successfully")
+            # Save manifest to GCS
+            self._save_data(
+                manifest,
+                f"{self.config.dataset}/manifest",
+                self.config.bucket,
+                stage="bronze",
+            )
+
             self.log.info("GEUS Borehole Pesticides bronze job completed successfully")
 
-            # Return raw data for in-memory passing
-            return raw_data
+            # Return metadata for silver layer (or it can read from GCS manifest)
+            return manifest
