@@ -1009,19 +1009,33 @@ class GEUSBoreholePesticidesSilver(
             if all_analyses:
                 self._validate_geometries(joined_table)
 
-            # Save to GCS
+            # Save to GCS with pipeline metadata for data tracing
             self.log.info("Saving data to GCS...")
 
             # Save boreholes (all boreholes, not just those with pesticides)
-            self.save_data_direct(boreholes_table, "geus_boreholes", self.config.bucket, "silver")
+            self._save_data_with_metadata(
+                data=boreholes_table,
+                dataset="geus_boreholes",
+                source_key="geus_borehole_pesticides",
+                bucket=self.config.bucket,
+                stage="silver",
+            )
 
             # Save pesticide analyses if we have any
             if all_analyses:
-                self.save_data_direct(
-                    analyses_table, "geus_pesticide_analyses", self.config.bucket, "silver"
+                self._save_data_with_metadata(
+                    data=analyses_table,
+                    dataset="geus_pesticide_analyses",
+                    source_key="geus_borehole_pesticides",
+                    bucket=self.config.bucket,
+                    stage="silver",
                 )
-                self.save_data_direct(
-                    joined_table, "geus_borehole_pesticides", self.config.bucket, "silver"
+                self._save_data_with_metadata(
+                    data=joined_table,
+                    dataset="geus_borehole_pesticides",
+                    source_key="geus_borehole_pesticides",
+                    bucket=self.config.bucket,
+                    stage="silver",
                 )
 
             self.log.info("GEUS Borehole Pesticides silver job completed successfully")
