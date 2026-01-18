@@ -160,9 +160,8 @@ class GEUSDataversePesticidesSilver(
         # Register the DataFrame with DuckDB
         self.conn.register("raw_pesticides", df)
 
-        # Get column names for mapping (handle case variations)
+        # Get column names for logging
         columns = list(df.columns)
-        col_map = {c.upper(): c for c in columns}
 
         self.log.info(f"Available columns: {columns}")
 
