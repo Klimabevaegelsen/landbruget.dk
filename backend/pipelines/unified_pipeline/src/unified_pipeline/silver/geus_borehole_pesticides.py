@@ -807,13 +807,25 @@ class GEUSBoreholePesticidesSilver(
         gml_data = []
         for path in chunk_paths:
             try:
-                # Read parquet from GCS into DuckDB
-                gcs_uri = f"gs://{self.config.bucket}/bronze/{path}.parquet"
-                self.log.debug(f"Reading chunk from {gcs_uri}")
+                # The _save_data method creates paths like:
+                # bronze/{dataset}/chunks/{layer}/{chunk_name}/{timestamp}/data.parquet
+                # We need to find the latest file using glob pattern
+                gcs_pattern = f"gs://{self.config.bucket}/bronze/{path}/*/data.parquet"
+                self.log.debug(f"Looking for chunk files matching: {gcs_pattern}")
+
+                # Use list_files to find matching files
+                matching_files = self.gcs_access.list_files(gcs_pattern)
+                if not matching_files:
+                    self.log.warning(f"No files found matching {gcs_pattern}")
+                    continue
+
+                # Get the most recent file (sorted by path which includes timestamp)
+                latest_file = sorted(matching_files, reverse=True)[0]
+                self.log.debug(f"Reading chunk from {latest_file}")
 
                 # Read the parquet file
                 result = self.conn.execute(
-                    f"SELECT payload FROM read_parquet('{gcs_uri}')"
+                    f"SELECT payload FROM read_parquet('{latest_file}')"
                 ).fetchall()
 
                 gml_data.extend(row[0] for row in result)
