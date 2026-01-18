@@ -794,24 +794,52 @@ class GEUSBoreholePesticidesSilver(
         else:
             self.log.info(f"All {total_count:,} geometries validated within Denmark bounds")
 
+    def _read_gml_chunks_from_gcs(self, chunk_paths: list[str]) -> list[str]:
+        """
+        Read GML data from GCS chunk files.
+
+        Args:
+            chunk_paths: List of GCS paths to chunk parquet files
+
+        Returns:
+            List of GML strings from the chunks
+        """
+        gml_data = []
+        for path in chunk_paths:
+            try:
+                # Read parquet from GCS into DuckDB
+                gcs_uri = f"gs://{self.config.bucket}/bronze/{path}.parquet"
+                self.log.debug(f"Reading chunk from {gcs_uri}")
+
+                # Read the parquet file
+                result = self.conn.execute(
+                    f"SELECT payload FROM read_parquet('{gcs_uri}')"
+                ).fetchall()
+
+                for row in result:
+                    gml_data.append(row[0])
+
+            except Exception as e:
+                self.log.warning(f"Failed to read chunk {path}: {e}")
+                continue
+
+        return gml_data
+
     async def run(self, bronze_data: Any | None = None) -> dict[str, Any] | None:
         """
         Run the GEUS borehole pesticides silver layer processing pipeline.
 
         This method orchestrates the entire data processing workflow:
-        1. Reads raw GML data from bronze layer (boreholes, analyses, pesticide_analyses)
+        1. Reads raw GML data from bronze layer (from GCS chunks or in-memory)
         2. Parses boreholes and analyses from GML
         3. Combines analyses from both sources (jupiter_anlaegsanalyser and mc_analyse)
         4. Creates joined dataset
         5. Saves to GCS
 
         Args:
-            bronze_data: Optional in-memory data from bronze stage
-                        Expected format: {
-                            "boreholes": [gml_strings],
-                            "analyses": [gml_strings],  # jupiter_anlaegsanalyser
-                            "pesticide_analyses": [gml_strings]  # mc_analyse
-                        }
+            bronze_data: Optional data from bronze stage. Can be:
+                        - Manifest dict with 'layers' containing GCS paths to chunks
+                        - Legacy format with 'boreholes', 'analyses' lists of GML strings
 
         Returns:
             dict[str, Any]: Success information including dataset name and status
@@ -820,44 +848,85 @@ class GEUSBoreholePesticidesSilver(
         self.log.info("Running GEUS Borehole Pesticides silver job")
 
         async with AsyncTimer("GEUS Borehole Pesticides silver job"):
-            # Get data either from memory or storage
+            # Get data either from manifest (GCS chunks) or legacy in-memory format
             if bronze_data is not None:
-                self.log.info("Using bronze data from memory (in-memory data passing)")
                 if not isinstance(bronze_data, dict):
                     self.log.error(f"Expected dict from bronze stage, got {type(bronze_data)}")
                     return None
 
-                boreholes_gml = bronze_data.get("boreholes", [])
-                analyses_gml = bronze_data.get("analyses", [])  # jupiter_anlaegsanalyser
-                pesticide_analyses_gml = bronze_data.get("pesticide_analyses", [])  # mc_analyse
+                # Check if this is the new manifest format (has 'layers' key with paths)
+                if "layers" in bronze_data:
+                    self.log.info("Using bronze manifest format (reading from GCS chunks)")
+                    layers = bronze_data["layers"]
+
+                    # Read boreholes from GCS chunks
+                    boreholes_paths = layers.get("boreholes", {}).get("saved_paths", [])
+                    self.log.info(f"Reading {len(boreholes_paths)} borehole chunks from GCS...")
+                    boreholes_gml = self._read_gml_chunks_from_gcs(boreholes_paths)
+
+                    # Read analyses from GCS chunks
+                    analyses_paths = layers.get("analyses", {}).get("saved_paths", [])
+                    self.log.info(
+                        f"Reading {len(analyses_paths)} facility analyses chunks from GCS..."
+                    )
+                    analyses_gml = self._read_gml_chunks_from_gcs(analyses_paths)
+
+                    # Read pesticide analyses from GCS chunks
+                    pesticide_paths = layers.get("pesticide_analyses", {}).get("saved_paths", [])
+                    self.log.info(
+                        f"Reading {len(pesticide_paths)} pesticide analyses chunks from GCS..."
+                    )
+                    pesticide_analyses_gml = self._read_gml_chunks_from_gcs(pesticide_paths)
+                else:
+                    # Legacy in-memory format (lists of GML strings)
+                    self.log.info("Using legacy bronze data format (in-memory GML strings)")
+                    boreholes_gml = bronze_data.get("boreholes", [])
+                    analyses_gml = bronze_data.get("analyses", [])
+                    pesticide_analyses_gml = bronze_data.get("pesticide_analyses", [])
             else:
-                # Read from storage
-                self.log.info("Reading bronze data from storage (fallback)")
-                raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
-                if raw_data is None:
-                    self.log.error("Failed to read bronze data")
-                    return None
+                # Read from storage (fallback - read manifest then chunks)
+                self.log.info("Reading bronze manifest from storage...")
+                manifest_path = (
+                    f"gs://{self.config.bucket}/bronze/{self.config.dataset}/manifest.json"
+                )
+                try:
+                    # Try to read manifest
+                    manifest_result = self.conn.execute(
+                        f"SELECT * FROM read_json('{manifest_path}')"
+                    ).fetchone()
+                    if manifest_result:
+                        # Parse manifest and read chunks
+                        # This is a simplified fallback - in practice the manifest is passed
+                        self.log.info("Found manifest, reading chunks...")
+                        # For now, fall back to legacy parquet reading
+                        raise Exception("Manifest reading not fully implemented - using legacy")
+                except Exception as e:
+                    self.log.info(f"Manifest not found or error ({e}), trying legacy parquet...")
+                    raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
+                    if raw_data is None:
+                        self.log.error("Failed to read bronze data")
+                        return None
 
-                # Parse the stored data - it should have layer_type column
-                conn = self.conn
-                boreholes_rows = conn.execute(
-                    "SELECT payload FROM raw_data WHERE layer_type = 'boreholes'"
-                ).fetchall()
-                analyses_rows = conn.execute(
-                    "SELECT payload FROM raw_data WHERE layer_type = 'analyses'"
-                ).fetchall()
-                pesticide_analyses_rows = conn.execute(
-                    "SELECT payload FROM raw_data WHERE layer_type = 'pesticide_analyses'"
-                ).fetchall()
+                    # Parse the stored data - it should have layer_type column
+                    conn = self.conn
+                    boreholes_rows = conn.execute(
+                        "SELECT payload FROM raw_data WHERE layer_type = 'boreholes'"
+                    ).fetchall()
+                    analyses_rows = conn.execute(
+                        "SELECT payload FROM raw_data WHERE layer_type = 'analyses'"
+                    ).fetchall()
+                    pesticide_analyses_rows = conn.execute(
+                        "SELECT payload FROM raw_data WHERE layer_type = 'pesticide_analyses'"
+                    ).fetchall()
 
-                boreholes_gml = [row[0] for row in boreholes_rows]
-                analyses_gml = [row[0] for row in analyses_rows]
-                pesticide_analyses_gml = [row[0] for row in pesticide_analyses_rows]
+                    boreholes_gml = [row[0] for row in boreholes_rows]
+                    analyses_gml = [row[0] for row in analyses_rows]
+                    pesticide_analyses_gml = [row[0] for row in pesticide_analyses_rows]
 
             self.log.info(
-                f"Processing {len(boreholes_gml)} borehole chunks, "
-                f"{len(analyses_gml)} facility analysis chunks (jupiter_anlaegsanalyser), "
-                f"and {len(pesticide_analyses_gml)} pesticide analysis chunks (mc_analyse)"
+                f"Processing {len(boreholes_gml)} borehole GML responses, "
+                f"{len(analyses_gml)} facility analysis GML responses (jupiter_anlaegsanalyser), "
+                f"and {len(pesticide_analyses_gml)} pesticide analysis GML responses (mc_analyse)"
             )
 
             # Parse GML data
