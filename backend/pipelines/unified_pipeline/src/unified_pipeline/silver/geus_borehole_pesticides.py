@@ -49,7 +49,7 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
         "gml": "http://www.opengis.net/gml/3.2",  # GML 3.2 (verified from GEUS API response)
     }
 
-    # Tracked pesticides for jupiter_anlaegsanalyser (legacy - limited to 48 substances)
+    # Tracked pesticides for jupiter_anlaegsanalyser (legacy - limited to substances in WFS)
     # These are kept for backward compatibility with the facility analyses layer.
     # The mc_analyse layer provides ALL pesticides via stofgruppe=50 filter.
     tracked_pesticides: ClassVar[dict[int, str]] = {
@@ -71,8 +71,8 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
         218: "Toluen",  # BTEX component
     }
 
-    # Note: The mc_analyse layer with stofgruppe=50 filter now provides comprehensive
-    # pesticide data including:
+    # Note: The mc_analyse layer with stofgruppe=50 filter provides comprehensive
+    # pesticide data including substances NOT in jupiter_anlaegsanalyser:
     # - Simazin, DEA, DIA, DEIA (triazine metabolites)
     # - Bentazon (mandatory monitoring since 1998)
     # - MCPA, Mecoprop, Dichlorprop (phenoxy acids)
