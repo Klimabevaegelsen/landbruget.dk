@@ -150,11 +150,11 @@ PIPELINE_SCHEDULES: dict[Source, PipelineScheduleConfig] = {
         description="Danish Work Environment Authority inspections",
         estimated_duration_minutes=45,
     ),
-    Source.geus_borehole_pesticides: PipelineScheduleConfig(
+    Source.geus_dataverse_pesticides: PipelineScheduleConfig(
         frequency=ScheduleFrequency.MONTHLY,
         priority=8,
-        description="GEUS borehole locations and pesticide contamination data from Jupiter DB",
-        estimated_duration_minutes=60,
+        description="GEUS Dataverse groundwater pesticide data (633 substances, 4.2M+ analyses, 1981-2025)",
+        estimated_duration_minutes=30,  # Faster than WFS - single file download
     ),
     # MONTHLY PIPELINES - With Dependencies
     Source.property_cadastral_merge: PipelineScheduleConfig(

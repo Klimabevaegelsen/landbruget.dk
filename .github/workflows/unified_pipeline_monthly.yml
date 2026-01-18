@@ -25,7 +25,7 @@ on:
           - "arbejdstilsynet_inspections"
           - "drive_data"
           - "bbr_buildings"
-          - "geus_borehole_pesticides"
+          - "geus_dataverse_pesticides"
           - "property_cadastral_merge"
           - "field_production"
           - "field_area_analysis"
@@ -58,7 +58,7 @@ jobs:
         github.event.inputs.batch == 'all' ||
         github.event.inputs.batch == '1' ||
         github.event_name == 'schedule' ||
-        contains(fromJson('["dst","fvm_wfs","cadastral","bnbo","dagi","water_projects","arbejdstilsynet_inspections","drive_data","bbr_buildings","geus_borehole_pesticides"]'), github.event.inputs.source)
+        contains(fromJson('["dst","fvm_wfs","cadastral","bnbo","dagi","water_projects","arbejdstilsynet_inspections","drive_data","bbr_buildings","geus_dataverse_pesticides"]'), github.event.inputs.source)
       }}
     name: Monthly Foundation Sources
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
               {"source":"arbejdstilsynet_inspections","priority":7,"description":"Work Environment Authority inspections","duration_est":"45min"},
               {"source":"drive_data","priority":8,"description":"Google Drive regulatory compliance documents","duration_est":"90min"},
               {"source":"bbr_buildings","priority":9,"description":"BBR Buildings and GeoDanmark infrastructure","duration_est":"180min"},
-              {"source":"geus_borehole_pesticides","priority":10,"description":"GEUS borehole pesticide contamination data from Jupiter DB","duration_est":"60min"}
+              {"source":"geus_dataverse_pesticides","priority":10,"description":"GEUS Dataverse groundwater pesticide data (633 substances, 4.2M+ analyses)","duration_est":"30min"}
             ]') ||
             fromJson(format('[{{"source":"{0}","priority":1,"description":"Manual execution"}}]', github.event.inputs.source))
           }}

@@ -24,9 +24,9 @@ from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
 from unified_pipeline.bronze.dmi import DMIBronze, DMIBronzeConfig
 from unified_pipeline.bronze.dst import DSTBronze, DSTBronzeConfig
 from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
-from unified_pipeline.bronze.geus_borehole_pesticides import (
-    GEUSBoreholePesticidesBronze,
-    GEUSBoreholePesticidesBronzeConfig,
+from unified_pipeline.bronze.geus_dataverse_pesticides import (
+    GEUSDataversePesticidesBronze,
+    GEUSDataversePesticidesBronzeConfig,
 )
 from unified_pipeline.bronze.grukos import GrukosBronze, GrukosBronzeConfig
 from unified_pipeline.bronze.jordbrugsanalyser import (
@@ -125,9 +125,9 @@ from unified_pipeline.silver.dmi import DMISilver, DMISilverConfig
 from unified_pipeline.silver.dst import DSTSilver, DSTSilverConfig
 from unified_pipeline.silver.dst_zone_mapping import DSTZoneMapping, DSTZoneMappingConfig
 from unified_pipeline.silver.fvm_wfs import FVMWFSSilver, FVMWFSSilverConfig
-from unified_pipeline.silver.geus_borehole_pesticides import (
-    GEUSBoreholePesticidesSilver,
-    GEUSBoreholePesticidesSilverConfig,
+from unified_pipeline.silver.geus_dataverse_pesticides import (
+    GEUSDataversePesticidesSilver,
+    GEUSDataversePesticidesSilverConfig,
 )
 from unified_pipeline.silver.grukos import GrukosSilver, GrukosSilverConfig
 from unified_pipeline.silver.jordbrugsanalyser import (
@@ -500,16 +500,16 @@ def execute(cli_config: cli_models.CliConfig) -> int:
                 (GrukosSilver, GrukosSilverConfig),
             ],
         },
-        cli_models.Source.geus_borehole_pesticides: {
+        cli_models.Source.geus_dataverse_pesticides: {
             cli_models.Stage.bronze: [
-                (GEUSBoreholePesticidesBronze, GEUSBoreholePesticidesBronzeConfig)
+                (GEUSDataversePesticidesBronze, GEUSDataversePesticidesBronzeConfig)
             ],
             cli_models.Stage.silver: [
-                (GEUSBoreholePesticidesSilver, GEUSBoreholePesticidesSilverConfig)
+                (GEUSDataversePesticidesSilver, GEUSDataversePesticidesSilverConfig)
             ],
             cli_models.Stage.all: [
-                (GEUSBoreholePesticidesBronze, GEUSBoreholePesticidesBronzeConfig),
-                (GEUSBoreholePesticidesSilver, GEUSBoreholePesticidesSilverConfig),
+                (GEUSDataversePesticidesBronze, GEUSDataversePesticidesBronzeConfig),
+                (GEUSDataversePesticidesSilver, GEUSDataversePesticidesSilverConfig),
             ],
         },
         cli_models.Source.property_cadastral_merge: {
