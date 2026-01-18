@@ -497,12 +497,28 @@ class GEUSBoreholePesticidesSilver(
                     self.log.info(f"[mc_analyse] First chunk root tag: {root.tag}")
                     members = root.findall(".//wfs:member", self.config.namespaces)
                     self.log.info(f"[mc_analyse] Found {len(members)} wfs:member elements")
+                    # Debug: Log first member's children to understand structure
+                    if members:
+                        first_member = members[0]
+                        children = list(first_member)
+                        self.log.info(
+                            f"[mc_analyse] First member has {len(children)} children. "
+                            f"Tags: {[c.tag for c in children[:3]]}"
+                        )
+                        for child in children[:1]:
+                            self.log.info(f"[mc_analyse] First child tag: '{child.tag}'")
+                            self.log.info(
+                                f"[mc_analyse] 'mc_analyse' in tag.lower(): "
+                                f"{'mc_analyse' in child.tag.lower()}"
+                            )
 
                 # Find all mc_analyse features via wfs:member path
+                chunk_features_found = 0
                 for member in root.findall(".//wfs:member", self.config.namespaces):
                     for child in member:
                         if "mc_analyse" in child.tag.lower():
                             total_features_seen += 1
+                            chunk_features_found += 1
                             parsed = self._parse_mc_analyse_feature(child)
                             if parsed:
                                 key = (
@@ -513,6 +529,14 @@ class GEUSBoreholePesticidesSilver(
                                 if key not in seen_analyses:
                                     analyses.append(parsed)
                                     seen_analyses.add(key)
+
+                # Debug: Log if no features found in this chunk
+                if i == 0 and chunk_features_found == 0:
+                    members = root.findall(".//wfs:member", self.config.namespaces)
+                    self.log.warning(
+                        f"[mc_analyse] First chunk: 0 features matched 'mc_analyse' in tag. "
+                        f"Members found: {len(members)}"
+                    )
 
                 # Also try direct path for formats without wfs:member wrapper
                 for feature in root.findall(".//ms:mc_analyse", self.config.namespaces):
