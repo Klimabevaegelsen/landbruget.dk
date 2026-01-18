@@ -20,7 +20,6 @@ Each batch is saved as a separate parquet file, which the silver layer reads in
 chunks for processing.
 """
 
-import asyncio
 import ssl
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore

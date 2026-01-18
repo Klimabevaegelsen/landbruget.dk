@@ -816,8 +816,7 @@ class GEUSBoreholePesticidesSilver(
                     f"SELECT payload FROM read_parquet('{gcs_uri}')"
                 ).fetchall()
 
-                for row in result:
-                    gml_data.append(row[0])
+                gml_data.extend(row[0] for row in result)
 
             except Exception as e:
                 self.log.warning(f"Failed to read chunk {path}: {e}")
