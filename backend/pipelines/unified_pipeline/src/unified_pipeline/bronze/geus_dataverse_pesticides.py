@@ -22,7 +22,6 @@ Key advantages over WFS:
 
 import ssl
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -154,20 +153,11 @@ class GEUSDataversePesticidesBronze(
         relative_path = f"bronze/{self.config.dataset}/{run_timestamp}/{filename}"
         gcs_path = f"gs://{self.config.bucket}/{relative_path}"
 
-        # Save to a temporary file first, then upload
-        import tempfile
+        # Stream binary content directly to GCS using gcsfs
+        with self.gcs_access.fs.open(gcs_path, "wb") as f:
+            f.write(rds_content)
 
-        with tempfile.NamedTemporaryFile(suffix=".rds", delete=False) as tmp_file:
-            tmp_file.write(rds_content)
-            tmp_path = tmp_file.name
-
-        try:
-            self.gcs_access.upload_file(tmp_path, gcs_path)
-            self.log.info(f"Saved {filename} to {gcs_path}")
-        finally:
-            # Clean up temp file
-            Path(tmp_path).unlink(missing_ok=True)
-
+        self.log.info(f"Saved {filename} to {gcs_path}")
         return relative_path
 
     async def run(self) -> dict[str, Any] | None:
