@@ -276,10 +276,11 @@ async def test_fetch_raw_data_success(
     mock_fetch_layer_data: AsyncMock,
     geus_bronze: GEUSBoreholePesticidesBronze,
 ) -> None:
-    """Test successful fetching of all raw data (both layers)."""
+    """Test successful fetching of all raw data (all three layers)."""
     mock_fetch_layer_data.side_effect = [
         ["<xml>boreholes1</xml>", "<xml>boreholes2</xml>"],  # boreholes
-        ["<xml>analyses1</xml>"],  # analyses
+        ["<xml>analyses1</xml>"],  # analyses (jupiter_anlaegsanalyser)
+        ["<xml>pesticide1</xml>", "<xml>pesticide2</xml>"],  # pesticide_analyses (mc_analyse)
     ]
 
     result = await geus_bronze._fetch_raw_data()
@@ -287,8 +288,10 @@ async def test_fetch_raw_data_success(
     assert result is not None
     assert "boreholes" in result
     assert "analyses" in result
+    assert "pesticide_analyses" in result
     assert len(result["boreholes"]) == 2
     assert len(result["analyses"]) == 1
+    assert len(result["pesticide_analyses"]) == 2
 
 
 @pytest.mark.asyncio
@@ -303,6 +306,7 @@ async def test_run_success(
     mock_fetch_raw_data.return_value = {
         "boreholes": ["<xml>borehole data</xml>"],
         "analyses": ["<xml>analyses data</xml>"],
+        "pesticide_analyses": ["<xml>pesticide data</xml>"],
     }
     geus_bronze._save_data = MagicMock()
 
@@ -311,6 +315,7 @@ async def test_run_success(
     assert result is not None
     assert "boreholes" in result
     assert "analyses" in result
+    assert "pesticide_analyses" in result
     mock_fetch_raw_data.assert_called_once()
 
 
@@ -334,10 +339,11 @@ async def test_run_fetch_error(
 
 
 def test_create_dataframe(geus_bronze: GEUSBoreholePesticidesBronze) -> None:
-    """Test creating a raw table from both layers."""
+    """Test creating a raw table from all three layers."""
     data = {
         "boreholes": ["<wfs:FeatureCollection></wfs:FeatureCollection>"],
         "analyses": ["<wfs:FeatureCollection></wfs:FeatureCollection>"],
+        "pesticide_analyses": ["<wfs:FeatureCollection></wfs:FeatureCollection>"],
     }
 
     table_name = geus_bronze.create_dataframe(data)
@@ -347,7 +353,7 @@ def test_create_dataframe(geus_bronze: GEUSBoreholePesticidesBronze) -> None:
 
     # Verify the table exists and has correct structure
     result = geus_bronze.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
-    assert result[0] == 2  # Two rows, one for each layer
+    assert result[0] == 3  # Three rows, one for each layer
 
     # Check column structure
     columns = geus_bronze.conn.execute(f"DESCRIBE {table_name}").fetchall()
@@ -360,7 +366,7 @@ def test_create_dataframe(geus_bronze: GEUSBoreholePesticidesBronze) -> None:
         f"SELECT DISTINCT layer_type FROM {table_name}"
     ).fetchall()
     layer_type_values = {row[0] for row in layer_types}
-    assert layer_type_values == {"boreholes", "analyses"}
+    assert layer_type_values == {"boreholes", "analyses", "pesticide_analyses"}
 
 
 def test_config_defaults() -> None:
@@ -375,5 +381,7 @@ def test_config_defaults() -> None:
     assert config.source_crs == "EPSG:25832"
     assert config.boreholes_typename == "jupiter_boringer_ws"
     assert config.analyses_typename == "jupiter_anlaegsanalyser"
+    assert config.mc_analyse_typename == "mc_analyse"
+    assert config.pesticide_stofgruppe == 50
     assert config.batch_size == 5000
     assert config.max_concurrent == 2

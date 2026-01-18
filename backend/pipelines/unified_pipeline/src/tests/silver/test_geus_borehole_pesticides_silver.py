@@ -34,42 +34,43 @@ def silver_source(config: GEUSBoreholePesticidesSilverConfig) -> GEUSBoreholePes
 @pytest.fixture
 def sample_borehole_gml() -> str:
     """Return a sample GML string for boreholes."""
+    # GEUS uses MapServer namespace (ms:) for features
     return """<?xml version="1.0" encoding="UTF-8"?>
     <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
-                          xmlns:geus="http://data.geus.dk/geusmap"
+                          xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
                           xmlns:gml="http://www.opengis.net/gml/3.2"
                           numberMatched="2" numberReturned="2">
         <wfs:member>
-            <geus:jupiter_boringer_ws gml:id="borehole1">
-                <geus:dgunr>12345678</geus:dgunr>
-                <geus:anlaegid>A001</geus:anlaegid>
-                <geus:kommunenr>101</geus:kommunenr>
-                <geus:kommunenavn>Copenhagen</geus:kommunenavn>
-                <geus:region_tekst>Hovedstaden</geus:region_tekst>
-                <geus:dybde>50m</geus:dybde>
-                <geus:formaal>Vandforsyning</geus:formaal>
-                <geus:boringsstatus>Aktiv</geus:boringsstatus>
-                <geus:anlaegtype>Boring</geus:anlaegtype>
+            <ms:jupiter_boringer_ws gml:id="borehole1">
+                <ms:dgunr>12345678</ms:dgunr>
+                <ms:anlaegid>A001</ms:anlaegid>
+                <ms:komnr>101</ms:komnr>
+                <ms:kommunenavn>Copenhagen</ms:kommunenavn>
+                <ms:region_tekst>Hovedstaden</ms:region_tekst>
+                <ms:dybde>50m</ms:dybde>
+                <ms:formaal_tekst>Vandforsyning</ms:formaal_tekst>
+                <ms:kode_tekst>Aktiv</ms:kode_tekst>
+                <ms:hovedtype>Boring</ms:hovedtype>
                 <gml:Point>
                     <gml:pos>725000 6175000</gml:pos>
                 </gml:Point>
-            </geus:jupiter_boringer_ws>
+            </ms:jupiter_boringer_ws>
         </wfs:member>
         <wfs:member>
-            <geus:jupiter_boringer_ws gml:id="borehole2">
-                <geus:dgunr>87654321</geus:dgunr>
-                <geus:anlaegid>A002</geus:anlaegid>
-                <geus:kommunenr>147</geus:kommunenr>
-                <geus:kommunenavn>Frederiksberg</geus:kommunenavn>
-                <geus:region_tekst>Hovedstaden</geus:region_tekst>
-                <geus:dybde>30m</geus:dybde>
-                <geus:formaal>Grundvandsovervågning</geus:formaal>
-                <geus:boringsstatus>Aktiv</geus:boringsstatus>
-                <geus:anlaegtype>Boring</geus:anlaegtype>
+            <ms:jupiter_boringer_ws gml:id="borehole2">
+                <ms:dgunr>87654321</ms:dgunr>
+                <ms:anlaegid>A002</ms:anlaegid>
+                <ms:komnr>147</ms:komnr>
+                <ms:kommunenavn>Frederiksberg</ms:kommunenavn>
+                <ms:region_tekst>Hovedstaden</ms:region_tekst>
+                <ms:dybde>30m</ms:dybde>
+                <ms:formaal_tekst>Grundvandsovervågning</ms:formaal_tekst>
+                <ms:kode_tekst>Aktiv</ms:kode_tekst>
+                <ms:hovedtype>Boring</ms:hovedtype>
                 <gml:Point>
                     <gml:pos>726000 6176000</gml:pos>
                 </gml:Point>
-            </geus:jupiter_boringer_ws>
+            </ms:jupiter_boringer_ws>
         </wfs:member>
     </wfs:FeatureCollection>
     """
@@ -78,47 +79,47 @@ def sample_borehole_gml() -> str:
 @pytest.fixture
 def sample_analyses_gml() -> str:
     """Return a sample GML string for analyses with tracked pesticides."""
+    # GEUS uses MapServer namespace (ms:) and _num suffix for numeric fields
     return """<?xml version="1.0" encoding="UTF-8"?>
     <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
-                          xmlns:geus="http://data.geus.dk/geusmap"
+                          xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
                           xmlns:gml="http://www.opengis.net/gml/3.2"
                           numberMatched="3" numberReturned="3">
         <wfs:member>
-            <geus:jupiter_anlaegsanalyser gml:id="analysis1">
-                <geus:anlaegid>A001</geus:anlaegid>
-                <geus:dgunr>12345678</geus:dgunr>
-                <geus:stofnr>438</geus:stofnr>
-                <geus:stof>2,6-Dichlorbenzamid (BAM)</geus:stof>
-                <geus:stof_status>Aktiv</geus:stof_status>
-                <geus:maengde>0.15</geus:maengde>
-                <geus:enhed>ug/l</geus:enhed>
-                <geus:proevedato>2024-01-15</geus:proevedato>
-                <geus:indtastdato>2024-01-20</geus:indtastdato>
-            </geus:jupiter_anlaegsanalyser>
+            <ms:jupiter_anlaegsanalyser gml:id="analysis1">
+                <ms:anlaegid_num>A001</ms:anlaegid_num>
+                <ms:stofnr_num>438</ms:stofnr_num>
+                <ms:stof>2,6-Dichlorbenzamid (BAM)</ms:stof>
+                <ms:stof_status>Aktiv</ms:stof_status>
+                <ms:maengde_num>0.15</ms:maengde_num>
+                <ms:enhed>ug/l</ms:enhed>
+                <ms:proevedato>2024-01-15</ms:proevedato>
+                <ms:xutm32euref89>725000</ms:xutm32euref89>
+                <ms:yutm32euref89>6175000</ms:yutm32euref89>
+            </ms:jupiter_anlaegsanalyser>
         </wfs:member>
         <wfs:member>
-            <geus:jupiter_anlaegsanalyser gml:id="analysis2">
-                <geus:anlaegid>A001</geus:anlaegid>
-                <geus:dgunr>12345678</geus:dgunr>
-                <geus:stofnr>846</geus:stofnr>
-                <geus:stof>Atrazin</geus:stof>
-                <geus:stof_status>Aktiv</geus:stof_status>
-                <geus:maengde>0.05</geus:maengde>
-                <geus:enhed>ug/l</geus:enhed>
-                <geus:proevedato>2024-01-15</geus:proevedato>
-                <geus:indtastdato>2024-01-20</geus:indtastdato>
-            </geus:jupiter_anlaegsanalyser>
+            <ms:jupiter_anlaegsanalyser gml:id="analysis2">
+                <ms:anlaegid_num>A001</ms:anlaegid_num>
+                <ms:stofnr_num>846</ms:stofnr_num>
+                <ms:stof>Atrazin</ms:stof>
+                <ms:stof_status>Aktiv</ms:stof_status>
+                <ms:maengde_num>0.05</ms:maengde_num>
+                <ms:enhed>ug/l</ms:enhed>
+                <ms:proevedato>2024-01-15</ms:proevedato>
+                <ms:xutm32euref89>725000</ms:xutm32euref89>
+                <ms:yutm32euref89>6175000</ms:yutm32euref89>
+            </ms:jupiter_anlaegsanalyser>
         </wfs:member>
         <wfs:member>
-            <geus:jupiter_anlaegsanalyser gml:id="analysis3">
-                <geus:anlaegid>A002</geus:anlaegid>
-                <geus:dgunr>87654321</geus:dgunr>
-                <geus:stofnr>9999</geus:stofnr>
-                <geus:stof>Non-tracked substance</geus:stof>
-                <geus:maengde>1.0</geus:maengde>
-                <geus:enhed>ug/l</geus:enhed>
-                <geus:proevedato>2024-01-16</geus:proevedato>
-            </geus:jupiter_anlaegsanalyser>
+            <ms:jupiter_anlaegsanalyser gml:id="analysis3">
+                <ms:anlaegid_num>A002</ms:anlaegid_num>
+                <ms:stofnr_num>9999</ms:stofnr_num>
+                <ms:stof>Non-tracked substance</ms:stof>
+                <ms:maengde_num>1.0</ms:maengde_num>
+                <ms:enhed>ug/l</ms:enhed>
+                <ms:proevedato>2024-01-16</ms:proevedato>
+            </ms:jupiter_anlaegsanalyser>
         </wfs:member>
     </wfs:FeatureCollection>
     """
@@ -140,17 +141,18 @@ def test_config_defaults() -> None:
 
 def test_get_element_text(silver_source: GEUSBoreholePesticidesSilver) -> None:
     """Test getting element text from XML."""
+    # GEUS uses MapServer namespace (ms:) not custom namespace
     xml_str = """<?xml version="1.0" encoding="UTF-8"?>
-    <feature xmlns:geus="http://data.geus.dk/geusmap">
-        <geus:dgunr>12345678</geus:dgunr>
-        <geus:empty></geus:empty>
+    <feature xmlns:ms="http://mapserver.gis.umn.edu/mapserver">
+        <ms:dgunr>12345678</ms:dgunr>
+        <ms:empty></ms:empty>
     </feature>
     """
     root = ET.fromstring(xml_str)
 
-    dgunr = silver_source._get_element_text(root, "geus:dgunr")
-    empty = silver_source._get_element_text(root, "geus:empty")
-    missing = silver_source._get_element_text(root, "geus:missing")
+    dgunr = silver_source._get_element_text(root, "ms:dgunr")
+    empty = silver_source._get_element_text(root, "ms:empty")
+    missing = silver_source._get_element_text(root, "ms:missing")
 
     assert dgunr == "12345678"
     assert empty is None  # Empty element returns None
@@ -159,23 +161,24 @@ def test_get_element_text(silver_source: GEUSBoreholePesticidesSilver) -> None:
 
 def test_parse_borehole_feature_valid(silver_source: GEUSBoreholePesticidesSilver) -> None:
     """Test parsing a valid borehole feature."""
+    # GEUS uses MapServer namespace (ms:) for features
     xml_str = """<?xml version="1.0" encoding="UTF-8"?>
-    <geus:jupiter_boringer_ws xmlns:geus="http://data.geus.dk/geusmap"
-                              xmlns:gml="http://www.opengis.net/gml/3.2"
-                              gml:id="borehole1">
-        <geus:dgunr>12345678</geus:dgunr>
-        <geus:anlaegid>A001</geus:anlaegid>
-        <geus:kommunenr>101</geus:kommunenr>
-        <geus:kommunenavn>Copenhagen</geus:kommunenavn>
-        <geus:region_tekst>Hovedstaden</geus:region_tekst>
-        <geus:dybde>50m</geus:dybde>
-        <geus:formaal>Vandforsyning</geus:formaal>
-        <geus:boringsstatus>Aktiv</geus:boringsstatus>
-        <geus:anlaegtype>Boring</geus:anlaegtype>
+    <ms:jupiter_boringer_ws xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+                            xmlns:gml="http://www.opengis.net/gml/3.2"
+                            gml:id="borehole1">
+        <ms:dgunr>12345678</ms:dgunr>
+        <ms:anlaegid>A001</ms:anlaegid>
+        <ms:komnr>101</ms:komnr>
+        <ms:kommunenavn>Copenhagen</ms:kommunenavn>
+        <ms:region_tekst>Hovedstaden</ms:region_tekst>
+        <ms:dybde>50m</ms:dybde>
+        <ms:formaal_tekst>Vandforsyning</ms:formaal_tekst>
+        <ms:kode_tekst>Aktiv</ms:kode_tekst>
+        <ms:hovedtype>Boring</ms:hovedtype>
         <gml:Point>
             <gml:pos>725000 6175000</gml:pos>
         </gml:Point>
-    </geus:jupiter_boringer_ws>
+    </ms:jupiter_boringer_ws>
     """
     root = ET.fromstring(xml_str)
 
@@ -194,13 +197,13 @@ def test_parse_borehole_feature_valid(silver_source: GEUSBoreholePesticidesSilve
 def test_parse_borehole_feature_missing_dgunr(silver_source: GEUSBoreholePesticidesSilver) -> None:
     """Test parsing a borehole feature without dgunr."""
     xml_str = """<?xml version="1.0" encoding="UTF-8"?>
-    <geus:jupiter_boringer_ws xmlns:geus="http://data.geus.dk/geusmap"
-                              xmlns:gml="http://www.opengis.net/gml/3.2">
-        <geus:anlaegid>A001</geus:anlaegid>
+    <ms:jupiter_boringer_ws xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+                            xmlns:gml="http://www.opengis.net/gml/3.2">
+        <ms:anlaegid>A001</ms:anlaegid>
         <gml:Point>
             <gml:pos>725000 6175000</gml:pos>
         </gml:Point>
-    </geus:jupiter_boringer_ws>
+    </ms:jupiter_boringer_ws>
     """
     root = ET.fromstring(xml_str)
 
@@ -212,11 +215,11 @@ def test_parse_borehole_feature_missing_dgunr(silver_source: GEUSBoreholePestici
 def test_parse_borehole_feature_missing_point(silver_source: GEUSBoreholePesticidesSilver) -> None:
     """Test parsing a borehole feature without coordinates."""
     xml_str = """<?xml version="1.0" encoding="UTF-8"?>
-    <geus:jupiter_boringer_ws xmlns:geus="http://data.geus.dk/geusmap"
-                              xmlns:gml="http://www.opengis.net/gml/3.2">
-        <geus:dgunr>12345678</geus:dgunr>
-        <geus:anlaegid>A001</geus:anlaegid>
-    </geus:jupiter_boringer_ws>
+    <ms:jupiter_boringer_ws xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+                            xmlns:gml="http://www.opengis.net/gml/3.2">
+        <ms:dgunr>12345678</ms:dgunr>
+        <ms:anlaegid>A001</ms:anlaegid>
+    </ms:jupiter_boringer_ws>
     """
     root = ET.fromstring(xml_str)
 
@@ -229,17 +232,19 @@ def test_parse_analysis_feature_tracked_pesticide(
     silver_source: GEUSBoreholePesticidesSilver,
 ) -> None:
     """Test parsing an analysis feature with a tracked pesticide."""
+    # GEUS uses MapServer namespace (ms:) and _num suffix for numeric fields
     xml_str = """<?xml version="1.0" encoding="UTF-8"?>
-    <geus:jupiter_anlaegsanalyser xmlns:geus="http://data.geus.dk/geusmap">
-        <geus:anlaegid>A001</geus:anlaegid>
-        <geus:dgunr>12345678</geus:dgunr>
-        <geus:stofnr>438</geus:stofnr>
-        <geus:stof>2,6-Dichlorbenzamid (BAM)</geus:stof>
-        <geus:stof_status>Aktiv</geus:stof_status>
-        <geus:maengde>0.15</geus:maengde>
-        <geus:enhed>ug/l</geus:enhed>
-        <geus:proevedato>2024-01-15</geus:proevedato>
-    </geus:jupiter_anlaegsanalyser>
+    <ms:jupiter_anlaegsanalyser xmlns:ms="http://mapserver.gis.umn.edu/mapserver">
+        <ms:anlaegid_num>A001</ms:anlaegid_num>
+        <ms:stofnr_num>438</ms:stofnr_num>
+        <ms:stof>2,6-Dichlorbenzamid (BAM)</ms:stof>
+        <ms:stof_status>Aktiv</ms:stof_status>
+        <ms:maengde_num>0.15</ms:maengde_num>
+        <ms:enhed>ug/l</ms:enhed>
+        <ms:proevedato>2024-01-15</ms:proevedato>
+        <ms:xutm32euref89>725000</ms:xutm32euref89>
+        <ms:yutm32euref89>6175000</ms:yutm32euref89>
+    </ms:jupiter_anlaegsanalyser>
     """
     root = ET.fromstring(xml_str)
 
@@ -251,6 +256,7 @@ def test_parse_analysis_feature_tracked_pesticide(
     assert result["stof"] == "2,6-Dichlorbenzamid (BAM)"
     assert result["maengde"] == 0.15
     assert result["enhed"] == "ug/l"
+    assert result["data_source"] == "jupiter_anlaegsanalyser"
 
 
 def test_parse_analysis_feature_non_tracked_pesticide(
@@ -258,12 +264,12 @@ def test_parse_analysis_feature_non_tracked_pesticide(
 ) -> None:
     """Test parsing an analysis feature with a non-tracked substance."""
     xml_str = """<?xml version="1.0" encoding="UTF-8"?>
-    <geus:jupiter_anlaegsanalyser xmlns:geus="http://data.geus.dk/geusmap">
-        <geus:anlaegid>A001</geus:anlaegid>
-        <geus:stofnr>9999</geus:stofnr>
-        <geus:stof>Some other substance</geus:stof>
-        <geus:maengde>1.0</geus:maengde>
-    </geus:jupiter_anlaegsanalyser>
+    <ms:jupiter_anlaegsanalyser xmlns:ms="http://mapserver.gis.umn.edu/mapserver">
+        <ms:anlaegid_num>A001</ms:anlaegid_num>
+        <ms:stofnr_num>9999</ms:stofnr_num>
+        <ms:stof>Some other substance</ms:stof>
+        <ms:maengde_num>1.0</ms:maengde_num>
+    </ms:jupiter_anlaegsanalyser>
     """
     root = ET.fromstring(xml_str)
 
@@ -277,10 +283,10 @@ def test_parse_analysis_feature_missing_stofnr(
 ) -> None:
     """Test parsing an analysis feature without stofnr."""
     xml_str = """<?xml version="1.0" encoding="UTF-8"?>
-    <geus:jupiter_anlaegsanalyser xmlns:geus="http://data.geus.dk/geusmap">
-        <geus:anlaegid>A001</geus:anlaegid>
-        <geus:stof>Some substance</geus:stof>
-    </geus:jupiter_anlaegsanalyser>
+    <ms:jupiter_anlaegsanalyser xmlns:ms="http://mapserver.gis.umn.edu/mapserver">
+        <ms:anlaegid_num>A001</ms:anlaegid_num>
+        <ms:stof>Some substance</ms:stof>
+    </ms:jupiter_anlaegsanalyser>
     """
     root = ET.fromstring(xml_str)
 
@@ -391,6 +397,7 @@ async def test_run_success_with_bronze_data(
     bronze_data = {
         "boreholes": [sample_borehole_gml],
         "analyses": [sample_analyses_gml],
+        "pesticide_analyses": [],  # Empty mc_analyse data for this test
     }
 
     silver_source.save_data_direct = MagicMock()
@@ -411,6 +418,7 @@ async def test_run_no_boreholes_parsed(
     bronze_data = {
         "boreholes": ["<invalid>not valid GML</invalid>"],
         "analyses": ["<invalid>not valid GML</invalid>"],
+        "pesticide_analyses": [],
     }
 
     result = await silver_source.run(bronze_data=bronze_data)
@@ -436,18 +444,18 @@ async def test_run_no_pesticide_analyses(
     sample_borehole_gml: str,
 ) -> None:
     """Test run when no pesticide analyses are found."""
-    # Only non-tracked substance in analyses
+    # Only non-tracked substance in analyses (using MapServer namespace)
     analyses_gml = """<?xml version="1.0" encoding="UTF-8"?>
     <wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"
-                          xmlns:geus="http://data.geus.dk/geusmap"
+                          xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
                           numberMatched="1" numberReturned="1">
         <wfs:member>
-            <geus:jupiter_anlaegsanalyser>
-                <geus:anlaegid>A001</geus:anlaegid>
-                <geus:stofnr>9999</geus:stofnr>
-                <geus:stof>Non-tracked substance</geus:stof>
-                <geus:maengde>1.0</geus:maengde>
-            </geus:jupiter_anlaegsanalyser>
+            <ms:jupiter_anlaegsanalyser>
+                <ms:anlaegid_num>A001</ms:anlaegid_num>
+                <ms:stofnr_num>9999</ms:stofnr_num>
+                <ms:stof>Non-tracked substance</ms:stof>
+                <ms:maengde_num>1.0</ms:maengde_num>
+            </ms:jupiter_anlaegsanalyser>
         </wfs:member>
     </wfs:FeatureCollection>
     """
@@ -455,6 +463,7 @@ async def test_run_no_pesticide_analyses(
     bronze_data = {
         "boreholes": [sample_borehole_gml],
         "analyses": [analyses_gml],
+        "pesticide_analyses": [],  # Empty mc_analyse data
     }
 
     silver_source.save_data_direct = MagicMock()
