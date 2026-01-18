@@ -799,7 +799,8 @@ class GEUSBoreholePesticidesSilver(
         Read GML data from GCS chunk files.
 
         Args:
-            chunk_paths: List of GCS paths to chunk parquet files
+            chunk_paths: List of relative paths to chunk parquet files.
+                New format: bronze/{dataset}/{timestamp}/chunks/{layer}/chunk_0000.parquet
 
         Returns:
             List of GML strings from the chunks
@@ -807,25 +808,14 @@ class GEUSBoreholePesticidesSilver(
         gml_data = []
         for path in chunk_paths:
             try:
-                # The _save_data method creates paths like:
-                # bronze/{dataset}/chunks/{layer}/{chunk_name}/{timestamp}/data.parquet
-                # We need to find the latest file using glob pattern
-                gcs_pattern = f"gs://{self.config.bucket}/bronze/{path}/*/data.parquet"
-                self.log.debug(f"Looking for chunk files matching: {gcs_pattern}")
-
-                # Use list_files to find matching files
-                matching_files = self.gcs_access.list_files(gcs_pattern)
-                if not matching_files:
-                    self.log.warning(f"No files found matching {gcs_pattern}")
-                    continue
-
-                # Get the most recent file (sorted by path which includes timestamp)
-                latest_file = sorted(matching_files, reverse=True)[0]
-                self.log.debug(f"Reading chunk from {latest_file}")
+                # New path structure already includes full relative path:
+                # bronze/{dataset}/{timestamp}/chunks/{layer}/chunk_0000.parquet
+                gcs_path = f"gs://{self.config.bucket}/{path}"
+                self.log.debug(f"Reading chunk from {gcs_path}")
 
                 # Read the parquet file
                 result = self.conn.execute(
-                    f"SELECT payload FROM read_parquet('{latest_file}')"
+                    f"SELECT payload FROM read_parquet('{gcs_path}')"
                 ).fetchall()
 
                 gml_data.extend(row[0] for row in result)
@@ -895,44 +885,83 @@ class GEUSBoreholePesticidesSilver(
                     analyses_gml = bronze_data.get("analyses", [])
                     pesticide_analyses_gml = bronze_data.get("pesticide_analyses", [])
             else:
-                # Read from storage (fallback - read manifest then chunks)
-                self.log.info("Reading bronze manifest from storage...")
-                manifest_path = (
-                    f"gs://{self.config.bucket}/bronze/{self.config.dataset}/manifest.json"
+                # Read from storage (fallback - read manifest from GCS)
+                self.log.info("No bronze data passed - reading from GCS (independent silver run)")
+
+                # Find the latest manifest in GCS
+                # New path structure: bronze/{dataset}/{run_timestamp}/manifest.json
+                manifest_pattern = (
+                    f"gs://{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
                 )
+                self.log.info(f"Looking for manifest files matching: {manifest_pattern}")
+
+                manifest_files = self.gcs_access.list_files(manifest_pattern)
+                if not manifest_files:
+                    self.log.error(
+                        f"No manifest files found in GCS. Run bronze stage first. "
+                        f"Pattern: {manifest_pattern}"
+                    )
+                    return None
+
+                # Get the most recent manifest (sorted by path which includes timestamp)
+                latest_manifest = sorted(manifest_files, reverse=True)[0]
+                self.log.info(f"Reading manifest from {latest_manifest}")
+
+                # Read and parse manifest (JSON format)
                 try:
-                    # Try to read manifest
-                    manifest_result = self.conn.execute(
-                        f"SELECT * FROM read_json('{manifest_path}')"
-                    ).fetchone()
-                    if manifest_result:
-                        # Parse manifest and read chunks
-                        # This is a simplified fallback - in practice the manifest is passed
-                        self.log.info("Found manifest, reading chunks...")
-                        # For now, fall back to legacy parquet reading
-                        raise Exception("Manifest reading not fully implemented - using legacy")
+                    manifest = self.gcs_access.download_json(latest_manifest)
+                    self.log.info(
+                        f"Loaded manifest for run {manifest.get('run_timestamp', 'unknown')}"
+                    )
+
+                    # Read chunks from paths stored in manifest
+                    layers = manifest.get("layers", {})
+
+                    # Read boreholes chunks
+                    boreholes_paths = layers.get("boreholes", {}).get("saved_paths", [])
+                    self.log.info(
+                        f"Reading {len(boreholes_paths)} borehole chunks from manifest..."
+                    )
+                    boreholes_gml = []
+                    for path in boreholes_paths:
+                        gcs_path = f"gs://{self.config.bucket}/{path}"
+                        result = self.conn.execute(
+                            f"SELECT payload FROM read_parquet('{gcs_path}')"
+                        ).fetchall()
+                        boreholes_gml.extend(row[0] for row in result)
+
+                    # Read analyses chunks
+                    analyses_paths = layers.get("analyses", {}).get("saved_paths", [])
+                    self.log.info(
+                        f"Reading {len(analyses_paths)} facility analyses chunks from manifest..."
+                    )
+                    analyses_gml = []
+                    for path in analyses_paths:
+                        gcs_path = f"gs://{self.config.bucket}/{path}"
+                        result = self.conn.execute(
+                            f"SELECT payload FROM read_parquet('{gcs_path}')"
+                        ).fetchall()
+                        analyses_gml.extend(row[0] for row in result)
+
+                    # Read pesticide analyses chunks
+                    pesticide_paths = layers.get("pesticide_analyses", {}).get("saved_paths", [])
+                    self.log.info(
+                        f"Reading {len(pesticide_paths)} pesticide analyses chunks from manifest..."
+                    )
+                    pesticide_analyses_gml = []
+                    for path in pesticide_paths:
+                        gcs_path = f"gs://{self.config.bucket}/{path}"
+                        result = self.conn.execute(
+                            f"SELECT payload FROM read_parquet('{gcs_path}')"
+                        ).fetchall()
+                        pesticide_analyses_gml.extend(row[0] for row in result)
+
                 except Exception as e:
-                    self.log.info(f"Manifest not found or error ({e}), trying legacy parquet...")
-                    raw_data = self._read_bronze_data(self.config.dataset, self.config.bucket)
-                    if raw_data is None:
-                        self.log.error("Failed to read bronze data")
-                        return None
+                    self.log.error(f"Failed to read from GCS: {e}")
+                    import traceback
 
-                    # Parse the stored data - it should have layer_type column
-                    conn = self.conn
-                    boreholes_rows = conn.execute(
-                        "SELECT payload FROM raw_data WHERE layer_type = 'boreholes'"
-                    ).fetchall()
-                    analyses_rows = conn.execute(
-                        "SELECT payload FROM raw_data WHERE layer_type = 'analyses'"
-                    ).fetchall()
-                    pesticide_analyses_rows = conn.execute(
-                        "SELECT payload FROM raw_data WHERE layer_type = 'pesticide_analyses'"
-                    ).fetchall()
-
-                    boreholes_gml = [row[0] for row in boreholes_rows]
-                    analyses_gml = [row[0] for row in analyses_rows]
-                    pesticide_analyses_gml = [row[0] for row in pesticide_analyses_rows]
+                    self.log.error(traceback.format_exc())
+                    return None
 
             self.log.info(
                 f"Processing {len(boreholes_gml)} borehole GML responses, "

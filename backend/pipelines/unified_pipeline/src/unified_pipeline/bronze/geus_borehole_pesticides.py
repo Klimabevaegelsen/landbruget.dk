@@ -246,13 +246,16 @@ class GEUSBoreholePesticidesBronze(
         """
         Save intermediate GML chunks to GCS to avoid memory accumulation.
 
+        Path structure: bronze/{dataset}/{run_timestamp}/chunks/{layer_type}/chunk_{num}.parquet
+        This puts the run timestamp at the top level so all chunks from a run are grouped together.
+
         Args:
             layer_type: Type of layer (boreholes, analyses, pesticide_analyses)
             chunk_num: Chunk number for filename
             gml_data: List of GML strings to save
 
         Returns:
-            GCS path where the chunk was saved
+            GCS path where the chunk was saved (relative to bucket)
         """
         current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
 
@@ -285,9 +288,17 @@ class GEUSBoreholePesticidesBronze(
             ],
         )
 
-        # Save to GCS
-        gcs_path = f"{self.config.dataset}/chunks/{layer_type}/chunk_{chunk_num:04d}"
-        self._save_data(chunk_table, gcs_path, self.config.bucket, stage="bronze")
+        # Build GCS path with run timestamp at top level:
+        # bronze/{dataset}/{run_timestamp}/chunks/{layer_type}/chunk_0000.parquet
+        run_timestamp = self.date_pattern  # Consistent across entire run
+        relative_path = (
+            f"bronze/{self.config.dataset}/{run_timestamp}/chunks/{layer_type}/"
+            f"chunk_{chunk_num:04d}.parquet"
+        )
+        gcs_path = f"gs://{self.config.bucket}/{relative_path}"
+
+        # Save directly to GCS using gcs_access (bypasses _save_data's timestamp logic)
+        self.gcs_access.upload_from_duckdb_table(chunk_table, gcs_path)
 
         # Clean up tables
         self.conn.execute(f"DROP TABLE {temp_table}")
@@ -295,10 +306,11 @@ class GEUSBoreholePesticidesBronze(
 
         self.log.info(
             f"Saved intermediate chunk {chunk_num} for {layer_type} "
-            f"({len(gml_data)} GML responses) to {gcs_path}"
+            f"({len(gml_data)} GML responses) to {relative_path}"
         )
 
-        return gcs_path
+        # Return the relative path (without gs://bucket/) for manifest
+        return relative_path
 
     async def _fetch_layer_data_streaming(
         self, session: aiohttp.ClientSession, typename: str, cql_filter: str | None = None
@@ -621,10 +633,13 @@ class GEUSBoreholePesticidesBronze(
             )
 
             # Save metadata manifest for silver layer
+            # Path structure: bronze/{dataset}/{run_timestamp}/manifest.json
+            run_timestamp = self.date_pattern
             manifest = {
                 "dataset": self.config.dataset,
                 "bucket": self.config.bucket,
                 "source_crs": self.config.source_crs,
+                "run_timestamp": run_timestamp,
                 "layers": {
                     "boreholes": {
                         "total_features": boreholes_meta["total_features"],
@@ -644,13 +659,13 @@ class GEUSBoreholePesticidesBronze(
                 },
             }
 
-            # Save manifest to GCS
-            self._save_data(
-                manifest,
-                f"{self.config.dataset}/manifest",
-                self.config.bucket,
-                stage="bronze",
+            # Save manifest directly to GCS with proper path hierarchy
+            # bronze/{dataset}/{run_timestamp}/manifest.json
+            manifest_path = (
+                f"gs://{self.config.bucket}/bronze/{self.config.dataset}/"
+                f"{run_timestamp}/manifest.json"
             )
+            self.gcs_access.upload_json(manifest, manifest_path)
 
             self.log.info("GEUS Borehole Pesticides bronze job completed successfully")
 
