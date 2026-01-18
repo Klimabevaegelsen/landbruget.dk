@@ -11,8 +11,9 @@ The module contains:
 - GEUSBoreholePesticidesBronze: Implementation class for fetching and processing data
 
 Data sources:
-- jupiter_boringer_ws: Danish boreholes (280,000+ records)
-- jupiter_anlaegsanalyser: Facility substance analyses (pesticide detections)
+- jupiter_boringer_ws: Danish boreholes (442,000+ records)
+- jupiter_anlaegsanalyser: Facility substance analyses (limited to 48 substances)
+- mc_analyse: Full groundwater chemical analyses (stofgruppe 50 = pesticides)
 
 The data is fetched in parallel batches to optimize performance, with proper
 error handling and retry logic for robustness.
@@ -73,7 +74,12 @@ class GEUSBoreholePesticidesBronzeConfig(BaseJobConfig):
 
     # WFS layer names
     boreholes_typename: str = "jupiter_boringer_ws"
-    analyses_typename: str = "jupiter_anlaegsanalyser"
+    analyses_typename: str = "jupiter_anlaegsanalyser"  # Facility analyses (48 substances)
+    mc_analyse_typename: str = "mc_analyse"  # Full groundwater analyses (all substances)
+
+    # Stofgruppe codes for filtering mc_analyse
+    # 50 = "Pesticider, nedbrydningsprodukter og beslægtede stoffer"
+    pesticide_stofgruppe: int = 50
 
     batch_size: int = 5000
     max_concurrent: int = 2
@@ -117,7 +123,9 @@ class GEUSBoreholePesticidesBronze(
         """
         super().__init__(config)
 
-    def _get_params(self, typename: str, start_index: int = 0) -> dict:
+    def _get_params(
+        self, typename: str, start_index: int = 0, cql_filter: str | None = None
+    ) -> dict:
         """
         Generate WFS request parameters.
 
@@ -128,11 +136,12 @@ class GEUSBoreholePesticidesBronze(
             typename (str): The WFS layer name to fetch
             start_index (int, optional): Starting index for the batch of features to fetch.
                                         Defaults to 0.
+            cql_filter (str, optional): CQL filter to apply to the request.
 
         Returns:
             dict: Dictionary of WFS request parameters
         """
-        return {
+        params = {
             "SERVICE": "WFS",
             "REQUEST": "GetFeature",
             "VERSION": "2.0.0",
@@ -141,6 +150,9 @@ class GEUSBoreholePesticidesBronze(
             "COUNT": str(self.config.batch_size),
             "SRSNAME": "urn:ogc:def:crs:EPSG::25832",
         }
+        if cql_filter:
+            params["CQL_FILTER"] = cql_filter
+        return params
 
     @retry(
         retry=retry_if_exception_type(Exception),
@@ -148,7 +160,11 @@ class GEUSBoreholePesticidesBronze(
         stop=stop_after_attempt(5),
     )
     async def _fetch_chunk(
-        self, session: aiohttp.ClientSession, typename: str, start_index: int
+        self,
+        session: aiohttp.ClientSession,
+        typename: str,
+        start_index: int,
+        cql_filter: str | None = None,
     ) -> dict:
         """
         Fetch a chunk of features with retry logic.
@@ -162,6 +178,7 @@ class GEUSBoreholePesticidesBronze(
             session (aiohttp.ClientSession): HTTP session for making requests
             typename (str): The WFS layer name to fetch
             start_index (int): Starting index for the batch of features to fetch
+            cql_filter (str, optional): CQL filter to apply to the request
 
         Returns:
             dict: Dictionary containing the text response, start index, total features count,
@@ -174,10 +191,11 @@ class GEUSBoreholePesticidesBronze(
             The method uses a semaphore to control the number of concurrent requests
             to avoid overwhelming the service.
         """
+        filter_desc = f" (filter: {cql_filter})" if cql_filter else ""
         async with (
             self.config.request_semaphore,
             AsyncTimer(
-                f"Fetching {typename} chunk starting at index {start_index} "
+                f"Fetching {typename}{filter_desc} chunk starting at index {start_index} "
                 f"to {start_index + self.config.batch_size}"
             ),
         ):
@@ -185,7 +203,7 @@ class GEUSBoreholePesticidesBronze(
                 f"Trying to fetch {typename} data from {start_index} to "
                 f"{start_index + self.config.batch_size}"
             )
-            params = self._get_params(typename, start_index)
+            params = self._get_params(typename, start_index, cql_filter)
             try:
                 async with session.get(self.config.url, params=params) as response:
                     if response.status != 200:
@@ -221,7 +239,9 @@ class GEUSBoreholePesticidesBronze(
                 self.log.error(err_msg)
                 raise Exception(err_msg) from e
 
-    async def _fetch_layer_data(self, session: aiohttp.ClientSession, typename: str) -> list[str]:
+    async def _fetch_layer_data(
+        self, session: aiohttp.ClientSession, typename: str, cql_filter: str | None = None
+    ) -> list[str]:
         """
         Fetch all data for a specific WFS layer.
 
@@ -234,6 +254,7 @@ class GEUSBoreholePesticidesBronze(
         Args:
             session (aiohttp.ClientSession): HTTP session for making requests
             typename (str): The WFS layer name to fetch
+            cql_filter (str, optional): CQL filter to apply to the request
 
         Returns:
             list[str]: List of GML responses
@@ -242,10 +263,11 @@ class GEUSBoreholePesticidesBronze(
             Exception: If there are issues with data fetching or processing
         """
         raw_features = []
+        filter_desc = f" (filter: {cql_filter})" if cql_filter else ""
 
-        async with AsyncTimer(f"Fetching all {typename} data"):
+        async with AsyncTimer(f"Fetching all {typename}{filter_desc} data"):
             # Fetch first chunk to get total count
-            first_chunk = await self._fetch_chunk(session, typename, 0)
+            first_chunk = await self._fetch_chunk(session, typename, 0, cql_filter)
             total_features = first_chunk["total_features"]
             returned_features = first_chunk["returned_features"]
             raw_features.append(first_chunk["text"])
@@ -253,12 +275,14 @@ class GEUSBoreholePesticidesBronze(
 
             if total_features is None:
                 # Total is unknown - fetch sequentially until we get fewer than batch_size
-                self.log.info(f"[{typename}] Total features unknown, fetching until exhausted...")
+                self.log.info(
+                    f"[{typename}]{filter_desc} Total features unknown, fetching until exhausted..."
+                )
                 self.log.debug(f"[{typename}] First chunk returned {fetched_count} features")
 
                 current_index = returned_features
                 while returned_features >= self.config.batch_size:
-                    chunk = await self._fetch_chunk(session, typename, current_index)
+                    chunk = await self._fetch_chunk(session, typename, current_index, cql_filter)
                     returned_features = chunk["returned_features"]
 
                     if returned_features > 0:
@@ -276,12 +300,14 @@ class GEUSBoreholePesticidesBronze(
                 )
             else:
                 # Total is known - can fetch remaining chunks in parallel
-                self.log.info(f"[{typename}] Total features to fetch: {total_features:,}")
+                self.log.info(
+                    f"[{typename}]{filter_desc} Total features to fetch: {total_features:,}"
+                )
                 self.log.debug(f"[{typename}] Fetched {fetched_count} out of {total_features}")
 
                 # Create tasks for remaining chunks
                 tasks = [
-                    self._fetch_chunk(session, typename, start_index)
+                    self._fetch_chunk(session, typename, start_index, cql_filter)
                     for start_index in range(
                         returned_features, total_features, self.config.batch_size
                     )
@@ -353,13 +379,26 @@ class GEUSBoreholePesticidesBronze(
                     session, self.config.boreholes_typename
                 )
 
-                # Fetch analyses data
-                self.log.info("Fetching analyses data...")
-                analyses_data = await self._fetch_layer_data(session, self.config.analyses_typename)
+                # Fetch facility analyses data (jupiter_anlaegsanalyser - 48 substances)
+                self.log.info("Fetching facility analyses data (jupiter_anlaegsanalyser)...")
+                facility_analyses_data = await self._fetch_layer_data(
+                    session, self.config.analyses_typename
+                )
+
+                # Fetch full groundwater analyses filtered by stofgruppe 50 (pesticides)
+                # mc_analyse contains ALL groundwater chemical analyses with full substance list
+                pesticide_filter = f"stofgruppe={self.config.pesticide_stofgruppe}"
+                self.log.info(
+                    f"Fetching full pesticide analyses data (mc_analyse, {pesticide_filter})..."
+                )
+                pesticide_analyses_data = await self._fetch_layer_data(
+                    session, self.config.mc_analyse_typename, cql_filter=pesticide_filter
+                )
 
                 return {
                     "boreholes": boreholes_data,
-                    "analyses": analyses_data,
+                    "analyses": facility_analyses_data,  # Legacy name for compatibility
+                    "pesticide_analyses": pesticide_analyses_data,  # New: full pesticide data
                 }
 
             except Exception as e:
@@ -371,10 +410,11 @@ class GEUSBoreholePesticidesBronze(
         Create a DuckDB table from the raw data.
 
         This method takes a dictionary of layer data and converts it into a DuckDB table
-        with separate payload columns for boreholes and analyses data.
+        with separate payload columns for boreholes, facility analyses, and pesticide analyses.
 
         Args:
-            raw_data (dict[str, list[str]]): Dictionary with 'boreholes' and 'analyses' keys
+            raw_data (dict[str, list[str]]): Dictionary with 'boreholes', 'analyses',
+                                             and 'pesticide_analyses' keys
 
         Returns:
             str: Table name containing the raw data with metadata.
@@ -384,14 +424,19 @@ class GEUSBoreholePesticidesBronze(
         # Create tables for each layer
         self.conn.execute("CREATE OR REPLACE TABLE temp_boreholes (payload VARCHAR)")
         self.conn.execute("CREATE OR REPLACE TABLE temp_analyses (payload VARCHAR)")
+        self.conn.execute("CREATE OR REPLACE TABLE temp_pesticide_analyses (payload VARCHAR)")
 
         # Insert boreholes data
         for data_str in raw_data["boreholes"]:
             self.conn.execute("INSERT INTO temp_boreholes VALUES (?)", [data_str])
 
-        # Insert analyses data
+        # Insert facility analyses data (jupiter_anlaegsanalyser)
         for data_str in raw_data["analyses"]:
             self.conn.execute("INSERT INTO temp_analyses VALUES (?)", [data_str])
+
+        # Insert pesticide analyses data (mc_analyse filtered by stofgruppe=50)
+        for data_str in raw_data.get("pesticide_analyses", []):
+            self.conn.execute("INSERT INTO temp_pesticide_analyses VALUES (?)", [data_str])
 
         # Create final combined table with metadata
         self.conn.execute(
@@ -414,8 +459,21 @@ class GEUSBoreholePesticidesBronze(
                 ? as created_at,
                 ? as updated_at
             FROM temp_analyses
+            UNION ALL
+            SELECT
+                'pesticide_analyses' as layer_type,
+                payload,
+                ? as source,
+                ? as source_crs,
+                ? as created_at,
+                ? as updated_at
+            FROM temp_pesticide_analyses
         """,
             [
+                self.config.name,
+                self.config.source_crs,
+                current_timestamp,
+                current_timestamp,
                 self.config.name,
                 self.config.source_crs,
                 current_timestamp,
@@ -430,6 +488,7 @@ class GEUSBoreholePesticidesBronze(
         # Clean up temporary tables
         self.conn.execute("DROP TABLE temp_boreholes")
         self.conn.execute("DROP TABLE temp_analyses")
+        self.conn.execute("DROP TABLE temp_pesticide_analyses")
 
         return "final_dataframe"
 
@@ -463,7 +522,8 @@ class GEUSBoreholePesticidesBronze(
             self.log.info(
                 f"Fetched raw data successfully: "
                 f"{len(raw_data['boreholes'])} borehole chunks, "
-                f"{len(raw_data['analyses'])} analyses chunks"
+                f"{len(raw_data['analyses'])} facility analyses chunks, "
+                f"{len(raw_data.get('pesticide_analyses', []))} pesticide analyses chunks"
             )
 
             # Create dataframe for storage

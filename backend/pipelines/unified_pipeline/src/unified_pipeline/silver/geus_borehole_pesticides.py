@@ -33,7 +33,7 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
         source_crs (str): Source coordinate reference system
         storage_batch_size (int): Batch size for storage operations
         namespaces (dict[str, str]): XML namespaces used in the GEUS data
-        tracked_pesticides (dict[int, str]): Pesticide stofnr codes to track
+        tracked_pesticides (dict[int, str]): Pesticide stofnr codes to track (legacy)
     """
 
     dataset: str = "geus_borehole_pesticides"
@@ -49,12 +49,9 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
         "gml": "http://www.opengis.net/gml/3.2",  # GML 3.2 (verified from GEUS API response)
     }
 
-    # Tracked pesticides and groundwater contaminants (stofnr -> substance name)
-    # Based on substances available in GEUS jupiter_anlaegsanalyser WFS layer
-    # Note: The WFS layer contains a subset of all monitored substances.
-    # For comprehensive pesticide data, the full Jupiter database should be queried.
-    #
-    # Currently tracking ALL pesticide-related substances available in the WFS:
+    # Tracked pesticides for jupiter_anlaegsanalyser (legacy - limited to substances in WFS)
+    # These are kept for backward compatibility with the facility analyses layer.
+    # The mc_analyse layer provides ALL pesticides via stofgruppe=50 filter.
     tracked_pesticides: ClassVar[dict[int, str]] = {
         # === Pesticides and metabolites (verified in WFS data) ===
         438: "2,6-Dichlorbenzamid (BAM)",  # From dichlobenil - most detected in DK
@@ -74,8 +71,8 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
         218: "Toluen",  # BTEX component
     }
 
-    # Note: Additional pesticides commonly found in Danish groundwater that are NOT
-    # in the jupiter_anlaegsanalyser WFS layer but are in the full Jupiter database:
+    # Note: The mc_analyse layer with stofgruppe=50 filter provides comprehensive
+    # pesticide data including substances NOT in jupiter_anlaegsanalyser:
     # - Simazin, DEA, DIA, DEIA (triazine metabolites)
     # - Bentazon (mandatory monitoring since 1998)
     # - MCPA, Mecoprop, Dichlorprop (phenoxy acids)
@@ -83,9 +80,7 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
     # - 1,2,4-Triazol (fungicide metabolite)
     # - DMS (N,N-dimethylsulfamid)
     # - Isoproturon, Diuron (urea herbicides)
-    #
-    # To track these, the bronze layer would need to query additional Jupiter APIs
-    # or use a different data source (e.g., direct Jupiter database access).
+    # - And many more pesticides and metabolites
 
 
 class GEUSBoreholePesticidesSilver(
@@ -268,9 +263,82 @@ class GEUSBoreholePesticidesSilver(
                 "anlaeg": self._get_element_text(feature, "ms:anlaeg"),  # Facility name
                 "kommune": self._get_element_text(feature, "ms:kommune"),
                 "virksomhedstype": self._get_element_text(feature, "ms:virksomhedstype"),
+                "data_source": "jupiter_anlaegsanalyser",
             }
         except Exception as e:
             self.log.debug(f"Error parsing analysis feature: {e}")
+            return None
+
+    def _parse_mc_analyse_feature(self, feature: ET.Element) -> dict[str, Any] | None:
+        """
+        Parse a feature from the mc_analyse WFS layer.
+
+        The mc_analyse layer contains comprehensive groundwater chemical analyses
+        filtered by stofgruppe=50 (pesticides). This layer has different field names
+        than jupiter_anlaegsanalyser.
+
+        Args:
+            feature: XML element containing mc_analyse data
+
+        Returns:
+            Dictionary with analysis data or None if parsing fails
+        """
+        try:
+            # Extract substance identifiers
+            stofnr_str = self._get_element_text(feature, "ms:stofnr")
+            if not stofnr_str:
+                return None
+
+            stofnr = int(stofnr_str)
+
+            # Get borehole/facility identifier (boringsid or anlaegsid)
+            boringsid = self._get_element_text(feature, "ms:boringsid")
+            anlaegsid = self._get_element_text(feature, "ms:anlaegsid")
+            # Use boringsid if available, fall back to anlaegsid
+            identifier = boringsid or anlaegsid
+            if not identifier:
+                return None
+
+            # Extract coordinates - mc_analyse uses xutm/yutm fields
+            x_str = self._get_element_text(feature, "ms:xutm")
+            y_str = self._get_element_text(feature, "ms:yutm")
+            x = float(x_str) if x_str else None
+            y = float(y_str) if y_str else None
+
+            # Extract measurement data - mc_analyse uses seneste_analysevaerdi
+            analysevaerdi_str = self._get_element_text(feature, "ms:seneste_analysevaerdi")
+            maengde = float(analysevaerdi_str) if analysevaerdi_str else None
+
+            # Get substance name - mc_analyse uses stof_tekst
+            stof = self._get_element_text(feature, "ms:stof_tekst")
+
+            # Get sample date
+            proevedato = self._get_element_text(feature, "ms:seneste_dato")
+
+            # Get location info
+            kommune = self._get_element_text(feature, "ms:kommune_tekst")
+
+            # Get DGU number if available
+            dgunr = self._get_element_text(feature, "ms:dgunr")
+
+            return {
+                "anlaegid": identifier,
+                "dgunr": dgunr,
+                "stofnr": stofnr,
+                "stof": stof,
+                "stof_status": None,  # Not available in mc_analyse
+                "maengde": maengde,
+                "enhed": self._get_element_text(feature, "ms:enhed"),
+                "proevedato": proevedato,
+                "x": x,  # UTM32 EUREF89 easting
+                "y": y,  # UTM32 EUREF89 northing
+                "anlaeg": None,  # Not available in mc_analyse
+                "kommune": kommune,
+                "virksomhedstype": None,  # Not available in mc_analyse
+                "data_source": "mc_analyse",
+            }
+        except Exception as e:
+            self.log.debug(f"Error parsing mc_analyse feature: {e}")
             return None
 
     @timed(name="Parsing boreholes GML data")
@@ -388,7 +456,7 @@ class GEUSBoreholePesticidesSilver(
 
         self.log.info(
             f"Filtered {len(analyses):,} pesticide analyses from {total_analyses_seen:,} "
-            f"total analyses across {len(gml_data)} GML chunks"
+            f"total analyses across {len(gml_data)} GML chunks (jupiter_anlaegsanalyser)"
         )
 
         # Log breakdown by pesticide type
@@ -401,6 +469,88 @@ class GEUSBoreholePesticidesSilver(
 
         return analyses
 
+    @timed(name="Parsing mc_analyse pesticide GML data")
+    def _parse_pesticide_analyses_gml(self, gml_data: list[str]) -> list[dict[str, Any]]:
+        """
+        Parse all pesticide features from mc_analyse GML data chunks.
+
+        The mc_analyse layer is pre-filtered by stofgruppe=50 (pesticides) at the
+        bronze layer, so all features here are pesticide analyses.
+
+        Args:
+            gml_data: List of GML XML strings from mc_analyse
+
+        Returns:
+            List of parsed pesticide analysis dictionaries
+        """
+        analyses = []
+        total_features_seen = 0
+        # Track seen analyses by (identifier, stofnr, proevedato) to avoid duplicates
+        seen_analyses: set[tuple[str, int, str | None]] = set()
+
+        for i, gml_chunk in enumerate(gml_data):
+            try:
+                root = ET.fromstring(gml_chunk)
+
+                # Debug: Log first chunk structure
+                if i == 0:
+                    self.log.info(f"[mc_analyse] First chunk root tag: {root.tag}")
+                    members = root.findall(".//wfs:member", self.config.namespaces)
+                    self.log.info(f"[mc_analyse] Found {len(members)} wfs:member elements")
+
+                # Find all mc_analyse features via wfs:member path
+                for member in root.findall(".//wfs:member", self.config.namespaces):
+                    for child in member:
+                        if "mc_analyse" in child.tag.lower():
+                            total_features_seen += 1
+                            parsed = self._parse_mc_analyse_feature(child)
+                            if parsed:
+                                key = (
+                                    parsed["anlaegid"],
+                                    parsed["stofnr"],
+                                    parsed.get("proevedato"),
+                                )
+                                if key not in seen_analyses:
+                                    analyses.append(parsed)
+                                    seen_analyses.add(key)
+
+                # Also try direct path for formats without wfs:member wrapper
+                for feature in root.findall(".//ms:mc_analyse", self.config.namespaces):
+                    total_features_seen += 1
+                    parsed = self._parse_mc_analyse_feature(feature)
+                    if parsed:
+                        key = (parsed["anlaegid"], parsed["stofnr"], parsed.get("proevedato"))
+                        if key not in seen_analyses:
+                            analyses.append(parsed)
+                            seen_analyses.add(key)
+
+                if (i + 1) % 10 == 0:
+                    self.log.info(
+                        f"[mc_analyse] Processed {i + 1}/{len(gml_data)} chunks, "
+                        f"{len(analyses):,} pesticide analyses found"
+                    )
+
+            except ET.ParseError as e:
+                self.log.warning(f"[mc_analyse] Failed to parse GML chunk {i}: {e}")
+                continue
+
+        self.log.info(
+            f"[mc_analyse] Parsed {len(analyses):,} pesticide analyses from "
+            f"{total_features_seen:,} features across {len(gml_data)} GML chunks"
+        )
+
+        # Log breakdown by substance
+        from collections import Counter
+
+        substance_counts = Counter(a.get("stof", "Unknown") for a in analyses)
+        self.log.info(f"[mc_analyse] Found {len(substance_counts)} unique pesticide substances")
+        for substance, count in substance_counts.most_common(20):  # Top 20
+            self.log.info(f"  - {substance}: {count:,} analyses")
+        if len(substance_counts) > 20:
+            self.log.info(f"  ... and {len(substance_counts) - 20} more substances")
+
+        return analyses
+
     @timed(name="Creating DuckDB tables")
     def _create_duckdb_tables(
         self, boreholes: list[dict], analyses: list[dict]
@@ -410,12 +560,12 @@ class GEUSBoreholePesticidesSilver(
 
         Creates three tables:
         1. geus_boreholes - All borehole locations
-        2. geus_pesticide_analyses - Filtered pesticide analyses
+        2. geus_pesticide_analyses - Combined pesticide analyses from both sources
         3. geus_borehole_pesticides_joined - Boreholes with pesticide detections
 
         Args:
             boreholes: List of parsed borehole dictionaries
-            analyses: List of parsed analysis dictionaries
+            analyses: List of parsed analysis dictionaries (combined from both sources)
 
         Returns:
             Tuple of table names (boreholes, analyses, joined)
@@ -482,6 +632,7 @@ class GEUSBoreholePesticidesSilver(
         conn.execute("""
             CREATE TABLE geus_pesticide_analyses (
                 anlaegid VARCHAR,
+                dgunr VARCHAR,
                 stofnr INTEGER,
                 stof VARCHAR,
                 stof_status VARCHAR,
@@ -493,6 +644,7 @@ class GEUSBoreholePesticidesSilver(
                 anlaeg VARCHAR,
                 kommune VARCHAR,
                 virksomhedstype VARCHAR,
+                data_source VARCHAR,
                 geometry GEOMETRY
             )
         """)
@@ -506,7 +658,7 @@ class GEUSBoreholePesticidesSilver(
                 conn.execute(
                     """
                     INSERT INTO geus_pesticide_analyses VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         CASE WHEN ? IS NOT NULL AND ? IS NOT NULL
                              THEN ST_Point(?, ?)
                              ELSE NULL END
@@ -514,6 +666,7 @@ class GEUSBoreholePesticidesSilver(
                     """,
                     [
                         an["anlaegid"],
+                        an.get("dgunr"),  # New: dgunr from mc_analyse
                         an["stofnr"],
                         an.get("stof"),
                         an.get("stof_status"),
@@ -525,6 +678,7 @@ class GEUSBoreholePesticidesSilver(
                         an.get("anlaeg"),
                         an.get("kommune"),
                         an.get("virksomhedstype"),
+                        an.get("data_source", "unknown"),  # New: data source
                         x,
                         y,
                         x,
@@ -535,29 +689,39 @@ class GEUSBoreholePesticidesSilver(
         self.log.info(f"Created geus_pesticide_analyses table with {len(analyses):,} records")
 
         # Create joined table - boreholes with pesticide detections
+        # Note: We join on both anlaegid AND dgunr to handle both data sources:
+        # - jupiter_anlaegsanalyser uses anlaegid
+        # - mc_analyse uses dgunr (more reliable for borehole matching)
         self.log.info("Creating joined table...")
         conn.execute("DROP TABLE IF EXISTS geus_borehole_pesticides_joined")
         conn.execute("""
             CREATE TABLE geus_borehole_pesticides_joined AS
             SELECT
-                b.dgunr,
-                b.anlaegid,
+                COALESCE(b.dgunr, a.dgunr) as dgunr,
+                COALESCE(b.anlaegid, a.anlaegid) as anlaegid,
                 a.stofnr,
                 a.stof,
                 a.stof_status,
                 a.maengde,
                 a.enhed,
                 a.proevedato,
-                b.kommunenavn,
+                COALESCE(b.kommunenavn, a.kommune) as kommunenavn,
                 b.region_tekst,
                 b.dybde,
-                b.geometry,
+                a.data_source,
+                COALESCE(b.geometry, a.geometry) as geometry,
                 CASE
                     WHEN a.maengde > 0 THEN true
                     ELSE false
                 END as is_detection
-            FROM geus_boreholes b
-            INNER JOIN geus_pesticide_analyses a ON b.anlaegid = a.anlaegid
+            FROM geus_pesticide_analyses a
+            LEFT JOIN geus_boreholes b ON (
+                -- Join on dgunr if available (more reliable)
+                (a.dgunr IS NOT NULL AND a.dgunr = b.dgunr)
+                OR
+                -- Fall back to anlaegid for facility analyses
+                (a.dgunr IS NULL AND a.anlaegid = b.anlaegid)
+            )
         """)
 
         joined_count = conn.execute(
@@ -576,9 +740,26 @@ class GEUSBoreholePesticidesSilver(
 
         # Log unique boreholes with pesticide data
         unique_boreholes = conn.execute(
-            "SELECT COUNT(DISTINCT dgunr) FROM geus_borehole_pesticides_joined"
+            "SELECT COUNT(DISTINCT dgunr) FROM geus_borehole_pesticides_joined WHERE dgunr IS NOT NULL"
         ).fetchone()[0]
         self.log.info(f"  - Unique boreholes with pesticide data: {unique_boreholes:,}")
+
+        # Log breakdown by data source
+        source_counts = conn.execute("""
+            SELECT data_source, COUNT(*) as count
+            FROM geus_borehole_pesticides_joined
+            GROUP BY data_source
+            ORDER BY count DESC
+        """).fetchall()
+        self.log.info("  - By data source:")
+        for source, count in source_counts:
+            self.log.info(f"      {source}: {count:,} analyses")
+
+        # Log unique substances
+        unique_substances = conn.execute(
+            "SELECT COUNT(DISTINCT stofnr) FROM geus_borehole_pesticides_joined"
+        ).fetchone()[0]
+        self.log.info(f"  - Unique substances tracked: {unique_substances:,}")
 
         return "geus_boreholes", "geus_pesticide_analyses", "geus_borehole_pesticides_joined"
 
@@ -618,15 +799,19 @@ class GEUSBoreholePesticidesSilver(
         Run the GEUS borehole pesticides silver layer processing pipeline.
 
         This method orchestrates the entire data processing workflow:
-        1. Reads raw GML data from bronze layer
+        1. Reads raw GML data from bronze layer (boreholes, analyses, pesticide_analyses)
         2. Parses boreholes and analyses from GML
-        3. Filters analyses for tracked pesticides
+        3. Combines analyses from both sources (jupiter_anlaegsanalyser and mc_analyse)
         4. Creates joined dataset
         5. Saves to GCS
 
         Args:
             bronze_data: Optional in-memory data from bronze stage
-                        Expected format: {"boreholes": [gml_strings], "analyses": [gml_strings]}
+                        Expected format: {
+                            "boreholes": [gml_strings],
+                            "analyses": [gml_strings],  # jupiter_anlaegsanalyser
+                            "pesticide_analyses": [gml_strings]  # mc_analyse
+                        }
 
         Returns:
             dict[str, Any]: Success information including dataset name and status
@@ -643,7 +828,8 @@ class GEUSBoreholePesticidesSilver(
                     return None
 
                 boreholes_gml = bronze_data.get("boreholes", [])
-                analyses_gml = bronze_data.get("analyses", [])
+                analyses_gml = bronze_data.get("analyses", [])  # jupiter_anlaegsanalyser
+                pesticide_analyses_gml = bronze_data.get("pesticide_analyses", [])  # mc_analyse
             else:
                 # Read from storage
                 self.log.info("Reading bronze data from storage (fallback)")
@@ -660,13 +846,18 @@ class GEUSBoreholePesticidesSilver(
                 analyses_rows = conn.execute(
                     "SELECT payload FROM raw_data WHERE layer_type = 'analyses'"
                 ).fetchall()
+                pesticide_analyses_rows = conn.execute(
+                    "SELECT payload FROM raw_data WHERE layer_type = 'pesticide_analyses'"
+                ).fetchall()
 
                 boreholes_gml = [row[0] for row in boreholes_rows]
                 analyses_gml = [row[0] for row in analyses_rows]
+                pesticide_analyses_gml = [row[0] for row in pesticide_analyses_rows]
 
             self.log.info(
-                f"Processing {len(boreholes_gml)} borehole chunks and "
-                f"{len(analyses_gml)} analysis chunks"
+                f"Processing {len(boreholes_gml)} borehole chunks, "
+                f"{len(analyses_gml)} facility analysis chunks (jupiter_anlaegsanalyser), "
+                f"and {len(pesticide_analyses_gml)} pesticide analysis chunks (mc_analyse)"
             )
 
             # Parse GML data
@@ -675,20 +866,38 @@ class GEUSBoreholePesticidesSilver(
                 self.log.error("No boreholes parsed from GML data")
                 return None
 
-            analyses = self._parse_analyses_gml(analyses_gml)
-            if not analyses:
+            # Parse facility analyses (jupiter_anlaegsanalyser - limited to tracked pesticides)
+            facility_analyses = self._parse_analyses_gml(analyses_gml)
+            self.log.info(
+                f"Parsed {len(facility_analyses):,} analyses from jupiter_anlaegsanalyser"
+            )
+
+            # Parse pesticide analyses (mc_analyse - comprehensive pesticide data)
+            mc_analyse_data = self._parse_pesticide_analyses_gml(pesticide_analyses_gml)
+            self.log.info(
+                f"Parsed {len(mc_analyse_data):,} analyses from mc_analyse (stofgruppe=50)"
+            )
+
+            # Combine analyses from both sources
+            # mc_analyse data is prioritized since it has comprehensive pesticide coverage
+            all_analyses = facility_analyses + mc_analyse_data
+            self.log.info(
+                f"Combined total: {len(all_analyses):,} pesticide analyses from both sources"
+            )
+
+            if not all_analyses:
                 self.log.warning(
-                    "No pesticide analyses found - this may be expected if no pesticides detected"
+                    "No pesticide analyses found from either source - this may indicate a data issue"
                 )
 
             # Create DuckDB tables
             boreholes_table, analyses_table, joined_table = self._create_duckdb_tables(
-                boreholes, analyses
+                boreholes, all_analyses
             )
 
             # Validate geometries
             self._validate_geometries(boreholes_table)
-            if analyses:
+            if all_analyses:
                 self._validate_geometries(joined_table)
 
             # Save to GCS
@@ -698,7 +907,7 @@ class GEUSBoreholePesticidesSilver(
             self.save_data_direct(boreholes_table, "geus_boreholes", self.config.bucket, "silver")
 
             # Save pesticide analyses if we have any
-            if analyses:
+            if all_analyses:
                 self.save_data_direct(
                     analyses_table, "geus_pesticide_analyses", self.config.bucket, "silver"
                 )
@@ -716,11 +925,13 @@ class GEUSBoreholePesticidesSilver(
                 "status": "completed",
                 "tables_created": [
                     "geus_boreholes",
-                    "geus_pesticide_analyses" if analyses else None,
-                    "geus_borehole_pesticides" if analyses else None,
+                    "geus_pesticide_analyses" if all_analyses else None,
+                    "geus_borehole_pesticides" if all_analyses else None,
                 ],
                 "statistics": {
                     "total_boreholes": len(boreholes),
-                    "total_pesticide_analyses": len(analyses),
+                    "total_pesticide_analyses": len(all_analyses),
+                    "facility_analyses_count": len(facility_analyses),
+                    "mc_analyse_count": len(mc_analyse_data),
                 },
             }
