@@ -25,9 +25,9 @@ from silver.transform import SilverPipeline
 @pytest.fixture
 def sample_raw_csv():
     """Create realistic work inspection CSV data."""
-    return """Dato,Antal,Afgoerelse,Arbejdsmiljoeproblem (emne),Paaklaget,Efterkommet,Produktionsenhed,P-nummer,Branche,Produktionenhedens adresse
+    return """Dato,Antal,Afgørelse,Arbejdsmiljøproblem (emne),Påklaget,Efterkommet,Produktionsenhed,P-nummer,Branche,Produktionenhedens adresse
 2024-01-15,5,Påbud,Støj og vibrationer,,Efterkommet,Dansk Landbrug A/S,1234567890,Landbrug, skovbrug og fiskeri,Landbrugsvej 1 4000 Roskilde
-2024-01-16,10,Strakspåbud,Kemiske stoffer,Paaklaget,,Danish Crown Slagteri,2345678901,Slagterier,Slagtervej 2 8000 Aarhus
+2024-01-16,10,Strakspåbud,Kemiske stoffer,Påklaget,,Danish Crown Slagteri,2345678901,Slagterier,Slagtervej 2 8000 Aarhus
 2024-01-17,3,Forbud,Arbejde i høj,,,MT Højgaard A/S,3456789012,Anlægsarbejde,Byggevej 3 2000 København
 2024-01-18,8,Vejledning,Ergonomi,,Efterkommet,Arla Foods,4567890123,Fødevarer,Mejerivej 4 6000 Kolding
 2024-01-19,2,Påbud,Maskiner og teknisk udstyr,,,Vestjyllands Byggecenter,5678901234,Anlægsarbejde,Anlægsvej 5 7500 Holstebro"""
@@ -307,7 +307,7 @@ class TestDataTransformationAccuracy:
     def test_danish_character_normalization(self, temp_workspace):
         """Test that Danish characters are properly normalized."""
         # Create data with Danish characters
-        csv_content = """Dato,Antal,Afgoerelse,Arbejdsmiljoeproblem (emne),Paaklaget,Efterkommet,Produktionsenhed,P-nummer,Branche,Produktionenhedens adresse
+        csv_content = """Dato,Antal,Afgørelse,Arbejdsmiljøproblem (emne),Påklaget,Efterkommet,Produktionsenhed,P-nummer,Branche,Produktionenhedens adresse
 2024-01-15,5,Påbud,Støj og vibrationer,,Efterkommet,Dansk Landbrug,1234567890,Landbrug,Vejlevej 1"""
 
         bronze_timestamp = "20240115_120000"
@@ -351,7 +351,7 @@ class TestDataTransformationAccuracy:
     def test_null_handling_consistency(self, temp_workspace):
         """Test that null values are consistently handled."""
         # Create data with various empty representations
-        csv_content = """Dato,Antal,Afgoerelse,Arbejdsmiljoeproblem (emne),Paaklaget,Efterkommet,Produktionsenhed,P-nummer,Branche,Produktionenhedens adresse
+        csv_content = """Dato,Antal,Afgørelse,Arbejdsmiljøproblem (emne),Påklaget,Efterkommet,Produktionsenhed,P-nummer,Branche,Produktionenhedens adresse
 2024-01-15,5,Påbud,Støj,,Efterkommet,Company A,1234567890,Landbrug,Address 1
 2024-01-16,10,,Issue,,,,Company B,2345678901,Industri,
 2024-01-17,,Vejledning,Problem,,,Company C,3456789012,,Address 3"""
