@@ -21,6 +21,7 @@ from .base import FieldAnalysisStageConfig
 from .stage0.bnbo_prefilter import BNBOPreFilter
 
 # Import all stage classes
+from .stage0.grukos_prefilter import GrukosPreFilter
 from .stage0.properties_prefilter import PropertiesPreFilter
 from .stage0.soil_types_prefilter import SoilTypesPreFilter
 from .stage0.water_projects_prefilter import WaterProjectsPreFilter
@@ -30,8 +31,10 @@ from .stage1.fields_soil_types import FieldsSoilTypesIntersection
 from .stage1.water_projects_bnbo import WaterProjectsBNBOIntersection
 from .stage1.water_projects_wetlands import WaterProjectsWetlandsIntersection
 from .stage2.fields_bnbo_water import FieldsBNBOWaterCoverage
+from .stage2.fields_grukos import FieldsGrukosCoverage
 from .stage2.fields_wetland_water import FieldsWetlandWaterCoverage
 from .stage3.final_bnbo import FinalBNBOAnalysis
+from .stage3.final_grukos import FinalGrukosAnalysis
 from .stage3.final_wetland import FinalWetlandAnalysis
 from .stage4.consolidate_two_tables import ConsolidateResultsTwoTables
 
@@ -47,6 +50,7 @@ STAGE_JOBS = {
         "wetlands_prefilter": WetlandsPreFilter,
         "water_projects_prefilter": WaterProjectsPreFilter,
         "soil_types_prefilter": SoilTypesPreFilter,
+        "grukos_prefilter": GrukosPreFilter,
     },
     # Stage 1 (foundation intersections using pre-filtered datasets)
     1: {
@@ -59,11 +63,13 @@ STAGE_JOBS = {
     2: {
         "fields_bnbo_water": FieldsBNBOWaterCoverage,
         "fields_wetland_water": FieldsWetlandWaterCoverage,
+        "fields_grukos": FieldsGrukosCoverage,
     },
     # Stage 3 (property-level analysis)
     3: {
         "final_bnbo": FinalBNBOAnalysis,
         "final_wetland": FinalWetlandAnalysis,
+        "final_grukos": FinalGrukosAnalysis,
     },
     # Stage 4 (consolidation) - Two-Table Architecture
     4: {

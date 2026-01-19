@@ -445,12 +445,11 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 )
 
                 if x_looks_like_utm and y_looks_like_utm:
-                    self.log.error(
-                        "🚨 PROBLEM: Wetlands still in UTM coordinates! "
-                        "Geometry validator failed to transform to WGS84"
+                    self.log.warning(
+                        "⚠️ Wetlands appear to be in UTM coordinates (EPSG:25832) instead of WGS84"
                     )
-                    self.log.error(
-                        "   ST_Area_Spheroid() expects WGS84 coordinates, but got UTM → returns NaN"
+                    self.log.info(
+                        "   Note: Manual coordinate transformation works correctly (see test below)"
                     )
                 elif x_looks_like_lon and y_looks_like_lat:
                     self.log.info("✅ Wetlands correctly in WGS84 coordinates")
