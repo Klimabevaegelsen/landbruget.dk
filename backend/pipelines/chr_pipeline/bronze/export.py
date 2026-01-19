@@ -3,12 +3,16 @@
 import json
 import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 from zeep.helpers import serialize_object
+
+# Add backend directory to path BEFORE any common imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 # Import the unified GCS access layer
 try:
@@ -21,9 +25,6 @@ except ImportError:
 
 # Import the unified metadata system
 try:
-    import sys
-
-    sys.path.append(str(Path(__file__).parent.parent.parent.parent))
     from common.pipeline_metadata import MetadataManager
 
     METADATA_AVAILABLE = True
