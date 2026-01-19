@@ -763,16 +763,16 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                          OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 1, 8), '-',
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 9, 4), '-',
+                        '5', SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                      TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 13, 3), '-',
+                        CONCAT('8', SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 17, 3)), '-',
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 21, 12)
                     )
                 END
             )
@@ -784,16 +784,16 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     WHEN p_number IS NULL
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
-                               TRIM(CAST(p_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
-                               TRIM(CAST(p_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
-                                      TRIM(CAST(p_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
-                                               TRIM(CAST(p_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
-                               TRIM(CAST(p_number AS VARCHAR)))), 21, 12)
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
+                               TRIM(CAST(p_number AS VARCHAR)))) AS VARCHAR), 1, 8), '-',
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
+                               TRIM(CAST(p_number AS VARCHAR)))) AS VARCHAR), 9, 4), '-',
+                        '5', SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
+                                      TRIM(CAST(p_number AS VARCHAR)))) AS VARCHAR), 13, 3), '-',
+                        CONCAT('8', SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
+                                               TRIM(CAST(p_number AS VARCHAR)))) AS VARCHAR), 17, 3)), '-',
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'pnumber-',
+                               TRIM(CAST(p_number AS VARCHAR)))) AS VARCHAR), 21, 12)
                     )
                 END
             )
