@@ -498,13 +498,49 @@ def process_chr_data_streaming(
                     logging.warning(f"Failed to load optional dataset {dataset_key}: {e}")
                     continue
             else:
-                # Single file processing (original logic)
+                # Single file processing - check both base directory and CHR-group-suffixed directories
                 gcs_path = (
                     f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
                 )
 
-                # Check if file exists in GCS
-                if not gcs_access.file_exists(gcs_path):
+                # Check if file exists in base GCS directory
+                file_found = gcs_access.file_exists(gcs_path)
+
+                # If not found in base directory, search CHR-group-suffixed directories (for ejendom etc.)
+                if not file_found:
+                    try:
+                        import gcsfs
+
+                        fs = gcsfs.GCSFileSystem()
+
+                        # Find all suffixed directories for this bronze timestamp
+                        all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
+                        suffixed_dirs = [
+                            d
+                            for d in all_dirs
+                            if bronze_timestamp in d
+                            and d != f"{bucket_name}/bronze/chr/{bronze_timestamp}"
+                        ]
+
+                        if suffixed_dirs:
+                            logging.info(
+                                f"Checking {len(suffixed_dirs)} CHR-group-suffixed directories for {dataset_info['file']}"
+                            )
+
+                            # Check each suffixed directory
+                            for suffixed_dir in suffixed_dirs:
+                                alt_gcs_path = f"gs://{suffixed_dir}/{dataset_info['file']}"
+                                if gcs_access.file_exists(alt_gcs_path):
+                                    gcs_path = alt_gcs_path  # Use the file from suffixed directory
+                                    file_found = True
+                                    logging.info(
+                                        f"Found {dataset_info['file']} in CHR-group directory: {suffixed_dir}"
+                                    )
+                                    break
+                    except Exception as e:
+                        logging.warning(f"Error searching CHR-group directories: {e}")
+
+                if not file_found:
                     if dataset_info["required"]:
                         logging.error(f"Required file not found: {gcs_path}")
                         return False
