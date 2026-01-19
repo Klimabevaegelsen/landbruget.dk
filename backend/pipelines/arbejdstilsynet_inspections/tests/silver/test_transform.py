@@ -29,9 +29,9 @@ def sample_raw_data():
         {
             "Dato": ["2024-01-15", "2024-01-16", "2024-01-17"],
             "Antal": ["5", "10", "3"],
-            "Afgoerelse": ["Påbud", "Strakspåbud", "Vejledning"],
-            "Arbejdsmiljoeproblem (emne)": ["Støj", "Kemikalier", "Ergonomi"],
-            "Paaklaget": ["", "Paaklaget", ""],
+            "Afgørelse": ["Påbud", "Strakspåbud", "Vejledning"],
+            "Arbejdsmiljøproblem (emne)": ["Støj", "Kemikalier", "Ergonomi"],
+            "Påklaget": ["", "Påklaget", ""],
             "Efterkommet": ["Efterkommet", "", "Efterkommet"],
             "Produktionsenhed": ["Test Farm A/S", "Test Farm B ApS", "Test Farm C"],
             "P-nummer": ["1234567890", "2345678901", "3456789012"],
@@ -111,7 +111,7 @@ class TestColumnOperations:
                 ('2024-01-01', '5', 'Test', 'Issue', '', '', 'Company', '1234567890', 'Industry', 'Address'),
                 ('2024-01-01', '5', 'Test', 'Issue', '', '', 'Company', '1234567890', 'Industry', 'Address'),
                 ('2024-01-02', '10', 'Test2', 'Issue2', '', '', 'Company2', '2345678901', 'Industry2', 'Address2')
-            ) AS t(Dato, Antal, Afgoerelse, "Arbejdsmiljoeproblem (emne)", Paaklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
+            ) AS t(Dato, Antal, Afgørelse, "Arbejdsmiljøproblem (emne)", Påklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
         """)
 
         pipeline.rename_columns()
@@ -178,7 +178,7 @@ class TestDataTypeCasting:
             CREATE TABLE raw_data AS
             SELECT * FROM (VALUES
                 ('invalid-date', 'not-a-number', 'Test', 'Issue', '', '', 'Company', '1234567890', 'Industry', 'Address')
-            ) AS t(Dato, Antal, Afgoerelse, "Arbejdsmiljoeproblem (emne)", Paaklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
+            ) AS t(Dato, Antal, Afgørelse, "Arbejdsmiljøproblem (emne)", Påklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
         """)
 
         pipeline.rename_columns()
@@ -203,7 +203,7 @@ class TestDataTypeCasting:
             SELECT * FROM (VALUES
                 ('2024-01-15', '5', 'Test', 'Issue', '', '', 'Company', '1234567890', 'Industry', 'Address'),
                 ('2024-12-31', '10', 'Test', 'Issue', '', '', 'Company', '1234567890', 'Industry', 'Address')
-            ) AS t(Dato, Antal, Afgoerelse, "Arbejdsmiljoeproblem (emne)", Paaklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
+            ) AS t(Dato, Antal, Afgørelse, "Arbejdsmiljøproblem (emne)", Påklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
         """)
 
         pipeline.rename_columns()
@@ -229,7 +229,7 @@ class TestDataTypeCasting:
             SELECT * FROM (VALUES
                 ('2024-02-29', '5', 'Test', 'Issue', '', '', 'Company', '1234567890', 'Industry', 'Address'),
                 ('2023-02-29', '5', 'Test', 'Issue', '', '', 'Company', '1234567890', 'Industry', 'Address')
-            ) AS t(Dato, Antal, Afgoerelse, "Arbejdsmiljoeproblem (emne)", Paaklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
+            ) AS t(Dato, Antal, Afgørelse, "Arbejdsmiljøproblem (emne)", Påklaget, Efterkommet, Produktionsenhed, "P-nummer", Branche, "Produktionenhedens adresse")
         """)
 
         pipeline.rename_columns()

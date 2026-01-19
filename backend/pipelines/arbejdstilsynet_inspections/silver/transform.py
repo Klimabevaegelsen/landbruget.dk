@@ -176,9 +176,9 @@ class SilverPipeline:
         self.column_rename = {
             "Dato": "date",
             "Antal": "case_count",
-            "Afgoerelse": "decision",
-            "Arbejdsmiljoeproblem (emne)": "work_env_issue",
-            "Paaklaget": "appealed",
+            "Afgørelse": "decision",
+            "Arbejdsmiljøproblem (emne)": "work_env_issue",
+            "Påklaget": "appealed",
             "Efterkommet": "complied",
             "Produktionsenhed": "company_name",
             "P-nummer": "company_id",
