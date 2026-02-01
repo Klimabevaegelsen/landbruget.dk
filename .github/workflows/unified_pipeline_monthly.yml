@@ -153,21 +153,27 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Monthly Foundation Pipeline - ${{ matrix.source }}
+        env:
+          # Pass matrix values through env vars to avoid bash syntax errors from special chars
+          # See: https://github.com/orgs/community/discussions/128282
+          MATRIX_SOURCE: ${{ matrix.source }}
+          MATRIX_DESCRIPTION: ${{ matrix.description }}
+          MATRIX_DURATION: ${{ matrix.duration_est }}
         run: |
-          echo "🗓️ Running monthly foundation pipeline: ${{ matrix.source }}"
-          echo "📝 Description: ${{ matrix.description }}"
-          echo "⏱️ Estimated duration: ${{ matrix.duration_est }}"
+          echo "🗓️ Running monthly foundation pipeline: $MATRIX_SOURCE"
+          echo "📝 Description: $MATRIX_DESCRIPTION"
+          echo "⏱️ Estimated duration: $MATRIX_DURATION"
           echo "🏗️ Batch: Foundation (no dependencies)"
           echo "⏰ Started at: $(date)"
 
           cd backend/pipelines/unified_pipeline
 
           # Enhanced resource monitoring and optimization for long-running jobs
-          if [ "${{ matrix.source }}" = "fvm_wfs" ] || [ "${{ matrix.source }}" = "cadastral" ]; then
-            echo "🔍 Starting enhanced resource monitoring for ${{ matrix.source }}"
+          if [ "$MATRIX_SOURCE" = "fvm_wfs" ] || [ "$MATRIX_SOURCE" = "cadastral" ]; then
+            echo "🔍 Starting enhanced resource monitoring for $MATRIX_SOURCE"
 
             # Set performance optimizations for cadastral
-            if [ "${{ matrix.source }}" = "cadastral" ]; then
+            if [ "$MATRIX_SOURCE" = "cadastral" ]; then
               export CADASTRAL_REQUESTS_PER_SECOND=4
               export CADASTRAL_CHECKPOINT_ENABLED=true
               export CADASTRAL_CHECKPOINT_INTERVAL=100000
@@ -202,7 +208,7 @@ jobs:
                 fi
 
                 # Check for checkpoint files (cadastral progress monitoring)
-                if [ "${{ matrix.source }}" = "cadastral" ]; then
+                if [ "$MATRIX_SOURCE" = "cadastral" ]; then
                   if ls /tmp/cadastral_checkpoint_*.json 1> /dev/null 2>&1; then
                     echo "📍 Cadastral checkpoint files found - processing in progress"
                   fi
@@ -213,7 +219,7 @@ jobs:
           fi
 
           # Handle special cases
-          if [ "${{ matrix.source }}" = "fvm_wfs" ]; then
+          if [ "$MATRIX_SOURCE" = "fvm_wfs" ]; then
             # FVM WFS - trigger the dedicated matrix workflow
             echo "🚜 FVM WFS detected - triggering dedicated matrix workflow"
 
@@ -230,7 +236,7 @@ jobs:
               cat /tmp/curl_response.txt
               exit 1
             fi
-          elif [ "${{ matrix.source }}" = "drive_data" ]; then
+          elif [ "$MATRIX_SOURCE" = "drive_data" ]; then
             # Google Drive - trigger the dedicated pipeline workflow
             echo "📁 Google Drive pipeline detected - triggering dedicated workflow"
 
@@ -247,7 +253,7 @@ jobs:
               cat /tmp/curl_response.txt
               exit 1
             fi
-          elif [ "${{ matrix.source }}" = "bbr_buildings" ]; then
+          elif [ "$MATRIX_SOURCE" = "bbr_buildings" ]; then
             # BBR Buildings - trigger the dedicated pipeline workflow
             echo "🏢 BBR Buildings pipeline detected - triggering dedicated workflow"
 
@@ -266,17 +272,16 @@ jobs:
             fi
           else
             # Regular pipeline execution
-            SOURCE="${{ matrix.source }}"
             STAGE="${{ github.event.inputs.stage || 'all' }}"
 
-            if [ -z "$SOURCE" ]; then
+            if [ -z "$MATRIX_SOURCE" ]; then
               echo "❌ ERROR: matrix.source is empty or null"
               echo "Matrix values: ${{ toJson(matrix) }}"
               exit 1
             fi
 
-            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
-            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
+            echo "🚀 Executing: python -m unified_pipeline run -s ${MATRIX_SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${MATRIX_SOURCE}" -j "${STAGE}"
           fi
 
           # Stop monitoring
@@ -285,7 +290,7 @@ jobs:
             echo "Resource monitoring stopped"
           fi
 
-          echo "✅ Monthly foundation pipeline completed: ${{ matrix.source }}"
+          echo "✅ Monthly foundation pipeline completed: $MATRIX_SOURCE"
           echo "⏰ Finished at: $(date)"
 
       - name: Cleanup temporary files
@@ -396,19 +401,26 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Monthly Dependent Pipeline - ${{ matrix.source }}
+        env:
+          # Pass matrix values through env vars to avoid bash syntax errors from special chars
+          # See: https://github.com/orgs/community/discussions/128282
+          MATRIX_SOURCE: ${{ matrix.source }}
+          MATRIX_DESCRIPTION: ${{ matrix.description }}
+          MATRIX_DURATION: ${{ matrix.duration_est }}
+          MATRIX_DEPENDENCIES: ${{ matrix.dependencies }}
         run: |
-          echo "🗓️ Running monthly dependent pipeline: ${{ matrix.source }}"
-          echo "📝 Description: ${{ matrix.description }}"
-          echo "⏱️ Estimated duration: ${{ matrix.duration_est }}"
-          echo "🔗 Dependencies: ${{ matrix.dependencies }}"
+          echo "🗓️ Running monthly dependent pipeline: $MATRIX_SOURCE"
+          echo "📝 Description: $MATRIX_DESCRIPTION"
+          echo "⏱️ Estimated duration: $MATRIX_DURATION"
+          echo "🔗 Dependencies: $MATRIX_DEPENDENCIES"
           echo "🏗️ Batch: Dependent (runs after foundation)"
           echo "⏰ Started at: $(date)"
 
           cd backend/pipelines/unified_pipeline
 
           # Resource monitoring for memory-intensive jobs
-          if [ "${{ matrix.source }}" = "property_cadastral_merge" ] || [ "${{ matrix.source }}" = "field_area_analysis" ] || [ "${{ matrix.source }}" = "cvr_enrichment" ]; then
-            echo "🔍 Starting resource monitoring for ${{ matrix.source }}"
+          if [ "$MATRIX_SOURCE" = "property_cadastral_merge" ] || [ "$MATRIX_SOURCE" = "field_area_analysis" ] || [ "$MATRIX_SOURCE" = "cvr_enrichment" ]; then
+            echo "🔍 Starting resource monitoring for $MATRIX_SOURCE"
             {
               while true; do
                 sleep 120  # Check every 2 minutes
@@ -433,7 +445,7 @@ jobs:
           fi
 
           # Handle special cases
-          if [ "${{ matrix.source }}" = "cvr_enrichment" ]; then
+          if [ "$MATRIX_SOURCE" = "cvr_enrichment" ]; then
             # CVR Enrichment - trigger the dedicated workflow with job splitting
             echo "🏢 CVR Enrichment detected - triggering dedicated workflow with job splitting"
 
@@ -454,7 +466,7 @@ jobs:
               cat /tmp/curl_response.txt
               exit 1
             fi
-          elif [ "${{ matrix.source }}" = "field_area_analysis" ]; then
+          elif [ "$MATRIX_SOURCE" = "field_area_analysis" ]; then
             # Field Area Analysis - trigger the dedicated matrix workflow
             echo "📊 Field Area Analysis detected - triggering dedicated matrix workflow"
             curl -X POST \
@@ -463,7 +475,7 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
               -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","agricultural_fields_year":"both"}}'
             echo "✅ Field Area Analysis matrix workflow triggered successfully"
-          elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
+          elif [ "$MATRIX_SOURCE" = "fvm_wfs" ]; then
             # FVM WFS - trigger the dedicated matrix workflow
             echo "🚜 FVM WFS detected - triggering dedicated matrix workflow"
 
@@ -482,17 +494,16 @@ jobs:
             fi
           else
             # Regular pipeline execution
-            SOURCE="${{ matrix.source }}"
             STAGE="${{ github.event.inputs.stage || 'all' }}"
 
-            if [ -z "$SOURCE" ]; then
+            if [ -z "$MATRIX_SOURCE" ]; then
               echo "❌ ERROR: matrix.source is empty or null"
               echo "Matrix values: ${{ toJson(matrix) }}"
               exit 1
             fi
 
-            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
-            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
+            echo "🚀 Executing: python -m unified_pipeline run -s ${MATRIX_SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${MATRIX_SOURCE}" -j "${STAGE}"
           fi
 
           # Stop monitoring
@@ -501,7 +512,7 @@ jobs:
             echo "Resource monitoring stopped"
           fi
 
-          echo "✅ Monthly dependent pipeline completed: ${{ matrix.source }}"
+          echo "✅ Monthly dependent pipeline completed: $MATRIX_SOURCE"
           echo "⏰ Finished at: $(date)"
 
       - name: Cleanup temporary files for memory-intensive jobs

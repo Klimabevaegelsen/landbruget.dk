@@ -607,3 +607,6 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             )
 
             self.log.info("Saved processed data successfully")
+
+            # Return processed table name for gold layer (in-memory passing)
+            return table_name
