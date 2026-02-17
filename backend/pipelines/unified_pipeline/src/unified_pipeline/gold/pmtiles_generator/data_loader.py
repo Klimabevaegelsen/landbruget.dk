@@ -517,6 +517,11 @@ class PMTilesDataLoader:
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
                     field_uuid,
+                    -- Extract field_id from MatchedBlockID (stored as 'block_' || field_id)
+                    -- Used as stable join key since field_uuid changes when FVM geometry is re-run
+                    REGEXP_REPLACE(
+                        COALESCE(MatchedBlockID, ''), '^block_', ''
+                    ) as field_id,
                     COUNT(*) as pesticide_applications,
                     STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
 
@@ -655,7 +660,8 @@ class PMTilesDataLoader:
                     water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {enhanced_pesticide_table}
-                GROUP BY field_uuid, residential_buildings_formatted,
+                GROUP BY field_uuid, REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
+                         residential_buildings_formatted,
                          educational_facilities_formatted, water_distance_formatted
                 """
             else:
@@ -664,6 +670,10 @@ class PMTilesDataLoader:
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
                     field_uuid,
+                    -- Extract field_id from MatchedBlockID (stored as 'block_' || field_id)
+                    REGEXP_REPLACE(
+                        COALESCE(MatchedBlockID, ''), '^block_', ''
+                    ) as field_id,
                     COUNT(*) as pesticide_applications,
                     STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
 
@@ -746,7 +756,8 @@ class PMTilesDataLoader:
                     water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {pesticide_table}
-                GROUP BY field_uuid, residential_buildings_formatted,
+                GROUP BY field_uuid, REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
+                         residential_buildings_formatted,
                          educational_facilities_formatted, water_distance_formatted
                 """
 
@@ -853,7 +864,7 @@ class PMTilesDataLoader:
                 ps.water_distance_formatted,
                 ps.avg_match_confidence
             FROM {integrated_table} i
-            LEFT JOIN temp_pesticide_summary ps ON i.field_uuid = ps.field_uuid
+            LEFT JOIN temp_pesticide_summary ps ON CAST(i.field_id AS VARCHAR) = ps.field_id
             """
 
             await asyncio.to_thread(self.conn.execute, update_query)
@@ -874,8 +885,8 @@ class PMTilesDataLoader:
                     f"SELECT field_uuid, unique_pesticide_products, total_pesticide_belastning "
                     f"FROM {integrated_table}_updated WHERE unique_pesticide_products > 0 LIMIT 1",
                 )
-                if sample_integration.fetchone():
-                    sample = sample_integration.fetchone()
+                sample = sample_integration.fetchone()
+                if sample:
                     logger.info(f"DEBUG: Sample data - field: {sample[0]}, products: {sample[1]}")
                 else:
                     logger.warning("DEBUG: No records found with pesticide data after integration!")
