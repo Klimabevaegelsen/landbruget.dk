@@ -653,15 +653,13 @@ class PMTilesDataLoader:
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
 
 
-                    -- Proximity data
-                    residential_buildings_formatted,
-                    educational_facilities_formatted,
-                    water_distance_formatted,
+                    -- Proximity data (ANY_VALUE since proximity is per field_uuid which may vary)
+                    ANY_VALUE(residential_buildings_formatted) as residential_buildings_formatted,
+                    ANY_VALUE(educational_facilities_formatted) as educational_facilities_formatted,
+                    ANY_VALUE(water_distance_formatted) as water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {enhanced_pesticide_table}
-                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
-                         residential_buildings_formatted,
-                         educational_facilities_formatted, water_distance_formatted
+                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', '')
                 """
             else:
                 # Fallback to basic aggregation without BMD classifications
@@ -748,15 +746,13 @@ class PMTilesDataLoader:
                     SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
 
-                    -- Proximity data
-                    residential_buildings_formatted,
-                    educational_facilities_formatted,
-                    water_distance_formatted,
+                    -- Proximity data (ANY_VALUE since proximity is per field_uuid which may vary)
+                    ANY_VALUE(residential_buildings_formatted) as residential_buildings_formatted,
+                    ANY_VALUE(educational_facilities_formatted) as educational_facilities_formatted,
+                    ANY_VALUE(water_distance_formatted) as water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {pesticide_table}
-                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
-                         residential_buildings_formatted,
-                         educational_facilities_formatted, water_distance_formatted
+                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', '')
                 """
 
             await asyncio.to_thread(self.conn.execute, summary_query)
