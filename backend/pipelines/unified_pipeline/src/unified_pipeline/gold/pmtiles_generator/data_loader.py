@@ -516,7 +516,6 @@ class PMTilesDataLoader:
                 summary_query = f"""
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
-                    field_uuid,
                     -- Extract field_id from MatchedBlockID (stored as 'block_' || field_id)
                     -- Used as stable join key since field_uuid changes when FVM geometry is re-run
                     REGEXP_REPLACE(
@@ -660,7 +659,7 @@ class PMTilesDataLoader:
                     water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {enhanced_pesticide_table}
-                GROUP BY field_uuid, REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
+                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
                          residential_buildings_formatted,
                          educational_facilities_formatted, water_distance_formatted
                 """
@@ -669,7 +668,6 @@ class PMTilesDataLoader:
                 summary_query = f"""
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
-                    field_uuid,
                     -- Extract field_id from MatchedBlockID (stored as 'block_' || field_id)
                     REGEXP_REPLACE(
                         COALESCE(MatchedBlockID, ''), '^block_', ''
@@ -756,7 +754,7 @@ class PMTilesDataLoader:
                     water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {pesticide_table}
-                GROUP BY field_uuid, REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
+                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', ''),
                          residential_buildings_formatted,
                          educational_facilities_formatted, water_distance_formatted
                 """
