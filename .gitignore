@@ -248,3 +248,6 @@ data_samples/
 
 # Claude Code local settings (not committed, agent-specific)
 .claude/settings.local.json
+
+# Vercel
+.vercel

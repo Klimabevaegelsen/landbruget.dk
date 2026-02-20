@@ -1,0 +1,34 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": [
+        "https://data.landbruget.dk",
+        "https://data-staging.landbruget.dk",
+        "https://*.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:3001"
+      ],
+      "AllowedMethods": [
+        "GET",
+        "HEAD"
+      ],
+      "AllowedHeaders": [
+        "Content-Type",
+        "Range",
+        "If-Modified-Since",
+        "If-None-Match",
+        "Accept",
+        "Accept-Encoding"
+      ],
+      "ExposeHeaders": [
+        "Content-Range",
+        "Accept-Ranges",
+        "ETag",
+        "Last-Modified",
+        "Content-Length",
+        "Content-Type"
+      ],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}
