@@ -28,7 +28,6 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("latest_sync")
@@ -39,10 +38,7 @@ EXCLUDE_DATASETS = {"property_owners"}
 
 def rclone_lsd(path: str) -> list[str]:
     """List subdirectories of a remote path."""
-    result = subprocess.run(
-        ["rclone", "lsd", path],
-        capture_output=True, text=True, check=True
-    )
+    result = subprocess.run(["rclone", "lsd", path], capture_output=True, text=True, check=True)
     dirs = []
     for line in result.stdout.splitlines():
         parts = line.strip().split()
@@ -70,7 +66,7 @@ def copy_file(src: str, dst: str, dry_run: bool = False) -> bool:
     if dry_run:
         cmd.append("--dry-run")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to copy {src} -> {dst}: {e.stderr}")
@@ -91,12 +87,20 @@ def sync_latest(
     # Configure rclone R2 remote
     r2_endpoint = f"https://{r2_account_id}.r2.cloudflarestorage.com"
     subprocess.run(
-        ["rclone", "config", "create", "r2", "s3",
-         f"access_key_id={r2_access_key_id}",
-         f"secret_access_key={r2_secret_access_key}",
-         f"endpoint={r2_endpoint}",
-         "provider=Cloudflare", "--non-interactive"],
-        capture_output=True, check=False
+        [
+            "rclone",
+            "config",
+            "create",
+            "r2",
+            "s3",
+            f"access_key_id={r2_access_key_id}",
+            f"secret_access_key={r2_secret_access_key}",
+            f"endpoint={r2_endpoint}",
+            "provider=Cloudflare",
+            "--non-interactive",
+        ],
+        capture_output=True,
+        check=False,
     )
 
     manifest_datasets = []
@@ -142,18 +146,22 @@ def sync_latest(
             if ok:
                 total_copied += 1
                 if not dry_run:
-                    manifest_datasets.append({
-                        "layer": layer,
-                        "name": dataset,
-                        "snapshot": latest,
-                        "r2_path": f"{layer}/{dataset}/data.parquet",
-                        "gcs_src": src,
-                    })
+                    manifest_datasets.append(
+                        {
+                            "layer": layer,
+                            "name": dataset,
+                            "snapshot": latest,
+                            "r2_path": f"{layer}/{dataset}/data.parquet",
+                            "gcs_src": src,
+                        }
+                    )
             else:
                 total_failed += 1
 
     logger.info("=" * 60)
-    logger.info(f"{'[DRY RUN] ' if dry_run else ''}Done: {total_copied} copied, {total_skipped} skipped, {total_failed} failed")
+    logger.info(
+        f"{'[DRY RUN] ' if dry_run else ''}Done: {total_copied} copied, {total_skipped} skipped, {total_failed} failed"
+    )
 
     return {
         "copied": total_copied,
@@ -173,18 +181,20 @@ def build_manifest(
     entries = []
     for ds in datasets:
         url = f"{r2_base_url.rstrip('/')}/{ds['layer']}/{ds['name']}/data.parquet"
-        entries.append({
-            "name": ds["name"],
-            "displayName": ds["name"].replace("_", " ").title(),
-            "description": f"{ds['layer'].title()} layer dataset",
-            "url": url,
-            "layer": ds["layer"],
-            "snapshot": ds.get("snapshot", ""),
-            "rowCount": 0,
-            "sizeBytes": 0,
-            "columns": 0,
-            "lastUpdated": datetime.now(timezone.utc).isoformat(),
-        })
+        entries.append(
+            {
+                "name": ds["name"],
+                "displayName": ds["name"].replace("_", " ").title(),
+                "description": f"{ds['layer'].title()} layer dataset",
+                "url": url,
+                "layer": ds["layer"],
+                "snapshot": ds.get("snapshot", ""),
+                "rowCount": 0,
+                "sizeBytes": 0,
+                "columns": 0,
+                "lastUpdated": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
     manifest = {
         "version": "1.0",

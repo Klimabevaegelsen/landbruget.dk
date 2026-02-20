@@ -12,14 +12,11 @@ For each dataset in the manifest:
 """
 
 import json
-import os
-import sys
-import time
-import subprocess
 import logging
-import concurrent.futures
+import os
+import subprocess
+import time
 from pathlib import Path
-from typing import Optional
 
 import duckdb
 import google.generativeai as genai
@@ -45,7 +42,6 @@ KNOWN_COLUMNS: dict[str, str] = {
     "field_uuid": "Deterministic UUID generated from field geometry. Stable across years, allowing tracking of the same physical field over time.",
     "block_id": "Field block identifier (Danish: Markblok / MB_NR). Groups multiple fields into larger administrative blocks. Used as spatial reference unit for subsidies.",
     "primary_field_id": "Primary field reference ID, linking back to the original source field register.",
-
     # Company identifiers
     "cvr_number": "Danish Central Business Register number (CVR). 8-digit company/farm identifier. IMPORTANT: stored as VARCHAR (string) in most silver tables but INT32 in cvr_enrichment_companies — always use TRY_CAST(cvr_number AS INTEGER) when joining to cvr_enrichment_companies.",
     "company_uuid": "Deterministic UUID generated from CVR number. Used as primary key in gold layer company tables.",
@@ -58,7 +54,6 @@ KNOWN_COLUMNS: dict[str, str] = {
     "primary_industry_code": "Danish industry classification code (DB07). 6-digit code. Codes starting with '01' = crop farming, '02' = forestry, '03' = fishing, '10-11' = food processing.",
     "primary_industry_description": "Human-readable description of the primary industry code.",
     "pnumber_count": "Number of production units (P-numbers) associated with this CVR company.",
-
     # Address / geographic
     "latitude": "WGS84 latitude of company headquarters (EPSG:4326).",
     "longitude": "WGS84 longitude of company headquarters (EPSG:4326).",
@@ -67,7 +62,6 @@ KNOWN_COLUMNS: dict[str, str] = {
     "current_city": "City name from company address.",
     "current_postal_code": "Danish postal code (postnummer).",
     "address_geom": "WKB binary geometry of company address point (EPSG:4326). Use ST_AsText() to convert.",
-
     # Field attributes
     "area_ha": "Field area in hectares. Source: IMK_areal (Imago-Marked area) — the officially registered area used for EU subsidy calculations.",
     "crop_code": "Crop classification code (Danish: Afgkode). Integer code identifying the crop type. Maps to crop_name.",
@@ -83,7 +77,6 @@ KNOWN_COLUMNS: dict[str, str] = {
     "journal_number": "Administrative journal number (Danish: Journalnr). Internal reference from FVM (Danish Agricultural Authority).",
     "year": "Data year. Used to filter time series tables. Always filter on specific year for performance.",
     "municipality": "Municipality name where the field is located.",
-
     # Environmental / land
     "bfe_number": "Cadastral parcel number (BFE-nummer). Identifies land parcels in the Danish property register (Matrikelregistret). Format varies by municipality.",
     "toerv_pct": "Peat percentage category (Danish: tørvprocent). Values: '>12' (high peat content, >12%), '6-12' (medium peat), other values = low/no peat. Critical for carbon/wetland analysis.",
@@ -92,40 +85,32 @@ KNOWN_COLUMNS: dict[str, str] = {
     "property_bnbo_total_m2": "Total BNBO (drinking water protection zone) area intersecting the property in m².",
     "property_grukos_total_m2": "Total groundwater protection area (grukos) intersecting the property in m².",
     "property_intersection_area_m2": "Total intersection area between the agricultural field/property and the analysis layer in m².",
-
     # Yield / production
     "yield_estimate_hkg_ha": "Estimated crop yield in hectokilograms per hectare (hkg/ha). 1 hkg = 100 kg. Source: DST (Danmarks Statistik) regional yield statistics.",
     "yield_estimation_method": "Method used to estimate yield: 'dst_region_match' = matched to DST region average, 'no_yield_data' = no DST data available for this crop/year.",
     "production_estimate_hkg": "Total estimated production in hectokilograms (area_ha × yield_estimate_hkg_ha).",
     "production_unit": "Unit for production estimate (typically 'hkg' = hectokilogram).",
-
     # Geographic / statistical zones
     "landsdel_code": "DAGI geographic sub-region code (landsdel). E.g. 'DK011' = Byen København, 'DK021' = Østjylland. Used for DST statistical reporting.",
     "landsdel_name": "Name of the DAGI landsdel (geographic sub-region). 11 landsdele cover all of Denmark.",
     "dst_regions": "Pipe-separated DST (Danmarks Statistik) statistical region codes for this area. Used for matching to DST harvest statistics.",
     "dagi_region_name": "DAGI administrative region name. One of: Region Hovedstaden, Region Midtjylland, Region Nordjylland, Region Sjælland, Region Syddanmark.",
     "dagi_region_code": "DAGI administrative region code.",
-
     # Soil
     "soil_code": "JB soil classification code (KODE). Danish soil type classification system. JB1=coarse sand, JB2=fine sand, JB3=sandy loam, JB4=sandy clay, JB5=loam, JB6=clay loam, JB7=clay, JB8=heavy clay.",
     "soil_description": "Soil type description in Danish (JORD_TEKST). Full name of soil classification.",
-
     # Water / climate
     "projektnavn": "Name of the water restoration project (Danish: projektnavn = project name).",
     "startdato": "Project start date.",
     "slutdato": "Project end date.",
     "parameter_id": "DMI climate parameter ID. E.g. 'pot_evaporation_makkink' = potential evaporation.",
     "avg_value": "Average measurement value for the time period.",
-
     # GEUS groundwater
     "gridcode": "Grid cell classification code used in wetland mapping.",
-
     # CVR financial
-    "dissolution_date": "Date company was dissolved (null if active).",
     "advertisement_protection": "Boolean: true if company has opted out of marketing contact.",
     "dawa_enriched": "Boolean: true if address was successfully geocoded via DAWA (Danish Address Web API).",
     "coordinate_quality": "Quality level of geocoded coordinates from DAWA.",
-
     # Timestamps
     "created_at": "Record creation timestamp (when pipeline processed this record).",
     "processed_at": "Pipeline processing timestamp.",
@@ -136,6 +121,7 @@ KNOWN_COLUMNS: dict[str, str] = {
 }
 
 # ── Parquet metadata extraction ───────────────────────────────────────────────
+
 
 def get_parquet_stats(url: str) -> dict:
     """Read column stats from parquet metadata via DuckDB HTTP range requests."""
@@ -170,8 +156,7 @@ def get_sample_values(url: str, columns: list[str], n: int = 5) -> dict[str, lis
     samples: dict[str, list] = {}
     # Only sample non-geometry, non-binary columns
     sample_cols = [
-        c for c in columns
-        if not any(k in c.lower() for k in ("geom", "geometry", "wkt", "wkb", "_json", "uuid"))
+        c for c in columns if not any(k in c.lower() for k in ("geom", "geometry", "wkt", "wkb", "_json", "uuid"))
     ][:20]  # cap at 20 cols to keep it fast
     if not sample_cols:
         return {}
@@ -197,6 +182,7 @@ def get_sample_values(url: str, columns: list[str], n: int = 5) -> dict[str, lis
 
 # ── Gemini description generation ────────────────────────────────────────────
 
+
 def build_prompt(ds: dict, stats: dict, samples: dict) -> str:
     schema = ds.get("schema", [])
     lines = []
@@ -221,11 +207,11 @@ def build_prompt(ds: dict, stats: dict, samples: dict) -> str:
 
     return f"""You are building a data catalog for Danish agricultural data in DuckDB.
 
-Table: {ds['name']}
-Display name: {ds['displayName']}
-Layer: {ds['layer']}
-Rows: {ds['rowCount']:,}
-Current description: {ds['description']}
+Table: {ds["name"]}
+Display name: {ds["displayName"]}
+Layer: {ds["layer"]}
+Rows: {ds["rowCount"]:,}
+Current description: {ds["description"]}
 
 Columns:
 {chr(10).join(lines)}
@@ -264,6 +250,7 @@ def generate_descriptions(ds: dict, stats: dict, samples: dict, model) -> dict:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+
 
 def _is_empty_column(stats: dict, sample_values: list) -> bool:
     """Return True if a column appears to contain no real data (all null/zero/nan)."""
@@ -345,30 +332,32 @@ def main():
     for i, ds in enumerate(datasets):
         name = ds["name"]
         if name in existing:
-            log.info(f"[{i+1}/{len(datasets)}] Skipping {name} (already done)")
+            log.info(f"[{i + 1}/{len(datasets)}] Skipping {name} (already done)")
             catalog_entries.append(existing[name])
             continue
 
         try:
             entry = process_dataset(ds, model)
             catalog_entries.append(entry)
-            log.info(f"[{i+1}/{len(datasets)}] ✓ {name}")
+            log.info(f"[{i + 1}/{len(datasets)}] ✓ {name}")
         except Exception as e:
-            log.error(f"[{i+1}/{len(datasets)}] ✗ {name}: {e}")
+            log.error(f"[{i + 1}/{len(datasets)}] ✗ {name}: {e}")
             failed.append(name)
             # Still add a basic entry so we can resume later
-            catalog_entries.append({
-                "name": name,
-                "description": ds["description"],
-                "layer": ds["layer"],
-                "url": ds["url"],
-                "rowCount": ds["rowCount"],
-                "sizeBytes": ds["sizeBytes"],
-                "columns": ds.get("columns", 0),
-                "schema": ds.get("schema", []),
-                "columnDescriptions": {},
-                "columnStats": {},
-            })
+            catalog_entries.append(
+                {
+                    "name": name,
+                    "description": ds["description"],
+                    "layer": ds["layer"],
+                    "url": ds["url"],
+                    "rowCount": ds["rowCount"],
+                    "sizeBytes": ds["sizeBytes"],
+                    "columns": ds.get("columns", 0),
+                    "schema": ds.get("schema", []),
+                    "columnDescriptions": {},
+                    "columnStats": {},
+                }
+            )
 
         # Save progress every 10 datasets
         if (i + 1) % 10 == 0:
@@ -414,8 +403,7 @@ def _update_manifest(manifest: dict, catalog_entries: list):
 
 def _upload_to_r2(local_path: Path, r2_dest: str):
     result = subprocess.run(
-        ["rclone", "copyto", str(local_path), r2_dest, "--s3-no-check-bucket"],
-        capture_output=True, text=True
+        ["rclone", "copyto", str(local_path), r2_dest, "--s3-no-check-bucket"], capture_output=True, text=True
     )
     if result.returncode != 0:
         log.error(f"Upload failed for {local_path}: {result.stderr}")

@@ -27,7 +27,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 # Add parent directory to path to access common modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -423,7 +423,7 @@ def main() -> int:
         # Generate manifest
         if not args.dry_run:
             manifest = syncer.generate_manifest(output_path=args.manifest)
-            logger.info(f"\nManifest summary:")
+            logger.info("\nManifest summary:")
             logger.info(f"  Total datasets: {len(manifest.get('datasets', {}))}")
             logger.info(f"  All successful: {manifest['all_successful']}")
 

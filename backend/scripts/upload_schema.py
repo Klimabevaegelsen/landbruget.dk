@@ -46,7 +46,6 @@ except ImportError:
 # Import Google GenAI SDK
 try:
     from google import genai
-    from google.genai import types
 except ImportError:
     print("ERROR: google-genai package not installed.\nInstall with: pip install google-genai")
     sys.exit(1)
