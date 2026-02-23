@@ -197,10 +197,16 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             if bounds and all(v is not None for v in bounds):
                 min_x, max_x, min_y, max_y = bounds
                 is_wgs84_lon_lat = (
-                    7 <= min_x <= 16 and 7 <= max_x <= 16 and 54 <= min_y <= 58 and 54 <= max_y <= 58
+                    7 <= min_x <= 16
+                    and 7 <= max_x <= 16
+                    and 54 <= min_y <= 58
+                    and 54 <= max_y <= 58
                 )
                 is_wgs84_lat_lon = (
-                    54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
+                    54 <= min_x <= 58
+                    and 54 <= max_x <= 58
+                    and 7 <= min_y <= 16
+                    and 7 <= max_y <= 16
                 )
                 is_utm32 = (
                     440000 <= min_x <= 900000

@@ -34,7 +34,9 @@ class PropertiesPreFilter(PreFilteringStageBase):
 
         # Detect CRS/axis mismatch between fields and properties, then normalize
         # properties to match fields so downstream field-property joins remain consistent.
-        def detect_geometry_profile(table_name: str) -> tuple[str, tuple[float, float, float, float] | None]:
+        def detect_geometry_profile(
+            table_name: str,
+        ) -> tuple[str, tuple[float, float, float, float] | None]:
             bounds = self.conn.execute(f"""
                 SELECT
                     MIN(ST_XMin(geometry)) as min_x,
@@ -92,7 +94,9 @@ class PropertiesPreFilter(PreFilteringStageBase):
                     "⚠️ CRS mismatch detected: fields are EPSG:25832 and properties are WGS84 "
                     "(lon,lat). Transforming properties to EPSG:25832."
                 )
-                geometry_expr = "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true)"
+                geometry_expr = (
+                    "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true)"
+                )
             elif props_raw_profile == "wgs84_lat_lon":
                 self.log.warning(
                     "⚠️ CRS+axis mismatch detected: fields are EPSG:25832 and properties are WGS84 "
@@ -120,7 +124,9 @@ class PropertiesPreFilter(PreFilteringStageBase):
                     "⚠️ CRS mismatch detected: fields are WGS84 and properties are EPSG:25832. "
                     "Transforming properties to WGS84."
                 )
-                geometry_expr = "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)"
+                geometry_expr = (
+                    "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)"
+                )
             else:
                 self.log.warning(
                     "⚠️ Could not classify properties profile while fields are WGS84; "
