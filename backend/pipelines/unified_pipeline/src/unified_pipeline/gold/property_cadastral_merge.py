@@ -184,6 +184,63 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             self.conn.execute(merge_query)
 
+            # Normalize output geometry to EPSG:25832 (processing CRS) for downstream joins.
+            bounds = self.conn.execute("""
+                SELECT
+                    MIN(ST_XMin(geometry)) as min_x,
+                    MAX(ST_XMax(geometry)) as max_x,
+                    MIN(ST_YMin(geometry)) as min_y,
+                    MAX(ST_YMax(geometry)) as max_y
+                FROM merged_properties
+                WHERE geometry IS NOT NULL
+            """).fetchone()
+            if bounds and all(v is not None for v in bounds):
+                min_x, max_x, min_y, max_y = bounds
+                is_wgs84_lon_lat = (
+                    7 <= min_x <= 16 and 7 <= max_x <= 16 and 54 <= min_y <= 58 and 54 <= max_y <= 58
+                )
+                is_wgs84_lat_lon = (
+                    54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
+                )
+                is_utm32 = (
+                    440000 <= min_x <= 900000
+                    and 440000 <= max_x <= 900000
+                    and 6040000 <= min_y <= 6425000
+                    and 6040000 <= max_y <= 6425000
+                )
+
+                if is_wgs84_lon_lat:
+                    self.log.warning(
+                        "Geometry in merged_properties appears WGS84 (lon,lat); "
+                        "transforming to EPSG:25832."
+                    )
+                    self.conn.execute("""
+                        UPDATE merged_properties
+                        SET geometry = ST_Transform(
+                            geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true
+                        )
+                        WHERE geometry IS NOT NULL
+                    """)
+                elif is_wgs84_lat_lon:
+                    self.log.warning(
+                        "Geometry in merged_properties appears WGS84 (lat,lon); "
+                        "flipping and transforming to EPSG:25832."
+                    )
+                    self.conn.execute("""
+                        UPDATE merged_properties
+                        SET geometry = ST_Transform(
+                            ST_FlipCoordinates(geometry), 'EPSG:4326', 'EPSG:25832',
+                            always_xy := true
+                        )
+                        WHERE geometry IS NOT NULL
+                    """)
+                elif is_utm32:
+                    self.log.info("Geometry in merged_properties already appears EPSG:25832.")
+                else:
+                    self.log.warning(
+                        "Could not classify merged_properties geometry bounds; leaving geometry unchanged."
+                    )
+
             # Get merge statistics without loading data into memory
             merged_count = self.conn.execute("SELECT COUNT(*) FROM merged_properties").fetchone()[0]
 

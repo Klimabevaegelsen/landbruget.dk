@@ -32,13 +32,132 @@ class PropertiesPreFilter(PreFilteringStageBase):
         self.log.info("Loading full cadastral dataset (6.5M properties)...")
         self._load_silver_dataset("cadastral", "properties_raw")
 
-        # Add memory optimization and basic geometry validation
+        # Detect CRS/axis mismatch between fields and properties, then normalize
+        # properties to match fields so downstream field-property joins remain consistent.
+        def detect_geometry_profile(table_name: str) -> tuple[str, tuple[float, float, float, float] | None]:
+            bounds = self.conn.execute(f"""
+                SELECT
+                    MIN(ST_XMin(geometry)) as min_x,
+                    MAX(ST_XMax(geometry)) as max_x,
+                    MIN(ST_YMin(geometry)) as min_y,
+                    MAX(ST_YMax(geometry)) as max_y
+                FROM {table_name}
+                WHERE geometry IS NOT NULL
+            """).fetchone()
+
+            if not bounds or any(v is None for v in bounds):
+                return "unknown", None
+
+            min_x, max_x, min_y, max_y = bounds
+            is_wgs84_lon_lat = (
+                7 <= min_x <= 16 and 7 <= max_x <= 16 and 54 <= min_y <= 58 and 54 <= max_y <= 58
+            )
+            is_wgs84_lat_lon = (
+                54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
+            )
+            is_utm32 = (
+                440000 <= min_x <= 900000
+                and 440000 <= max_x <= 900000
+                and 6040000 <= min_y <= 6425000
+                and 6040000 <= max_y <= 6425000
+            )
+            if is_utm32:
+                return "utm32", bounds
+            if is_wgs84_lon_lat:
+                return "wgs84_lon_lat", bounds
+            if is_wgs84_lat_lon:
+                return "wgs84_lat_lon", bounds
+            return "unknown", bounds
+
+        fields_profile, fields_bounds = detect_geometry_profile("fields_for_filtering")
+        props_raw_profile, props_raw_bounds = detect_geometry_profile("properties_raw")
+
+        if fields_bounds:
+            self.log.info(
+                f"🌍 Fields bounds: X({fields_bounds[0]:.2f}, {fields_bounds[1]:.2f}), "
+                f"Y({fields_bounds[2]:.2f}, {fields_bounds[3]:.2f}) [{fields_profile}]"
+            )
+        if props_raw_bounds:
+            self.log.info(
+                f"🌍 Properties(raw) bounds: X({props_raw_bounds[0]:.2f}, {props_raw_bounds[1]:.2f}), "
+                f"Y({props_raw_bounds[2]:.2f}, {props_raw_bounds[3]:.2f}) [{props_raw_profile}]"
+            )
+
+        geometry_expr = "geometry"
+        if fields_profile == "utm32":
+            if props_raw_profile == "utm32":
+                self.log.info("✅ Fields/properties already aligned in EPSG:25832.")
+            elif props_raw_profile == "wgs84_lon_lat":
+                self.log.warning(
+                    "⚠️ CRS mismatch detected: fields are EPSG:25832 and properties are WGS84 "
+                    "(lon,lat). Transforming properties to EPSG:25832."
+                )
+                geometry_expr = "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true)"
+            elif props_raw_profile == "wgs84_lat_lon":
+                self.log.warning(
+                    "⚠️ CRS+axis mismatch detected: fields are EPSG:25832 and properties are WGS84 "
+                    "(lat,lon). Flipping then transforming properties to EPSG:25832."
+                )
+                geometry_expr = (
+                    "ST_Transform(ST_FlipCoordinates(geometry), 'EPSG:4326', "
+                    "'EPSG:25832', always_xy := true)"
+                )
+            else:
+                self.log.warning(
+                    "⚠️ Could not classify properties profile while fields are EPSG:25832; "
+                    "using properties geometry as-is."
+                )
+        elif fields_profile == "wgs84_lon_lat":
+            if props_raw_profile == "wgs84_lon_lat":
+                self.log.info("✅ Fields/properties already aligned in WGS84 (lon,lat).")
+            elif props_raw_profile == "wgs84_lat_lon":
+                self.log.warning(
+                    "⚠️ Axis-order mismatch detected in WGS84. Flipping properties to (lon,lat)."
+                )
+                geometry_expr = "ST_FlipCoordinates(geometry)"
+            elif props_raw_profile == "utm32":
+                self.log.warning(
+                    "⚠️ CRS mismatch detected: fields are WGS84 and properties are EPSG:25832. "
+                    "Transforming properties to WGS84."
+                )
+                geometry_expr = "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)"
+            else:
+                self.log.warning(
+                    "⚠️ Could not classify properties profile while fields are WGS84; "
+                    "using properties geometry as-is."
+                )
+        elif fields_profile == "wgs84_lat_lon":
+            if props_raw_profile == "wgs84_lon_lat":
+                self.log.warning(
+                    "⚠️ Fields appear WGS84 (lat,lon) while properties are (lon,lat). "
+                    "Flipping properties to match fields."
+                )
+                geometry_expr = "ST_FlipCoordinates(geometry)"
+            elif props_raw_profile == "utm32":
+                self.log.warning(
+                    "⚠️ Fields appear WGS84 (lat,lon) while properties are EPSG:25832. "
+                    "Transforming to WGS84 and flipping to match fields."
+                )
+                geometry_expr = (
+                    "ST_FlipCoordinates("
+                    "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)"
+                    ")"
+                )
+            else:
+                self.log.info("✅ Fields/properties already aligned to fields profile.")
+        else:
+            self.log.warning(
+                "⚠️ Could not confidently detect CRS/profile for fields; "
+                "using properties geometry as-is."
+            )
+
+        # Add memory optimization and basic geometry validation.
         self.log.info("Preparing properties dataset with memory optimization...")
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE properties_full AS
             SELECT
                 bfe_number,
-                geometry
+                {geometry_expr} as geometry
             FROM properties_raw
             WHERE geometry IS NOT NULL
               AND bfe_number IS NOT NULL
@@ -66,9 +185,11 @@ class PropertiesPreFilter(PreFilteringStageBase):
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
                     self.log.info(f"   Raw WKT {i + 1}: {wkt}")
-                    # Extract coordinates from "POINT(x y)" format
-                    if wkt and "POINT(" in wkt:
-                        coords_str = wkt.replace("POINT(", "").replace(")", "")
+                    # Extract coordinates from WKT "POINT (x y)" / "POINT(x y)" formats.
+                    if wkt and wkt.startswith("POINT"):
+                        coords_str = (
+                            wkt.replace("POINT", "").replace("(", "").replace(")", "").strip()
+                        )
                         try:
                             coord_parts = coords_str.split()
                             if len(coord_parts) >= 2:
@@ -265,7 +386,17 @@ class PropertiesPreFilter(PreFilteringStageBase):
 
         # Final statistics
         processing_time = time.time() - start_time
-        reduction_pct = (1 - total_filtered / total_properties) * 100
+        reduction_pct = (
+            (1 - total_filtered / total_properties) * 100 if total_properties > 0 else 0.0
+        )
+        if total_filtered > 0:
+            performance_improvement = (
+                f"{total_properties / total_filtered:.1f}x reduction in Stage 1 complexity"
+            )
+        elif total_properties > 0:
+            performance_improvement = "No properties remained after filtering"
+        else:
+            performance_improvement = "No input properties to process"
 
         self.log.info(
             f"🎯 MASSIVE REDUCTION: {total_properties:,} → {total_filtered:,} properties "
@@ -286,9 +417,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
             "reduction_percentage": reduction_pct,
             "processing_time_seconds": processing_time,
             "output_path": output_path,
-            "performance_improvement": (
-                f"{total_properties / total_filtered:.1f}x reduction in Stage 1 complexity"
-            ),
+            "performance_improvement": performance_improvement,
         }
 
     def _save_output_data(self, result: dict[str, Any]):

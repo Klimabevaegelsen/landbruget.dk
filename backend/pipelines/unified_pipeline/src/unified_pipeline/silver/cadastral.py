@@ -598,6 +598,68 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
                     geometry_column="geometry",
                 )
 
+        # Final CRS guardrail: enforce cadastral silver output in EPSG:25832.
+        bounds = self.conn.execute(f"""
+            SELECT
+                MIN(ST_XMin(geometry)) as min_x,
+                MAX(ST_XMax(geometry)) as max_x,
+                MIN(ST_YMin(geometry)) as min_y,
+                MAX(ST_YMax(geometry)) as max_y
+            FROM {processed_table}
+            WHERE geometry IS NOT NULL
+        """).fetchone()
+
+        if bounds and all(v is not None for v in bounds):
+            min_x, max_x, min_y, max_y = bounds
+            self.log.info(
+                f"Cadastral geometry bounds before final CRS guardrail: "
+                f"X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
+            )
+
+            is_wgs84_lon_lat = (
+                7 <= min_x <= 16 and 7 <= max_x <= 16 and 54 <= min_y <= 58 and 54 <= max_y <= 58
+            )
+            is_wgs84_lat_lon = (
+                54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
+            )
+            is_utm32 = (
+                440000 <= min_x <= 900000
+                and 440000 <= max_x <= 900000
+                and 6040000 <= min_y <= 6425000
+                and 6040000 <= max_y <= 6425000
+            )
+
+            if is_wgs84_lon_lat:
+                self.log.warning(
+                    "Cadastral output appears WGS84 (lon,lat); transforming to EPSG:25832."
+                )
+                self.conn.execute(f"""
+                    UPDATE {processed_table}
+                    SET geometry = ST_Transform(
+                        geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true
+                    )
+                    WHERE geometry IS NOT NULL
+                """)
+            elif is_wgs84_lat_lon:
+                self.log.warning(
+                    "Cadastral output appears WGS84 (lat,lon); flipping and transforming "
+                    "to EPSG:25832."
+                )
+                self.conn.execute(f"""
+                    UPDATE {processed_table}
+                    SET geometry = ST_Transform(
+                        ST_FlipCoordinates(geometry), 'EPSG:4326', 'EPSG:25832',
+                        always_xy := true
+                    )
+                    WHERE geometry IS NOT NULL
+                """)
+            elif is_utm32:
+                self.log.info("Cadastral output already in EPSG:25832.")
+            else:
+                self.log.warning(
+                    "Could not classify cadastral output bounds; leaving geometry unchanged."
+                )
+
         # Create dissolved version (skip in bronze/silver to save time, move to gold if needed)
         create_dissolved = os.getenv("CADASTRAL_CREATE_DISSOLVED", "false").lower() == "true"
         if create_dissolved:
