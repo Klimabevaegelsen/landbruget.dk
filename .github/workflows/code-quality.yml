@@ -140,8 +140,12 @@ jobs:
         FAILED=0
 
         # Check for google.cloud.storage imports in Python files
-        MATCHES=$(grep -rn "from google\.cloud import.*storage\|import google\.cloud\.storage" \
-          --include="*.py" . | grep -v -E "$ALLOWLIST_PATTERN" || true)
+        MATCHES=$(grep -rEn "^[[:space:]]*(from[[:space:]]+google\.cloud[[:space:]]+import[[:space:]]+storage|import[[:space:]]+google\.cloud\.storage([[:space:]]|$))" \
+          --include="*.py" \
+          --exclude-dir=".venv" \
+          --exclude-dir="venv" \
+          --exclude-dir="site-packages" \
+          . | grep -v -E "$ALLOWLIST_PATTERN" || true)
         if [ -n "$MATCHES" ]; then
           echo "### New google.cloud.storage imports found:" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
@@ -152,8 +156,12 @@ jobs:
         fi
 
         # Check for new gcsfs imports in Python files
-        MATCHES=$(grep -rn "import gcsfs\|from gcsfs" \
-          --include="*.py" . | grep -v -E "$ALLOWLIST_PATTERN" || true)
+        MATCHES=$(grep -rEn "^[[:space:]]*(import[[:space:]]+gcsfs([[:space:]]|$)|from[[:space:]]+gcsfs[[:space:]]+import[[:space:]])" \
+          --include="*.py" \
+          --exclude-dir=".venv" \
+          --exclude-dir="venv" \
+          --exclude-dir="site-packages" \
+          . | grep -v -E "$ALLOWLIST_PATTERN" || true)
         if [ -n "$MATCHES" ]; then
           echo "### New gcsfs imports found:" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
