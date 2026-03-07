@@ -49,7 +49,7 @@ class StoetteoplysningerSilverConfig(BaseJobConfig):
     type: str = "transformation"
     description: str = "EU CAP payment data - EAGF and EAFRD funds"
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Bronze source
     bronze_path: str = Field(

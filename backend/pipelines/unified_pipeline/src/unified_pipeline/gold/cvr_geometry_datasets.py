@@ -25,7 +25,7 @@ class CVRGeometryDatasetsConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Link geometries (points and polygons) to CVR numbers for spatial analysis"
     frequency: str = "weekly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Phase 1: Point geometries
     process_address_points: bool = Field(

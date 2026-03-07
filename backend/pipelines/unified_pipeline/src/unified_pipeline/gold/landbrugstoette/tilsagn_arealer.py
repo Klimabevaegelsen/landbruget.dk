@@ -32,7 +32,7 @@ class TilsagnArealerGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Unified spatial subsidies - organic, grassland, environmental"
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Silver input datasets (from FVM WFS processor)
     organic_dataset: str = Field(
