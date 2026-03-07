@@ -16,7 +16,6 @@ from typing import Any
 
 import duckdb
 from dotenv import load_dotenv
-from google.cloud import storage
 
 # Import DateTimeEncoder for JSON serialization
 
@@ -27,20 +26,20 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize storage configuration
-GCS_BUCKET = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
-USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
+GCS_BUCKET = os.getenv("R2_BUCKET", "landbrugsdata-raw-data")
 
-# Initialize GCS client if available
-gcs_client = None
-if USE_GCS:
-    try:
-        gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
-        logger.debug(f"Initialized GCS client for project: {GOOGLE_CLOUD_PROJECT}")
-    except Exception as e:
-        logger.error(f"Failed to initialize GCS client: {e}")
-        logger.warning("Falling back to local storage")
-        USE_GCS = False
+# Initialize R2/S3 filesystem if available
+_r2_fs = None
+USE_GCS = False
+try:
+    from common.gcs.filesystem import get_r2_filesystem
+
+    _r2_fs = get_r2_filesystem()
+    USE_GCS = True
+    logger.debug("Initialized R2/S3 filesystem for cloud storage")
+except (ImportError, EnvironmentError) as e:
+    logger.warning(f"Cloud storage not available: {e}")
+    logger.warning("Falling back to local storage")
 
 
 class SvineflytningSilverProcessor:
@@ -136,17 +135,15 @@ class SvineflytningSilverProcessor:
 
         try:
             if data_path.startswith("gs://"):
-                # Load from GCS
-                bucket_name = data_path.split("/")[2]
-                blob_path = "/".join(data_path.split("/")[3:])
-                bucket = gcs_client.bucket(bucket_name)
-                blob = bucket.blob(blob_path)
+                # Load from R2/S3 cloud storage
+                # Strip gs:// prefix for s3fs compatibility
+                r2_path = data_path.replace("gs://", "")
 
                 # Download to temporary file for processing
                 with tempfile.NamedTemporaryFile(
                     mode="w+", suffix=".json", delete=False
                 ) as tmp_file:
-                    blob.download_to_filename(tmp_file.name)
+                    _r2_fs.get(r2_path, tmp_file.name)
                     with open(tmp_file.name) as f:
                         data = json.load(f)
                 os.unlink(tmp_file.name)
@@ -676,7 +673,10 @@ class SvineflytningSilverProcessor:
                     # Upload file using streaming
                     import shutil
 
-                    with open(parquet_file, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                    with (
+                        open(parquet_file, "rb") as src,
+                        gcs_access.fs.open(gcs_path.replace("gs://", ""), "wb") as dst,
+                    ):
                         shutil.copyfileobj(src, dst)
 
                     logger.info(f"✅ Uploaded {parquet_file.name} to {gcs_path}")

@@ -30,7 +30,8 @@ on:
 
 env:
   ENVIRONMENT: production
-  GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+  R2_BUCKET: ${{ secrets.R2_BUCKET }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
 jobs:
   discover-cvrs:
@@ -66,14 +67,6 @@ jobs:
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
         uv pip install --system pandas pyarrow
-
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
 
     - name: Discover CVRs for year ${{ matrix.year }}
       id: discover
@@ -176,14 +169,6 @@ jobs:
         uv pip install --system -e .
         uv pip install --system pandas pyarrow
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-
     - name: Download CVR list
       uses: actions/download-artifact@v4
       with:
@@ -239,14 +224,6 @@ jobs:
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
         uv pip install --system pandas pyarrow
-
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
 
     - name: Download CVR list
       uses: actions/download-artifact@v4
@@ -304,14 +281,6 @@ jobs:
         uv pip install --system -e .
         uv pip install --system pandas pyarrow
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-
     - name: Download CVR list
       uses: actions/download-artifact@v4
       with:
@@ -360,14 +329,6 @@ jobs:
         uv pip install --system -e .
         uv pip install --system pandas pyarrow
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-
     - name: Download all batch results
       uses: actions/download-artifact@v4
       with:
@@ -381,12 +342,12 @@ jobs:
         name: cvrs-2021
         path: /tmp
 
-    - name: Consolidate and upload to GCS
+    - name: Consolidate and upload to R2
       working-directory: backend/pipelines/climate
       run: |
         batch_count=$(jq '.batch_count' /tmp/cvrs_2021.json)
         timestamp=$(date +%Y%m%d_%H%M%S)
-        gcs_path="gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_2021/${timestamp}"
+        r2_path="s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_2021/${timestamp}"
 
         python -c "
         from batch_processor import BatchProcessor
@@ -396,14 +357,14 @@ jobs:
         result = processor.consolidate_batches(
             year=2021,
             batch_count=${batch_count},
-            gcs_output_path='${gcs_path}',
+            gcs_output_path='${r2_path}',
             cleanup=True
         )
         print(json.dumps(result, indent=2))
         "
 
         echo "## 2021 Results" >> $GITHUB_STEP_SUMMARY
-        echo "GCS Path: ${gcs_path}" >> $GITHUB_STEP_SUMMARY
+        echo "R2 Path: ${r2_path}" >> $GITHUB_STEP_SUMMARY
 
   consolidate-2022:
     if: ${{ !inputs.dry_run && contains(inputs.years, '2022') && always() }}
@@ -429,14 +390,6 @@ jobs:
         uv pip install --system -e .
         uv pip install --system pandas pyarrow
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-
     - name: Download all batch results
       uses: actions/download-artifact@v4
       with:
@@ -450,12 +403,12 @@ jobs:
         name: cvrs-2022
         path: /tmp
 
-    - name: Consolidate and upload to GCS
+    - name: Consolidate and upload to R2
       working-directory: backend/pipelines/climate
       run: |
         batch_count=$(jq '.batch_count' /tmp/cvrs_2022.json)
         timestamp=$(date +%Y%m%d_%H%M%S)
-        gcs_path="gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_2022/${timestamp}"
+        r2_path="s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_2022/${timestamp}"
 
         python -c "
         from batch_processor import BatchProcessor
@@ -465,14 +418,14 @@ jobs:
         result = processor.consolidate_batches(
             year=2022,
             batch_count=${batch_count},
-            gcs_output_path='${gcs_path}',
+            gcs_output_path='${r2_path}',
             cleanup=True
         )
         print(json.dumps(result, indent=2))
         "
 
         echo "## 2022 Results" >> $GITHUB_STEP_SUMMARY
-        echo "GCS Path: ${gcs_path}" >> $GITHUB_STEP_SUMMARY
+        echo "R2 Path: ${r2_path}" >> $GITHUB_STEP_SUMMARY
 
   consolidate-2023:
     if: ${{ !inputs.dry_run && contains(inputs.years, '2023') && always() }}
@@ -498,14 +451,6 @@ jobs:
         uv pip install --system -e .
         uv pip install --system pandas pyarrow
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Set up Google Cloud SDK
-      uses: google-github-actions/setup-gcloud@v2
-
     - name: Download all batch results
       uses: actions/download-artifact@v4
       with:
@@ -519,12 +464,12 @@ jobs:
         name: cvrs-2023
         path: /tmp
 
-    - name: Consolidate and upload to GCS
+    - name: Consolidate and upload to R2
       working-directory: backend/pipelines/climate
       run: |
         batch_count=$(jq '.batch_count' /tmp/cvrs_2023.json)
         timestamp=$(date +%Y%m%d_%H%M%S)
-        gcs_path="gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_2023/${timestamp}"
+        r2_path="s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_2023/${timestamp}"
 
         python -c "
         from batch_processor import BatchProcessor
@@ -534,14 +479,14 @@ jobs:
         result = processor.consolidate_batches(
             year=2023,
             batch_count=${batch_count},
-            gcs_output_path='${gcs_path}',
+            gcs_output_path='${r2_path}',
             cleanup=True
         )
         print(json.dumps(result, indent=2))
         "
 
         echo "## 2023 Results" >> $GITHUB_STEP_SUMMARY
-        echo "GCS Path: ${gcs_path}" >> $GITHUB_STEP_SUMMARY
+        echo "R2 Path: ${r2_path}" >> $GITHUB_STEP_SUMMARY
 
   # Final summary
   summary:
@@ -564,8 +509,8 @@ jobs:
         if [ "${{ inputs.dry_run }}" = "true" ]; then
           echo "This was a dry run - no calculations were performed." >> $GITHUB_STEP_SUMMARY
         else
-          echo "Results uploaded to GCS gold layer:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_{year}/{timestamp}/\`" >> $GITHUB_STEP_SUMMARY
+          echo "Results uploaded to R2 gold layer:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_{year}/{timestamp}/\`" >> $GITHUB_STEP_SUMMARY
         fi
 
   # Dry run summary

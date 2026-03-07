@@ -194,7 +194,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -202,32 +202,28 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
@@ -251,8 +247,8 @@ jobs:
       - name: Run Foundation Steps
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
         run: |
           # Determine which foundation step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
@@ -346,7 +342,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -354,14 +350,6 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -377,21 +365,25 @@ jobs:
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
@@ -407,18 +399,22 @@ jobs:
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
-      - name: Download Required Bronze Data from GCS
+      - name: Download Required Bronze Data from R2
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           # Download the bronze timestamp from artifact to know which folder to download from
           if [ -f "/tmp/bronze_timestamp.txt" ]; then
             BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
           else
             # If no timestamp file, try to find the latest timestamp from the foundation job
             echo "No bronze timestamp file found, trying to find latest bronze data..."
-            BRONZE_TIMESTAMP=$(gsutil ls gs://$GCS_BUCKET/bronze/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+            BRONZE_TIMESTAMP=$(aws s3 ls s3://$R2_BUCKET/bronze/chr/ --endpoint-url $R2_ENDPOINT | grep -oE '[0-9]{8}_[0-9]{6}' | sort | tail -n 1)
             if [ -z "$BRONZE_TIMESTAMP" ]; then
               echo "❌ Could not determine bronze timestamp"
               exit 1
@@ -431,13 +427,13 @@ jobs:
           mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
 
           # Download foundation data files that parallel jobs need
-          echo "Downloading foundation files from: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+          echo "Downloading foundation files from: s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
 
           # Download besaetning_list.json (needed by most steps)
-          gsutil cp gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/besaetning_list.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ 2>/dev/null || echo "⚠️ besaetning_list.json not found (may not be needed)"
+          aws s3 cp s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/besaetning_list.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "⚠️ besaetning_list.json not found (may not be needed)"
 
           # Download stamdata files if they exist
-          gsutil cp gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/stamdata_*.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ 2>/dev/null || echo "⚠️ stamdata files not found (may not be needed)"
+          aws s3 cp s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ --recursive --exclude "*" --include "stamdata_*.json" --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "⚠️ stamdata files not found (may not be needed)"
 
           # List what we downloaded
           echo "=== Downloaded foundation files ==="
@@ -449,8 +445,8 @@ jobs:
       - name: Run Parallel Group 1 Step
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
           CHR_MAX_WORKERS: 3
           SPF_SU_MAX_WORKERS: "2"
         run: |
@@ -521,7 +517,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -529,14 +525,6 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -552,21 +540,25 @@ jobs:
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
@@ -590,8 +582,8 @@ jobs:
       - name: Run Animal Movements for Month ${{ matrix.month }}
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
           CHR_MAX_WORKERS: 3
           CONTEXT_IMPORT_PATH: /tmp/chr_context.json
         run: |
@@ -683,7 +675,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -691,14 +683,6 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -714,21 +698,25 @@ jobs:
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
@@ -752,8 +740,8 @@ jobs:
       - name: Run Animal Movements (Traditional Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
         run: |
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
           SHOW_PROGRESS="true"
@@ -817,7 +805,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -825,14 +813,6 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact with herd details
         uses: actions/download-artifact@v4
@@ -848,21 +828,25 @@ jobs:
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
@@ -886,8 +870,8 @@ jobs:
       - name: Run VetStat for Month ${{ matrix.month }}
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
           CHR_MAX_WORKERS: 6
           VETSTAT_MAX_WORKERS: "10"
           CONTEXT_IMPORT_PATH: /tmp/chr_context_with_details.json
@@ -981,7 +965,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -989,14 +973,6 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -1012,21 +988,25 @@ jobs:
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
@@ -1051,8 +1031,8 @@ jobs:
       - name: Run Herd Details Step
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
         run: |
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
           SHOW_PROGRESS="true"
@@ -1125,7 +1105,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1133,14 +1113,6 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -1156,21 +1128,25 @@ jobs:
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
@@ -1191,16 +1167,22 @@ jobs:
           mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
           mkdir -p /tmp/data/silver/chr
 
-      - name: Download bronze data from GCS
+      - name: Download bronze data from R2
+        env:
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           # Read the bronze timestamp
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
           echo "Downloading bronze data for timestamp: $BRONZE_TIMESTAMP"
 
-          # Download all bronze files from GCS
-          gsutil -m cp -r gs://${{ secrets.GCS_BUCKET }}/bronze/chr/$BRONZE_TIMESTAMP/* /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || echo "Some bronze files may not exist (this is normal for optional steps)"
+          # Download all bronze files from R2
+          aws s3 cp s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ --recursive --endpoint-url $R2_ENDPOINT || echo "Some bronze files may not exist (this is normal for optional steps)"
 
           # List what was downloaded
           echo "Downloaded bronze files:"
@@ -1221,8 +1203,8 @@ jobs:
       - name: Run Parallel Group 2 Step (${{ matrix.data_type }} - CHR group ${{ matrix.chr_group }})
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
           CHR_MAX_WORKERS: 3
           SPF_SU_MAX_WORKERS: "2"
         run: |
@@ -1299,7 +1281,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1307,14 +1289,6 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download bronze timestamp artifact
         uses: actions/download-artifact@v4
@@ -1324,8 +1298,11 @@ jobs:
 
       - name: Set up environment variables (NO FVM CREDENTIALS)
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
@@ -1336,8 +1313,11 @@ jobs:
           echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
 
           # Set up environment WITHOUT FVM credentials (silver doesn't need them)
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
           # Add Supabase credentials for incremental processing tracking
@@ -1357,26 +1337,30 @@ jobs:
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
-      - name: Verify Bronze Data Exists in GCS (Streaming Mode)
+      - name: Verify Bronze Data Exists in R2 (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           # Read the bronze timestamp from artifact
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-          echo "🚀 STREAMING MODE: Verifying bronze data exists in GCS for timestamp: $BRONZE_TIMESTAMP"
+          echo "🚀 STREAMING MODE: Verifying bronze data exists in R2 for timestamp: $BRONZE_TIMESTAMP"
 
-          # Just verify the data exists in GCS - DON'T download it
-          echo "Checking GCS path: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
-          gsutil ls gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ | head -10 || {
-            echo "❌ No bronze data found in GCS for timestamp: $BRONZE_TIMESTAMP"
+          # Just verify the data exists in R2 - DON'T download it
+          echo "Checking R2 path: s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+          aws s3 ls s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ --endpoint-url $R2_ENDPOINT | head -10 || {
+            echo "❌ No bronze data found in R2 for timestamp: $BRONZE_TIMESTAMP"
             echo "Available timestamp folders:"
-            gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
+            aws s3 ls s3://$R2_BUCKET/bronze/chr/ --endpoint-url $R2_ENDPOINT | head -10
             exit 1
           }
 
-          echo "✅ Bronze data verified in GCS - will be processed via streaming mode"
-          echo "🔥 NO LOCAL DOWNLOAD - Using direct GCS access for memory efficiency"
+          echo "✅ Bronze data verified in R2 - will be processed via streaming mode"
+          echo "🔥 NO LOCAL DOWNLOAD - Using direct R2 access for memory efficiency"
 
       - name: Install uv
         run: |
@@ -1385,7 +1369,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1393,20 +1377,11 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth-silver"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
-
       - name: Run silver processing (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
           CHR_FORCE_STREAMING: "true"
           GITHUB_ACTIONS: "true"
         run: |
@@ -1434,7 +1409,7 @@ jobs:
           fi
 
           echo "🚀 Running silver processing in STREAMING MODE: $CMD"
-          echo "📊 Processing data directly from GCS without local downloads"
+          echo "📊 Processing data directly from R2 without local downloads"
           $CMD
 
   # Job 6: Gold Processing (Veterinary Timeline + Transportation Analysis)
@@ -1462,7 +1437,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1470,25 +1445,22 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth-gold"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
-
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+
         run: |
           cd backend/pipelines/chr_pipeline
 
           # Set up environment for gold processing
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
           mkdir -p /tmp/data/silver/chr
@@ -1497,9 +1469,13 @@ jobs:
       - name: Find latest silver data
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          echo "🔍 Finding latest silver data in GCS..."
+          echo "🔍 Finding latest silver data in R2..."
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           # If we have a bronze timestamp (from silver processing), use that
           if [ -f /tmp/bronze_timestamp.txt ]; then
@@ -1507,21 +1483,21 @@ jobs:
             echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
 
             # Check if corresponding silver data exists
-            SILVER_PATH="gs://$GCS_BUCKET/silver/chr/$BRONZE_TIMESTAMP/"
-            if gsutil ls "$SILVER_PATH" > /dev/null 2>&1; then
+            SILVER_PATH="s3://$R2_BUCKET/silver/chr/$BRONZE_TIMESTAMP/"
+            if aws s3 ls "$SILVER_PATH" --endpoint-url $R2_ENDPOINT > /dev/null 2>&1; then
               echo "SILVER_TIMESTAMP=$BRONZE_TIMESTAMP" >> $GITHUB_ENV
               echo "Found silver data at: $SILVER_PATH"
             else
               echo "⚠️ No silver data found for bronze timestamp $BRONZE_TIMESTAMP"
               echo "Looking for latest silver data..."
-              LATEST_SILVER=$(gsutil ls gs://$GCS_BUCKET/silver/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+              LATEST_SILVER=$(aws s3 ls s3://$R2_BUCKET/silver/chr/ --endpoint-url $R2_ENDPOINT | grep -oE '[0-9]{8}_[0-9]{6}' | sort | tail -1)
               echo "SILVER_TIMESTAMP=$LATEST_SILVER" >> $GITHUB_ENV
               echo "Using latest silver data: $LATEST_SILVER"
             fi
           else
             # Find latest silver data
             echo "No bronze timestamp found, finding latest silver data..."
-            LATEST_SILVER=$(gsutil ls gs://$GCS_BUCKET/silver/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
+            LATEST_SILVER=$(aws s3 ls s3://$R2_BUCKET/silver/chr/ --endpoint-url $R2_ENDPOINT | grep -oE '[0-9]{8}_[0-9]{6}' | sort | tail -1)
             echo "SILVER_TIMESTAMP=$LATEST_SILVER" >> $GITHUB_ENV
             echo "Using latest silver data: $LATEST_SILVER"
           fi
@@ -1536,17 +1512,21 @@ jobs:
       - name: Verify silver data exists
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           echo "🔍 Verifying silver data exists for timestamp: $SILVER_TIMESTAMP"
 
-          SILVER_PATH="gs://$GCS_BUCKET/silver/chr/$SILVER_TIMESTAMP/"
-          echo "Checking GCS path: $SILVER_PATH"
+          SILVER_PATH="s3://$R2_BUCKET/silver/chr/$SILVER_TIMESTAMP/"
+          echo "Checking R2 path: $SILVER_PATH"
 
-          if ! gsutil ls "$SILVER_PATH" > /dev/null 2>&1; then
+          if ! aws s3 ls "$SILVER_PATH" --endpoint-url $R2_ENDPOINT > /dev/null 2>&1; then
             echo "❌ No silver data found for timestamp: $SILVER_TIMESTAMP"
             echo "Available silver timestamps:"
-            gsutil ls gs://$GCS_BUCKET/silver/chr/ | head -10
+            aws s3 ls s3://$R2_BUCKET/silver/chr/ --endpoint-url $R2_ENDPOINT | head -10
             exit 1
           fi
 
@@ -1554,13 +1534,13 @@ jobs:
 
           # List key files to verify completeness
           echo "📋 Available silver files:"
-          gsutil ls "$SILVER_PATH" | head -20
+          aws s3 ls "$SILVER_PATH" --endpoint-url $R2_ENDPOINT | head -20
 
       - name: Run gold processing (Veterinary Timeline)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
           GITHUB_ACTIONS: "true"
         run: |
           echo "🥇 Starting Gold Processing (Veterinary Timeline + Transportation Analysis)..."
@@ -1582,7 +1562,7 @@ jobs:
           # Process gold data using the silver timestamp
           success = process_gold_data(
               export_timestamp='$GOLD_TIMESTAMP',
-              silver_dir=None  # Will auto-find from GCS
+              silver_dir=None  # Will auto-find from R2
           )
 
           if success:
@@ -1596,41 +1576,45 @@ jobs:
       - name: Verify gold output
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           echo "🔍 Verifying gold output..."
 
           GOLD_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-          GOLD_PATH="gs://$GCS_BUCKET/gold/chr/"
+          GOLD_PATH="s3://$R2_BUCKET/gold/chr/"
 
           echo "Checking for gold output in: $GOLD_PATH"
-          if gsutil ls "$GOLD_PATH" > /dev/null 2>&1; then
+          if aws s3 ls "$GOLD_PATH" --endpoint-url $R2_ENDPOINT > /dev/null 2>&1; then
             echo "📋 Gold layer contents:"
-            gsutil ls -la "$GOLD_PATH" | tail -10
+            aws s3 ls "$GOLD_PATH" --endpoint-url $R2_ENDPOINT | tail -10
 
             # Check for veterinary timeline specifically
-            if gsutil ls "${GOLD_PATH}*/veterinary_timeline.parquet" > /dev/null 2>&1; then
+            if aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep -q "veterinary_timeline.parquet"; then
               echo "✅ Veterinary timeline successfully created"
 
               # Get file size
-              TIMELINE_SIZE=$(gsutil ls -la "${GOLD_PATH}*/veterinary_timeline.parquet" | awk '{print $1}' | tail -1)
+              TIMELINE_SIZE=$(aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT | grep "veterinary_timeline.parquet" | tail -1 | awk '{print $3}')
               echo "📊 Timeline file size: $TIMELINE_SIZE bytes"
             else
               echo "⚠️ Veterinary timeline not found in gold output"
             fi
 
             # Check for transportation analysis specifically
-            if gsutil ls "${GOLD_PATH}*/transportation_analysis.parquet" > /dev/null 2>&1; then
+            if aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep -q "transportation_analysis.parquet"; then
               echo "✅ Transportation analysis successfully created"
 
               # Get file size
-              TRANSPORT_SIZE=$(gsutil ls -la "${GOLD_PATH}*/transportation_analysis.parquet" | awk '{print $1}' | tail -1)
+              TRANSPORT_SIZE=$(aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT | grep "transportation_analysis.parquet" | tail -1 | awk '{print $3}')
               echo "📊 Transportation analysis file size: $TRANSPORT_SIZE bytes"
             else
               echo "⚠️ Transportation analysis not found in gold output"
             fi
           else
-            echo "⚠️ No gold output found in GCS"
+            echo "⚠️ No gold output found in R2"
           fi
 
   # Job 7: Single Step Execution (for individual steps not covered above)
@@ -1657,7 +1641,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1665,32 +1649,28 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Set up environment variables
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
@@ -1708,8 +1688,8 @@ jobs:
       - name: Run Single Step
         working-directory: backend/pipelines/chr_pipeline
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
         run: |
           STEP="${{ inputs.step }}"
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
@@ -1758,7 +1738,7 @@ jobs:
           echo "1. FVM credentials (FVM_USERNAME/FVM_PASSWORD) invalid or expired"
           echo "2. VetStat certificate issues (VETSTAT_CERTIFICATE/VETSTAT_CERTIFICATE_PASSWORD)"
           echo "3. Network connectivity issues with FVM services"
-          echo "4. GCS authentication or bucket access issues"
+          echo "4. R2 authentication or bucket access issues"
           echo "5. Pipeline timeout or memory issues"
           echo ""
           echo "💡 Try running with smaller limits (max_herds, limit_herds_per_species) for testing"

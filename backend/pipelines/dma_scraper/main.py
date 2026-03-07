@@ -88,17 +88,14 @@ class OptimizedStorageBackend:
             self._init_fallback(bucket_name)
 
     def _init_fallback(self, bucket_name: str):
-        """Initialize fallback storage using google-cloud-storage."""
+        """Initialize fallback storage using s3fs via common.gcs.filesystem."""
         try:
-            from google.cloud import storage
+            from common.gcs.filesystem import get_r2_filesystem
 
-            self.gcs_client = storage.Client()
-            self.gcs_bucket = self.gcs_client.bucket(bucket_name)
-            print(f"✅ DMA Storage: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError as e:
-            raise ImportError("google-cloud-storage is required but not available") from e
+            self.fs = get_r2_filesystem()
+            print(f"✅ DMA Storage: Using s3fs fallback for bucket: {bucket_name}")
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
+            raise RuntimeError(f"Failed to initialize storage: {e}") from e
 
     def save_json(self, data, blob_name: str):
         """Save JSON data to GCS."""
@@ -111,9 +108,10 @@ class OptimizedStorageBackend:
                 import json
 
                 json_str = json.dumps(data, indent=2, ensure_ascii=False)
-                blob = self.gcs_bucket.blob(blob_name)
-                blob.upload_from_string(json_str, content_type="application/json")
-                print(f"Saved {blob_name} to fallback GCS storage")
+                r2_path = f"{self.bucket_name}/{blob_name}"
+                with self.fs.open(r2_path, "w") as f:
+                    f.write(json_str)
+                print(f"Saved {blob_name} to fallback storage")
         except Exception as e:
             print(f"Error saving JSON to {blob_name}: {e}")
             raise
@@ -153,10 +151,10 @@ class OptimizedStorageBackend:
                     gcs_file.write(file_data)
                 print(f"Saved {blob_name} to optimized GCS storage (parquet)")
             else:
-                # Use fallback upload
-                blob = self.gcs_bucket.blob(blob_name)
-                blob.upload_from_filename(tmp_path)
-                print(f"Saved {blob_name} to fallback GCS storage (parquet)")
+                # Use fallback upload via s3fs
+                r2_path = f"{self.bucket_name}/{blob_name}"
+                self.fs.put(tmp_path, r2_path)
+                print(f"Saved {blob_name} to fallback storage (parquet)")
         finally:
             # Clean up temporary file
             if os.path.exists(tmp_path):
@@ -168,11 +166,11 @@ class OptimizedStorageBackend:
             if self.use_optimized:
                 gcs_path = f"gs://{self.bucket_name}/{blob_name}"
                 return self.gcs_access.download_json(gcs_path)
-            blob = self.gcs_bucket.blob(blob_name)
-            json_bytes = blob.download_as_bytes()
             import json
 
-            return json.loads(json_bytes.decode("utf-8"))
+            r2_path = f"{self.bucket_name}/{blob_name}"
+            with self.fs.open(r2_path, "r") as f:
+                return json.loads(f.read())
         except Exception as e:
             print(f"Error reading JSON from {blob_name}: {e}")
             raise

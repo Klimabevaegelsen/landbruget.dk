@@ -390,29 +390,27 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
         True if file contains company data, False otherwise
     """
     try:
-        import os
-
         import duckdb
-        import gcsfs
+        from common.gcs.filesystem import get_r2_filesystem
 
         # Create a temporary connection for checking file structure
         temp_conn = duckdb.connect()
         temp_conn.install_extension("spatial")
         temp_conn.load_extension("spatial")
 
-        # Use HMAC authentication if available (same pattern as gcs_access.py)
-        gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-        gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-
-        if gcs_access_key and gcs_secret_key:
-            fs = gcsfs.GCSFileSystem(access_key_id=gcs_access_key, secret_access_key=gcs_secret_key)
-        else:
-            fs = gcsfs.GCSFileSystem()
-
+        # Use s3fs filesystem from the common R2 layer
+        fs = get_r2_filesystem()
         temp_conn.register_filesystem(fs)
 
+        # Strip gs:// prefix for s3fs compatibility
+        stripped_path = filepath
+        if stripped_path.startswith("gs://"):
+            stripped_path = stripped_path[len("gs://") :]
+        if stripped_path.startswith("r2://"):
+            stripped_path = stripped_path[len("r2://") :]
+
         columns_result = temp_conn.execute(f"""
-            DESCRIBE (SELECT * FROM read_parquet('{filepath}') LIMIT 1)
+            DESCRIBE (SELECT * FROM read_parquet('s3://{stripped_path}') LIMIT 1)
         """).fetchall()
 
         column_names = [col[0] for col in columns_result]
@@ -530,29 +528,24 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
                     return True  # Found at least one local artifact
         return False  # No local artifacts found
 
-    # Check GCS files existence (for non-GitHub Actions environments)
+    # Check storage files existence (for non-GitHub Actions environments)
     try:
-        from google.cloud import storage
+        from common.gcs.filesystem import get_r2_filesystem
 
-        # Parse bucket and path from GCS URLs
+        fs = get_r2_filesystem()
+
+        # Parse bucket and path from gs:// URLs
         for pipeline_path in pipeline_paths[:1]:  # Check just the first one for efficiency
             if pipeline_path.startswith("gs://"):
-                # Extract bucket and blob path
-                parts = pipeline_path[5:].split("/", 1)
-                if len(parts) == 2:
-                    bucket_name, blob_path = parts
-
-                    client = storage.Client()
-                    bucket = client.bucket(bucket_name)
-                    blob = bucket.blob(blob_path)
-
-                    if blob.exists():
-                        return True  # Found at least one pipeline file
+                # Strip gs:// prefix for s3fs compatibility
+                r2_path = pipeline_path[5:]
+                if fs.exists(r2_path):
+                    return True  # Found at least one pipeline file
 
         return False  # No pipeline files found
 
     except Exception:
-        # If we can't check GCS, assume independent execution
+        # If we can't check storage, assume independent execution
         return False
 
 

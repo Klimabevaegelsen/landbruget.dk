@@ -42,8 +42,20 @@ from tenacity import (
 logger = logging.getLogger("landbruget.gcs")
 
 
+def _strip_protocol(path: str) -> str:
+    """Strip gs:// or r2:// protocol prefix from a storage path."""
+    if path.startswith("gs://"):
+        return path[len("gs://") :]
+    if path.startswith("r2://"):
+        return path[len("r2://") :]
+    return path
+
+
 class GCSDataAccess:
-    """Unified GCS data access optimized for maximum performance."""
+    """Unified cloud data access optimized for maximum performance.
+
+    Supports both GCS (gs://) and R2 (r2://) paths for backward compatibility.
+    """
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None):
         """
@@ -137,7 +149,7 @@ class GCSDataAccess:
             self.log.warning(f"DuckDB configuration warning: {e}")
 
     def _check_native_gcs_support(self) -> bool:
-        """Check if native GCS access is available."""
+        """Check if native cloud storage access is available (R2 or GCS)."""
         try:
             # Check if httpfs extension is loaded
             result = self.duckdb_conn.execute(
@@ -146,20 +158,24 @@ class GCSDataAccess:
             if not result:
                 return False
 
-            # Check if GCS secret exists
+            # Check if R2 or GCS secret exists
             try:
                 secrets = self.duckdb_conn.execute("SELECT name FROM duckdb_secrets()").fetchall()
-                return any("gcs" in s[0].lower() for s in secrets)
+                return any("r2" in s[0].lower() or "gcs" in s[0].lower() for s in secrets)
             except Exception:
                 # Some DuckDB versions don't support listing secrets
-                return bool(os.getenv("GCS_ACCESS_KEY_ID") and os.getenv("GCS_SECRET_ACCESS_KEY"))
+                return bool(
+                    (os.getenv("R2_ACCESS_KEY_ID") and os.getenv("R2_SECRET_ACCESS_KEY"))
+                    or (os.getenv("GCS_ACCESS_KEY_ID") and os.getenv("GCS_SECRET_ACCESS_KEY"))
+                )
 
         except Exception as e:
-            self.log.debug(f"Native GCS check failed: {e}")
+            self.log.debug(f"Native storage check failed: {e}")
             return False
 
     def check_file_size_limits(self, gcs_path: str) -> bool:
         """Check if file is too large for runner constraints."""
+        gcs_path = _strip_protocol(gcs_path)
         try:
             file_info = self.fs.info(gcs_path)
             file_size_gb = file_info["size"] / (1024**3)
@@ -180,6 +196,7 @@ class GCSDataAccess:
 
     def _temp_download(self, gcs_path: str):
         """Context manager for temporary file download with guaranteed cleanup."""
+        gcs_path = _strip_protocol(gcs_path)
 
         @contextmanager
         def temp_file_context():
@@ -281,6 +298,7 @@ class GCSDataAccess:
         - Direct DuckDB COPY with optimized Parquet settings
         - Streaming upload to GCS
         """
+        gcs_path = _strip_protocol(gcs_path)
         self.monitor.check_resources("start_direct_export")
 
         # Build COPY options for optimal Parquet export
@@ -488,7 +506,7 @@ class GCSDataAccess:
         """
         OPTIMAL: Query multiple parquet files directly into DuckDB table - no DataFrame conversion.
         """
-        pattern_without_gs = gcs_pattern.replace("gs://", "")
+        pattern_without_gs = _strip_protocol(gcs_pattern)
         files = self.fs.glob(pattern_without_gs)
         gcs_paths = [f"gs://{f}" for f in files]
 
@@ -601,7 +619,7 @@ class GCSDataAccess:
 
         try:
             # STREAMING: Write JSON directly to GCS without temp files
-            with self.fs.open(gcs_path, "w", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(gcs_path), "w", encoding="utf-8") as f:
                 json.dump(data, f, **json_kwargs)
 
             self.monitor.check_resources("post_json_upload")
@@ -626,7 +644,7 @@ class GCSDataAccess:
         self.monitor.check_resources("start_json_string_upload")
 
         try:
-            with self.fs.open(gcs_path, "w", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(gcs_path), "w", encoding="utf-8") as f:
                 f.write(json_string)
 
             self.monitor.check_resources("post_json_string_upload")
@@ -648,7 +666,7 @@ class GCSDataAccess:
         self.monitor.check_resources("start_json_download")
 
         try:
-            with self.fs.open(gcs_path, "r", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(gcs_path), "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             self.monitor.check_resources("post_json_download")
@@ -665,6 +683,7 @@ class GCSDataAccess:
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
         """
+        gcs_path = _strip_protocol(gcs_path)
         self.monitor.check_resources("start_duckdb_upload")
 
         # Detect format based on file extension
@@ -755,6 +774,7 @@ class GCSDataAccess:
         Raises:
             Exception if file doesn't exist or size mismatch
         """
+        gcs_path = _strip_protocol(gcs_path)
         try:
             if not self.fs.exists(gcs_path):
                 self.log.error(f"File not found after upload: {gcs_path}")
@@ -778,6 +798,7 @@ class GCSDataAccess:
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
         """
+        gcs_path = _strip_protocol(gcs_path)
         self.monitor.check_resources("start_query_upload")
 
         # Detect format based on file extension
@@ -835,7 +856,7 @@ class GCSDataAccess:
     # Utility methods
     def list_files(self, gcs_pattern: str) -> list[str]:
         """List files matching pattern."""
-        pattern_without_gs = gcs_pattern.replace("gs://", "")
+        pattern_without_gs = _strip_protocol(gcs_pattern)
         files = self.fs.glob(pattern_without_gs)
         return [f"gs://{f}" for f in files]
 
@@ -848,7 +869,7 @@ class GCSDataAccess:
         """
         import datetime
 
-        pattern_without_gs = gcs_pattern.replace("gs://", "")
+        pattern_without_gs = _strip_protocol(gcs_pattern)
         files = self.fs.glob(pattern_without_gs)
 
         files_with_timestamps = []
@@ -879,17 +900,17 @@ class GCSDataAccess:
 
     def file_exists(self, gcs_path: str) -> bool:
         """Check if file exists."""
-        path_without_gs = gcs_path.replace("gs://", "")
+        path_without_gs = _strip_protocol(gcs_path)
         return self.fs.exists(path_without_gs)
 
     def get_file_size(self, gcs_path: str) -> int:
         """Get file size in bytes."""
-        path_without_gs = gcs_path.replace("gs://", "")
+        path_without_gs = _strip_protocol(gcs_path)
         return self.fs.size(path_without_gs)
 
     def get_file_info(self, gcs_path: str) -> dict[str, Any]:
         """Get detailed file information."""
-        path_without_gs = gcs_path.replace("gs://", "")
+        path_without_gs = _strip_protocol(gcs_path)
         return self.fs.info(path_without_gs)
 
     def list_files_with_metadata(self, bucket_name: str, prefix: str = "") -> list[Any]:

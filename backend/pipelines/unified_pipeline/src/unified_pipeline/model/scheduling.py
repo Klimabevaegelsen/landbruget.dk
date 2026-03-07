@@ -302,9 +302,11 @@ def get_dependency_order(sources: list[Source]) -> list[list[Source]]:
 
         # Sort by priority within the batch
         ready_sources.sort(
-            key=lambda s: PIPELINE_SCHEDULES.get(
-                s, PipelineScheduleConfig(frequency=ScheduleFrequency.MANUAL)
-            ).priority
+            key=lambda s: (
+                PIPELINE_SCHEDULES.get(
+                    s, PipelineScheduleConfig(frequency=ScheduleFrequency.MANUAL)
+                ).priority
+            )
         )
         batches.append(ready_sources)
 

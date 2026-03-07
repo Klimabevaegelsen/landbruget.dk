@@ -6,8 +6,7 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "pydantic>=2.0",
-    "google-cloud-storage>=2.0",
-    "gcsfs>=2023.0",
+    "s3fs>=2024.1.0",
     "duckdb>=1.0",
 ]
 

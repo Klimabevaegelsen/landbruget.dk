@@ -60,17 +60,15 @@ class OptimizedGCSStorage:
             self._init_fallback(bucket_name)
 
     def _init_fallback(self, bucket_name: str):
-        """Initialize fallback GCS storage."""
+        """Initialize fallback storage using s3fs/R2."""
         try:
-            from google.cloud import storage
+            from common.gcs.filesystem import get_r2_filesystem
 
-            self.gcs_client = storage.Client()
-            self.gcs_bucket = self.gcs_client.bucket(bucket_name)
-            logger.info(f"✅ BMD Silver: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError as e:
-            raise ImportError("google-cloud-storage is required but not available") from e
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
+            self._fallback_fs = get_r2_filesystem()
+            self._fallback_bucket = bucket_name
+            logger.info(f"BMD Silver: Using s3fs/R2 fallback for bucket: {bucket_name}")
+        except (ImportError, EnvironmentError) as e:
+            raise RuntimeError(f"Cloud storage not available: {e}") from e
 
     def upload_file(self, local_path: Path, gcs_path: str | None = None) -> bool:
         """Upload file to GCS with optimized or fallback method."""
@@ -92,12 +90,10 @@ class OptimizedGCSStorage:
                     shutil.copyfileobj(file_obj, gcs_file)
                 logger.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized)")
             else:
-                # Use fallback upload
-                blob = self.gcs_bucket.blob(gcs_path)
-                blob.upload_from_filename(str(local_path))
-                logger.info(
-                    f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)"
-                )
+                # Use s3fs/R2 fallback upload
+                dest_path = f"{self._fallback_bucket}/{gcs_path}"
+                self._fallback_fs.put(str(local_path), dest_path)
+                logger.info(f"Uploaded {local_path} to {dest_path} (fallback)")
 
             return True
 

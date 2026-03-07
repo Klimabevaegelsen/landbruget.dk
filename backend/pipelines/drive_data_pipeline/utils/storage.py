@@ -84,21 +84,16 @@ class DriveStorageManager:
             )
 
     def _init_fallback_gcs(self, bucket_name: str) -> None:
-        """Initialize fallback GCS storage using google-cloud-storage directly."""
+        """Initialize fallback storage using s3fs via common.gcs.filesystem."""
         try:
-            from google.cloud import storage
+            from common.gcs.filesystem import get_r2_filesystem
 
-            self.gcs_client = storage.Client()
-            self.gcs_bucket = self.gcs_client.bucket(bucket_name)
+            self.fs = get_r2_filesystem()
             logger.info(
-                f"✅ DriveStorageManager: Initialized with fallback GCS for bucket: {bucket_name}"
+                f"✅ DriveStorageManager: Initialized with s3fs fallback for bucket: {bucket_name}"
             )
-        except ImportError as e:
-            raise ImportError(
-                "google-cloud-storage is required for GCS storage but not available"
-            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
+            raise RuntimeError(f"Failed to initialize storage: {e}") from e
 
     def save_file(self, data: bytes | BinaryIO, path: str | Path) -> None:
         """Save file data to the given path.
@@ -147,12 +142,12 @@ class DriveStorageManager:
                         f"✅ Saved file to GCS (optimized): {gcs_path} ({len(file_bytes)} bytes)"
                     )
                 else:
-                    # Use fallback GCS storage
-                    blob = self.gcs_bucket.blob(gcs_relative_path)
-                    blob.upload_from_string(file_bytes)
+                    # Use s3fs fallback storage
+                    r2_path = f"{self.bucket_name}/{gcs_relative_path}"
+                    with self.fs.open(r2_path, "wb") as f:
+                        f.write(file_bytes)
                     logger.info(
-                        f"✅ Saved file to GCS (fallback): "
-                        f"gs://{self.bucket_name}/{gcs_relative_path} ({len(file_bytes)} bytes)"
+                        f"✅ Saved file to storage (fallback): {r2_path} ({len(file_bytes)} bytes)"
                     )
             else:
                 # Local storage
@@ -194,10 +189,11 @@ class DriveStorageManager:
 
                     logger.debug(f"Read file from GCS (optimized): {gcs_path}")
                 else:
-                    # Use fallback GCS storage
-                    blob = self.gcs_bucket.blob(str(path))
-                    data = blob.download_as_bytes()
-                    logger.debug(f"Read file from GCS (fallback): gs://{self.bucket_name}/{path}")
+                    # Use s3fs fallback storage
+                    r2_path = f"{self.bucket_name}/{path}"
+                    with self.fs.open(r2_path, "rb") as f:
+                        data = f.read()
+                    logger.debug(f"Read file from storage (fallback): {r2_path}")
             else:
                 full_path = self.base_dir / path
                 with open(full_path, "rb") as f:
@@ -228,13 +224,14 @@ class DriveStorageManager:
                     self.gcs_access.upload_json(data, gcs_path)
                     logger.debug(f"Saved JSON to GCS (optimized): {gcs_path}")
                 else:
-                    # Use fallback GCS storage
+                    # Use s3fs fallback storage
                     import json
 
-                    json_bytes = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
-                    blob = self.gcs_bucket.blob(str(path))
-                    blob.upload_from_string(json_bytes, content_type="application/json")
-                    logger.debug(f"Saved JSON to GCS (fallback): gs://{self.bucket_name}/{path}")
+                    json_str = json.dumps(data, indent=2, ensure_ascii=False)
+                    r2_path = f"{self.bucket_name}/{path}"
+                    with self.fs.open(r2_path, "w") as f:
+                        f.write(json_str)
+                    logger.debug(f"Saved JSON to storage (fallback): {r2_path}")
             else:
                 full_path = self.base_dir / path
                 full_path.parent.mkdir(parents=True, exist_ok=True)
@@ -269,13 +266,13 @@ class DriveStorageManager:
                     data = self.gcs_access.download_json(gcs_path)
                     logger.debug(f"Read JSON from GCS (optimized): {gcs_path}")
                 else:
-                    # Use fallback GCS storage
-                    blob = self.gcs_bucket.blob(str(path))
-                    json_bytes = blob.download_as_bytes()
+                    # Use s3fs fallback storage
                     import json
 
-                    data = json.loads(json_bytes.decode("utf-8"))
-                    logger.debug(f"Read JSON from GCS (fallback): gs://{self.bucket_name}/{path}")
+                    r2_path = f"{self.bucket_name}/{path}"
+                    with self.fs.open(r2_path, "r") as f:
+                        data = json.loads(f.read())
+                    logger.debug(f"Read JSON from storage (fallback): {r2_path}")
             else:
                 full_path = self.base_dir / path
                 import json
@@ -328,17 +325,22 @@ class DriveStorageManager:
                                 result.append(Path(relative_path))
 
                     return result
-                # Use fallback GCS storage
-                prefix = str(path).rstrip("/") + "/" if path else ""
-                blobs = self.gcs_bucket.list_blobs(prefix=prefix)
+                # Use s3fs fallback storage
+                prefix = f"{self.bucket_name}/{path}".rstrip("/") + "/"
+                try:
+                    all_files = self.fs.ls(prefix, detail=False)
+                except FileNotFoundError:
+                    all_files = []
                 files = []
-                for blob in blobs:
-                    if not blob.name.endswith("/"):  # Skip directories
+                for file_path in all_files:
+                    # Remove bucket prefix to get relative path
+                    relative_path = file_path.replace(f"{self.bucket_name}/", "", 1)
+                    if not relative_path.endswith("/"):  # Skip directories
                         if pattern:
-                            if pattern.replace("*", "") in blob.name:
-                                files.append(Path(blob.name))
+                            if pattern.replace("*", "") in relative_path:
+                                files.append(Path(relative_path))
                         else:
-                            files.append(Path(blob.name))
+                            files.append(Path(relative_path))
                 return files
             full_path = self.base_dir / path
             if pattern:
@@ -389,9 +391,9 @@ class DriveStorageManager:
                 if self.use_optimized and self.gcs_access:
                     gcs_path = f"gs://{self.bucket_name}/{path}"
                     return self.gcs_access.file_exists(gcs_path)
-                # Use fallback GCS storage
-                blob = self.gcs_bucket.blob(str(path))
-                return blob.exists()
+                # Use s3fs fallback storage
+                r2_path = f"{self.bucket_name}/{path}"
+                return self.fs.exists(r2_path)
             full_path = self.base_dir / path
             return full_path.exists() and full_path.is_file()
         except Exception as e:

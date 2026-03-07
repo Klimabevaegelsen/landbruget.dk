@@ -27,7 +27,7 @@ permissions:
 
 env:
   PYTHON_VERSION: '3.11'
-  GCS_BUCKET: 'landbrugsdata-raw-data'
+  R2_BUCKET: 'landbrugsdata-raw-data'
 
 jobs:
   # ==========================================================================
@@ -48,7 +48,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-xdist duckdb pandas pyarrow gcsfs
+          pip install pytest pytest-xdist duckdb pandas pyarrow s3fs
 
       - name: Run identifier validation tests
         run: |
@@ -232,24 +232,24 @@ jobs:
           path: backend/chr-results.xml
 
   # ==========================================================================
-  # Job 5: Baseline Comparison (requires GCS access)
+  # Job 5: Baseline Comparison (requires R2 access)
   # ==========================================================================
   baseline-comparison:
     name: Baseline Comparison
     runs-on: ubuntu-latest
     needs: [identifier-validation, geospatial-validation, area-validation, chr-validation]
 
-    # Only run if GCS credentials are available
-    if: ${{ vars.GCS_CREDENTIALS_AVAILABLE == 'true' }}
+    # Only run if R2 credentials are available
+    if: ${{ vars.R2_CREDENTIALS_AVAILABLE == 'true' }}
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCS_CREDENTIALS }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -258,12 +258,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest duckdb pandas pyarrow gcsfs google-cloud-storage
+          pip install pytest duckdb pandas pyarrow s3fs
 
-      - name: Download baseline metrics from GCS
+      - name: Download baseline metrics from R2
         run: |
           mkdir -p baselines
-          gsutil -m cp -r gs://${{ env.GCS_BUCKET }}/baselines/main/ ./baselines/ || echo "No baselines found, skipping comparison"
+          aws s3 cp s3://${{ env.R2_BUCKET }}/baselines/main/ ./baselines/ --recursive --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com || echo "No baselines found, skipping comparison"
 
       - name: Run baseline comparison tests
         run: |

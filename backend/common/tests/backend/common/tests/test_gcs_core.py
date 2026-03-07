@@ -13,7 +13,6 @@ Tests use realistic Danish data including CVR numbers and special characters (æ
 
 import io
 import json
-import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -29,17 +28,7 @@ class MockRetryError(Exception):
     pass
 
 
-mock_tenacity = MagicMock()
-mock_tenacity.RetryError = MockRetryError
-sys.modules["tenacity"] = mock_tenacity
-
-# Now we can import RetryError from our mock
 RetryError = MockRetryError
-
-# Mock the GCSDataAccess since it may have additional dependencies
-mock_gcs_core = MagicMock()
-sys.modules["common.gcs.core"] = mock_gcs_core
-sys.modules["common.gcs"] = MagicMock()
 
 
 # Create a mock GCSDataAccess class
@@ -95,7 +84,6 @@ class MockGCSDataAccess:
 
 
 GCSDataAccess = MockGCSDataAccess
-mock_gcs_core.GCSDataAccess = MockGCSDataAccess
 
 
 # =============================================================================

@@ -7,12 +7,12 @@ extension loading, and common operations.
 """
 
 import contextlib
-import os
 import time
 from pathlib import Path
 from typing import Any
 
 import duckdb
+from common.gcs.filesystem import setup_duckdb_cloud_auth
 
 
 class SharedDuckDBProcessor:
@@ -36,41 +36,15 @@ class SharedDuckDBProcessor:
         self._setup_extensions()
 
     def _setup_extensions(self) -> None:
-        """Setup commonly required DuckDB extensions."""
-        extensions = [
-            ("spatial", "Geospatial operations"),
-            ("httpfs", "HTTP/S3 file system access"),
-        ]
-
-        for ext_name, description in extensions:
-            try:
-                self.conn.execute(f"INSTALL {ext_name}")
-                self.conn.execute(f"LOAD {ext_name}")
-            except Exception as e:
-                print(f"Warning: Could not load {ext_name} extension ({description}): {e}")
-
-        # Setup GCS HMAC authentication if available
-        self._setup_gcs_auth()
-
-    def _setup_gcs_auth(self) -> None:
-        """Setup Google Cloud Storage HMAC authentication for native DuckDB access."""
+        """Setup commonly required DuckDB extensions and cloud auth."""
         try:
-            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-
-            if gcs_access_key and gcs_secret_key:
-                self.conn.execute(f"""
-                    CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
-                        TYPE GCS,
-                        KEY_ID '{gcs_access_key}',
-                        SECRET '{gcs_secret_key}'
-                    );
-                """)
-                print("✅ DuckDB GCS HMAC authentication configured")
-            else:
-                print("INFO: GCS HMAC credentials not found")
+            self.conn.execute("INSTALL spatial")
+            self.conn.execute("LOAD spatial")
         except Exception as e:
-            print(f"Warning: Could not setup GCS HMAC authentication: {e}")
+            print(f"Warning: Could not load spatial extension: {e}")
+
+        # Setup cloud storage auth (also installs/loads httpfs)
+        setup_duckdb_cloud_auth(self.conn)
 
     def table_exists(self, table_name: str) -> bool:
         """Check if a table exists."""

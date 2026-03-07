@@ -32,7 +32,7 @@ jobs:
         python-version: '3.11'
 
     - name: Install ruff
-      run: pip install ruff==0.12.8
+      run: pip install ruff==0.15.5
 
     - name: Run ruff linting (critical errors only)
       run: |
@@ -72,7 +72,7 @@ jobs:
         python-version: '3.11'
 
     - name: Install ruff
-      run: pip install ruff==0.12.8
+      run: pip install ruff==0.15.5
 
     - name: Check formatting
       run: |
@@ -99,7 +99,7 @@ jobs:
         python-version: '3.11'
 
     - name: Install ruff
-      run: pip install ruff==0.12.8
+      run: pip install ruff==0.15.5
 
     - name: Check import organization
       run: |
@@ -110,6 +110,82 @@ jobs:
         else
           echo "❌ Import organization issues found - PR blocked" >> $GITHUB_STEP_SUMMARY
           echo "Run \`ruff check . --select I --fix\` locally to fix imports" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+
+  storage-migration-guard:
+    name: Storage Migration Guard
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check for new GCS library usage in Python source
+      run: |
+        echo "## Storage Migration Guard" >> $GITHUB_STEP_SUMMARY
+
+        # Allowlisted legacy files that still legitimately use GCS libraries.
+        # These should be migrated eventually — do NOT add new files here.
+        ALLOWLIST=(
+          "backend/pipelines/property_owners_sftp/local_property_processing.py"
+          "backend/scripts/generate_baseline_metrics.py"
+          "backend/common/validation/baseline_manager.py"
+          "backend/pipelines/chr_pipeline/silver/chr_silver_processing.py"
+          "backend/common/gcs/core.py"
+        )
+        ALLOWLIST_PATTERN=$(printf "|%s" "${ALLOWLIST[@]}")
+        ALLOWLIST_PATTERN="${ALLOWLIST_PATTERN:1}"  # remove leading |
+
+        FAILED=0
+
+        # Check for google.cloud.storage imports in Python files
+        MATCHES=$(grep -rEn "^[[:space:]]*(from[[:space:]]+google\.cloud[[:space:]]+import[[:space:]]+storage|import[[:space:]]+google\.cloud\.storage([[:space:]]|$))" \
+          --include="*.py" \
+          --exclude-dir=".venv" \
+          --exclude-dir="venv" \
+          --exclude-dir="site-packages" \
+          . | grep -v -E "$ALLOWLIST_PATTERN" || true)
+        if [ -n "$MATCHES" ]; then
+          echo "### New google.cloud.storage imports found:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$MATCHES" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Use common.gcs instead of google.cloud.storage directly." >> $GITHUB_STEP_SUMMARY
+          FAILED=1
+        fi
+
+        # Check for new gcsfs imports in Python files
+        MATCHES=$(grep -rEn "^[[:space:]]*(import[[:space:]]+gcsfs([[:space:]]|$)|from[[:space:]]+gcsfs[[:space:]]+import[[:space:]])" \
+          --include="*.py" \
+          --exclude-dir=".venv" \
+          --exclude-dir="venv" \
+          --exclude-dir="site-packages" \
+          . | grep -v -E "$ALLOWLIST_PATTERN" || true)
+        if [ -n "$MATCHES" ]; then
+          echo "### New gcsfs imports found:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$MATCHES" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Use common.gcs (s3fs-based) instead of gcsfs." >> $GITHUB_STEP_SUMMARY
+          FAILED=1
+        fi
+
+        # Count hardcoded gs:// URLs in runtime Python code (informational — not blocking yet)
+        # Many legacy files still use gs:// paths; this tracks migration progress over time.
+        GS_COUNT=$(grep -rn 'gs://' \
+          --include="*.py" \
+          backend/pipelines/ backend/common/ backend/api/ \
+          | grep -v "_test\.py\|test_\|/tests/" \
+          | wc -l || echo "0")
+        echo "### Hardcoded gs:// URL count (informational): $GS_COUNT" >> $GITHUB_STEP_SUMMARY
+        echo "Migrate these to \`StoragePath\` or \`r2://\` paths to reduce this number." >> $GITHUB_STEP_SUMMARY
+
+        if [ "$FAILED" -eq 0 ]; then
+          echo "No new GCS library usage detected." >> $GITHUB_STEP_SUMMARY
+        else
+          echo ""
+          echo "ERROR: New GCS library usage detected. Use common.gcs module instead."
           exit 1
         fi
 
@@ -127,7 +203,7 @@ jobs:
         python-version: '3.11'
 
     - name: Install ruff
-      run: pip install ruff==0.12.8
+      run: pip install ruff==0.15.5
 
     - name: Check for common pipeline issues
       run: |

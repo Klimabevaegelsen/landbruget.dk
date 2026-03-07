@@ -173,7 +173,7 @@ export default function Home() {
             Loading PMTiles Map...
           </p>
           <p className="mt-2 text-sm text-white/60">
-            Discovering latest data from GCS bucket
+            Discovering latest data from storage
           </p>
         </div>
       </div>

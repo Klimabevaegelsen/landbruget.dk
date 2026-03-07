@@ -1,4 +1,4 @@
-name: Weekly Property Owners SFTP to GCS Transfer Pipeline
+name: Weekly Property Owners SFTP to R2 Transfer Pipeline
 
 on:
   schedule:
@@ -8,8 +8,9 @@ on:
     # Allow manual triggering for testing
 
 env:
-  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
   LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
 jobs:
@@ -24,15 +25,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
 
       - name: Create SFTP Transfer and Processing VM
         run: |
@@ -88,8 +80,8 @@ jobs:
           echo "  1. Install dependencies (Python, ijson, pyarrow)"
           echo "  2. Download latest ZIP from SFTP server"
           echo "  3. Extract and process JSON with privacy transformations"
-          echo "  4. Upload processed Parquet to: gs://landbrugsdata-raw-data/silver/property_owners/"
-          echo "  5. Upload original ZIP backup to: gs://landbrugsdata-raw-data/bronze/property_owners/"
+          echo "  4. Upload processed Parquet to: s3://landbrugsdata-raw-data/silver/property_owners/"
+          echo "  5. Upload original ZIP backup to: s3://landbrugsdata-raw-data/bronze/property_owners/"
           echo "  6. Delete itself when complete"
           echo ""
           echo "VM Specs: e2-standard-8 (8 cores, 32GB RAM, 30GB SSD) - Standard instance"
@@ -121,7 +113,7 @@ jobs:
                 df -h /tmp 2>/dev/null || echo 'Could not check disk'
                 echo 'Attempting emergency upload of any partial data...'
                 if [ -d '/tmp/property_owners_data' ]; then
-                  gsutil -m cp -r /tmp/property_owners_data/* gs://landbrugsdata-raw-data/bronze/property_owners/timeout_$(date +%Y%m%d_%H%M%S)/ || echo 'Emergency upload failed'
+                  aws s3 cp /tmp/property_owners_data/ s3://landbrugsdata-raw-data/bronze/property_owners/timeout_$(date +%Y%m%d_%H%M%S)/ --recursive --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com || echo 'Emergency upload failed'
                 fi
                 echo '=== END TIMEOUT CLEANUP ==='
               " 2>/dev/null || echo "Could not connect for timeout cleanup"

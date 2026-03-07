@@ -15,10 +15,10 @@ from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config.settings import get_settings
 from utils.logger import setup_logger
 
-# GCS upload functionality
+# Storage upload functionality
 try:
     from common.gcs import GCSDataAccess  # noqa: F401
-    from google.cloud import storage
+    from common.gcs.filesystem import get_r2_filesystem
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -26,24 +26,21 @@ except ImportError:
 
 
 def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str) -> bool | None:
-    """Upload file to GCS using the standard pattern from other pipelines."""
+    """Upload file to storage using s3fs."""
     if not GCS_AVAILABLE:
-        print("⚠️ GCS not available - skipping upload")
+        print("⚠️ Storage not available - skipping upload")
         return False
 
     try:
-        print(f"📤 Uploading {file_path} to gs://{gcs_bucket}/{gcs_path}")
+        print(f"📤 Uploading {file_path} to {gcs_bucket}/{gcs_path}")
 
-        # Use the same pattern as other pipelines
-        client = storage.Client()
-        bucket = client.bucket(gcs_bucket)
-        blob = bucket.blob(gcs_path)
-
-        blob.upload_from_filename(file_path)
-        print(f"✅ Successfully uploaded to gs://{gcs_bucket}/{gcs_path}")
+        fs = get_r2_filesystem()
+        r2_path = f"{gcs_bucket}/{gcs_path}"
+        fs.put(file_path, r2_path)
+        print(f"✅ Successfully uploaded to {r2_path}")
         return True
     except Exception as e:
-        print(f"❌ Failed to upload to GCS: {e}")
+        print(f"❌ Failed to upload: {e}")
         return False
 
 
