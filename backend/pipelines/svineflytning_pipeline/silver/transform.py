@@ -26,7 +26,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize storage configuration
-GCS_BUCKET = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+GCS_BUCKET = os.getenv("R2_BUCKET", "landbrugsdata-raw-data")
 
 # Initialize R2/S3 filesystem if available
 _r2_fs = None
@@ -673,7 +673,10 @@ class SvineflytningSilverProcessor:
                     # Upload file using streaming
                     import shutil
 
-                    with open(parquet_file, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                    with (
+                        open(parquet_file, "rb") as src,
+                        gcs_access.fs.open(gcs_path.replace("gs://", ""), "wb") as dst,
+                    ):
                         shutil.copyfileobj(src, dst)
 
                     logger.info(f"✅ Uploaded {parquet_file.name} to {gcs_path}")

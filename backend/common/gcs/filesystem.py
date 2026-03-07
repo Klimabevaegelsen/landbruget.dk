@@ -58,9 +58,9 @@ def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
     """Get DuckDB connection with R2 configured (native TYPE r2 secret)."""
     conn = duckdb.connect()
 
-    # Try native R2 auth first (fastest), fallback to s3fs fsspec
-    if _setup_native_r2_auth(conn):
-        logger.info("DuckDB configured with native R2 authentication")
+    # Try native cloud auth first (fastest), fallback to s3fs fsspec
+    if setup_duckdb_cloud_auth(conn):
+        logger.info("DuckDB configured with native cloud authentication")
     else:
         # Fallback to s3fs integration via fsspec
         try:
@@ -86,30 +86,31 @@ def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
     return conn
 
 
-def _setup_native_r2_auth(conn: duckdb.DuckDBPyConnection) -> bool:
-    """
-    Setup native R2 authentication using DuckDB's TYPE r2 secret.
+def setup_duckdb_cloud_auth(conn: duckdb.DuckDBPyConnection) -> bool:
+    """Setup cloud storage authentication for a DuckDB connection.
 
-    Uses DuckDB's httpfs extension with R2 secret type.
+    Tries R2 credentials first (TYPE r2), falls back to GCS HMAC (TYPE GCS).
+    Installs and loads the httpfs extension as a prerequisite.
+
     Reference: https://duckdb.org/docs/stable/guides/network_cloud_storage/cloudflare_r2_import
 
     Returns:
-        True if native authentication was configured successfully, False otherwise.
+        True if any cloud authentication was configured, False otherwise.
     """
     try:
-        # Install and load httpfs extension
         conn.execute("INSTALL httpfs")
         conn.execute("LOAD httpfs")
+    except Exception as e:
+        logger.warning(f"Could not load httpfs extension: {e}")
+        return False
 
-        # Check for R2 credentials
-        r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
-        r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
-        r2_account_id = os.getenv("R2_ACCOUNT_ID")
+    # Try R2 credentials first
+    r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
+    r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+    r2_account_id = os.getenv("R2_ACCOUNT_ID")
 
-        if r2_access_key and r2_secret_key and r2_account_id:
-            # Create R2 secret for native access
-            # TYPE r2 automatically configures the correct R2 endpoint using ACCOUNT_ID
-            # Use proper SQL escaping by doubling single quotes
+    if r2_access_key and r2_secret_key and r2_account_id:
+        try:
             escaped_key = r2_access_key.replace("'", "''")
             escaped_secret = r2_secret_key.replace("'", "''")
             escaped_account = r2_account_id.replace("'", "''")
@@ -121,17 +122,37 @@ def _setup_native_r2_auth(conn: duckdb.DuckDBPyConnection) -> bool:
                     ACCOUNT_ID '{escaped_account}'
                 );
             """)
-            logger.info("Created DuckDB R2 secret with HMAC credentials")
+            logger.info("DuckDB R2 authentication configured")
             return True
-        logger.info("R2 credentials not found, using s3fs fallback")
-        return False
+        except Exception as e:
+            logger.warning(f"Could not setup R2 authentication: {e}")
 
-    except Exception as e:
-        logger.warning(f"Could not setup native R2 authentication: {e}")
-        return False
+    # Fallback to GCS HMAC credentials
+    gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+    gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+    if gcs_access_key and gcs_secret_key:
+        try:
+            escaped_key = gcs_access_key.replace("'", "''")
+            escaped_secret = gcs_secret_key.replace("'", "''")
+            conn.execute(f"""
+                CREATE OR REPLACE SECRET gcs_hmac (
+                    TYPE GCS,
+                    KEY_ID '{escaped_key}',
+                    SECRET '{escaped_secret}'
+                );
+            """)
+            logger.info("DuckDB GCS HMAC authentication configured (legacy)")
+            return True
+        except Exception as e:
+            logger.warning(f"Could not setup GCS authentication: {e}")
+
+    logger.info("No R2 or GCS HMAC credentials found for DuckDB")
+    return False
 
 
 # Backward-compatible aliases
+_setup_native_r2_auth = setup_duckdb_cloud_auth
+_setup_native_gcs_auth = setup_duckdb_cloud_auth
 get_gcs_filesystem = get_r2_filesystem
 get_duckdb_with_gcs = get_duckdb_with_r2
-_setup_native_gcs_auth = _setup_native_r2_auth

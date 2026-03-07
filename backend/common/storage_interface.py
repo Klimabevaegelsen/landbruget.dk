@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Any, Never
 
@@ -17,6 +18,45 @@ except ImportError as e:
 
 # google.cloud.storage no longer needed — using s3fs via GCSDataAccess (R2)
 storage = None
+
+DEFAULT_BUCKET = "landbrugsdata-raw-data"
+
+
+class StoragePath:
+    """Build cloud storage paths consistently across all pipelines.
+
+    Centralizes bucket name, protocol prefix, and medallion-layer path construction
+    so pipelines never build URLs ad-hoc.
+
+    Usage:
+        paths = StoragePath()  # reads bucket from R2_BUCKET or GCS_BUCKET env
+        paths.bronze("chr_pipeline", "2025-03-07", "raw.parquet")
+        # -> "gs://landbrugsdata-raw-data/bronze/chr_pipeline/2025-03-07/raw.parquet"
+
+        paths.silver("unified_pipeline", "agricultural_fields.parquet")
+        # -> "gs://landbrugsdata-raw-data/silver/unified_pipeline/agricultural_fields.parquet"
+    """
+
+    def __init__(self, bucket: str | None = None) -> None:
+        self.bucket = bucket or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or DEFAULT_BUCKET
+
+    def _build(self, *parts: str) -> str:
+        """Build a gs:// path from parts, stripping extra slashes."""
+        joined = "/".join(p.strip("/") for p in parts if p)
+        return f"gs://{self.bucket}/{joined}"
+
+    def bronze(self, source: str, *parts: str) -> str:
+        return self._build("bronze", source, *parts)
+
+    def silver(self, source: str, *parts: str) -> str:
+        return self._build("silver", source, *parts)
+
+    def gold(self, source: str, *parts: str) -> str:
+        return self._build("gold", source, *parts)
+
+    def raw(self, *parts: str) -> str:
+        """Build a path without a medallion layer prefix."""
+        return self._build(*parts)
 
 
 class StorageInterface:
@@ -104,8 +144,8 @@ class LocalStorage(StorageInterface):
             return json.load(f)
 
 
-class GCSStorage(StorageInterface):
-    """Save JSON files to a Google Cloud Storage bucket using optimized gcs_access.py."""
+class CloudStorage(StorageInterface):
+    """Save JSON files to cloud object storage using optimized GCSDataAccess."""
 
     def __init__(self, bucket_name: str) -> None:
         self.bucket_name = bucket_name
@@ -224,3 +264,7 @@ class GCSStorage(StorageInterface):
         blob = self.bucket.blob(src_path)
         content = blob.download_as_string()
         return json.loads(content)
+
+
+# Backward-compatible alias (deprecated name)
+GCSStorage = CloudStorage

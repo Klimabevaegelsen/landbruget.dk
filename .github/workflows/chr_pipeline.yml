@@ -213,10 +213,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 
@@ -369,10 +373,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 
@@ -540,10 +548,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 
@@ -694,10 +706,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 
@@ -820,10 +836,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 
@@ -976,10 +996,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 
@@ -1112,10 +1136,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 
@@ -1271,6 +1299,9 @@ jobs:
       - name: Set up environment variables (NO FVM CREDENTIALS)
         env:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -1283,6 +1314,9 @@ jobs:
 
           # Set up environment WITHOUT FVM credentials (silver doesn't need them)
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
 
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
@@ -1414,12 +1448,18 @@ jobs:
       - name: Set up environment variables
         env:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
         run: |
           cd backend/pipelines/chr_pipeline
 
           # Set up environment for gold processing
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
 
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
@@ -1620,10 +1660,14 @@ jobs:
 
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "R2_BUCKET=$R2_BUCKET" >> .env
+          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
+          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
+          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
 

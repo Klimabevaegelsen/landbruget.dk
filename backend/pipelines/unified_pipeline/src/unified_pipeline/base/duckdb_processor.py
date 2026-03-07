@@ -1,11 +1,11 @@
 """Base class for DuckDB operations in migrated pipelines."""
 
-import os
 import time
 from pathlib import Path
 from typing import Any
 
 import duckdb
+from common.gcs.filesystem import setup_duckdb_cloud_auth
 
 
 class DuckDBProcessor:
@@ -17,78 +17,15 @@ class DuckDBProcessor:
         self._setup_extensions()
 
     def _setup_extensions(self):
-        """Setup required DuckDB extensions."""
+        """Setup required DuckDB extensions and cloud auth."""
         try:
             self.conn.execute("INSTALL spatial")
             self.conn.execute("LOAD spatial")
         except Exception as e:
             print(f"Warning: Could not load spatial extension: {e}")
 
-        try:
-            self.conn.execute("INSTALL httpfs")
-            self.conn.execute("LOAD httpfs")
-        except Exception as e:
-            print(f"Warning: Could not load httpfs extension: {e}")
-
-        # Setup GCS HMAC authentication if credentials are available
-        self._setup_gcs_auth()
-
-    def _setup_gcs_auth(self):
-        """Setup Google Cloud Storage HMAC authentication for native DuckDB access."""
-        try:
-            # Check for HMAC credentials in environment variables
-            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-
-            if gcs_access_key and gcs_secret_key:
-                # Escape single quotes in credentials to prevent SQL injection
-                escaped_key = gcs_access_key.replace("'", "''")
-                escaped_secret = gcs_secret_key.replace("'", "''")
-
-                # Create persistent GCS secret for native access
-                self.conn.execute(f"""
-                    CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
-                        TYPE GCS,
-                        KEY_ID '{escaped_key}',
-                        SECRET '{escaped_secret}'
-                    );
-                """)
-                print("✅ DuckDB GCS HMAC authentication configured")
-            else:
-                print(
-                    "ℹ️  GCS HMAC credentials not found "
-                    "(set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY)"
-                )
-        except Exception as e:
-            print(f"Warning: Could not setup GCS HMAC authentication: {e}")
-
-    def setup_gcs_secret(
-        self, access_key_id: str, secret_access_key: str, secret_name: str = "gcs_hmac"
-    ):
-        """
-        Manually setup GCS HMAC secret for native DuckDB access.
-
-        Args:
-            access_key_id: GCS HMAC Access Key ID
-            secret_access_key: GCS HMAC Secret Access Key
-            secret_name: Name for the secret (default: gcs_hmac)
-        """
-        try:
-            # Escape single quotes in credentials to prevent SQL injection
-            escaped_key = access_key_id.replace("'", "''")
-            escaped_secret = secret_access_key.replace("'", "''")
-
-            self.conn.execute(f"""
-                CREATE OR REPLACE PERSISTENT SECRET {secret_name} (
-                    TYPE GCS,
-                    KEY_ID '{escaped_key}',
-                    SECRET '{escaped_secret}'
-                );
-            """)
-            print(f"✅ GCS secret '{secret_name}' configured successfully")
-        except Exception as e:
-            print(f"Error setting up GCS secret: {e}")
-            raise
+        # Setup cloud storage auth (also installs/loads httpfs)
+        setup_duckdb_cloud_auth(self.conn)
 
     def create_table_from_parquet(
         self, parquet_path: str | Path, table_name: str | None = None

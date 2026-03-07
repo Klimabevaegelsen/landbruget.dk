@@ -175,6 +175,7 @@ class GCSDataAccess:
 
     def check_file_size_limits(self, gcs_path: str) -> bool:
         """Check if file is too large for runner constraints."""
+        gcs_path = _strip_protocol(gcs_path)
         try:
             file_info = self.fs.info(gcs_path)
             file_size_gb = file_info["size"] / (1024**3)
@@ -195,6 +196,7 @@ class GCSDataAccess:
 
     def _temp_download(self, gcs_path: str):
         """Context manager for temporary file download with guaranteed cleanup."""
+        gcs_path = _strip_protocol(gcs_path)
 
         @contextmanager
         def temp_file_context():
@@ -296,6 +298,7 @@ class GCSDataAccess:
         - Direct DuckDB COPY with optimized Parquet settings
         - Streaming upload to GCS
         """
+        gcs_path = _strip_protocol(gcs_path)
         self.monitor.check_resources("start_direct_export")
 
         # Build COPY options for optimal Parquet export
@@ -616,7 +619,7 @@ class GCSDataAccess:
 
         try:
             # STREAMING: Write JSON directly to GCS without temp files
-            with self.fs.open(gcs_path, "w", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(gcs_path), "w", encoding="utf-8") as f:
                 json.dump(data, f, **json_kwargs)
 
             self.monitor.check_resources("post_json_upload")
@@ -641,7 +644,7 @@ class GCSDataAccess:
         self.monitor.check_resources("start_json_string_upload")
 
         try:
-            with self.fs.open(gcs_path, "w", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(gcs_path), "w", encoding="utf-8") as f:
                 f.write(json_string)
 
             self.monitor.check_resources("post_json_string_upload")
@@ -663,7 +666,7 @@ class GCSDataAccess:
         self.monitor.check_resources("start_json_download")
 
         try:
-            with self.fs.open(gcs_path, "r", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(gcs_path), "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             self.monitor.check_resources("post_json_download")
@@ -680,6 +683,7 @@ class GCSDataAccess:
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
         """
+        gcs_path = _strip_protocol(gcs_path)
         self.monitor.check_resources("start_duckdb_upload")
 
         # Detect format based on file extension
@@ -770,6 +774,7 @@ class GCSDataAccess:
         Raises:
             Exception if file doesn't exist or size mismatch
         """
+        gcs_path = _strip_protocol(gcs_path)
         try:
             if not self.fs.exists(gcs_path):
                 self.log.error(f"File not found after upload: {gcs_path}")
@@ -793,6 +798,7 @@ class GCSDataAccess:
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
         """
+        gcs_path = _strip_protocol(gcs_path)
         self.monitor.check_resources("start_query_upload")
 
         # Detect format based on file extension

@@ -7,12 +7,12 @@ extension loading, and common operations.
 """
 
 import contextlib
-import os
 import time
 from pathlib import Path
 from typing import Any
 
 import duckdb
+from common.gcs.filesystem import setup_duckdb_cloud_auth
 
 
 class SharedDuckDBProcessor:
@@ -36,67 +36,15 @@ class SharedDuckDBProcessor:
         self._setup_extensions()
 
     def _setup_extensions(self) -> None:
-        """Setup commonly required DuckDB extensions."""
-        extensions = [
-            ("spatial", "Geospatial operations"),
-            ("httpfs", "HTTP/S3 file system access"),
-        ]
-
-        for ext_name, description in extensions:
-            try:
-                self.conn.execute(f"INSTALL {ext_name}")
-                self.conn.execute(f"LOAD {ext_name}")
-            except Exception as e:
-                print(f"Warning: Could not load {ext_name} extension ({description}): {e}")
-
-        # Setup GCS HMAC authentication if available
-        self._setup_gcs_auth()
-
-    def _setup_gcs_auth(self) -> None:
-        """Setup cloud storage authentication for native DuckDB access.
-
-        Tries R2 credentials first (TYPE r2), falls back to GCS (TYPE gcs).
-        """
+        """Setup commonly required DuckDB extensions and cloud auth."""
         try:
-            # Try R2 credentials first
-            r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
-            r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
-            r2_account_id = os.getenv("R2_ACCOUNT_ID")
-
-            if r2_access_key and r2_secret_key and r2_account_id:
-                escaped_key = r2_access_key.replace("'", "''")
-                escaped_secret = r2_secret_key.replace("'", "''")
-                escaped_account = r2_account_id.replace("'", "''")
-                self.conn.execute(f"""
-                    CREATE OR REPLACE SECRET r2_hmac (
-                        TYPE r2,
-                        KEY_ID '{escaped_key}',
-                        SECRET '{escaped_secret}',
-                        ACCOUNT_ID '{escaped_account}'
-                    );
-                """)
-                print("DuckDB R2 authentication configured")
-                return
-
-            # Fallback to GCS credentials
-            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-
-            if gcs_access_key and gcs_secret_key:
-                escaped_key = gcs_access_key.replace("'", "''")
-                escaped_secret = gcs_secret_key.replace("'", "''")
-                self.conn.execute(f"""
-                    CREATE OR REPLACE SECRET gcs_hmac (
-                        TYPE GCS,
-                        KEY_ID '{escaped_key}',
-                        SECRET '{escaped_secret}'
-                    );
-                """)
-                print("DuckDB GCS HMAC authentication configured (legacy)")
-            else:
-                print("INFO: No R2 or GCS HMAC credentials found")
+            self.conn.execute("INSTALL spatial")
+            self.conn.execute("LOAD spatial")
         except Exception as e:
-            print(f"Warning: Could not setup cloud storage authentication: {e}")
+            print(f"Warning: Could not load spatial extension: {e}")
+
+        # Setup cloud storage auth (also installs/loads httpfs)
+        setup_duckdb_cloud_auth(self.conn)
 
     def table_exists(self, table_name: str) -> bool:
         """Check if a table exists."""

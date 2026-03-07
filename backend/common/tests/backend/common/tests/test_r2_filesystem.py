@@ -197,6 +197,45 @@ class TestGetDuckDBWithR2:
         finally:
             conn.close()
 
+    @patch.dict(
+        os.environ,
+        {
+            "R2_ACCESS_KEY_ID": "test-key-id",
+            "R2_SECRET_ACCESS_KEY": "test-secret-key",
+            "R2_ACCOUNT_ID": "abc123def456ghi789jkl012mno345pqr",
+        },
+    )
+    def test_setup_duckdb_cloud_auth_function_works(self):
+        """New shared auth helper should configure native cloud auth."""
+        from common.gcs.filesystem import setup_duckdb_cloud_auth
+
+        conn = duckdb.connect(":memory:")
+        try:
+            assert setup_duckdb_cloud_auth(conn) is True
+        finally:
+            conn.close()
+
+    @patch.dict(
+        os.environ,
+        {
+            "GCS_ACCESS_KEY_ID": "legacy-key",
+            "GCS_SECRET_ACCESS_KEY": "legacy-secret",
+            "HOME": os.environ.get("HOME", "/tmp"),
+        },
+        clear=True,
+    )
+    def test_setup_duckdb_cloud_auth_falls_back_to_gcs(self):
+        """Shared auth helper should keep legacy GCS HMAC fallback."""
+        from common.gcs.filesystem import setup_duckdb_cloud_auth
+
+        conn = duckdb.connect(":memory:")
+        try:
+            assert setup_duckdb_cloud_auth(conn) is True
+            secrets = conn.execute("SELECT * FROM duckdb_secrets()").fetchall()
+            assert "gcs" in str(secrets).lower()
+        finally:
+            conn.close()
+
 
 class TestBackwardCompatibility:
     """Tests that old GCS function names still work via aliases."""
