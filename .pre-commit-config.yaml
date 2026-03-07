@@ -16,14 +16,21 @@ repos:
         language_version: python3
 
   # Stage 2: Python formatting and linting (sequenced properly)
+  # IMPORTANT: Keep rev in sync with ruff version in .github/workflows/code-quality.yml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0
+    rev: v0.12.8
     hooks:
-      # First: Fix code issues
+      # First: Fix import sorting (matches CI import-check job)
       - id: ruff
-        args: [--fix]  # Remove --exit-non-zero-on-fix to prevent rollbacks
+        name: ruff (import sorting)
+        args: [--select, I, --fix]
         types_or: [python, pyi]
-      # Second: Format code
+      # Second: Check for critical errors (matches CI lint job)
+      - id: ruff
+        name: ruff (critical lint)
+        args: [--select, "E9,F,E711,E712,E713,E714,W605"]
+        types_or: [python, pyi]
+      # Third: Format code (matches CI format-check job)
       - id: ruff-format
         types_or: [python, pyi]
 
