@@ -97,7 +97,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install ruff
-        run: pip install ruff==0.8.0
+        run: pip install ruff==0.15.5
 
       - name: Check for coordinate-related code issues
         run: |
