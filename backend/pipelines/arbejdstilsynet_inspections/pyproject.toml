@@ -10,8 +10,7 @@ authors = [
 ]
 dependencies = [
     "python-dotenv>=1.0.0",
-    "gcsfs>=2024.1.0",
-    "google-cloud-storage>=2.0.0",
+    "s3fs>=2024.1.0",
     "pyarrow>=14.0.0",
     "loguru>=0.7.0",
     "playwright>=1.40.0",

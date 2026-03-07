@@ -15,10 +15,8 @@ try:
 except ImportError as e:
     raise ImportError("DuckDB is required for storage operations") from e
 
-try:
-    from google.cloud import storage
-except ImportError:
-    storage = None
+# google.cloud.storage no longer needed — using s3fs via GCSDataAccess (R2)
+storage = None
 
 
 class StorageInterface:

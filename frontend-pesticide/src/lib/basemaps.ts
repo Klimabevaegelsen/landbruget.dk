@@ -14,9 +14,9 @@ const DENMARK_BOUNDS = {
   north: 57.8,
 };
 
-// Denmark PMTiles URL on GCS
+// Denmark PMTiles URL on R2
 const DENMARK_PMTILES_URL =
-  'pmtiles://https://storage.googleapis.com/landbrugsdata-raw-data/pmtiles/protomaps_denmark.pmtiles';
+  'pmtiles://https://data.pesticidkortet.dk/pmtiles/protomaps_denmark.pmtiles';
 
 // Create basemap styles using the actual Denmark PMTiles
 function createDenmarkBasemapStyle(flavor: 'light' | 'black') {

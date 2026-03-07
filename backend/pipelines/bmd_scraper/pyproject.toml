@@ -14,9 +14,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pyarrow>=14.0.0",
     "duckdb>=0.9.0",
-    "gcsfs>=2025.3.2",
+    "s3fs>=2024.1.0",
     "simple-singleton>=2.0.0",
-    "google-cloud-storage>=2.0.0",
     "landbruget-common",
 ]
 

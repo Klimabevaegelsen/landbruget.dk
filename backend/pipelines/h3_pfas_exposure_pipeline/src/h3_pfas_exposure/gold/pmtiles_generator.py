@@ -464,44 +464,16 @@ class H3PMTilesGenerator:
             return None
 
     def _set_public_read_acl(self, gcs_path: str) -> None:
-        """Set public read ACL on a GCS file."""
-        try:
-            # Extract bucket and blob name from gs:// path
-            path_parts = gcs_path.replace("gs://", "").split("/", 1)
-            bucket_name = path_parts[0]
-            blob_name = path_parts[1]
+        """Set public read ACL on a storage file.
 
-            # Try to use Google Cloud Storage client to set ACL
-            try:
-                from google.cloud import storage
-
-                client = storage.Client()
-                bucket = client.bucket(bucket_name)
-                blob = bucket.blob(blob_name)
-
-                # Set public read access
-                blob.acl.all().grant_read()
-                blob.acl.save()
-
-                self.log.info(f"✅ Set public read ACL on {gcs_path}")
-
-            except ImportError:
-                # Fallback to gsutil command if google-cloud-storage is not available
-                import subprocess
-
-                subprocess.run(
-                    ["gsutil", "acl", "ch", "-u", "AllUsers:R", gcs_path],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-
-                self.log.info(f"✅ Set public read ACL on {gcs_path} (via gsutil)")
-
-        except Exception as e:
-            # Log warning but don't fail the upload
-            self.log.warning(f"⚠️ Failed to set public read ACL on {gcs_path}: {e}")
-            self.log.warning("⚠️ File uploaded successfully but may not be publicly accessible")
+        Note: R2 does not support per-object ACLs in the same way as GCS.
+        Public access is controlled via R2 bucket settings or custom domains.
+        This method is kept as a no-op for backward compatibility.
+        """
+        self.log.info(
+            f"ℹ️ Public read ACL not applicable for R2 storage: {gcs_path}. "
+            "Configure public access via R2 bucket settings or custom domain."
+        )
 
     def _create_kommune_geojson(
         self,

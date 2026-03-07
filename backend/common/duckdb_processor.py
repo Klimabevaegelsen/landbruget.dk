@@ -53,24 +53,50 @@ class SharedDuckDBProcessor:
         self._setup_gcs_auth()
 
     def _setup_gcs_auth(self) -> None:
-        """Setup Google Cloud Storage HMAC authentication for native DuckDB access."""
+        """Setup cloud storage authentication for native DuckDB access.
+
+        Tries R2 credentials first (TYPE r2), falls back to GCS (TYPE gcs).
+        """
         try:
+            # Try R2 credentials first
+            r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
+            r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+            r2_account_id = os.getenv("R2_ACCOUNT_ID")
+
+            if r2_access_key and r2_secret_key and r2_account_id:
+                escaped_key = r2_access_key.replace("'", "''")
+                escaped_secret = r2_secret_key.replace("'", "''")
+                escaped_account = r2_account_id.replace("'", "''")
+                self.conn.execute(f"""
+                    CREATE OR REPLACE SECRET r2_hmac (
+                        TYPE r2,
+                        KEY_ID '{escaped_key}',
+                        SECRET '{escaped_secret}',
+                        ACCOUNT_ID '{escaped_account}'
+                    );
+                """)
+                print("DuckDB R2 authentication configured")
+                return
+
+            # Fallback to GCS credentials
             gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
             gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
             if gcs_access_key and gcs_secret_key:
+                escaped_key = gcs_access_key.replace("'", "''")
+                escaped_secret = gcs_secret_key.replace("'", "''")
                 self.conn.execute(f"""
-                    CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
+                    CREATE OR REPLACE SECRET gcs_hmac (
                         TYPE GCS,
-                        KEY_ID '{gcs_access_key}',
-                        SECRET '{gcs_secret_key}'
+                        KEY_ID '{escaped_key}',
+                        SECRET '{escaped_secret}'
                     );
                 """)
-                print("✅ DuckDB GCS HMAC authentication configured")
+                print("DuckDB GCS HMAC authentication configured (legacy)")
             else:
-                print("INFO: GCS HMAC credentials not found")
+                print("INFO: No R2 or GCS HMAC credentials found")
         except Exception as e:
-            print(f"Warning: Could not setup GCS HMAC authentication: {e}")
+            print(f"Warning: Could not setup cloud storage authentication: {e}")
 
     def table_exists(self, table_name: str) -> bool:
         """Check if a table exists."""

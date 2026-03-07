@@ -1,7 +1,13 @@
 """
-GCS filesystem utilities using gcsfs.
+R2/S3-compatible filesystem utilities using s3fs.
 
 Provides cached filesystem access and DuckDB integration for optimal performance.
+Migrated from gcsfs (GCS) to s3fs (Cloudflare R2) — all public APIs preserved.
+
+Backward compatibility:
+- get_gcs_filesystem() → alias for get_r2_filesystem()
+- get_duckdb_with_gcs() → alias for get_duckdb_with_r2()
+- _setup_native_gcs_auth() → alias for _setup_native_r2_auth()
 """
 
 import logging
@@ -9,70 +15,83 @@ import os
 from functools import lru_cache
 
 import duckdb
-import gcsfs
+import s3fs
 
 # Use standard logging - can be configured by calling code
 logger = logging.getLogger("landbruget.gcs")
 
 
 @lru_cache(maxsize=1)
-def get_gcs_filesystem() -> gcsfs.GCSFileSystem:
+def get_r2_filesystem() -> s3fs.S3FileSystem:
     """
-    Get cached gcsfs filesystem instance with optimal authentication.
+    Get cached s3fs filesystem instance for Cloudflare R2.
 
-    Priority order:
-    1. HMAC credentials (fastest, no OAuth required)
-    2. Service account authentication (fallback)
+    Requires R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_ACCOUNT_ID
+    environment variables to be set.
+
+    Raises:
+        EnvironmentError: If required R2 credentials are not set.
     """
-    # Try HMAC authentication first (no OAuth required)
-    gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-    gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+    r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
+    r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+    r2_account_id = os.getenv("R2_ACCOUNT_ID")
 
-    if gcs_access_key and gcs_secret_key:
-        logger.info("Using HMAC authentication for gcsfs (no OAuth required)")
-        return gcsfs.GCSFileSystem(access_key_id=gcs_access_key, secret_access_key=gcs_secret_key)
-    logger.info("Using service account authentication for gcsfs (requires OAuth)")
-    return gcsfs.GCSFileSystem()
+    if not (r2_access_key and r2_secret_key and r2_account_id):
+        raise EnvironmentError(
+            "R2 credentials not configured. Set R2_ACCESS_KEY_ID, "
+            "R2_SECRET_ACCESS_KEY, and R2_ACCOUNT_ID environment variables."
+        )
+
+    endpoint_url = f"https://{r2_account_id}.r2.cloudflarestorage.com"
+    logger.info("Using R2 S3-compatible authentication via s3fs")
+
+    return s3fs.S3FileSystem(
+        key=r2_access_key,
+        secret=r2_secret_key,
+        client_kwargs={"endpoint_url": endpoint_url},
+        s3_additional_kwargs={"ACL": "private"},
+    )
 
 
 @lru_cache(maxsize=1)
-def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
-    """Get DuckDB connection with gcsfs registered (6x faster than HTTPFS)."""
+def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
+    """Get DuckDB connection with R2 configured (native TYPE r2 secret)."""
     conn = duckdb.connect()
 
-    # Try native HMAC first (fastest), fallback to gcsfs
-    if _setup_native_gcs_auth(conn):
-        logger.info("DuckDB configured with native GCS HMAC authentication")
+    # Try native R2 auth first (fastest), fallback to s3fs fsspec
+    if _setup_native_r2_auth(conn):
+        logger.info("DuckDB configured with native R2 authentication")
     else:
-        # Fallback to gcsfs integration
+        # Fallback to s3fs integration via fsspec
         try:
-            from fsspec import filesystem
+            r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
+            r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+            r2_account_id = os.getenv("R2_ACCOUNT_ID")
 
-            # Use HMAC credentials if available for fsspec as well
-            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-
-            if gcs_access_key and gcs_secret_key:
-                fs = filesystem("gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key)
-                logger.info("DuckDB configured with gcsfs integration using HMAC (no OAuth)")
+            if r2_access_key and r2_secret_key and r2_account_id:
+                endpoint_url = f"https://{r2_account_id}.r2.cloudflarestorage.com"
+                fs = s3fs.S3FileSystem(
+                    key=r2_access_key,
+                    secret=r2_secret_key,
+                    client_kwargs={"endpoint_url": endpoint_url},
+                    s3_additional_kwargs={"ACL": "private"},
+                )
+                conn.register_filesystem(fs)
+                logger.info("DuckDB configured with s3fs integration for R2")
             else:
-                fs = filesystem("gs")
-                logger.info("DuckDB configured with gcsfs integration using service account")
-
-            conn.register_filesystem(fs)
+                logger.warning("R2 credentials not found, DuckDB has no cloud storage access")
         except Exception as e:
-            logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
+            logger.warning(f"Failed to register s3fs with DuckDB: {e}")
 
     return conn
 
 
-def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
+def _setup_native_r2_auth(conn: duckdb.DuckDBPyConnection) -> bool:
     """
-    Setup native GCS HMAC authentication if credentials are available.
+    Setup native R2 authentication using DuckDB's TYPE r2 secret.
 
-    Uses DuckDB's httpfs extension with GCS secret type.
-    Reference: https://duckdb.org/docs/stable/core_extensions/httpfs/s3api
-    Reference: https://duckdb.org/docs/stable/guides/network_cloud_storage/gcs_import
+    Uses DuckDB's httpfs extension with R2 secret type.
+    Reference: https://duckdb.org/docs/stable/guides/network_cloud_storage/cloudflare_r2_import
 
     Returns:
         True if native authentication was configured successfully, False otherwise.
@@ -82,29 +101,37 @@ def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
         conn.execute("INSTALL httpfs")
         conn.execute("LOAD httpfs")
 
-        # Check for HMAC credentials
-        gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-        gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+        # Check for R2 credentials
+        r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
+        r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+        r2_account_id = os.getenv("R2_ACCOUNT_ID")
 
-        if gcs_access_key and gcs_secret_key:
-            # Create GCS secret for native access
-            # Note: TYPE gcs automatically configures the correct GCS endpoint
-            # No s3_region setting needed - that's only for S3
+        if r2_access_key and r2_secret_key and r2_account_id:
+            # Create R2 secret for native access
+            # TYPE r2 automatically configures the correct R2 endpoint using ACCOUNT_ID
             # Use proper SQL escaping by doubling single quotes
-            escaped_key = gcs_access_key.replace("'", "''")
-            escaped_secret = gcs_secret_key.replace("'", "''")
+            escaped_key = r2_access_key.replace("'", "''")
+            escaped_secret = r2_secret_key.replace("'", "''")
+            escaped_account = r2_account_id.replace("'", "''")
             conn.execute(f"""
-                CREATE OR REPLACE SECRET gcs_secret (
-                    TYPE gcs,
+                CREATE OR REPLACE SECRET r2_secret (
+                    TYPE r2,
                     KEY_ID '{escaped_key}',
-                    SECRET '{escaped_secret}'
+                    SECRET '{escaped_secret}',
+                    ACCOUNT_ID '{escaped_account}'
                 );
             """)
-            logger.info("Created DuckDB GCS secret with HMAC credentials")
+            logger.info("Created DuckDB R2 secret with HMAC credentials")
             return True
-        logger.info("GCS HMAC credentials not found, using gcsfs fallback")
+        logger.info("R2 credentials not found, using s3fs fallback")
         return False
 
     except Exception as e:
-        logger.warning(f"Could not setup native GCS authentication: {e}")
+        logger.warning(f"Could not setup native R2 authentication: {e}")
         return False
+
+
+# Backward-compatible aliases
+get_gcs_filesystem = get_r2_filesystem
+get_duckdb_with_gcs = get_duckdb_with_r2
+_setup_native_gcs_auth = _setup_native_r2_auth

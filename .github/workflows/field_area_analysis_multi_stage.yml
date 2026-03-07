@@ -2,8 +2,8 @@ name: Field Area Analysis Multi-Stage Pipeline
 
 # WORKFLOW MODES:
 # - 'all': Runs stages SEQUENTIALLY with proper dependencies (stage0→stage1→stage2→stage3→stage4)
-# - Individual stages (e.g. 'stage3'): Run INDEPENDENTLY using latest GCS data
-# Each stage uses _get_latest_gold_path() to find the most recent timestamped data from previous stages
+# - Individual stages (e.g. 'stage3'): Run INDEPENDENTLY using latest R2 data
+# Each stage uses _get_latest_gold_path() to find the most recent timestamped data from previous stages in R2
 
 on:
   workflow_dispatch:
@@ -38,9 +38,10 @@ on:
 
 env:
   ENVIRONMENT: production
-  GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  R2_BUCKET: ${{ secrets.R2_BUCKET }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
   LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
 jobs:
@@ -54,21 +55,23 @@ jobs:
       properties_available: ${{ steps.check.outputs.properties_available }}
       grukos_available: ${{ steps.check.outputs.grukos_available }}
     steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: Install AWS CLI
+        run: |
+          pip install awscli
 
       - name: Check silver data availability
         id: check
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
-          echo "🔍 Checking silver data availability in GCS..."
+          echo "🔍 Checking silver data availability in R2..."
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           # Check wetlands_dissolved
-          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/wetlands_dissolved/" &>/dev/null; then
+          if aws s3 ls "s3://${R2_BUCKET}/silver/wetlands_dissolved/" --endpoint-url $R2_ENDPOINT &>/dev/null; then
             echo "  ✅ wetlands_dissolved: Available"
             echo "wetlands_available=true" >> $GITHUB_OUTPUT
           else
@@ -77,7 +80,7 @@ jobs:
           fi
 
           # Check soil_types
-          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/soil_types/" &>/dev/null; then
+          if aws s3 ls "s3://${R2_BUCKET}/silver/soil_types/" --endpoint-url $R2_ENDPOINT &>/dev/null; then
             echo "  ✅ soil_types: Available"
             echo "soil_types_available=true" >> $GITHUB_OUTPUT
           else
@@ -86,7 +89,7 @@ jobs:
           fi
 
           # Check bnbo (drinking water protection areas - dissolved geometries)
-          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/bnbo_status_dissolved/" &>/dev/null; then
+          if aws s3 ls "s3://${R2_BUCKET}/silver/bnbo_status_dissolved/" --endpoint-url $R2_ENDPOINT &>/dev/null; then
             echo "  ✅ bnbo: Available"
             echo "bnbo_available=true" >> $GITHUB_OUTPUT
           else
@@ -95,7 +98,7 @@ jobs:
           fi
 
           # Check properties (merged cadastral + property owners from gold layer)
-          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/gold/property_cadastral_merged/" &>/dev/null; then
+          if aws s3 ls "s3://${R2_BUCKET}/gold/property_cadastral_merged/" --endpoint-url $R2_ENDPOINT &>/dev/null; then
             echo "  ✅ properties: Available"
             echo "properties_available=true" >> $GITHUB_OUTPUT
           else
@@ -104,7 +107,7 @@ jobs:
           fi
 
           # Check grukos (groundwater action areas - dissolved geometries)
-          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/grukos_dissolved/" &>/dev/null; then
+          if aws s3 ls "s3://${R2_BUCKET}/silver/grukos_dissolved/" --endpoint-url $R2_ENDPOINT &>/dev/null; then
             echo "  ✅ grukos: Available"
             echo "grukos_available=true" >> $GITHUB_OUTPUT
           else
@@ -142,11 +145,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Properties Pre-filtering (Critical - 90% reduction)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -181,11 +179,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Wetlands Pre-filtering (85% reduction)
         env:
@@ -222,11 +215,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run BNBO Pre-filtering (70% reduction)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -260,11 +248,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Water Projects Pre-filtering (80% reduction)
         env:
@@ -301,11 +284,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Soil Types Pre-filtering (40% reduction)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -340,11 +318,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Grukos Pre-filtering (groundwater action areas)
         env:
@@ -382,11 +355,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Water Projects × BNBO Analysis
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -421,11 +389,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Water Projects × Wetlands Analysis
         env:
@@ -483,11 +446,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Fields × Properties Intersection
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -529,11 +487,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Fields × Soil Types Analysis
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -570,11 +523,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Fields × BNBO Water Coverage
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -610,11 +558,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Fields × Wetland Water Coverage
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -649,11 +592,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Fields × Grukos Coverage
         env:
@@ -691,11 +629,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Final BNBO Analysis (Sequential)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -705,7 +638,7 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=3 --job=final_bnbo
 
-  # Stage 3B: Final Analysis (Independent mode - uses latest GCS data)
+  # Stage 3B: Final Analysis (Independent mode - uses latest R2 data)
   stage3-final-bnbo-independent:
     if: ${{ github.event.inputs.stage == 'stage3' }}
     runs-on: ubuntu-latest
@@ -730,11 +663,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Final BNBO Analysis (Independent)
         env:
@@ -772,11 +700,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Final Wetland Analysis (Sequential)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -786,7 +709,7 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=3 --job=final_wetland
 
-  # Stage 3D: Final Wetland Analysis (Independent mode - uses latest GCS data)
+  # Stage 3D: Final Wetland Analysis (Independent mode - uses latest R2 data)
   stage3-final-wetland-independent:
     if: ${{ github.event.inputs.stage == 'stage3' }}
     runs-on: ubuntu-latest
@@ -811,11 +734,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Final Wetland Analysis (Independent)
         env:
@@ -853,11 +771,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Final Grukos Analysis (Sequential)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -867,7 +780,7 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=3 --job=final_grukos
 
-  # Stage 3F: Final Grukos Analysis (Independent mode - uses latest GCS data)
+  # Stage 3F: Final Grukos Analysis (Independent mode - uses latest R2 data)
   stage3-final-grukos-independent:
     if: ${{ github.event.inputs.stage == 'stage3' }}
     runs-on: ubuntu-latest
@@ -892,11 +805,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Final Grukos Analysis (Independent)
         env:
@@ -934,24 +842,23 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Verify Stage 3 Outputs Exist
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
         run: |
-          echo "🔍 Checking for required Stage 3 GCS outputs..."
+          echo "🔍 Checking for required Stage 3 R2 outputs..."
           YEAR=$AGRICULTURAL_FIELDS_YEAR
+          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           # Check stage 3A output (property × BNBO intersection)
-          echo "Checking: gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/"
-          if ! gsutil ls "gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/*/data.parquet" &>/dev/null; then
+          echo "Checking: s3://${R2_BUCKET}/gold/property_bnbo_intersection_${YEAR}/"
+          if ! aws s3 ls "s3://${R2_BUCKET}/gold/property_bnbo_intersection_${YEAR}/" --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep -q "data.parquet"; then
             echo "⚠️ WARNING: Missing Stage 3A output for ${YEAR}"
-            echo "Expected: gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/*/data.parquet"
+            echo "Expected: s3://${R2_BUCKET}/gold/property_bnbo_intersection_${YEAR}/*/data.parquet"
             echo "Stage 3 may have been skipped - consolidation will likely fail"
             # Don't exit here - let consolidation script provide detailed error
           else
@@ -959,10 +866,10 @@ jobs:
           fi
 
           # Check stage 3B output (property × wetland intersection)
-          echo "Checking: gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/"
-          if ! gsutil ls "gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/*/data.parquet" &>/dev/null; then
+          echo "Checking: s3://${R2_BUCKET}/gold/property_wetland_intersection_${YEAR}/"
+          if ! aws s3 ls "s3://${R2_BUCKET}/gold/property_wetland_intersection_${YEAR}/" --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep -q "data.parquet"; then
             echo "⚠️ WARNING: Missing Stage 3B output for ${YEAR}"
-            echo "Expected: gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/*/data.parquet"
+            echo "Expected: s3://${R2_BUCKET}/gold/property_wetland_intersection_${YEAR}/*/data.parquet"
             echo "Stage 3 may have been skipped - consolidation will likely fail"
           else
             echo "✅ Found Stage 3B output for ${YEAR}"
@@ -987,9 +894,9 @@ jobs:
         run: |
           echo "🎉 Field Area Analysis Multi-Stage Pipeline Completed"
           echo "✅ All stages executed successfully"
-          echo "📊 Final consolidated results available in GCS"
+          echo "📊 Final consolidated results available in R2"
 
-  # Stage 4B: Consolidation (Independent mode - uses latest GCS data)
+  # Stage 4B: Consolidation (Independent mode - uses latest R2 data)
   stage4-consolidate-independent:
     if: ${{ github.event.inputs.stage == 'stage4' }}
     runs-on: ubuntu-latest
@@ -1015,10 +922,6 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
       - name: Consolidate Results (Independent)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
@@ -1032,5 +935,5 @@ jobs:
         if: always()
         run: |
           echo "🎉 Field Area Analysis Stage 4 Completed"
-          echo "✅ Consolidation executed successfully using latest GCS data"
-          echo "📊 Final consolidated results available in GCS"
+          echo "✅ Consolidation executed successfully using latest R2 data"
+          echo "📊 Final consolidated results available in R2"

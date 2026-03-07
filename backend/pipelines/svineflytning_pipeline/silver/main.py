@@ -24,23 +24,22 @@ def get_latest_bronze_data_path() -> str | None:
         String path to the latest bronze data or None if not found
     """
     try:
-        from google.cloud import storage
+        from common.gcs.filesystem import get_r2_filesystem
 
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
+        fs = get_r2_filesystem()
 
         # List all bronze svineflytning directories
-        prefix = "bronze/svineflytning/"
-        list(bucket.list_blobs(prefix=prefix, delimiter="/"))
+        prefix = f"{bucket_name}/bronze/svineflytning/"
+        entries = fs.ls(prefix, detail=False)
 
         # Get all directory timestamps
         directories = []
-        for blob in bucket.list_blobs(prefix=prefix, delimiter="/"):
-            if blob.name.endswith("/"):
-                timestamp = blob.name.replace(prefix, "").rstrip("/")
-                if timestamp:  # Skip empty strings
-                    directories.append(timestamp)
+        for entry in entries:
+            # entry is like "bucket/bronze/svineflytning/20240101_120000"
+            basename = entry.rstrip("/").split("/")[-1]
+            if basename:
+                directories.append(basename)
 
         if not directories:
             logger.warning("No bronze data directories found")

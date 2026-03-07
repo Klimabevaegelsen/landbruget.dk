@@ -91,12 +91,13 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
-      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
@@ -146,11 +147,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Unified Pipeline for ${{ matrix.source || matrix.layer_type }}
         run: |
@@ -290,11 +286,12 @@ jobs:
     name: Pesticide Processing Year ${{ matrix.year }}
     env:
       ENVIRONMENT: production
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
-      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -342,11 +339,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Pesticide Processing for ${{ matrix.year }}
         run: |

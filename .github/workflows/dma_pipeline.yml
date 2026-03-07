@@ -37,9 +37,10 @@ on:
 env:
   PROJECT_ID: landbrugsdata-1
   ZONE: europe-west1-b
-  GCS_BUCKET: landbrugsdata-raw-data
-  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  R2_BUCKET: landbrugsdata-raw-data
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
 jobs:
   run-dma-scraper:
@@ -53,16 +54,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
 
       - name: Create VM and run DMA pipeline
         run: |
@@ -226,7 +217,7 @@ jobs:
               pkill -f enhanced_dma_detail_scraper.py || echo 'Process already stopped'
               echo 'Uploading partial results...'
               if [ -d '/tmp/dma_data' ]; then
-                gsutil -m cp -r /tmp/dma_data/* gs://${{ env.GCS_BUCKET }}/bronze/dma/timeout_$(date +%Y%m%d_%H%M%S)/ || echo 'Upload failed'
+                aws s3 cp /tmp/dma_data/ s3://${{ env.R2_BUCKET }}/bronze/dma/timeout_$(date +%Y%m%d_%H%M%S)/ --recursive --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com || echo 'Upload failed'
               fi
               echo 'Timeout cleanup completed'
             " 2>/dev/null || echo "Could not connect to VM for timeout cleanup"
@@ -235,19 +226,21 @@ jobs:
             echo "FORCE_DELETE=true" >> $GITHUB_ENV
           fi
 
-      - name: Upload results to GCS
+      - name: Upload results to R2
         run: |
           VM_NAME="${{ env.VM_NAME }}"
-          echo "📤 Uploading results to GCS..."
+          echo "📤 Uploading results to R2..."
 
           # Create timestamp for this run
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-                     # Upload data from VM to GCS
+                     # Upload data from VM to R2
           gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="
+            export AWS_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
+            export AWS_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
             if [ -d '/tmp/dma_data' ]; then
-              echo 'Uploading DMA data to GCS...'
-              gsutil -m cp -r /tmp/dma_data/* gs://${{ env.GCS_BUCKET }}/bronze/dma/${TIMESTAMP}/
+              echo 'Uploading DMA data to R2...'
+              aws s3 cp /tmp/dma_data/ s3://${{ env.R2_BUCKET }}/bronze/dma/${TIMESTAMP}/ --recursive --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
               echo 'Upload completed'
             else
               echo 'No data directory found'
@@ -255,7 +248,7 @@ jobs:
 
             # Upload logs
             if [ -f '/tmp/dma_pipeline.log' ]; then
-              gsutil cp /tmp/dma_pipeline.log gs://${{ env.GCS_BUCKET }}/logs/dma/${TIMESTAMP}/pipeline.log
+              aws s3 cp /tmp/dma_pipeline.log s3://${{ env.R2_BUCKET }}/logs/dma/${TIMESTAMP}/pipeline.log --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
             fi
           "
 
@@ -276,7 +269,7 @@ jobs:
               find /tmp/dma_data -name '*.json' | wc -l | xargs echo '  Companies processed:'
               find /tmp/dma_data -name '*.pdf' | wc -l | xargs echo '  PDFs downloaded:'
               du -sh /tmp/dma_data 2>/dev/null | xargs echo '  Total data size:'
-                             echo '  Data location: gs://${{ env.GCS_BUCKET }}/bronze/dma/$(date +%Y%m%d_%H%M%S)/'
+                             echo '  Data location: s3://${{ env.R2_BUCKET }}/bronze/dma/$(date +%Y%m%d_%H%M%S)/'
             else
               echo 'No data collected'
             fi
@@ -316,8 +309,8 @@ jobs:
         if: success()
         run: |
           echo "✅ DMA Monthly Pipeline completed successfully on $(date)"
-          echo "📍 Data location: gs://${{ env.GCS_BUCKET }}/bronze/dma/"
-          echo "📍 Logs location: gs://${{ env.GCS_BUCKET }}/logs/dma/"
+          echo "📍 Data location: s3://${{ env.R2_BUCKET }}/bronze/dma/"
+          echo "📍 Logs location: s3://${{ env.R2_BUCKET }}/logs/dma/"
 
       - name: Notify on failure
         if: failure()

@@ -19,8 +19,9 @@ on:
         default: false
 
 env:
-  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
 jobs:
   discover-years:
@@ -51,21 +52,10 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
-        with:
-          install_components: "gke-gcloud-auth-plugin"
-
       - name: Discover available years
         id: discover
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           cd backend/pipelines/unified_pipeline
 
@@ -92,7 +82,7 @@ jobs:
               import re
               logger = Logger.get_logger()
               gcs_access = GCSDataAccess()
-              bucket = os.getenv('GCS_BUCKET', 'landbrugsdata-raw-data')
+              bucket = os.getenv('R2_BUCKET', 'landbrugsdata-raw-data')
 
               try:
                   # Get files with timestamps to find latest for each year
@@ -199,7 +189,7 @@ jobs:
 
     env:
       ENVIRONMENT: production
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
       SAVE_LOCAL: false
 
     steps:
@@ -220,20 +210,9 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
-        with:
-          install_components: "gke-gcloud-auth-plugin"
-
       - name: Run Field Production for Year ${{ matrix.year }}
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           cd backend/pipelines/unified_pipeline
           echo "🌾 Processing field production estimates for year ${{ matrix.year }}..."
@@ -253,7 +232,7 @@ jobs:
         if: success()
         run: |
           echo "✅ Successfully processed field production estimates for year ${{ matrix.year }}"
-          echo "Data saved to: gs://landbrugsdata-raw-data/gold/field_production_${{ matrix.year }}/"
+          echo "Data saved to: r2://landbrugsdata-raw-data/gold/field_production_${{ matrix.year }}/"
 
       - name: Report failure
         if: failure()
@@ -301,5 +280,5 @@ jobs:
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Data Location" >> $GITHUB_STEP_SUMMARY
-          echo "- **Individual Years**: \`gs://landbrugsdata-raw-data/gold/field_production_YYYY/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Individual Years**: \`r2://landbrugsdata-raw-data/gold/field_production_YYYY/\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Access Pattern**: Query individual years or combine multiple years as needed" >> $GITHUB_STEP_SUMMARY

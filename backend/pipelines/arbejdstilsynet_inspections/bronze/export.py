@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from google.cloud import storage
 
 # Import the unified metadata system
 try:
@@ -76,12 +75,13 @@ class GCSStorage:
                 self.use_optimized = False
 
     def _check_gcs_available(self) -> bool:
-        """Check if GCS is available (Google Cloud Storage library is installed)."""
+        """Check if cloud storage is available (R2/S3 via common.gcs)."""
         try:
-            _ = storage
+            from common.gcs.filesystem import get_r2_filesystem  # noqa: F401
+
             return True
-        except (ImportError, NameError):
-            logging.warning("Google Cloud Storage library not available. Using local storage only.")
+        except (ImportError, EnvironmentError):
+            logging.warning("Cloud storage not available. Using local storage only.")
             return False
 
     def upload_file(self, local_path, gcs_path=None) -> bool:
@@ -148,12 +148,13 @@ class GCSStorage:
                         logging.warning(f"⚠️  Failed to create metadata: {e}")
 
                 return True
-            # Fallback to old method if optimized access failed
-            client = storage.Client()
-            bucket = client.bucket(self.bucket_name)
-            blob = bucket.blob(gcs_path)
-            blob.upload_from_filename(local_path)
-            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+            # Fallback to s3fs upload if optimized access failed
+            from common.gcs.filesystem import get_r2_filesystem
+
+            fs = get_r2_filesystem()
+            dest_path = f"{self.bucket_name}/{gcs_path}"
+            fs.put(local_path, dest_path)
+            logging.info(f"Uploaded {local_path} to {dest_path} (fallback)")
 
             # Create and upload metadata using fallback method
             if METADATA_AVAILABLE:
@@ -177,21 +178,18 @@ class GCSStorage:
                         file_size_bytes=file_size,
                     )
 
-                    # Upload metadata using fallback method
+                    # Upload metadata using s3fs
                     metadata_content = json.dumps(
                         metadata.model_dump(mode="json"), indent=2, default=str
                     )
-                    metadata_gcs_path = gcs_path.replace(".csv", "_metadata.json")
-                    metadata_blob = bucket.blob(metadata_gcs_path)
-                    metadata_blob.upload_from_string(
-                        metadata_content, content_type="application/json"
-                    )
+                    metadata_dest_path = dest_path.replace(".csv", "_metadata.json")
 
-                    logging.info(
-                        f"✅ Uploaded metadata to gs://{self.bucket_name}/{metadata_gcs_path} (fallback)"
-                    )
+                    with fs.open(metadata_dest_path, "w") as f:
+                        f.write(metadata_content)
+
+                    logging.info(f"Uploaded metadata to {metadata_dest_path} (fallback)")
                 except Exception as e:
-                    logging.warning(f"⚠️  Failed to create metadata (fallback): {e}")
+                    logging.warning(f"Failed to create metadata (fallback): {e}")
 
             return True
 

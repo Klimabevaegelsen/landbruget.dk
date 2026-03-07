@@ -1,5 +1,5 @@
 // PMTiles Discovery Service - Browser Compatible Version
-// This service handles discovery of PMTiles files from GCS bucket
+// This service handles discovery of PMTiles files from R2 storage
 
 export type YearSelection = number | 'total';
 
@@ -20,9 +20,9 @@ interface PMTilesUrls {
 class PMTilesDiscoveryService {
   private cache: Map<string, unknown> = new Map();
   private readonly baseUrl =
-    'https://storage.googleapis.com/landbrugsdata-raw-data';
+    'https://data.pesticidkortet.dk';
 
-  // Discover available data by checking GCS bucket structure
+  // Discover available data by checking R2 bucket structure
   async getDataAvailability(): Promise<DataAvailability> {
     const cacheKey = 'data_availability';
 
@@ -113,8 +113,8 @@ class PMTilesDiscoveryService {
 
   private async _discoverLatestTimestamp(pattern: string): Promise<string> {
     try {
-      // Try to list directory contents via GCS JSON API with timeout
-      const listUrl = `https://storage.googleapis.com/storage/v1/b/landbrugsdata-raw-data/o?prefix=${pattern}/&delimiter=/`;
+      // Try to list directory contents via R2 API with timeout
+      const listUrl = `https://data.pesticidkortet.dk/api/list?prefix=${pattern}/&delimiter=/`;
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout

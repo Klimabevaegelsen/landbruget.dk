@@ -27,8 +27,9 @@ on:
         default: false
 
 env:
-  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
 jobs:
   discover-years:
@@ -55,15 +56,10 @@ jobs:
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
     - name: Discover available years
       id: discover
       env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        R2_BUCKET: ${{ secrets.R2_BUCKET }}
       run: |
         cd backend/pipelines/unified_pipeline
 
@@ -76,10 +72,10 @@ jobs:
         from unified_pipeline.util.gcs_access import GCSDataAccess
 
         def discover_pesticide_years():
-            """Discover available pesticide years from GCS storage."""
+            """Discover available pesticide years from R2 storage."""
             try:
                 gcs_access = GCSDataAccess()
-                bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+                bucket = os.getenv("R2_BUCKET", "landbrugsdata-raw-data")
 
                 # List all parquet files in the pesticides silver directory (recursive)
                 files = gcs_access.list_files(f"gs://{bucket}/silver/pesticides/*/*.parquet")
@@ -99,10 +95,10 @@ jobs:
                 return []
 
         def discover_field_years():
-            """Discover available field years from GCS storage."""
+            """Discover available field years from R2 storage."""
             try:
                 gcs_access = GCSDataAccess()
-                bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+                bucket = os.getenv("R2_BUCKET", "landbrugsdata-raw-data")
 
                 # List all parquet files in silver layer to find fvm_marker directories (recursive)
                 files = gcs_access.list_files(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
@@ -195,7 +191,7 @@ jobs:
 
     env:
       ENVIRONMENT: production
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
       SAVE_LOCAL: false
 
     steps:
@@ -212,11 +208,6 @@ jobs:
         python -m pip install --upgrade pip uv
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
     - name: Run Pesticide Disaggregation for Year ${{ matrix.year }}
       run: |
@@ -239,7 +230,7 @@ jobs:
             try:
                 # Create configuration for this specific year
                 config = PesticideDisaggregationGoldConfig(
-                    bucket=os.getenv("GCS_BUCKET", "landbrugsdata-raw-data"),
+                    bucket=os.getenv("R2_BUCKET", "landbrugsdata-raw-data"),
                     pesticide_year=${{ matrix.year }},
                     area_tolerance_pct=2.0,  # Preserve original value
                     max_memory_gb=12.0,

@@ -623,13 +623,18 @@ class FullDMAPipeline:
         logger.info("🔄 Initiating VM auto-shutdown...")
 
         try:
-            # Copy data to GCS bucket first - using standard bronze/dma path structure
-            logger.info("📤 Uploading data to GCS...")
-            gcs_path = f"gs://landbrugsdata-raw-data/bronze/dma/{self.timestamp}/"
-            subprocess.run(
-                ["gsutil", "-m", "cp", "-r", str(self.session_dir), gcs_path], check=True
-            )
-            logger.info(f"✅ Data uploaded to GCS successfully: {gcs_path}")
+            # Copy data to storage bucket - using standard bronze/dma path structure
+            logger.info("📤 Uploading data to storage...")
+            r2_path = f"landbrugsdata-raw-data/bronze/dma/{self.timestamp}/"
+            try:
+                from common.gcs.filesystem import get_r2_filesystem
+
+                fs = get_r2_filesystem()
+                fs.put(str(self.session_dir), r2_path, recursive=True)
+            except Exception as upload_err:
+                logger.error(f"❌ s3fs upload failed: {upload_err}")
+                raise
+            logger.info(f"✅ Data uploaded to storage successfully: {r2_path}")
 
             # Shutdown the VM
             logger.info("🔌 Shutting down VM...")

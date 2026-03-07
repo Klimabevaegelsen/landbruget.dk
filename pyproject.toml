@@ -16,11 +16,10 @@ dependencies = [
     "pyproj~=3.7.0",
     "fiona~=1.10.1",
     # Cloud Services
-    "google-cloud-storage~=2.18.2",
+    "s3fs>=2024.1.0",
     "google-cloud-bigquery~=3.29.0",
     "google-cloud-secret-manager~=2.24.0",
     "fsspec~=2025.5.1",
-    "gcsfs~=2025.5.1",
     # Web Framework
     "fastapi~=0.115.7",
     "uvicorn~=0.34.0",

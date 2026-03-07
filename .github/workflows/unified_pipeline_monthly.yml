@@ -95,9 +95,10 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
@@ -146,11 +147,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Monthly Foundation Pipeline - ${{ matrix.source }}
         env:
@@ -341,9 +337,10 @@ jobs:
       max-parallel: 2 # Run dependent sources with limited parallelism
     env:
       ENVIRONMENT: production
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       CVR_USERID: ${{ secrets.CVR_USERID }}
       CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
       LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
@@ -394,11 +391,6 @@ jobs:
           python -m pip install --upgrade pip uv
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Monthly Dependent Pipeline - ${{ matrix.source }}
         env:

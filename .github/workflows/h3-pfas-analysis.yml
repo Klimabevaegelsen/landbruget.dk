@@ -45,10 +45,11 @@ on:
       - main
 
 env:
-  GCS_BUCKET: landbrugsdata-raw-data
+  R2_BUCKET: ${{ secrets.R2_BUCKET }}
   PIPELINE_DIR: backend/pipelines/h3_pfas_exposure_pipeline
-  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
 jobs:
   # Prepare matrix strategy
@@ -57,15 +58,10 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       has_years: ${{ steps.set-matrix.outputs.has_years }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
       - name: Discover years with available data and set matrix
         id: set-matrix
         run: |
@@ -97,12 +93,12 @@ jobs:
             requested_years=("2010" "2011" "2012" "2013" "2014" "2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
           fi
 
-          # Check which years have pesticide disaggregation data available in GCS
-          echo "🔍 Checking GCS for years with available pesticide disaggregation data..."
+          # Check which years have pesticide disaggregation data available in R2
+          echo "🔍 Checking R2 for years with available pesticide disaggregation data..."
           available_years=()
           for year in "${requested_years[@]}"; do
             # Check if pesticide disaggregation data exists for this year
-            if gsutil ls "gs://${{ env.GCS_BUCKET }}/gold/pesticide_disaggregation_${year}/" &>/dev/null; then
+            if aws s3 ls "s3://${{ env.R2_BUCKET }}/gold/pesticide_disaggregation_${year}/" --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com &>/dev/null; then
               echo "  ✅ Year ${year}: Data available"
               available_years+=("$year")
             else
@@ -225,7 +221,7 @@ jobs:
       - name: Install Python dependencies
         working-directory: ${{ env.PIPELINE_DIR }}
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd ../unified_pipeline
           uv pip install --system -e .
 
@@ -233,22 +229,10 @@ jobs:
           cd ../h3_pfas_exposure_pipeline
           uv pip install --system -e ".[production]"
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Verify GCS access
-        run: |
-          gsutil ls gs://${{ env.GCS_BUCKET }}/ | head -5
-
       - name: Run H3 PFAS Analysis - Year ${{ matrix.year }} - All Aggregation Levels
         working-directory: ${{ env.PIPELINE_DIR }}
         env:
-          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          R2_BUCKET: ${{ env.R2_BUCKET }}
           # Optimized for single-year, multi-aggregation processing with 16GB RAM, 4 CPU
           MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '14GB' }}
           THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
@@ -330,19 +314,22 @@ jobs:
           retention-days: 7
 
       - name: Collect output paths and save as artifacts
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          echo "Collecting GCS output paths for year ${{ matrix.year }}..."
+          echo "Collecting R2 output paths for year ${{ matrix.year }}..."
 
           # Create artifacts directory
           mkdir -p artifacts
 
           # Find H3 outputs for this year
           echo "🔍 Finding H3 outputs..."
-          gsutil ls gs://${{ env.GCS_BUCKET }}/gold/h3_pesticide_${{ matrix.year }}_res*/*/h3_pesticide_${{ matrix.year }}_res*.parquet > artifacts/h3_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No H3 outputs found"
+          aws s3 ls s3://${{ env.R2_BUCKET }}/gold/h3_pesticide_${{ matrix.year }}_res --recursive --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | grep '\.parquet$' > artifacts/h3_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No H3 outputs found"
 
           # Find kommune outputs for this year
           echo "🔍 Finding kommune outputs..."
-          gsutil ls gs://${{ env.GCS_BUCKET }}/gold/kommune_pesticide_${{ matrix.year }}/*/kommune_pesticide_${{ matrix.year }}.parquet > artifacts/kommune_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No kommune outputs found"
+          aws s3 ls s3://${{ env.R2_BUCKET }}/gold/kommune_pesticide_${{ matrix.year }}/ --recursive --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | grep '\.parquet$' > artifacts/kommune_paths_${{ matrix.year }}.txt 2>/dev/null || echo "No kommune outputs found"
 
           # Show what we found
           echo "📊 Found outputs for year ${{ matrix.year }}:"
@@ -436,21 +423,13 @@ jobs:
       - name: Install Python dependencies
         working-directory: ${{ env.PIPELINE_DIR }}
         run: |
-          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd ../unified_pipeline
           uv pip install --system -e .
 
           # Install H3 PFAS pipeline dependencies
           cd ../h3_pfas_exposure_pipeline
           uv pip install --system -e ".[production]"
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
 
       - name: Download output path artifacts
         uses: actions/download-artifact@v4
@@ -476,7 +455,7 @@ jobs:
       - name: Run Cumulative Analysis
         working-directory: ${{ env.PIPELINE_DIR }}
         env:
-          GCS_BUCKET: ${{ env.GCS_BUCKET }}
+          R2_BUCKET: ${{ env.R2_BUCKET }}
           MEMORY_LIMIT: ${{ github.event.inputs.memory_limit || '14GB' }}
           THREAD_COUNT: ${{ github.event.inputs.thread_count || '4' }}
           CHUNK_SIZE: ${{ github.event.inputs.chunk_size || '10000' }}
@@ -502,9 +481,12 @@ jobs:
           echo "✅ Completed cumulative analysis"
 
       - name: Verify cumulative output
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          echo "Checking for cumulative output files in GCS..."
-          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/ | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
+          echo "Checking for cumulative output files in R2..."
+          aws s3 ls s3://${{ env.R2_BUCKET }}/gold/ --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
 
   # Summary job
   analysis-summary:
@@ -542,28 +524,21 @@ jobs:
             exit 1
           fi
 
-      - name: Authenticate to Google Cloud
-        if: needs.h3-pfas-analysis.result == 'success'
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        if: needs.h3-pfas-analysis.result == 'success'
-        uses: google-github-actions/setup-gcloud@v2
-
       - name: List final outputs
         if: needs.h3-pfas-analysis.result == 'success' && needs.cumulative-analysis.result == 'success'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           echo "=== Final Output Files ==="
           echo "Recent H3 outputs (individual years):"
-          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/h3_pesticide_*/*/h3_pesticide_*.parquet | tail -10
+          aws s3 ls s3://${{ env.R2_BUCKET }}/gold/h3_pesticide_ --recursive --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | grep '\.parquet$' | tail -10
           echo ""
           echo "Recent kommune outputs (individual years):"
-          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/kommune_pesticide_*/*/kommune_pesticide_*.parquet | tail -10
+          aws s3 ls s3://${{ env.R2_BUCKET }}/gold/kommune_pesticide_ --recursive --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | grep '\.parquet$' | tail -10
           echo ""
           echo "Cumulative PMTiles files:"
-          gsutil ls -l gs://${{ env.GCS_BUCKET }}/gold/pmtiles/ | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
+          aws s3 ls s3://${{ env.R2_BUCKET }}/gold/pmtiles/ --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com | grep -E "(h3_pfas_total|kommune_pfas_total)" | tail -10
 
   # Notification job
   notify:

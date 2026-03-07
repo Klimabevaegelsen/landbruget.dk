@@ -1034,46 +1034,49 @@ def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[l
         return [], None
 
     try:
-        from google.cloud import storage
+        from common.gcs.filesystem import get_r2_filesystem
 
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
+        fs = get_r2_filesystem()
 
         # Find the latest INSPIRE BBR data
-        prefix = "bronze/bbr_buildings/inspire/"
-        blobs = list(bucket.list_blobs(prefix=prefix))
+        prefix = f"{bucket_name}/bronze/bbr_buildings/inspire/"
+        try:
+            all_files = fs.ls(prefix, detail=False)
+        except FileNotFoundError:
+            all_files = []
 
-        if not blobs:
-            logger.error(f"❌ No INSPIRE BBR bronze data found in gs://{bucket_name}/{prefix}")
+        if not all_files:
+            logger.error(f"❌ No INSPIRE BBR bronze data found in {prefix}")
             return [], None
 
         # Get the latest timestamp folder
         timestamps = set()
-        for blob in blobs:
-            path_parts = blob.name.split("/")
+        for file_path in all_files:
+            # Remove bucket prefix
+            relative = file_path.replace(f"{bucket_name}/", "", 1)
+            path_parts = relative.split("/")
             if len(path_parts) >= 4:
                 timestamps.add(path_parts[3])  # bronze/bbr_buildings/inspire/TIMESTAMP/
 
         if not timestamps:
-            logger.error(f"❌ No timestamped INSPIRE BBR data found in gs://{bucket_name}/{prefix}")
+            logger.error(f"❌ No timestamped INSPIRE BBR data found in {prefix}")
             return [], None
 
         latest_timestamp = max(timestamps)
         logger.info(f"📂 Loading INSPIRE BBR data from timestamp: {latest_timestamp}")
 
         # Download building IDs JSON
-        building_ids_path = f"{prefix}{latest_timestamp}/inspire_building_ids.json"
-        building_ids_blob = bucket.blob(building_ids_path)
+        building_ids_path = f"{bucket_name}/bronze/bbr_buildings/inspire/{latest_timestamp}/inspire_building_ids.json"
 
-        if not building_ids_blob.exists():
-            logger.error(f"❌ Building IDs not found: gs://{bucket_name}/{building_ids_path}")
+        if not fs.exists(building_ids_path):
+            logger.error(f"❌ Building IDs not found: {building_ids_path}")
             return [], None
 
         # Download and parse building IDs
-        building_ids_data = building_ids_blob.download_as_text()
-        building_ids = json.loads(building_ids_data)
+        with fs.open(building_ids_path, "r") as f:
+            building_ids = json.loads(f.read())
 
-        logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
+        logger.info(f"✅ Loaded {len(building_ids):,} building IDs from storage")
 
         # TODO: Load attributes data if needed
         attributes_df = None
@@ -1081,7 +1084,7 @@ def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[l
         return building_ids, attributes_df
 
     except Exception as e:
-        logger.error(f"❌ Failed to load bronze data from GCS: {e}")
+        logger.error(f"❌ Failed to load bronze data from storage: {e}")
         return [], None
 
 

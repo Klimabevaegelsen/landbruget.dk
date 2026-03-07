@@ -27,8 +27,9 @@ on:
         default: false
 
 env:
-  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
-  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
 jobs:
   discover-years:
@@ -55,15 +56,10 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Discover Available Years for Compliance Analysis
         id: discover
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
           cd backend/pipelines/unified_pipeline
 
@@ -87,7 +83,7 @@ jobs:
                   gcs_access = GCSDataAccess()
 
                   # Look for pesticide disaggregation data
-                  pattern = f"gs://{os.getenv('GCS_BUCKET')}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+                  pattern = f"gs://{os.getenv('R2_BUCKET')}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
                   files = gcs_access.list_files_with_timestamps(pattern)
 
                   years = set()
@@ -166,7 +162,7 @@ jobs:
 
     env:
       ENVIRONMENT: production
-      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
       SAVE_LOCAL: false
 
     steps:
@@ -188,14 +184,9 @@ jobs:
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Run Pesticide Compliance Analysis for Year ${{ matrix.year }}
         env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
           PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
         run: |
