@@ -91,8 +91,8 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET || 'landbrugsdata-raw-data' }}
-      GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET || 'landbrugsdata-raw-data' }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+      GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
@@ -109,7 +109,8 @@ jobs:
       - name: Normalize and validate R2 environment
         run: |
           if [ -z "$R2_BUCKET" ]; then
-            echo "R2_BUCKET=landbrugsdata-raw-data" >> "$GITHUB_ENV"
+            echo "❌ Missing R2_BUCKET. Set secret/var R2_BUCKET to the existing Cloudflare R2 bucket name."
+            exit 1
           fi
 
           DERIVED_R2_ACCOUNT_ID=""
@@ -313,8 +314,8 @@ jobs:
     name: Pesticide Processing Year ${{ matrix.year }}
     env:
       ENVIRONMENT: production
-      R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET || 'landbrugsdata-raw-data' }}
-      GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET || 'landbrugsdata-raw-data' }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+      GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -329,7 +330,8 @@ jobs:
       - name: Normalize and validate R2 environment
         run: |
           if [ -z "$R2_BUCKET" ]; then
-            echo "R2_BUCKET=landbrugsdata-raw-data" >> "$GITHUB_ENV"
+            echo "❌ Missing R2_BUCKET. Set secret/var R2_BUCKET to the existing Cloudflare R2 bucket name."
+            exit 1
           fi
 
           DERIVED_R2_ACCOUNT_ID=""
