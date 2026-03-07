@@ -545,11 +545,13 @@ class SilverPipeline:
                             self.df[col]
                             .astype(str)
                             .apply(
-                                lambda v: LandbrugsdataUUID.generate_deterministic_uuid(
-                                    "cvr-anonymized", str(v)
+                                lambda v: (
+                                    LandbrugsdataUUID.generate_deterministic_uuid(
+                                        "cvr-anonymized", str(v)
+                                    )
+                                    if re.match(r"\b\d{10}\b", str(v))
+                                    else v
                                 )
-                                if re.match(r"\b\d{10}\b", str(v))
-                                else v
                             )
                         )
                     else:
@@ -560,9 +562,9 @@ class SilverPipeline:
                             self.df[col]
                             .astype(str)
                             .apply(
-                                lambda v: str(uuid.uuid4())
-                                if re.match(r"\b\d{10}\b", str(v))
-                                else v
+                                lambda v: (
+                                    str(uuid.uuid4()) if re.match(r"\b\d{10}\b", str(v)) else v
+                                )
                             )
                         )
 
