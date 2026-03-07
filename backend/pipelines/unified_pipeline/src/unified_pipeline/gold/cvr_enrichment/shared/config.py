@@ -391,7 +391,6 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
     """
     try:
         import duckdb
-
         from common.gcs.filesystem import get_r2_filesystem
 
         # Create a temporary connection for checking file structure

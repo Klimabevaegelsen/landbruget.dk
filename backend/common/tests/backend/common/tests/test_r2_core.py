@@ -15,13 +15,10 @@ Tests cover:
 """
 
 import io
-import json
 import os
-import sys
 from unittest.mock import MagicMock, patch
 
 import duckdb
-import pytest
 
 # Ensure tenacity is available (installed as a real dependency)
 # No mocking needed - tenacity works fine in tests, the @retry decorator
