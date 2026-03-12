@@ -34,7 +34,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Comprehensive field production estimates using DST yield data"
     frequency: str = "weekly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # NEW: Single year processing for matrix jobs
     target_year: int | None = None  # If set, process only this year

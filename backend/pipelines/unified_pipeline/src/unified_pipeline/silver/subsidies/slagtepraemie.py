@@ -39,7 +39,7 @@ class SlagtepraemieSilverConfig(BaseJobConfig):
     type: str = "transformation"
     description: str = "Slaughter premium - voluntary coupled support for cattle"
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Bronze source
     bronze_path: str = Field(

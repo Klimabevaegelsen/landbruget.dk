@@ -28,7 +28,7 @@ class WorkerSafetyGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Clean worker safety data by CVR, year, and injury type"
     frequency: str = "weekly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Input silver datasets
     worker_safety_dataset: str = "worker safety"  # Note: space in dataset name as per GCS path

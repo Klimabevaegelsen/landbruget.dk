@@ -91,18 +91,46 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+      GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT || vars.R2_ENDPOINT }}
       LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Normalize and validate R2 environment
+        run: |
+          if [ -z "$R2_BUCKET" ]; then
+            echo "❌ Missing R2_BUCKET. Set secret/var R2_BUCKET to the existing Cloudflare R2 bucket name."
+            exit 1
+          fi
+
+          DERIVED_R2_ACCOUNT_ID=""
+          if [ -z "$R2_ACCOUNT_ID" ] && [ -n "$R2_ENDPOINT" ]; then
+            DERIVED_R2_ACCOUNT_ID=$(echo "$R2_ENDPOINT" | sed -E 's#https?://([^./]+)\.r2\.cloudflarestorage\.com/?#\1#')
+            if [ "$DERIVED_R2_ACCOUNT_ID" != "$R2_ENDPOINT" ] && [ -n "$DERIVED_R2_ACCOUNT_ID" ]; then
+              echo "R2_ACCOUNT_ID=$DERIVED_R2_ACCOUNT_ID" >> "$GITHUB_ENV"
+              echo "Derived R2_ACCOUNT_ID from R2_ENDPOINT"
+            fi
+          fi
+
+          if [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "❌ Missing R2 access credentials (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY)."
+            exit 1
+          fi
+
+          if [ -z "$R2_ACCOUNT_ID" ] && [ -z "$DERIVED_R2_ACCOUNT_ID" ]; then
+            echo "❌ Missing R2_ACCOUNT_ID. Set secret/var R2_ACCOUNT_ID or provide R2_ENDPOINT."
+            exit 1
+          fi
 
       - name: Free up disk space for memory-intensive jobs
         if: matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge'
@@ -286,16 +314,44 @@ jobs:
     name: Pesticide Processing Year ${{ matrix.year }}
     env:
       ENVIRONMENT: production
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
+      GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID || vars.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT || vars.R2_ENDPOINT }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Normalize and validate R2 environment
+        run: |
+          if [ -z "$R2_BUCKET" ]; then
+            echo "❌ Missing R2_BUCKET. Set secret/var R2_BUCKET to the existing Cloudflare R2 bucket name."
+            exit 1
+          fi
+
+          DERIVED_R2_ACCOUNT_ID=""
+          if [ -z "$R2_ACCOUNT_ID" ] && [ -n "$R2_ENDPOINT" ]; then
+            DERIVED_R2_ACCOUNT_ID=$(echo "$R2_ENDPOINT" | sed -E 's#https?://([^./]+)\.r2\.cloudflarestorage\.com/?#\1#')
+            if [ "$DERIVED_R2_ACCOUNT_ID" != "$R2_ENDPOINT" ] && [ -n "$DERIVED_R2_ACCOUNT_ID" ]; then
+              echo "R2_ACCOUNT_ID=$DERIVED_R2_ACCOUNT_ID" >> "$GITHUB_ENV"
+              echo "Derived R2_ACCOUNT_ID from R2_ENDPOINT"
+            fi
+          fi
+
+          if [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "❌ Missing R2 access credentials (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY)."
+            exit 1
+          fi
+
+          if [ -z "$R2_ACCOUNT_ID" ] && [ -z "$DERIVED_R2_ACCOUNT_ID" ]; then
+            echo "❌ Missing R2_ACCOUNT_ID. Set secret/var R2_ACCOUNT_ID or provide R2_ENDPOINT."
+            exit 1
+          fi
 
       - name: Free up disk space for pesticide processing
         run: |

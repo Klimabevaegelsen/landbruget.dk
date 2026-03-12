@@ -40,7 +40,7 @@ class FieldAreaAnalysisRedesigned:
 
     def __init__(self):
         self.log = Logger.get_logger()
-        self.bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        self.bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
         # Initialize single GCS connection for all operations
         self.gcs_access = GCSDataAccess()

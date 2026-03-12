@@ -618,9 +618,13 @@ class GCSDataAccess:
         }
 
         try:
-            # STREAMING: Write JSON directly to GCS without temp files
+            # Serialize first so we write a single contiguous payload.
+            # This avoids uneven multipart chunk writes with some s3fs/R2 combinations.
+            json_payload = json.dumps(data, **json_kwargs)
+
+            # STREAMING: Write JSON directly to object storage without temp files
             with self.fs.open(_strip_protocol(gcs_path), "w", encoding="utf-8") as f:
-                json.dump(data, f, **json_kwargs)
+                f.write(json_payload)
 
             self.monitor.check_resources("post_json_upload")
             self.log.info(f"Uploaded JSON data to {gcs_path} (streaming)")

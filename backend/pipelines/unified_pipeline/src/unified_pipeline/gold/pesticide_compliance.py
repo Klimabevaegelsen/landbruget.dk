@@ -182,7 +182,7 @@ class PesticideComplianceGoldConfig(BaseJobConfig):
         "Identifies regulatory violations in pesticide applications using BMD restrictions"
     )
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
     # Agricultural year to analyze (e.g., 2023 = Aug 2023 - Jul 2024 season)
     pesticide_year: int | None = Field(
