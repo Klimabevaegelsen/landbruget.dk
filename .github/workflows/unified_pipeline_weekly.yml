@@ -33,7 +33,7 @@ jobs:
     name: CVR Enrichment (Weekly)
     if: ${{ github.event.inputs.source == 'cvr_enrichment' || github.event.inputs.source == 'all_weekly' || github.event_name == 'schedule' }}
     uses: ./.github/workflows/cvr_enrichment_pipeline.yml
-    secrets: inherit
+    secrets: inherit # pragma: allowlist secret
 
   # Other weekly pipelines (if any are added in the future)
   other_weekly_pipelines:
@@ -48,7 +48,7 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
       LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
