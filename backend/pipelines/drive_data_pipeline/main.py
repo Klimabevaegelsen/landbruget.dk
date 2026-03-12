@@ -100,14 +100,17 @@ def _extract_cvr_numbers_flexible(
             return []
 
         # Extract CVR numbers using the found column
+        # Support both raw CVR numbers (e.g. "12345678") and zero-padded strings
+        # (e.g. "01234567") by casting to BIGINT first to strip leading zeros,
+        # then filtering for valid 8-digit CVR range (10000000-99999999)
         query = f"""
-        SELECT DISTINCT {cvr_column}
+        SELECT DISTINCT LPAD(CAST(CAST(TRIM(CAST({cvr_column} AS VARCHAR)) AS BIGINT) AS VARCHAR), 8, '0')
         FROM {table_name}
         WHERE {cvr_column} IS NOT NULL
         AND {cvr_column} != ''
-        AND LENGTH(TRIM(CAST({cvr_column} AS VARCHAR))) = 8
-        AND TRIM(CAST({cvr_column} AS VARCHAR)) ~ '^[1-9][0-9]{{7}}$'
-        ORDER BY {cvr_column}
+        AND TRIM(CAST({cvr_column} AS VARCHAR)) ~ '^[0-9]{{8}}$'
+        AND CAST(TRIM(CAST({cvr_column} AS VARCHAR)) AS BIGINT) BETWEEN 10000000 AND 99999999
+        ORDER BY 1
         """
 
         result = connection.execute(query).fetchall()
@@ -160,9 +163,12 @@ def _save_discovered_cvr_numbers(
                 gcs_access = GCSDataAccess()
                 bucket = "landbrugsdata-raw-data"
 
-                # Find parquet files in GCS silver directory with pattern matching
-                silver_pattern = f"gs://{bucket}/silver/*/*/*.parquet"
-                parquet_files = gcs_access.list_files(silver_pattern)
+                # Find parquet files in GCS silver directory.
+                # Use recursive glob (**) to handle directory names with spaces
+                # (e.g. "work permits", "animal welfare", "pig international movements")
+                # that a flat silver/*/*/*.parquet pattern would miss.
+                silver_pattern = f"gs://{bucket}/silver/**/*.parquet"
+                parquet_files = sorted(set(gcs_access.list_files(silver_pattern)))
 
                 # Filter to only recent files (within reasonable timeframe of pipeline run)
                 pipeline_date = pipeline_start_time.strftime("%Y%m%d")
@@ -173,11 +179,9 @@ def _save_discovered_cvr_numbers(
                     logger.warning(
                         f"⚠️ No files found for date {pipeline_date}, using most recent files"
                     )
-                    recent_files = sorted(parquet_files, reverse=True)[:20]  # Most recent 20 files
+                    recent_files = sorted(parquet_files, reverse=True)
 
-                files_to_process = [
-                    (f, "gcs") for f in recent_files[:20]
-                ]  # Limit to avoid excessive processing
+                files_to_process = [(f, "gcs") for f in recent_files]
                 source_description = f"GCS files (filtered for {pipeline_date})"
 
             except Exception as e:
