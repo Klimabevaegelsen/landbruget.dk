@@ -1,6 +1,6 @@
 {
   "dataset_name": "svineflytning",
-  "source_path": "gs://landbrugsdata-raw-data/silver/svineflytning/20260107_035748/movements.parquet",
+  "source_path": "gs://landbruget-data/silver/svineflytning/20260107_035748/movements.parquet",
   "generated_at": "2026-01-17T11:20:27.600278",
   "record_count": 1272808,
   "unique_identifiers": {},

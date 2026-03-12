@@ -236,7 +236,7 @@ env-help:
 	@echo "  DATAFORDELER_PASSWORD      - Password for Datafordeler services"
 	@echo ""
 	@echo "Example:"
-	@echo "  export GCS_BUCKET=landbrugsdata-raw-data"
+	@echo "  export GCS_BUCKET=landbruget-data"
 	@echo "  export SAVE_LOCAL=false"
 
 # Show pipeline status
@@ -298,6 +298,6 @@ pesticide-env-help:  ## Show environment variables for pesticide disaggregation
 	@echo "    LOG_DIR                   - Log directory for mounting"
 	@echo ""
 	@echo "Example usage:"
-	@echo "  export GCS_BUCKET=landbrugsdata-raw-data"
+	@echo "  export GCS_BUCKET=landbruget-data"
 	@echo "  export PESTICIDE_YEAR=2021"
 	@echo "  make pesticide-disaggregation"

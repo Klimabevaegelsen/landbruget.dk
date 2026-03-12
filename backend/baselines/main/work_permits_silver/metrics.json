@@ -1,6 +1,6 @@
 {
   "dataset_name": "work_permits_silver",
-  "source_path": "gs://landbrugsdata-raw-data/silver/work permits/20260116_234019/Landbrugsvisum_statistik_2024.parquet",
+  "source_path": "gs://landbruget-data/silver/work permits/20260116_234019/Landbrugsvisum_statistik_2024.parquet",
   "generated_at": "2026-01-17T11:15:26.969249",
   "record_count": 6864,
   "unique_identifiers": {},

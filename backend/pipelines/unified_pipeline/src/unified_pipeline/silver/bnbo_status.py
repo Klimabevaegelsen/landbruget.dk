@@ -41,14 +41,14 @@ class BNBOStatusSilverConfig(BaseJobConfig):
     Attributes:
         dataset (str): The name of the dataset, defaults to "bnbo_status".
         bucket (str): The GCS bucket name where data is stored,
-                        defaults to "landbrugsdata-raw-data".
+                        defaults to "landbruget-data".
         storage_batch_size (int): The batch size for storage operations, defaults to 5000.
         status_mapping (dict): A mapping from detailed status descriptions to simplified categories.
         gml_ns (str): The GML namespace used in the XML data.
     """
 
     dataset: str = "bnbo_status"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     storage_batch_size: int = 5000
     status_mapping: ClassVar[dict[str, str]] = {
         "Frivillig aftale tilbudt (UDGÅET)": "Action Required",

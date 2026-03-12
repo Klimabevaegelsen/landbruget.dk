@@ -266,9 +266,9 @@ original_feature_count | INTEGER | Original feature count | 1247
 - **Transformation**: DuckDB-spatial ST_Transform function
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/dmi/{timestamp}/{parameter}_data.json`
-- **Bronze Metadata**: `gs://landbrugsdata-raw-data/bronze/dmi/{timestamp}/{parameter}_metadata.json`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/dmi_{parameter}/{timestamp}/data.parquet`
+- **Bronze**: `gs://landbruget-data/bronze/dmi/{timestamp}/{parameter}_data.json`
+- **Bronze Metadata**: `gs://landbruget-data/bronze/dmi/{timestamp}/{parameter}_metadata.json`
+- **Silver**: `gs://landbruget-data/silver/dmi_{parameter}/{timestamp}/data.parquet`
 
 ### Processing Infrastructure
 - **Platform**: Manual execution via GitHub Actions

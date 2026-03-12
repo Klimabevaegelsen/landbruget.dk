@@ -260,10 +260,10 @@ avg_permits_per_record | DOUBLE | Average permits per record | 2.74
 ```
 
 ### Storage Locations
-- **Gold Output**: `gs://landbrugsdata-raw-data/gold/work_permits/{timestamp}/`
+- **Gold Output**: `gs://landbruget-data/gold/work_permits/{timestamp}/`
 - **Main Dataset**: `work_permits.parquet`
 - **Summary Statistics**: `summary.parquet`
-- **Source Silver**: `gs://landbrugsdata-raw-data/silver/drive_data/{timestamp}/work_permits_*.parquet`
+- **Source Silver**: `gs://landbruget-data/silver/drive_data/{timestamp}/work_permits_*.parquet`
 
 ### Processing Infrastructure
 - **Platform**: Manual execution via GitHub Actions

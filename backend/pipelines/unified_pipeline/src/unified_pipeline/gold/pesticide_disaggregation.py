@@ -76,7 +76,7 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Disaggregates pesticide applications from company to field level"
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("GCS_BUCKET", "landbruget-data")
 
     # CRITICAL PARAMETER: Area tolerance for matching pesticide applications to fields
     # This 2% tolerance is what achieved 92% coverage in the original pipeline

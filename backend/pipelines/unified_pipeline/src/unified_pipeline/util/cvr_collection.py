@@ -28,7 +28,7 @@ class CVRCollectionManager:
     - Managing the standard CVR collection file structure
     """
 
-    def __init__(self, gcs_access: GCSDataAccess, bucket: str = "landbrugsdata-raw-data"):
+    def __init__(self, gcs_access: GCSDataAccess, bucket: str = "landbruget-data"):
         """
         Initialize CVR collection manager.
 
@@ -334,7 +334,7 @@ def save_pipeline_cvr_numbers(
     pipeline_name: str,
     cvr_numbers: list[str],
     gcs_access: GCSDataAccess | None = None,
-    bucket: str = "landbrugsdata-raw-data",
+    bucket: str = "landbruget-data",
     timestamp: str | None = None,
 ) -> str:
     """

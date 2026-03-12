@@ -28,7 +28,7 @@ class AddressGeocodingConfig(BaseJobConfig):
     type: str = "address_geocoding"
     description: str = "Enrich addresses with geometry via DAWA API"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Shared configuration
     shared_config: CVREnrichmentSharedConfig = Field(

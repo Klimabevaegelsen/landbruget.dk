@@ -36,7 +36,7 @@ class PesticideProximityGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Spatial proximity analysis for disaggregated pesticide applications"
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Distance thresholds for proximity analysis
     building_proximity_distance_m: float = Field(

@@ -20,7 +20,7 @@ class H3PFASConfig:
     thread_count: int = 4
 
     # GCS Configuration
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     available_years: list[int] = field(
         default_factory=lambda: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
     )
@@ -88,7 +88,7 @@ class H3PFASConfig:
             chunk_size=int(os.getenv("CHUNK_SIZE", "25000")),
             memory_limit="12GB",  # Always use 12GB - no env dependency
             thread_count=int(os.getenv("THREAD_COUNT", "4")),
-            bucket=os.getenv("GCS_BUCKET", "landbrugsdata-raw-data"),
+            bucket=os.getenv("GCS_BUCKET", "landbruget-data"),
             enable_progress_tracking=os.getenv("ENABLE_PROGRESS_TRACKING", "true").lower()
             == "true",
             log_chunk_details=os.getenv("LOG_CHUNK_DETAILS", "false").lower() == "true",

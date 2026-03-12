@@ -305,9 +305,9 @@ dissolved_at | TIMESTAMP | Dissolution timestamp | "2025-01-15T10:30:00"
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/bnbo_status/{timestamp}/data.parquet`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/bnbo_status/{timestamp}/data.parquet`
-- **Silver Dissolved**: `gs://landbrugsdata-raw-data/silver/bnbo_status_dissolved/{timestamp}/data.parquet`
+- **Bronze**: `gs://landbruget-data/bronze/bnbo_status/{timestamp}/data.parquet`
+- **Silver**: `gs://landbruget-data/silver/bnbo_status/{timestamp}/data.parquet`
+- **Silver Dissolved**: `gs://landbruget-data/silver/bnbo_status_dissolved/{timestamp}/data.parquet`
 
 ### Processing Infrastructure
 - **Platform**: Automated monthly execution as foundation data source

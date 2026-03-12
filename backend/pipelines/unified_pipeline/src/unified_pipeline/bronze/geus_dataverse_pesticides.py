@@ -64,7 +64,7 @@ class GEUSDataversePesticidesBronzeConfig(BaseJobConfig):
     pest_url: str = "https://dataverse.geus.dk/api/access/datafile/99149"  # AM_pest.rds
     pfas_url: str = "https://dataverse.geus.dk/api/access/datafile/99150"  # AM_pfas.rds
     frequency: str = "annual"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     source_crs: str = "EPSG:25832"  # Data uses UTM32 EUREF89 coordinates
 
     # Download settings

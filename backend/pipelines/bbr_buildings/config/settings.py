@@ -39,7 +39,7 @@ class Settings:
         self.graphql_max_retries = self._get_int_env("GRAPHQL_MAX_RETRIES", 3)
 
         # Google Cloud Storage
-        self.gcs_bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        self.gcs_bucket = os.getenv("GCS_BUCKET", "landbruget-data")
         self.gcs_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
         # Output directories

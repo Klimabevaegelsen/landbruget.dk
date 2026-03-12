@@ -80,7 +80,7 @@ on:
     - cron: "0 2 1 * *"
 
 env:
-  BUCKET_NAME: landbrugsdata-raw-data
+  BUCKET_NAME: landbruget-data
   PYTHON_VERSION: "3.11"
   # Shared timestamp for all pipeline steps to ensure consistent file paths
   PIPELINE_START_TIME: ${{ github.run_started_at }}
@@ -307,7 +307,7 @@ jobs:
           echo "Looking for data from: $TODAY"
 
           # List available part directories
-          PART_DIRS=$(aws s3 ls s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | head -1 || echo "")
+          PART_DIRS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | head -1 || echo "")
 
           if [ -z "$PART_DIRS" ]; then
             echo "❌ No data directories found for today"
@@ -319,8 +319,8 @@ jobs:
           echo "Found timestamp: $TIMESTAMP"
 
           # Check for part directories
-          PART1_EXISTS=$(aws s3 ls s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/consolidated.parquet --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "")
-          PART2_EXISTS=$(aws s3 ls s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/consolidated.parquet --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "")
+          PART1_EXISTS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/consolidated.parquet --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "")
+          PART2_EXISTS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/consolidated.parquet --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "")
 
           echo "Part 1 exists: ${PART1_EXISTS:-no}"
           echo "Part 2 exists: ${PART2_EXISTS:-no}"
@@ -359,7 +359,7 @@ jobs:
           conn.register_filesystem(fs)
 
           timestamp = "${TIMESTAMP}"
-          bucket = "landbrugsdata-raw-data"
+          bucket = "landbruget-data"
 
           # Read both parts
           part1_path = f"s3://{bucket}/bronze/cvr_raw_companies/{timestamp}/part1/consolidated.parquet"
@@ -406,23 +406,23 @@ jobs:
 
           # Find the timestamp we used
           TODAY=$(date -u +%Y%m%d)
-          PART_DIRS=$(aws s3 ls s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | head -1 || echo "")
+          PART_DIRS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | head -1 || echo "")
           TIMESTAMP=$(echo "$PART_DIRS" | grep -oE '[0-9]{8}_[0-9]{6}' | head -1)
 
           if [ -n "$TIMESTAMP" ]; then
             echo "Cleaning up part directories for timestamp: $TIMESTAMP"
 
             # Delete part1 directory
-            if aws s3 ls s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/ --endpoint-url $R2_ENDPOINT &>/dev/null; then
+            if aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/ --endpoint-url $R2_ENDPOINT &>/dev/null; then
               echo "Deleting part1 directory..."
-              aws s3 rm s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/ --recursive --endpoint-url $R2_ENDPOINT || true
+              aws s3 rm s3://landbruget-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/ --recursive --endpoint-url $R2_ENDPOINT || true
               echo "✅ Deleted part1 directory"
             fi
 
             # Delete part2 directory
-            if aws s3 ls s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/ --endpoint-url $R2_ENDPOINT &>/dev/null; then
+            if aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/ --endpoint-url $R2_ENDPOINT &>/dev/null; then
               echo "Deleting part2 directory..."
-              aws s3 rm s3://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/ --recursive --endpoint-url $R2_ENDPOINT || true
+              aws s3 rm s3://landbruget-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/ --recursive --endpoint-url $R2_ENDPOINT || true
               echo "✅ Deleted part2 directory"
             fi
 
@@ -622,7 +622,7 @@ jobs:
             echo "⚠️ P-number data artifact not found, looking for latest available data..."
 
             # Find the latest P-number data file from today's runs
-            LATEST_PNUMBER_PATH=$(aws s3 ls s3://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | grep "$(date -u +%Y%m%d)" | sort -r | head -1 | awk '{print "s3://landbrugsdata-raw-data/"$4}' || echo "")
+            LATEST_PNUMBER_PATH=$(aws s3 ls s3://landbruget-data/gold/cvr_enrichment_pnumbers/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | grep "$(date -u +%Y%m%d)" | sort -r | head -1 | awk '{print "s3://landbruget-data/"$4}' || echo "")
 
             if [ -n "$LATEST_PNUMBER_PATH" ]; then
               echo "✅ Found latest P-number file: $LATEST_PNUMBER_PATH"
@@ -633,7 +633,7 @@ jobs:
               echo "Trying to find any recent P-number data file..."
 
               # Fallback: find any recent P-number file
-              RECENT_PNUMBER_PATH=$(aws s3 ls s3://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | sort -r | head -1 | awk '{print "s3://landbrugsdata-raw-data/"$4}' || echo "")
+              RECENT_PNUMBER_PATH=$(aws s3 ls s3://landbruget-data/gold/cvr_enrichment_pnumbers/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | sort -r | head -1 | awk '{print "s3://landbruget-data/"$4}' || echo "")
 
               if [ -n "$RECENT_PNUMBER_PATH" ]; then
                 echo "✅ Found recent P-number file: $RECENT_PNUMBER_PATH"
@@ -712,7 +712,7 @@ jobs:
           R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           # Find the latest financial data file from today's runs
-          LATEST_FINANCIAL_PATH=$(aws s3 ls s3://landbrugsdata-raw-data/gold/cvr_enrichment_financial/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | grep "$(date -u +%Y%m%d)" | sort -r | head -1 | awk '{print "s3://landbrugsdata-raw-data/"$4}' || echo "")
+          LATEST_FINANCIAL_PATH=$(aws s3 ls s3://landbruget-data/gold/cvr_enrichment_financial/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | grep "$(date -u +%Y%m%d)" | sort -r | head -1 | awk '{print "s3://landbruget-data/"$4}' || echo "")
 
           if [ -n "$LATEST_FINANCIAL_PATH" ]; then
             echo "✅ Found latest financial file: $LATEST_FINANCIAL_PATH"
@@ -723,7 +723,7 @@ jobs:
             echo "Trying to find any recent financial data file..."
 
             # Fallback: find any recent financial file
-            RECENT_FINANCIAL_PATH=$(aws s3 ls s3://landbrugsdata-raw-data/gold/cvr_enrichment_financial/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | sort -r | head -1 | awk '{print "s3://landbrugsdata-raw-data/"$4}' || echo "")
+            RECENT_FINANCIAL_PATH=$(aws s3 ls s3://landbruget-data/gold/cvr_enrichment_financial/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "data.parquet" | sort -r | head -1 | awk '{print "s3://landbruget-data/"$4}' || echo "")
 
             if [ -n "$RECENT_FINANCIAL_PATH" ]; then
               echo "✅ Found recent financial file: $RECENT_FINANCIAL_PATH"
@@ -806,7 +806,7 @@ jobs:
           R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           # Find the latest address geocoding file from today's runs
-          LATEST_ADDRESS_PATH=$(aws s3 ls s3://landbrugsdata-raw-data/gold/cvr_enrichment/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "address_geocoding.parquet" | grep "$(date -u +%Y%m%d)" | sort -r | head -1 | awk '{print "s3://landbrugsdata-raw-data/"$4}' || echo "")
+          LATEST_ADDRESS_PATH=$(aws s3 ls s3://landbruget-data/gold/cvr_enrichment/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "address_geocoding.parquet" | grep "$(date -u +%Y%m%d)" | sort -r | head -1 | awk '{print "s3://landbruget-data/"$4}' || echo "")
 
           if [ -n "$LATEST_ADDRESS_PATH" ]; then
             echo "✅ Found latest address file: $LATEST_ADDRESS_PATH"
@@ -817,7 +817,7 @@ jobs:
             echo "Trying to find any recent address geocoding file..."
 
             # Fallback: find any recent address file within the last 7 days
-            RECENT_ADDRESS_PATH=$(aws s3 ls s3://landbrugsdata-raw-data/gold/cvr_enrichment/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "address_geocoding.parquet" | sort -r | head -1 | awk '{print "s3://landbrugsdata-raw-data/"$4}' || echo "")
+            RECENT_ADDRESS_PATH=$(aws s3 ls s3://landbruget-data/gold/cvr_enrichment/ --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep "address_geocoding.parquet" | sort -r | head -1 | awk '{print "s3://landbruget-data/"$4}' || echo "")
 
             if [ -n "$RECENT_ADDRESS_PATH" ]; then
               echo "✅ Found recent address file: $RECENT_ADDRESS_PATH"

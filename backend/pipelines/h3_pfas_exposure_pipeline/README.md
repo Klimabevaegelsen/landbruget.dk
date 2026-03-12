@@ -186,7 +186,7 @@ python main.py --dry-run --verbose
 | `--memory-limit` | 12GB | DuckDB memory limit |
 | `--thread-count` | 4 | Number of processing threads |
 | `--chunk-size` | 25000 | H3 cells per processing chunk |
-| `--bucket` | landbrugsdata-raw-data | GCS bucket name |
+| `--bucket` | landbruget-data | GCS bucket name |
 | `--parallel` | false | Run H3 and kommune analyses in parallel (mode 'all' only) |
 
 ## Architecture
@@ -280,7 +280,7 @@ Each municipality contains:
 
 ```bash
 # GCS Configuration
-GCS_BUCKET=landbrugsdata-raw-data
+GCS_BUCKET=landbruget-data
 
 # H3 Configuration
 H3_RESOLUTION=10
@@ -302,7 +302,7 @@ LOG_STAGE_TIMINGS=true
 Results are stored in GCS with timestamped directories and resolution indicators:
 
 ```
-gs://landbrugsdata-raw-data/gold/
+gs://landbruget-data/gold/
 ├── h3_pesticide_2023_res10/
 │   └── 20250703_214459/
 │       ├── h3_pesticide_2023_res10.parquet

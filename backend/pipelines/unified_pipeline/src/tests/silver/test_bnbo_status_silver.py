@@ -28,7 +28,7 @@ def bnbo_status_silver(silver_config: BNBOStatusSilverConfig) -> BNBOStatusSilve
 
 def test_bnbo_status_silver_config(silver_config: BNBOStatusSilverConfig) -> None:
     assert silver_config.dataset == "bnbo_status"
-    assert silver_config.bucket == "landbrugsdata-raw-data"
+    assert silver_config.bucket == "landbruget-data"
     assert silver_config.status_mapping["Indsats gennemført"] == "Completed"
     assert silver_config.gml_ns == "{http://www.opengis.net/gml/3.2}"
 

@@ -1,6 +1,6 @@
 {
   "dataset_name": "property_cadastral_merged",
-  "source_path": "gs://landbrugsdata-raw-data/gold/property_cadastral_merged/20260116_222116/property_cadastral_merged.parquet",
+  "source_path": "gs://landbruget-data/gold/property_cadastral_merged/20260116_222116/property_cadastral_merged.parquet",
   "generated_at": "2026-01-17T11:16:37.702564",
   "record_count": 6628426,
   "unique_identifiers": {

@@ -32,7 +32,7 @@ def main():
         input_paths = get_step_input_paths(
             CVREnrichmentStep.ADDRESS_GEOCODING,
             date_pattern,
-            bucket="landbrugsdata-raw-data",
+            bucket="landbruget-data",
             max_days_back=30,
         )
 

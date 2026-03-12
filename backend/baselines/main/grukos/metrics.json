@@ -1,6 +1,6 @@
 {
   "dataset_name": "grukos",
-  "source_path": "gs://landbrugsdata-raw-data/silver/grukos/20260116_221635/data.parquet",
+  "source_path": "gs://landbruget-data/silver/grukos/20260116_221635/data.parquet",
   "generated_at": "2026-01-17T11:19:49.078540",
   "record_count": 3323,
   "unique_identifiers": {},

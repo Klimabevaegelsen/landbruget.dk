@@ -53,7 +53,7 @@ class DMIBronzeConfig(BaseJobConfig):
     type: str = "api"
     description: str = "DMI monthly climate data from GovCloud API (2011-present)"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # DMI-specific configuration
     parameters: ClassVar[list[str]] = ["pot_evaporation_makkink", "acc_precip"]

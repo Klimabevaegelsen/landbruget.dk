@@ -21,7 +21,7 @@ services:
       - PYTHONUNBUFFERED=1
 
       # GCS Configuration
-      - GCS_BUCKET=landbrugsdata-raw-data
+      - GCS_BUCKET=landbruget-data
 
       # H3 Configuration - Updated for refactored structure
       - H3_RESOLUTION=10

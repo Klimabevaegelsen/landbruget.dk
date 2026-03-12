@@ -1,6 +1,6 @@
 {
   "dataset_name": "stable_fires",
-  "source_path": "gs://landbrugsdata-raw-data/silver/stable fires/20260116_234019/Brand.i.stald.2021_2023.parquet",
+  "source_path": "gs://landbruget-data/silver/stable fires/20260116_234019/Brand.i.stald.2021_2023.parquet",
   "generated_at": "2026-01-17T11:15:28.198977",
   "record_count": 65,
   "unique_identifiers": {},

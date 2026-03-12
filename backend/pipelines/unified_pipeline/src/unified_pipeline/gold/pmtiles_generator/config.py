@@ -65,9 +65,7 @@ class PMTilesGeneratorConfig(BaseJobConfig):
     )
 
     # Data source paths in GCS
-    gcs_bucket: str = Field(
-        default="landbrugsdata-raw-data", description="GCS bucket for source data"
-    )
+    gcs_bucket: str = Field(default="landbruget-data", description="GCS bucket for source data")
 
     # Dataset paths
     fvm_marker_path: str = Field(

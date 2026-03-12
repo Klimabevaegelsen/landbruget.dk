@@ -1,6 +1,6 @@
 {
   "dataset_name": "arbejdstilsynet_silver",
-  "source_path": "gs://landbrugsdata-raw-data/silver/arbejdstilsynet_inspections/20260112_063605/workplace_inspections.parquet",
+  "source_path": "gs://landbruget-data/silver/arbejdstilsynet_inspections/20260112_063605/workplace_inspections.parquet",
   "generated_at": "2026-01-17T11:15:26.299374",
   "record_count": 534,
   "unique_identifiers": {

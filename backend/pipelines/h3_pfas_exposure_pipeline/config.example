@@ -2,7 +2,7 @@
 # Copy this to .env and modify as needed
 
 # GCS Configuration
-GCS_BUCKET=landbrugsdata-raw-data
+GCS_BUCKET=landbruget-data
 
 # H3 Configuration
 # Supported resolutions: 7 (~516ha), 8 (~74ha), 9 (~11ha), 10 (~1.5ha)

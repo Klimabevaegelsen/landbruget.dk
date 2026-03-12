@@ -232,7 +232,7 @@ All three scrapers implement consistent medallion architecture:
 # Environment Configuration
 SOURCE_CSV_URL=https://government.dk/data/inspections.csv
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
-GCS_BUCKET=landbrugsdata-raw-data
+GCS_BUCKET=landbruget-data
 LOG_LEVEL=INFO
 MAX_CONCURRENT_REQUESTS=20
 RETRY_ATTEMPTS=3

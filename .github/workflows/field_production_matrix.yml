@@ -82,7 +82,7 @@ jobs:
               import re
               logger = Logger.get_logger()
               gcs_access = GCSDataAccess()
-              bucket = os.getenv('R2_BUCKET', 'landbrugsdata-raw-data')
+              bucket = os.getenv('R2_BUCKET', 'landbruget-data')
 
               try:
                   # Get files with timestamps to find latest for each year
@@ -232,7 +232,7 @@ jobs:
         if: success()
         run: |
           echo "✅ Successfully processed field production estimates for year ${{ matrix.year }}"
-          echo "Data saved to: r2://landbrugsdata-raw-data/gold/field_production_${{ matrix.year }}/"
+          echo "Data saved to: r2://landbruget-data/gold/field_production_${{ matrix.year }}/"
 
       - name: Report failure
         if: failure()
@@ -280,5 +280,5 @@ jobs:
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Data Location" >> $GITHUB_STEP_SUMMARY
-          echo "- **Individual Years**: \`r2://landbrugsdata-raw-data/gold/field_production_YYYY/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Individual Years**: \`r2://landbruget-data/gold/field_production_YYYY/\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Access Pattern**: Query individual years or combine multiple years as needed" >> $GITHUB_STEP_SUMMARY

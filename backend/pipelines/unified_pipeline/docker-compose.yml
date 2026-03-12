@@ -6,7 +6,7 @@ services:
     container_name: unified-pipeline
     environment:
       # GCS Configuration
-      - GCS_BUCKET=${GCS_BUCKET:-landbrugsdata-raw-data}
+      - GCS_BUCKET=${GCS_BUCKET:-landbruget-data}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
 
       # Pipeline Configuration
@@ -69,7 +69,7 @@ services:
     build: .
     container_name: unified-pipeline-agricultural-fields
     environment:
-      - GCS_BUCKET=${GCS_BUCKET:-landbrugsdata-raw-data}
+      - GCS_BUCKET=${GCS_BUCKET:-landbruget-data}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
       - SAVE_LOCAL=${SAVE_LOCAL:-false}
     volumes:
@@ -94,7 +94,7 @@ services:
     build: .
     container_name: unified-pipeline-bnbo
     environment:
-      - GCS_BUCKET=${GCS_BUCKET:-landbrugsdata-raw-data}
+      - GCS_BUCKET=${GCS_BUCKET:-landbruget-data}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
       - SAVE_LOCAL=${SAVE_LOCAL:-false}
     volumes:

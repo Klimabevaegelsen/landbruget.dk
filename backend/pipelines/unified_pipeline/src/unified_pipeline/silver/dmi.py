@@ -44,7 +44,7 @@ class DMISilverConfig(BaseJobConfig):
     """
 
     dataset: str = "dmi"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     parameters: ClassVar[list[str]] = ["pot_evaporation_makkink", "acc_precip"]
     # CRS Strategy: Keep EPSG:25832 throughout processing, transform to 4326 only at Supabase upload
     target_crs: str = "EPSG:25832"  # Keep in Danish UTM for processing (no transformation needed)

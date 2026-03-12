@@ -51,7 +51,7 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
     description: str = "Processed agricultural marker data from Jordbrugsanalyser"
     dataset: str = "jordbrugsanalyser_markers"
     bronze_dataset: str = "jordbrugsanalyser_markers"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Year range for marker data processing
     start_year: int = 2012

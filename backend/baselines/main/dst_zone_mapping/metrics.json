@@ -1,6 +1,6 @@
 {
   "dataset_name": "dst_zone_mapping",
-  "source_path": "gs://landbrugsdata-raw-data/silver/dst_zone_mapping/20260116_221933/data.parquet",
+  "source_path": "gs://landbruget-data/silver/dst_zone_mapping/20260116_221933/data.parquet",
   "generated_at": "2026-01-17T11:15:24.926319",
   "record_count": 11,
   "unique_identifiers": {},

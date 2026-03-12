@@ -207,9 +207,9 @@ registration_date | DATE | Date of registration | 2015-03-15
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/cvr_enrichment/{timestamp}/`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/cvr_enrichment/{timestamp}/`
-- **Gold**: `gs://landbrugsdata-raw-data/gold/cvr_enrichment/{timestamp}/`
+- **Bronze**: `gs://landbruget-data/bronze/cvr_enrichment/{timestamp}/`
+- **Silver**: `gs://landbruget-data/silver/cvr_enrichment/{timestamp}/`
+- **Gold**: `gs://landbruget-data/gold/cvr_enrichment/{timestamp}/`
 
 ### Processing Infrastructure
 - **Platform**: GitHub Actions on Ubuntu runners

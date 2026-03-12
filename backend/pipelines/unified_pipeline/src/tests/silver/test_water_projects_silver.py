@@ -197,7 +197,7 @@ def test_config_defaults() -> None:
     """Test that the config defaults are set correctly."""
     config = WaterProjectsSilverConfig()
     assert config.dataset == "water_projects"
-    assert config.bucket == "landbrugsdata-raw-data"
+    assert config.bucket == "landbruget-data"
     assert config.storage_batch_size == 8000
     assert config.namespaces["wfs"] == "http://www.opengis.net/wfs/2.0"
     assert config.namespaces["gml"] == "http://www.opengis.net/gml/3.2"

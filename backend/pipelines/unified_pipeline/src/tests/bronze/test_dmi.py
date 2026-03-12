@@ -27,7 +27,7 @@ class TestDMIBronzeConfig:
         assert config.type == "api"
         assert config.description == "DMI monthly climate data from GovCloud API (2011-present)"
         assert config.frequency == "monthly"
-        assert config.bucket == "landbrugsdata-raw-data"
+        assert config.bucket == "landbruget-data"
         # parameters is a ClassVar, so check it exists on the class
         assert DMIBronzeConfig.parameters == ["pot_evaporation_makkink", "acc_precip"]
         assert config.api_base_url == "https://dmigw.govcloud.dk/v2/climateData"
@@ -345,12 +345,12 @@ class TestDMIBronze:
 
         # Verify paths use proper GCS format with bucket name
         assert any(
-            "gs://landbrugsdata-raw-data/bronze/dmi/" in path
+            "gs://landbruget-data/bronze/dmi/" in path
             and "pot_evaporation_makkink_data.json" in path
             for path in paths
         )
         assert any(
-            "gs://landbrugsdata-raw-data/bronze/dmi/" in path
+            "gs://landbruget-data/bronze/dmi/" in path
             and "pot_evaporation_makkink_metadata.json" in path
             for path in paths
         )

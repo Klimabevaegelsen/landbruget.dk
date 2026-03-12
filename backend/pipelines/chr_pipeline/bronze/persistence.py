@@ -36,7 +36,7 @@ def _load_problematic_herds() -> None:
     if GCS_AVAILABLE:
         try:
             gcs = GCSDataAccess()
-            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
             problematic_herds_path = "bronze/chr/problematic_herds.json"
             gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
 
@@ -67,7 +67,7 @@ def _save_problematic_herds() -> None:
     if GCS_AVAILABLE:
         try:
             gcs = GCSDataAccess()
-            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
             problematic_herds_path = "bronze/chr/problematic_herds.json"
             gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
 

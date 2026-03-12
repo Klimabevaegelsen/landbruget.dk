@@ -230,9 +230,9 @@ field2     | DATE | Description | 2024-01-15
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/[pipeline_name]/`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/[pipeline_name]/`
-- **Gold**: `gs://landbrugsdata-raw-data/gold/[pipeline_name]/`
+- **Bronze**: `gs://landbruget-data/bronze/[pipeline_name]/`
+- **Silver**: `gs://landbruget-data/silver/[pipeline_name]/`
+- **Gold**: `gs://landbruget-data/gold/[pipeline_name]/`
 
 ### Processing Infrastructure
 - **Platform**: [GitHub Actions/Docker/etc.]

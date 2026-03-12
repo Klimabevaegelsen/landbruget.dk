@@ -24,7 +24,7 @@ class TestDSTBronzeConfig:
         assert config.type == "api"
         assert config.description == "Danish Statistics data from DST API"
         assert config.frequency == "monthly"
-        assert config.bucket == "landbrugsdata-raw-data"
+        assert config.bucket == "landbruget-data"
         assert config.table_ids == ["HST77", "GARTN1", "FRO", "HALM1"]
         assert config.lang == "da"
         assert config.api_base_url == "https://api.statbank.dk/v1"
@@ -238,14 +238,14 @@ class TestDSTBronze:
 
         # Verify paths use proper GCS format with bucket name
         assert any(
-            "gs://landbrugsdata-raw-data/bronze/dst/" in path and "HST77_data.json" in path
+            "gs://landbruget-data/bronze/dst/" in path and "HST77_data.json" in path
             for path in paths
         )
         assert any(
-            "gs://landbrugsdata-raw-data/bronze/dst/" in path and "HST77_tableinfo.json" in path
+            "gs://landbruget-data/bronze/dst/" in path and "HST77_tableinfo.json" in path
             for path in paths
         )
         assert any(
-            "gs://landbrugsdata-raw-data/bronze/dst/" in path and "HST77_metadata.json" in path
+            "gs://landbruget-data/bronze/dst/" in path and "HST77_metadata.json" in path
             for path in paths
         )

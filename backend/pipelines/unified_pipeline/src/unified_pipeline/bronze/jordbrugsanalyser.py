@@ -63,7 +63,7 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     wfs_url: str = "https://geodata.fvm.dk/geoserver/wfs"
     dataset: str = "jordbrugsanalyser_markers"
     frequency: str = "yearly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Year range for marker data
     start_year: int = 2012

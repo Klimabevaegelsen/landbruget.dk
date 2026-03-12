@@ -47,7 +47,7 @@ class DeminimisSilverConfig(BaseJobConfig):
     type: str = "transformation"
     description: str = "National de minimis aid - ledger aggregated"
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Bronze source
     bronze_path: str = Field(

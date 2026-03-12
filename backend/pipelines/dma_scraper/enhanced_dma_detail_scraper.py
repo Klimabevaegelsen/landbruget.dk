@@ -625,7 +625,7 @@ class FullDMAPipeline:
         try:
             # Copy data to storage bucket - using standard bronze/dma path structure
             logger.info("📤 Uploading data to storage...")
-            r2_path = f"landbrugsdata-raw-data/bronze/dma/{self.timestamp}/"
+            r2_path = f"landbruget-data/bronze/dma/{self.timestamp}/"
             try:
                 from common.gcs.filesystem import get_r2_filesystem
 

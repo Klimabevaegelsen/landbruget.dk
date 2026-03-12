@@ -24,7 +24,7 @@ class ArbjdstilsynetInspectionsGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Clean and standardize workplace inspection data for business analytics"
     frequency: str = "weekly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Input silver dataset
     silver_dataset: str = "arbejdstilsynet_inspections"

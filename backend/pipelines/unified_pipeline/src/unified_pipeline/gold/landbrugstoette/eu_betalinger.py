@@ -27,7 +27,7 @@ class LandbrugstoetteEUGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "EU CAP payments - EAGF (Pillar 1) and EAFRD (Pillar 2)"
     frequency: str = "yearly"
-    bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Silver input dataset
     silver_dataset: str = Field(

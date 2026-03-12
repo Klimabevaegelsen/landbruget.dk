@@ -1114,7 +1114,7 @@ def main():
     analyzer = DMAPermitAnalyzer()
     results = []
 
-    base_gcs_path = "gs://landbrugsdata-raw-data/bronze/dma/20250705_054247/20250705_054247"
+    base_gcs_path = "gs://landbruget-data/bronze/dma/20250705_054247/20250705_054247"
 
     for company in test_companies:
         cvr = company["cvr"]
