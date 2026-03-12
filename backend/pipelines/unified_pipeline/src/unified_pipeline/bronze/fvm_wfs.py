@@ -85,7 +85,7 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     dataset_grassland_subsidies: str = "fvm_grassland_subsidies"
     dataset_environmental_subsidies: str = "fvm_environmental_subsidies"
     frequency: str = "yearly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Year ranges based on FVM WFS capabilities analysis
     markblokke_years: ClassVar[list[int]] = list(range(2005, 2027))  # 2005-2026 (22 years)

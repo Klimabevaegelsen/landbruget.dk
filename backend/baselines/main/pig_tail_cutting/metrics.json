@@ -1,6 +1,6 @@
 {
   "dataset_name": "pig_tail_cutting",
-  "source_path": "gs://landbrugsdata-raw-data/silver/pig tail cutting/20260116_234019/Datatraek.halekuperingskampagne.2023.til.udlevering.parquet",
+  "source_path": "gs://landbruget-data/silver/pig tail cutting/20260116_234019/Datatraek.halekuperingskampagne.2023.til.udlevering.parquet",
   "generated_at": "2026-01-17T11:15:28.919063",
   "record_count": 395,
   "unique_identifiers": {},

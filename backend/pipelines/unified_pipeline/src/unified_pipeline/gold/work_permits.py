@@ -28,7 +28,7 @@ class WorkPermitsGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Clean agricultural work permits data by company, year, and nationality"
     frequency: str = "monthly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Input silver datasets from drive pipeline
     drive_data_dataset: str = "drive_data"  # Drive pipeline silver output

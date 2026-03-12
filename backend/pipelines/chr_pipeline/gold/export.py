@@ -41,7 +41,7 @@ def save_table(output_path: Path, con, table_name: str) -> Path | None:
         return None
 
 
-def upload_to_gcs(local_path: Path, gcs_path: str, bucket: str = "landbrugsdata-raw-data") -> bool:
+def upload_to_gcs(local_path: Path, gcs_path: str, bucket: str = "landbruget-data") -> bool:
     """
     Upload a local file to Google Cloud Storage.
 

@@ -38,7 +38,7 @@ def _load_high_volume_herds() -> None:
     if GCS_AVAILABLE:
         try:
             gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
             config_path = f"gs://{bucket_name}/bronze/chr/config/high_volume_herds.json"
 
             if gcs_data_access.file_exists(config_path):
@@ -94,7 +94,7 @@ def _save_high_volume_herds() -> None:
     if GCS_AVAILABLE:
         try:
             gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
             config_path = f"gs://{bucket_name}/bronze/chr/config/high_volume_herds.json"
 
             gcs_data_access.upload_json(_HIGH_VOLUME_HERDS, config_path)

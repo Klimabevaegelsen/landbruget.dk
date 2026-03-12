@@ -55,7 +55,7 @@ Copy `env.example` to `.env` and configure:
 ```bash
 # Required: SFTP access (managed via Secret Manager)
 PROJECT_ID=landbrugsdata-1
-GCS_BUCKET=landbrugsdata-raw-data
+GCS_BUCKET=landbruget-data
 
 # Optional: VM configuration
 VM_MACHINE_TYPE=e2-standard-8
@@ -100,7 +100,7 @@ The pipeline includes comprehensive error handling:
 ## Output Structure
 
 ```
-gs://landbrugsdata-raw-data/
+gs://landbruget-data/
 ├── bronze/property_owners/
 │   └── YYYYMMDD_HHMMSS_original.zip
 └── silver/property_owners/

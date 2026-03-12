@@ -405,7 +405,7 @@ def main():
     parser.add_argument(
         "--gcs-bucket",
         type=str,
-        default="landbrugsdata-raw-data",
+        default="landbruget-data",
         help="GCS bucket name",
     )
     parser.add_argument(

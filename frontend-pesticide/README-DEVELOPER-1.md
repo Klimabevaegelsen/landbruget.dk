@@ -314,7 +314,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 DATABASE_URL=postgresql://postgres:password@db.your-project.supabase.co:5432/postgres
 
 # GCS Configuration
-GCS_BUCKET=landbrugsdata-raw-data
+GCS_BUCKET=landbruget-data
 ```
 
 ### Shared Constants

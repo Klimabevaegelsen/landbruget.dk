@@ -133,7 +133,7 @@ def test_config_defaults() -> None:
     config = GEUSDataversePesticidesSilverConfig()
 
     assert config.dataset == "geus_dataverse_pesticides"
-    assert config.bucket == "landbrugsdata-raw-data"
+    assert config.bucket == "landbruget-data"
     assert config.source_crs == "EPSG:25832"
 
 

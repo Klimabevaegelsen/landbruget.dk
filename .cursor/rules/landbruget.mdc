@@ -5,7 +5,7 @@ alwaysApply: true
 ---
 
 ## GCS Configuration
-our bucket is gs://landbrugsdata-raw-data/
+our bucket is gs://landbruget-data/
 
 ## File Organization Rules
 When creating new files, place them in the appropriate directory:

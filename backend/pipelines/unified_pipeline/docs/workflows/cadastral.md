@@ -321,9 +321,9 @@ created_at | TIMESTAMP | Processing timestamp | "2025-01-15T10:30:00"
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/cadastral/{timestamp}/data.json`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/cadastral/{timestamp}/data.parquet`
-- **Silver Dissolved**: `gs://landbrugsdata-raw-data/silver/cadastral_dissolved/{timestamp}/data.parquet`
+- **Bronze**: `gs://landbruget-data/bronze/cadastral/{timestamp}/data.json`
+- **Silver**: `gs://landbruget-data/silver/cadastral/{timestamp}/data.parquet`
+- **Silver Dissolved**: `gs://landbruget-data/silver/cadastral_dissolved/{timestamp}/data.parquet`
 
 ### Processing Infrastructure
 - **Platform**: Automated monthly execution as foundation data source

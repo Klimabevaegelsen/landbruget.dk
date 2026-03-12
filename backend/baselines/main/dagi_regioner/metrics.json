@@ -1,6 +1,6 @@
 {
   "dataset_name": "dagi_regioner",
-  "source_path": "gs://landbrugsdata-raw-data/silver/dagi_regioner/20260116_221909/data.parquet",
+  "source_path": "gs://landbruget-data/silver/dagi_regioner/20260116_221909/data.parquet",
   "generated_at": "2026-01-17T11:15:20.185980",
   "record_count": 5,
   "unique_identifiers": {

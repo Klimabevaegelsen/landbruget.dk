@@ -19,7 +19,7 @@ except ImportError as e:
 # google.cloud.storage no longer needed — using s3fs via GCSDataAccess (R2)
 storage = None
 
-DEFAULT_BUCKET = "landbrugsdata-raw-data"
+DEFAULT_BUCKET = "landbruget-data"
 
 
 class StoragePath:
@@ -31,10 +31,10 @@ class StoragePath:
     Usage:
         paths = StoragePath()  # reads bucket from R2_BUCKET or GCS_BUCKET env
         paths.bronze("chr_pipeline", "2025-03-07", "raw.parquet")
-        # -> "gs://landbrugsdata-raw-data/bronze/chr_pipeline/2025-03-07/raw.parquet"
+        # -> "gs://landbruget-data/bronze/chr_pipeline/2025-03-07/raw.parquet"
 
         paths.silver("unified_pipeline", "agricultural_fields.parquet")
-        # -> "gs://landbrugsdata-raw-data/silver/unified_pipeline/agricultural_fields.parquet"
+        # -> "gs://landbruget-data/silver/unified_pipeline/agricultural_fields.parquet"
     """
 
     def __init__(self, bucket: str | None = None) -> None:

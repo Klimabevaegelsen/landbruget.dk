@@ -1,6 +1,6 @@
 {
   "dataset_name": "dagi_landsdele",
-  "source_path": "gs://landbrugsdata-raw-data/silver/dagi_landsdele/20260116_221918/data.parquet",
+  "source_path": "gs://landbruget-data/silver/dagi_landsdele/20260116_221918/data.parquet",
   "generated_at": "2026-01-17T11:15:21.651120",
   "record_count": 11,
   "unique_identifiers": {

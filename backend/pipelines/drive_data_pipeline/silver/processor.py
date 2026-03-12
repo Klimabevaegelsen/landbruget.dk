@@ -818,7 +818,7 @@ class SilverProcessor:
 
                 # Construct GCS path if needed
                 if not is_gcs_path and using_gcs_storage:
-                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    bucket = getattr(self.storage_manager, "bucket", "landbruget-data")
                     gcs_path = f"gs://{bucket}/silver/{output_path_str}"
                 else:
                     gcs_path = output_path_str
@@ -898,7 +898,7 @@ class SilverProcessor:
                 if not is_gcs_path and using_gcs_storage:
                     # Convert local path to GCS path using storage manager's bucket and base path
                     # The output_path is relative to the silver base path
-                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    bucket = getattr(self.storage_manager, "bucket", "landbruget-data")
                     gcs_path = f"gs://{bucket}/silver/{output_path_str}"
                 else:
                     gcs_path = output_path_str

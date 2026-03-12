@@ -115,10 +115,10 @@ COALESCE(
 ## GCS Output Locations
 
 **Document Metadata** (existing):
-- `gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/{timestamp}/financial_documents.parquet`
+- `gs://landbruget-data/gold/cvr_enrichment_financial/{timestamp}/financial_documents.parquet`
 
 **Comprehensive Financial Statements** (NEW!):
-- `gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial_statements/{timestamp}/financial_statements.parquet`
+- `gs://landbruget-data/gold/cvr_enrichment_financial_statements/{timestamp}/financial_statements.parquet`
 
 ## Migration Strategy
 

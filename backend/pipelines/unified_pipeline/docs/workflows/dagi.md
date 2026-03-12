@@ -349,8 +349,8 @@ processed_at | TIMESTAMP | Processing timestamp | "2025-01-15T10:30:00"
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/dagi_{layer}/{timestamp}/dagi_{layer}.json`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/dagi_{layer}/{timestamp}/data.parquet`
+- **Bronze**: `gs://landbruget-data/bronze/dagi_{layer}/{timestamp}/dagi_{layer}.json`
+- **Silver**: `gs://landbruget-data/silver/dagi_{layer}/{timestamp}/data.parquet`
 - **Layer Examples**:
   - `dagi_kommuner`, `dagi_regioner`
   - `dagi_landsdele`, `dagi_postnumre`

@@ -84,7 +84,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
                 self.duckdb_conn.execute("INSTALL httpfs")
                 self.duckdb_conn.execute("LOAD httpfs")
 
-                # Set correct GCS region (landbrugsdata-raw-data bucket is in EUROPE-WEST1)
+                # Set correct GCS region (landbruget-data bucket is in EUROPE-WEST1)
                 self.duckdb_conn.execute("SET s3_region = 'europe-west1'")
 
                 # Escape single quotes in credentials to prevent SQL injection

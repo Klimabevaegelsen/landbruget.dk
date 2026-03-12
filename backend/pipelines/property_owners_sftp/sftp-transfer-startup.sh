@@ -63,7 +63,7 @@ def flush_logs():
 class SFTPToGCSTransfer:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
-        self.bucket_name = "landbrugsdata-raw-data"
+        self.bucket_name = "landbruget-data"
         self.storage_client = storage.Client()
         self.secret_client = secretmanager.SecretManagerServiceClient()
         logger.info("SFTPToGCSTransfer class initialized.")

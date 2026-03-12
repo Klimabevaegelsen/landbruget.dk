@@ -339,10 +339,10 @@ data_quality_score | DOUBLE | Data quality score (0-1) | 0.95
 #### Standalone Pipeline
 - **Bronze**: `backend/pipelines/arbejdstilsynet_inspections/data/bronze/{timestamp}/data.csv`
 - **Silver**: `backend/pipelines/arbejdstilsynet_inspections/data/silver/{timestamp}/processed_data.parquet`
-- **GCS Export**: `gs://landbrugsdata-raw-data/silver/arbejdstilsynet_inspections/{timestamp}/workplace_inspections.parquet`
+- **GCS Export**: `gs://landbruget-data/silver/arbejdstilsynet_inspections/{timestamp}/workplace_inspections.parquet`
 
 #### Unified Pipeline
-- **Gold**: `gs://landbrugsdata-raw-data/gold/arbejdstilsynet_inspections/{timestamp}/workplace_inspections_gold.parquet`
+- **Gold**: `gs://landbruget-data/gold/arbejdstilsynet_inspections/{timestamp}/workplace_inspections_gold.parquet`
 
 ### Processing Infrastructure
 #### Standalone Pipeline
@@ -362,13 +362,13 @@ data_quality_score | DOUBLE | Data quality score (0-1) | 0.95
 # Standalone Pipeline Environment Variables
 SOURCE_CSV_URL=https://example.com/arbejdstilsynet-data.csv
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
-GCS_BUCKET=landbrugsdata-raw-data
+GCS_BUCKET=landbruget-data
 
 # Processing Parameters
 --start-date 2024-01-01
 --end-date 2024-06-30
 --stage all
---gcs-bucket landbrugsdata-raw-data
+--gcs-bucket landbruget-data
 ```
 
 ### CVR Integration Features

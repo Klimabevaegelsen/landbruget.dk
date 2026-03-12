@@ -86,13 +86,13 @@ conn.execute("LOAD spatial")
 # Load spatial lookup table directly from GCS
 conn.execute("""
     CREATE OR REPLACE TABLE dst_lookup AS 
-    SELECT * FROM read_parquet('gs://landbrugsdata-raw-data/silver/dst_zone_mapping/latest/data.parquet')
+    SELECT * FROM read_parquet('gs://landbruget-data/silver/dst_zone_mapping/latest/data.parquet')
 """)
 
 # Load reference table (without geometry for faster queries)
 conn.execute("""
     CREATE OR REPLACE TABLE dst_reference AS 
-    SELECT * FROM read_parquet('gs://landbrugsdata-raw-data/silver/dst_zone_mapping_reference/latest/data.parquet')
+    SELECT * FROM read_parquet('gs://landbruget-data/silver/dst_zone_mapping_reference/latest/data.parquet')
 """)
 ```
 
@@ -102,7 +102,7 @@ conn.execute("""
 # Load agricultural fields
 conn.execute("""
     CREATE OR REPLACE TABLE fields AS 
-    SELECT * FROM read_parquet('gs://landbrugsdata-raw-data/silver/fvm_marker_2024/latest/data.parquet')
+    SELECT * FROM read_parquet('gs://landbruget-data/silver/fvm_marker_2024/latest/data.parquet')
 """)
 
 # Perform spatial join to add DST zones using DuckDB spatial functions

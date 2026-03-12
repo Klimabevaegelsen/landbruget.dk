@@ -309,7 +309,7 @@ def save_discovery_results(
             import os
 
             gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
             config_path = f"gs://{bucket_name}/bronze/chr/config/discovery_results_{year}.json"
 
             gcs_data_access.upload_json(discovery_data, config_path)
@@ -342,7 +342,7 @@ def load_previous_discovery_results(year: int) -> tuple[list[dict], list[int]] |
             import os
 
             gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+            bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
             config_path = f"gs://{bucket_name}/bronze/chr/config/discovery_results_{year}.json"
 
             if gcs_data_access.file_exists(config_path):

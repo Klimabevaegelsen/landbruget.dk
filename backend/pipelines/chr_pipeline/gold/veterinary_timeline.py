@@ -764,7 +764,7 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
     Returns:
         Dict mapping table names to whether they were loaded successfully
     """
-    bucket = "landbrugsdata-raw-data"
+    bucket = "landbruget-data"
     loaded_tables = {}
 
     # Define data source patterns - specific files for correct data
@@ -1194,7 +1194,7 @@ def process_veterinary_timeline(
         if success:
             # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
             if gcs_access and migrate_save_data_pattern:
-                bucket = "landbrugsdata-raw-data"
+                bucket = "landbruget-data"
                 # Use subdataset parameter to create separate filenames
                 migrate_save_data_pattern(
                     gcs_access,

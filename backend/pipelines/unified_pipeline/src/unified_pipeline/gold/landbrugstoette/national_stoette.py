@@ -26,7 +26,7 @@ class LandbrugstoetteNationalGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "National subsidies - De Minimis and Slaughter Premium"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Silver input datasets
     deminimis_dataset: str = Field(default="deminimis", description="De minimis silver dataset")

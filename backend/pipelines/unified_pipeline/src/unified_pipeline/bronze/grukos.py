@@ -51,7 +51,7 @@ class GrukosBronzeConfig(BaseJobConfig):
     """
 
     dataset: str = "grukos"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     max_concurrent: int = 10
     request_timeout: int = 300
     batch_size: int = 10000

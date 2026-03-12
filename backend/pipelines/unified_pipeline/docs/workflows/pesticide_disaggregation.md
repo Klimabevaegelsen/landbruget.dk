@@ -233,9 +233,9 @@ uncertainty_score | FLOAT | Uncertainty indicator (0-1) | 0.3
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/pesticide_disaggregation/{year}/{timestamp}/`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/pesticide_disaggregation/{year}/{timestamp}/`
-- **Gold**: `gs://landbrugsdata-raw-data/gold/pesticide_disaggregation/{year}/{timestamp}/`
+- **Bronze**: `gs://landbruget-data/bronze/pesticide_disaggregation/{year}/{timestamp}/`
+- **Silver**: `gs://landbruget-data/silver/pesticide_disaggregation/{year}/{timestamp}/`
+- **Gold**: `gs://landbruget-data/gold/pesticide_disaggregation/{year}/{timestamp}/`
 
 ### Processing Infrastructure
 - **Platform**: GitHub Actions matrix jobs

@@ -34,7 +34,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     type: str = "wfs"
     description: str = "Cadastral parcels from WFS"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
     batch_size: int = 25000  # Increased from 10k to 25k for fewer API calls
     max_concurrent: int = 8  # Increased from 5 to 8 for better parallelism

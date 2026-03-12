@@ -64,7 +64,7 @@ total_fields       | bigint
 - Contains **placeholder view definition** with basic pesticide data
 - View was likely **dropped or never properly created** in production
 - **🚀 ENHANCED SOLUTION AVAILABLE**: Municipality-level pattern exists with **real nitrogen data**
-- **NLES5 nitrogen data available** in GCS: `gs://landbrugsdata-raw-data/gold/nles5_nitrogen_estimation/latest/`
+- **NLES5 nitrogen data available** in GCS: `gs://landbruget-data/gold/nles5_nitrogen_estimation/latest/`
 - **Can create rich environment_summary** instead of placeholder values
 
 ### 3. Missing Spatial Columns in `pesticide_applications_with_field_details` ⚠️ **CONFIRMED**

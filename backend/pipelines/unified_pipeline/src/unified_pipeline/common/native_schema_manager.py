@@ -262,7 +262,7 @@ class SchemaMixin:
 
         # Save to GCS if enabled
         if save_to_gcs:
-            gcs_path = f"gs://landbrugsdata-raw-data/schemas/{self.__class__.__name__}"
+            gcs_path = f"gs://landbruget-data/schemas/{self.__class__.__name__}"
             schema_manager.save_schema_to_gcs(table_name, schema_info, gcs_path)
 
         # Save locally if enabled

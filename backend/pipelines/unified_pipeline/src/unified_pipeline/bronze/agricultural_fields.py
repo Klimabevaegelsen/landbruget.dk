@@ -82,7 +82,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
     fields_dataset: str = "agricultural_fields"
     blocks_dataset: str = "agricultural_blocks"
     frequency: str = "weekly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     batch_size: int = 2000
     max_concurrent: int = 5

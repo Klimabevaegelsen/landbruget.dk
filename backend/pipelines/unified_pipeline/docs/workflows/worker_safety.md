@@ -241,9 +241,9 @@ injury_count | VARCHAR | Injury count or privacy range | "3" or "1-5"
 - **Privacy Records**: Automatically handled with range preservation
 
 ### Storage Locations
-- **Gold Output**: `gs://landbrugsdata-raw-data/gold/worker_safety/{timestamp}/`
+- **Gold Output**: `gs://landbruget-data/gold/worker_safety/{timestamp}/`
 - **Clean Dataset**: `worker_safety_clean.parquet`
-- **Source Silver**: `gs://landbrugsdata-raw-data/silver/worker safety/{timestamp}/`
+- **Source Silver**: `gs://landbruget-data/silver/worker safety/{timestamp}/`
 - **Input Files**: `worker_safety_2020-2024_mv.parquet`, `worker_safety_2020-2024_skadeart.parquet`
 
 ### Processing Infrastructure

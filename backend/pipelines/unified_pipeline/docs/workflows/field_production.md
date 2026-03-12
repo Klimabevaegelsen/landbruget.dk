@@ -283,8 +283,8 @@ primary_field_id | VARCHAR | Primary field reference | "abc-123-def-456"
 ```
 
 ### Storage Locations
-- **Gold Output (Normal)**: `gs://landbrugsdata-raw-data/gold/field_production/latest/data.parquet`
-- **Gold Output (Matrix)**: `gs://landbrugsdata-raw-data/gold/field_production_{year}/{timestamp}/data.parquet`
+- **Gold Output (Normal)**: `gs://landbruget-data/gold/field_production/latest/data.parquet`
+- **Gold Output (Matrix)**: `gs://landbruget-data/gold/field_production_{year}/{timestamp}/data.parquet`
 
 ### Processing Infrastructure
 - **Platform**: Automated monthly execution as dependent data source with matrix job support

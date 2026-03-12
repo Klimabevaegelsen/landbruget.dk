@@ -1,6 +1,6 @@
 {
   "dataset_name": "fertiliser",
-  "source_path": "gs://landbrugsdata-raw-data/silver/fertiliser/20260116_234019/Efterafgr\u00f8der 2020.parquet",
+  "source_path": "gs://landbruget-data/silver/fertiliser/20260116_234019/Efterafgr\u00f8der 2020.parquet",
   "generated_at": "2026-01-17T11:15:25.886304",
   "record_count": 51535,
   "unique_identifiers": {

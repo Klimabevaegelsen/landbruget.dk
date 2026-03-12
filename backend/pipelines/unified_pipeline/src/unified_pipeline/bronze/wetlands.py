@@ -58,7 +58,7 @@ class WetlandsBronzeConfig(BaseJobConfig):
     description: str = "Wetland areas from Danish EPA"
     url: str = "https://wfs2-miljoegis.mim.dk/natur/wfs"
     frequency: str = "static"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     batch_size: int = 10000
     max_concurrent: int = 3

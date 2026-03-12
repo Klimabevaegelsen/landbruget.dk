@@ -1704,7 +1704,7 @@ CREATE TABLE visa_yearly_counts (
 );
 ```
 
-**Current Data Source**: `gs://landbrugsdata-raw-data/silver/work permits/20250809_212145/`
+**Current Data Source**: `gs://landbruget-data/silver/work permits/20250809_212145/`
 - **File**: `Landbrugsvisum_statistik.parquet` (72.8 KB, 6,726 records)
 - **Content**: Fully structured work permits data by company, nationality, and year
 - **Coverage**: 2,261 companies, 20 nationalities, 2019-2023 (5 years)
@@ -1880,8 +1880,8 @@ GROUP BY emc.company_id, EXTRACT(YEAR FROM emc.month_year), vyc.total_visas, inc
 ### ✅ **COMPLETE: Table 21 - `incidents`** 🔴 **SCHEMA ENHANCEMENT NEEDED**
 
 **Sources**: Two complementary datasets for comprehensive workplace safety tracking
-1. **Worker Safety Data**: `gs://landbrugsdata-raw-data/gold/worker_safety/20250803_022717/`
-2. **Workplace Inspections**: `gs://landbrugsdata-raw-data/gold/arbejdstilsynet_inspections/20250803_022714/`
+1. **Worker Safety Data**: `gs://landbruget-data/gold/worker_safety/20250803_022717/`
+2. **Workplace Inspections**: `gs://landbruget-data/gold/arbejdstilsynet_inspections/20250803_022714/`
 
 **Current Supabase Schema** (needs enhancement):
 ```sql

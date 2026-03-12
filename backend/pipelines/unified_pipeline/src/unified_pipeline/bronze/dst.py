@@ -51,7 +51,7 @@ class DSTBronzeConfig(BaseJobConfig):
     type: str = "api"
     description: str = "Danish Statistics data from DST API"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # DST-specific configuration
     table_ids: ClassVar[list[str]] = ["HST77", "GARTN1", "FRO", "HALM1"]

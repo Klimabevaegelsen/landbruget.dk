@@ -80,8 +80,8 @@ jobs:
           echo "  1. Install dependencies (Python, ijson, pyarrow)"
           echo "  2. Download latest ZIP from SFTP server"
           echo "  3. Extract and process JSON with privacy transformations"
-          echo "  4. Upload processed Parquet to: s3://landbrugsdata-raw-data/silver/property_owners/"
-          echo "  5. Upload original ZIP backup to: s3://landbrugsdata-raw-data/bronze/property_owners/"
+          echo "  4. Upload processed Parquet to: s3://landbruget-data/silver/property_owners/"
+          echo "  5. Upload original ZIP backup to: s3://landbruget-data/bronze/property_owners/"
           echo "  6. Delete itself when complete"
           echo ""
           echo "VM Specs: e2-standard-8 (8 cores, 32GB RAM, 30GB SSD) - Standard instance"
@@ -113,7 +113,7 @@ jobs:
                 df -h /tmp 2>/dev/null || echo 'Could not check disk'
                 echo 'Attempting emergency upload of any partial data...'
                 if [ -d '/tmp/property_owners_data' ]; then
-                  aws s3 cp /tmp/property_owners_data/ s3://landbrugsdata-raw-data/bronze/property_owners/timeout_$(date +%Y%m%d_%H%M%S)/ --recursive --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com || echo 'Emergency upload failed'
+                  aws s3 cp /tmp/property_owners_data/ s3://landbruget-data/bronze/property_owners/timeout_$(date +%Y%m%d_%H%M%S)/ --recursive --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com || echo 'Emergency upload failed'
                 fi
                 echo '=== END TIMEOUT CLEANUP ==='
               " 2>/dev/null || echo "Could not connect for timeout cleanup"

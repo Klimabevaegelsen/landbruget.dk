@@ -24,7 +24,7 @@ from common.gcs import GCSDataAccess
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-BUCKET = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+BUCKET = os.getenv("GCS_BUCKET", "landbruget-data")
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 
 

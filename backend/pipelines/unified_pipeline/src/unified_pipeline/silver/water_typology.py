@@ -56,7 +56,7 @@ class WaterTypologySilverConfig(BaseJobConfig):
     """
 
     dataset: str = "water_typology"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     storage_batch_size: int = 8000  # Increased for better performance with 16GB RAM
     namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",

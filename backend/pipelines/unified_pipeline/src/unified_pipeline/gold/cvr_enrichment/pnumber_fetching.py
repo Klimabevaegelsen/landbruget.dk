@@ -28,7 +28,7 @@ class PNumberFetchingConfig(BaseJobConfig):
     type: str = "cvr_api"
     description: str = "Fetch P-number (production unit) data from CVR register"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Shared configuration
     shared_config: CVREnrichmentSharedConfig = Field(

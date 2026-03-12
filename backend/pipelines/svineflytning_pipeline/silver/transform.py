@@ -26,7 +26,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize storage configuration
-GCS_BUCKET = os.getenv("R2_BUCKET", "landbrugsdata-raw-data")
+GCS_BUCKET = os.getenv("R2_BUCKET", "landbruget-data")
 
 # Initialize R2/S3 filesystem if available
 _r2_fs = None

@@ -1,6 +1,6 @@
 {
   "dataset_name": "field_analysis_field_grukos_2024",
-  "source_path": "gs://landbrugsdata-raw-data/gold/field_analysis_field_grukos_intersections_2024/20260114_194630/data.parquet",
+  "source_path": "gs://landbruget-data/gold/field_analysis_field_grukos_intersections_2024/20260114_194630/data.parquet",
   "generated_at": "2026-01-17T11:15:44.867904",
   "record_count": 126056,
   "unique_identifiers": {

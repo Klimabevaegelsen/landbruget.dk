@@ -107,7 +107,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
     dataset_grassland_subsidies: str = "fvm_grassland_subsidies"
     dataset_environmental_subsidies: str = "fvm_environmental_subsidies"
 
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     storage_batch_size: int = 5000
 
     # UUID generation configuration

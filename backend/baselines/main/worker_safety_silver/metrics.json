@@ -1,6 +1,6 @@
 {
   "dataset_name": "worker_safety_silver",
-  "source_path": "gs://landbrugsdata-raw-data/silver/worker safety/20260116_234019/worker_safety_2020-2024_mv.parquet",
+  "source_path": "gs://landbruget-data/silver/worker safety/20260116_234019/worker_safety_2020-2024_mv.parquet",
   "generated_at": "2026-01-17T11:15:26.627165",
   "record_count": 194,
   "unique_identifiers": {},

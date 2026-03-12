@@ -151,7 +151,7 @@ The gold layer produces:
 - `veterinary_timeline.parquet` - Complete timeline of veterinary events per CHR
 - `timeline_summary.parquet` - Summary statistics by data source
 
-Data is exported to both local storage and GCS at `gs://landbrugsdata-raw-data/gold/chr/{timestamp}/`
+Data is exported to both local storage and GCS at `gs://landbruget-data/gold/chr/{timestamp}/`
 
 ## GitHub Actions
 

@@ -1,6 +1,6 @@
 {
   "dataset_name": "dmi_precipitation",
-  "source_path": "gs://landbrugsdata-raw-data/silver/dmi_acc_precip_dmi_acc_precip/20260117_094128/data.parquet",
+  "source_path": "gs://landbruget-data/silver/dmi_acc_precip_dmi_acc_precip/20260117_094128/data.parquet",
   "generated_at": "2026-01-17T11:15:23.501778",
   "record_count": 23541,
   "unique_identifiers": {},

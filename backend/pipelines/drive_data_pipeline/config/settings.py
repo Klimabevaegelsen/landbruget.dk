@@ -100,7 +100,7 @@ def get_settings() -> Settings:
     # Auto-configure storage type based on environment
     if environment.lower() in ("production", "container"):
         default_storage_type = "gcs"
-        default_gcs_bucket = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        default_gcs_bucket = os.getenv("GCS_BUCKET", "landbruget-data")
     else:
         default_storage_type = "local"
         default_gcs_bucket = None

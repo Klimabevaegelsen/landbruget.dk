@@ -1,6 +1,6 @@
 {
   "dataset_name": "pesticide_compliance",
-  "source_path": "gs://landbrugsdata-raw-data/gold/pesticide_compliance/20260114_215053/compliance_analysis_2023_2024.parquet",
+  "source_path": "gs://landbruget-data/gold/pesticide_compliance/20260114_215053/compliance_analysis_2023_2024.parquet",
   "generated_at": "2026-01-17T11:20:39.603759",
   "record_count": 1522718,
   "unique_identifiers": {},

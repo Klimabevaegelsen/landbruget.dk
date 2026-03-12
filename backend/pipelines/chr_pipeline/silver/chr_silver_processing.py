@@ -68,7 +68,7 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
         logging.error("GCS utilities not available - cannot download bronze data")
         return False
 
-    bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
     if not bucket_name:
         logging.error("GCS_BUCKET not set - cannot download bronze data")
         return False
@@ -236,7 +236,7 @@ def _save_discovered_cvr_numbers(
                 pipeline_name="chr_pipeline",
                 cvr_numbers=unique_cvr_numbers,
                 gcs_access=gcs_access,
-                bucket="landbrugsdata-raw-data",
+                bucket="landbruget-data",
                 timestamp=export_timestamp,
             )
 
@@ -280,7 +280,7 @@ def process_chr_data_streaming(
         logging.info(f"Using bronze timestamp as export timestamp: {export_timestamp}")
 
     # Get GCS bucket from environment
-    bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
     if not bucket_name:
         logging.error("GCS_BUCKET environment variable not set")
         return False

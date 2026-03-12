@@ -1,6 +1,6 @@
 {
   "dataset_name": "field_analysis_field_wetland_2025",
-  "source_path": "gs://landbrugsdata-raw-data/gold/field_analysis_field_wetland_intersections_2025/20260116_232837/data.parquet",
+  "source_path": "gs://landbruget-data/gold/field_analysis_field_wetland_intersections_2025/20260116_232837/data.parquet",
   "generated_at": "2026-01-17T11:20:38.361536",
   "record_count": 945977,
   "total_area_m2": null,

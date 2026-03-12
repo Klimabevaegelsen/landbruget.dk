@@ -75,7 +75,7 @@ jobs:
             """Discover available pesticide years from R2 storage."""
             try:
                 gcs_access = GCSDataAccess()
-                bucket = os.getenv("R2_BUCKET", "landbrugsdata-raw-data")
+                bucket = os.getenv("R2_BUCKET", "landbruget-data")
 
                 # List all parquet files in the pesticides silver directory (recursive)
                 files = gcs_access.list_files(f"gs://{bucket}/silver/pesticides/*/*.parquet")
@@ -98,7 +98,7 @@ jobs:
             """Discover available field years from R2 storage."""
             try:
                 gcs_access = GCSDataAccess()
-                bucket = os.getenv("R2_BUCKET", "landbrugsdata-raw-data")
+                bucket = os.getenv("R2_BUCKET", "landbruget-data")
 
                 # List all parquet files in silver layer to find fvm_marker directories (recursive)
                 files = gcs_access.list_files(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
@@ -230,7 +230,7 @@ jobs:
             try:
                 # Create configuration for this specific year
                 config = PesticideDisaggregationGoldConfig(
-                    bucket=os.getenv("R2_BUCKET", "landbrugsdata-raw-data"),
+                    bucket=os.getenv("R2_BUCKET", "landbruget-data"),
                     pesticide_year=${{ matrix.year }},
                     area_tolerance_pct=2.0,  # Preserve original value
                     max_memory_gb=12.0,

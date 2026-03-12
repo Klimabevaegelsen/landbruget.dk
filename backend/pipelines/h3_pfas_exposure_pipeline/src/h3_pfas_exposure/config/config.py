@@ -48,8 +48,8 @@ class H3SpatialConfig:
     max_intersection_ratio: float = 1.1  # Allow 10% tolerance for intersection calculations
 
     # GCS Configuration
-    bucket: str = "landbrugsdata-raw-data"
-    gcs_base_path: str = "gs://landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
+    gcs_base_path: str = "gs://landbruget-data"
 
     # Processing Configuration
     enable_coordinate_flipping: bool = True  # Enable coordinate flipping for spatial operations

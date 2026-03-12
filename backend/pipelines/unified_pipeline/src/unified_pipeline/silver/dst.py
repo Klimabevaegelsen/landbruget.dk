@@ -38,7 +38,7 @@ class DSTSilverConfig(BaseJobConfig):
     """
 
     dataset: str = "dst"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     table_ids: ClassVar[list[str]] = ["HST77", "GARTN1", "FRO", "HALM1"]
 
 

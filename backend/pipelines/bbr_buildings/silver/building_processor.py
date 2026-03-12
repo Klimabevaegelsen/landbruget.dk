@@ -343,7 +343,7 @@ class BuildingProcessor:
             try:
                 gcs_access = OptimizedGCSDataAccess()
                 timestamp = Path(output_dir).name  # Extract timestamp from output directory
-                gcs_path = f"gs://landbrugsdata-raw-data/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
+                gcs_path = f"gs://landbruget-data/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
 
                 # Use native GCS export with server-side compression
                 gcs_access.export_to_gcs_native(

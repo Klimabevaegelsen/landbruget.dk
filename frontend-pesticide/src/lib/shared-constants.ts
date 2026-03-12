@@ -17,7 +17,7 @@ export const API_ENDPOINTS = {
 
 // Data processing constants
 export const GCS_CONFIG = {
-  BUCKET: 'landbrugsdata-raw-data', // R2 bucket name (kept for backward compat)
+  BUCKET: 'landbruget-data', // R2 bucket name (kept for backward compat)
   H3_DATA_PATH: 'gold/h3_pfas_exposure',
   BNBO_DATA_PATH: 'gold/bnbo_status_areas',
   BBR_DATA_PATH: 'gold/bbr_buildings',

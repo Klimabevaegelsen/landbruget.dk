@@ -41,7 +41,7 @@ class CVREnrichmentGoldConfig(BaseJobConfig):
     type: str = "cvr_api"
     description: str = "CVR register data enrichment from distribution.virk.dk"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # CVR API configuration
     fetch_all_fields: bool = Field(

@@ -237,7 +237,7 @@ jobs:
         run: |
           STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
           echo "✅ Successfully processed ${{ matrix.layer_type }}_${{ matrix.year }} (stage: $STAGE)"
-          echo "Data saved to: r2://landbrugsdata-raw-data/$STAGE/fvm_${{ matrix.layer_type }}_${{ matrix.year }}/"
+          echo "Data saved to: r2://landbruget-data/$STAGE/fvm_${{ matrix.layer_type }}_${{ matrix.year }}/"
 
       - name: Report failure
         if: failure()
@@ -342,4 +342,4 @@ jobs:
           echo "- Each enrichment job processes only its specific year" >> $GITHUB_STEP_SUMMARY
           echo "- Organic enrichment adds ~92% organic field coverage to marker data" >> $GITHUB_STEP_SUMMARY
           echo "- Subsidy UUID enrichment enables direct field linkage for analysis" >> $GITHUB_STEP_SUMMARY
-          echo "- Data stored in: \`r2://landbrugsdata-raw-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Data stored in: \`r2://landbruget-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY

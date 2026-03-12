@@ -1,5 +1,5 @@
 // Debug script to test PMTiles URL accessibility
-const baseUrl = 'https://storage.googleapis.com/landbrugsdata-raw-data';
+const baseUrl = 'https://storage.googleapis.com/landbruget-data';
 
 const testUrls = [
   `${baseUrl}/pmtiles/protomaps_denmark.pmtiles`,
@@ -24,7 +24,7 @@ async function testUrl(url, name) {
 
 async function discoverLatestTimestamp(pattern) {
   try {
-    const listUrl = `https://storage.googleapis.com/storage/v1/b/landbrugsdata-raw-data/o?prefix=${pattern}/&delimiter=/`;
+    const listUrl = `https://storage.googleapis.com/storage/v1/b/landbruget-data/o?prefix=${pattern}/&delimiter=/`;
     console.log(`Discovering timestamps for: ${listUrl}`);
 
     const response = await fetch(listUrl);

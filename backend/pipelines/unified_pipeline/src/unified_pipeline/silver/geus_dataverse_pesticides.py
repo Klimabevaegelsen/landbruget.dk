@@ -51,7 +51,7 @@ class GEUSDataversePesticidesSilverConfig(BaseJobConfig):
     """
 
     dataset: str = "geus_dataverse_pesticides"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     source_crs: str = "EPSG:25832"  # Data uses UTM32 EUREF89 coordinates
 
 

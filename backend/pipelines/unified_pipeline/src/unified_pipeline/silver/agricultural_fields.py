@@ -61,7 +61,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
     dataset: str = "agricultural_fields"  # Primary dataset name for app.py silver data collection
     fields_dataset: str = "agricultural_fields"
     blocks_dataset: str = "agricultural_blocks"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     storage_batch_size: int = 5000
     debug_memory: bool = True  # Enable memory logging by default
     processing_batch_size: int = 10000  # Process features in batches to reduce memory usage

@@ -43,7 +43,7 @@ class DSTZoneMappingConfig(BaseJobConfig):
     type: str = "dst_zone_mapping"
     description: str = "Spatial lookup table for mapping field geometries to DST statistical zones"
     dataset: str = "dst_zone_mapping"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     target_crs: str = Field(
         default="EPSG:4326",
