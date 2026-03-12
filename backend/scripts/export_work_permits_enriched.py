@@ -7,18 +7,19 @@ and animal production details.
 
 Usage:
     cd backend && source venv/bin/activate
-    GOOGLE_APPLICATION_CREDENTIALS=~/landbrugsdata-key.json python scripts/export_work_permits_enriched.py
+    python scripts/export_work_permits_enriched.py
 """
 
 import logging
 import os
-import shutil
-import tempfile
-from contextlib import contextmanager
+import sys
 from pathlib import Path
 
 import duckdb
-import gcsfs
+
+# Add backend to path so common.gcs is importable
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common.gcs import GCSDataAccess
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -27,55 +28,20 @@ BUCKET = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 
 
-def get_fs():
-    """Get a gcsfs filesystem, supporting both service account and R2."""
-    # Try R2 first
-    r2_key = os.getenv("R2_ACCESS_KEY_ID")
-    r2_secret = os.getenv("R2_SECRET_ACCESS_KEY")
-    r2_account = os.getenv("R2_ACCOUNT_ID")
-    if r2_key and r2_secret and r2_account:
-        import s3fs
-
-        return s3fs.S3FileSystem(
-            key=r2_key,
-            secret=r2_secret,
-            client_kwargs={"endpoint_url": f"https://{r2_account}.r2.cloudflarestorage.com"},
-        )
-
-    # Fall back to GCS
-    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if creds_path:
-        return gcsfs.GCSFileSystem(token=creds_path)
-    return gcsfs.GCSFileSystem()
-
-
-@contextmanager
-def temp_download(fs, path: str):
-    """Download a file to a temp location, clean up after."""
-    tmp = tempfile.NamedTemporaryFile(suffix=".parquet", delete=False)
-    tmp.close()
-    try:
-        with fs.open(path, "rb") as src, open(tmp.name, "wb") as dst:
-            shutil.copyfileobj(src, dst)
-        yield tmp.name
-    finally:
-        Path(tmp.name).unlink(missing_ok=True)
-
-
-def find_latest(fs, pattern: str) -> str | None:
+def find_latest(gcs: GCSDataAccess, pattern: str) -> str | None:
     """Find the most recent file matching a glob pattern."""
-    files = fs.glob(pattern)
+    files = gcs.list_files(pattern)
     if not files:
         return None
     files.sort()
     return files[-1]
 
 
-def load_table(fs, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) -> bool:
+def load_table(gcs: GCSDataAccess, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) -> bool:
     """Download a parquet file and load into DuckDB table."""
     log.info(f"Loading {table_name} from .../{'/'.join(path.split('/')[-3:])}")
     try:
-        with temp_download(fs, path) as tmp:
+        with gcs._temp_download(path) as tmp:
             conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{tmp}')")
         count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         log.info(f"  -> {count:,} rows")
@@ -88,38 +54,38 @@ def load_table(fs, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) 
 def main():
     log.info("Starting work permits enriched export")
 
-    fs = get_fs()
+    gcs = GCSDataAccess()
     conn = duckdb.connect()
 
     # 1. Find latest files for each dataset
     log.info("Finding latest data files...")
 
-    work_permits_path = find_latest(fs, f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet")
+    work_permits_path = find_latest(gcs, f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet")
     if not work_permits_path:
-        work_permits_path = find_latest(fs, f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet")
+        work_permits_path = find_latest(gcs, f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet")
     if not work_permits_path:
         log.error("No work permits files found")
         return
 
-    cvr_companies_path = find_latest(fs, f"{BUCKET}/silver/cvr_companies/*/data.parquet")
-    cvr_persons_path = find_latest(fs, f"{BUCKET}/silver/cvr_persons/*/data.parquet")
-    chr_properties_path = find_latest(fs, f"{BUCKET}/silver/chr/*/properties.parquet")
-    chr_property_owners_path = find_latest(fs, f"{BUCKET}/silver/chr/*/property_owners.parquet")
-    chr_herds_path = find_latest(fs, f"{BUCKET}/silver/chr/*/herds.parquet")
+    cvr_companies_path = find_latest(gcs, f"gs://{BUCKET}/silver/cvr_companies/*/data.parquet")
+    cvr_persons_path = find_latest(gcs, f"gs://{BUCKET}/silver/cvr_persons/*/data.parquet")
+    chr_properties_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/properties.parquet")
+    chr_property_owners_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/property_owners.parquet")
+    chr_herds_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/herds.parquet")
 
     # 2. Load all datasets
     log.info("Loading datasets...")
 
-    if not load_table(fs, conn, "work_permits", work_permits_path):
+    if not load_table(gcs, conn, "work_permits", work_permits_path):
         return
 
-    has_companies = cvr_companies_path and load_table(fs, conn, "cvr_companies", cvr_companies_path)
-    has_persons = cvr_persons_path and load_table(fs, conn, "cvr_persons", cvr_persons_path)
-    has_properties = chr_properties_path and load_table(fs, conn, "chr_properties", chr_properties_path)
+    has_companies = cvr_companies_path and load_table(gcs, conn, "cvr_companies", cvr_companies_path)
+    has_persons = cvr_persons_path and load_table(gcs, conn, "cvr_persons", cvr_persons_path)
+    has_properties = chr_properties_path and load_table(gcs, conn, "chr_properties", chr_properties_path)
     has_property_owners = chr_property_owners_path and load_table(
-        fs, conn, "chr_property_owners", chr_property_owners_path
+        gcs, conn, "chr_property_owners", chr_property_owners_path
     )
-    has_herds = chr_herds_path and load_table(fs, conn, "chr_herds", chr_herds_path)
+    has_herds = chr_herds_path and load_table(gcs, conn, "chr_herds", chr_herds_path)
 
     # 3. Pre-aggregate CVR leadership/owners (one row per CVR with comma-separated names)
     # The cvr_persons silver parquet stores person details as JSON in person_data_json
