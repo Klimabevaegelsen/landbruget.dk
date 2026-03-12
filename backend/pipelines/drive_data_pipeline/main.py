@@ -472,9 +472,13 @@ def main() -> int:
         # then public access if enabled
 
         # Initialize storage manager
+        # Use r2_bucket for R2 storage, gcs_bucket for GCS, None for local
+        bucket_name = (
+            settings.r2_bucket if settings.storage_type.value == "r2" else settings.gcs_bucket
+        )
         storage_manager = get_storage_manager(
             storage_type=settings.storage_type.value,
-            bucket_name=settings.gcs_bucket,
+            bucket_name=bucket_name,
             base_dir=str(settings.base_path),
         )
 
@@ -581,7 +585,7 @@ def main() -> int:
 
                 # Look for dataset directories in bronze path
                 # Handle both local and GCS storage
-                if settings.storage_type.value == "gcs":
+                if settings.storage_type.value in ("gcs", "r2"):
                     # For GCS, use the storage manager to list directories
                     try:
                         # List dataset directories (fertiliser, work_permits, etc.)
@@ -711,7 +715,7 @@ def main() -> int:
                     )
 
                     # For GCS storage, also check recursively
-                    if storage_manager.storage_type.lower() == "gcs":
+                    if storage_manager.storage_type.lower() in ("gcs", "r2"):
                         # GCS storage - list with recursive prefix
                         prefix = str(bronze_run_path).rstrip("/") + "/"
                         if hasattr(storage_manager, "gcs_bucket") and storage_manager.gcs_bucket:

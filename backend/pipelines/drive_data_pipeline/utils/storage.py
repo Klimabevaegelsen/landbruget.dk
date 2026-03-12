@@ -52,21 +52,23 @@ class DriveStorageManager:
         self.bucket_name = bucket_name
         self.base_dir = Path(base_dir) if base_dir else Path()
 
-        if storage_type.lower() == "gcs":
+        if storage_type.lower() in ("gcs", "r2"):
             if not bucket_name:
-                raise ValueError("bucket_name is required for GCS storage")
+                raise ValueError("bucket_name is required for GCS/R2 storage")
 
-            # Try to use optimized GCS access, fallback to legacy if needed
+            # Try to use optimized GCS/R2 access (GCSDataAccess supports both via s3fs), fallback to legacy if needed
             if GCSDataAccess:
                 try:
                     self.gcs_access = GCSDataAccess()
                     self.use_optimized = True
                     logger.info(
-                        f"✅ DriveStorageManager: Initialized with optimized GCS access "
+                        f"✅ DriveStorageManager: Initialized with optimized {storage_type.upper()} access "
                         f"for bucket: {bucket_name}"
                     )
                 except Exception as e:
-                    logger.warning(f"⚠️ Failed to initialize optimized GCS access: {e}")
+                    logger.warning(
+                        f"⚠️ Failed to initialize optimized {storage_type.upper()} access: {e}"
+                    )
                     self.gcs_access = None
                     self.use_optimized = False
                     self._init_fallback_gcs(bucket_name)
@@ -113,7 +115,7 @@ class DriveStorageManager:
             else:
                 file_bytes = data
 
-            if self.storage_type.lower() == "gcs":
+            if self.storage_type.lower() in ("gcs", "r2"):
                 # For GCS, we need to construct the path correctly
                 # Remove any base_dir prefix if it exists in the path
                 gcs_relative_path = str(path)
@@ -180,7 +182,7 @@ class DriveStorageManager:
             StorageError: If the file could not be read
         """
         try:
-            if self.storage_type.lower() == "gcs":
+            if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
                     gcs_path = f"gs://{self.bucket_name}/{path}"
 
@@ -218,7 +220,7 @@ class DriveStorageManager:
             StorageError: If the JSON could not be saved
         """
         try:
-            if self.storage_type.lower() == "gcs":
+            if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
                     gcs_path = f"gs://{self.bucket_name}/{path}"
                     self.gcs_access.upload_json(data, gcs_path)
@@ -260,7 +262,7 @@ class DriveStorageManager:
             StorageError: If the JSON could not be read
         """
         try:
-            if self.storage_type.lower() == "gcs":
+            if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
                     gcs_path = f"gs://{self.bucket_name}/{path}"
                     data = self.gcs_access.download_json(gcs_path)
@@ -302,7 +304,7 @@ class DriveStorageManager:
             StorageError: If the directory could not be read
         """
         try:
-            if self.storage_type.lower() == "gcs":
+            if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
                     # Use optimized GCS file listing
                     prefix = (
@@ -365,7 +367,7 @@ class DriveStorageManager:
             StorageError: If the directory could not be created
         """
         try:
-            if self.storage_type.lower() == "gcs":
+            if self.storage_type.lower() in ("gcs", "r2"):
                 # GCS doesn't require directory creation
                 logger.debug(f"Directory ensured for GCS: {path}")
             else:
@@ -387,7 +389,7 @@ class DriveStorageManager:
             True if file exists, False otherwise
         """
         try:
-            if self.storage_type.lower() == "gcs":
+            if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
                     gcs_path = f"gs://{self.bucket_name}/{path}"
                     return self.gcs_access.file_exists(gcs_path)
