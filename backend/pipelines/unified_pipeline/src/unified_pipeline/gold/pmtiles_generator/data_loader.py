@@ -462,7 +462,7 @@ class PMTilesDataLoader:
 
             if nles5_table:
                 query_parts.append(f"""
-                LEFT JOIN {nles5_table} n ON f.field_id = n.field_id
+                LEFT JOIN {nles5_table} n ON f.field_uuid = n.field_uuid
                 """)
 
             # Execute integration query
@@ -516,11 +516,7 @@ class PMTilesDataLoader:
                 summary_query = f"""
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
-                    -- Extract field_id from MatchedBlockID (stored as 'block_' || field_id)
-                    -- Used as stable join key since field_uuid changes when FVM geometry is re-run
-                    REGEXP_REPLACE(
-                        COALESCE(MatchedBlockID, ''), '^block_', ''
-                    ) as field_id,
+                    field_uuid,
                     COUNT(*) as pesticide_applications,
                     STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
 
@@ -659,17 +655,14 @@ class PMTilesDataLoader:
                     ANY_VALUE(water_distance_formatted) as water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {enhanced_pesticide_table}
-                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', '')
+                GROUP BY field_uuid
                 """
             else:
                 # Fallback to basic aggregation without BMD classifications
                 summary_query = f"""
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
-                    -- Extract field_id from MatchedBlockID (stored as 'block_' || field_id)
-                    REGEXP_REPLACE(
-                        COALESCE(MatchedBlockID, ''), '^block_', ''
-                    ) as field_id,
+                    field_uuid,
                     COUNT(*) as pesticide_applications,
                     STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
 
@@ -752,7 +745,7 @@ class PMTilesDataLoader:
                     ANY_VALUE(water_distance_formatted) as water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
                 FROM {pesticide_table}
-                GROUP BY REGEXP_REPLACE(COALESCE(MatchedBlockID, ''), '^block_', '')
+                GROUP BY field_uuid
                 """
 
             await asyncio.to_thread(self.conn.execute, summary_query)
@@ -858,7 +851,7 @@ class PMTilesDataLoader:
                 ps.water_distance_formatted,
                 ps.avg_match_confidence
             FROM {integrated_table} i
-            LEFT JOIN temp_pesticide_summary ps ON CAST(i.field_id AS VARCHAR) = ps.field_id
+            LEFT JOIN temp_pesticide_summary ps ON i.field_uuid = ps.field_uuid
             """
 
             await asyncio.to_thread(self.conn.execute, update_query)
