@@ -31,7 +31,7 @@ on:
 env:
   ENVIRONMENT: production
   R2_BUCKET: ${{ secrets.R2_BUCKET }}
-  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
 jobs:
   discover-cvrs:
