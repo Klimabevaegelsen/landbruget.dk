@@ -71,6 +71,7 @@ jobs:
             # Single year specified
             echo "years=[\"${{ github.event.inputs.target_year }}\"]" >> $GITHUB_OUTPUT
             echo "should_run_matrix=true" >> $GITHUB_OUTPUT
+            echo "has_years=true" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.inputs.years_range }}" != "" ]; then
             # Years range specified
             range="${{ github.event.inputs.years_range }}"
@@ -89,6 +90,7 @@ jobs:
               echo "years=[\"$range\"]" >> $GITHUB_OUTPUT
             fi
             echo "should_run_matrix=true" >> $GITHUB_OUTPUT
+            echo "has_years=true" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.inputs.environmental_only }}" == "true" ]; then
             # Environmental only - no matrix needed
             echo "years=[]" >> $GITHUB_OUTPUT
