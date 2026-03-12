@@ -322,10 +322,10 @@ processing_time | VARCHAR | Processing timestamp | "2025-01-15T10:30:00"
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/dst/{timestamp}/{table_id}_data.json`
-- **Bronze Metadata**: `gs://landbrugsdata-raw-data/bronze/dst/{timestamp}/{table_id}_metadata.json`
-- **Bronze Table Info**: `gs://landbrugsdata-raw-data/bronze/dst/{timestamp}/{table_id}_tableinfo.json`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/{table_id}_processed/{timestamp}/data.parquet`
+- **Bronze**: `gs://landbruget-data/bronze/dst/{timestamp}/{table_id}_data.json`
+- **Bronze Metadata**: `gs://landbruget-data/bronze/dst/{timestamp}/{table_id}_metadata.json`
+- **Bronze Table Info**: `gs://landbruget-data/bronze/dst/{timestamp}/{table_id}_tableinfo.json`
+- **Silver**: `gs://landbruget-data/silver/{table_id}_processed/{timestamp}/data.parquet`
 
 ### Processing Infrastructure
 - **Platform**: Automated monthly execution via GitHub Actions (foundation batch)

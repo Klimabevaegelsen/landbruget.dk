@@ -28,7 +28,7 @@ async def main():
 
     # Create minimal config
     config = PMTilesGeneratorConfig(
-        gcs_bucket="landbrugsdata-raw-data",
+        gcs_bucket="landbruget-data",
         temp_dir="/tmp/pmtiles_test",
         cloudflare_r2_account_id="",  # Not needed for testing
         cloudflare_r2_access_key_id="",

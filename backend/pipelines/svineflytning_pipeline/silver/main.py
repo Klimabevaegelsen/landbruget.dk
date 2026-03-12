@@ -26,7 +26,7 @@ def get_latest_bronze_data_path() -> str | None:
     try:
         from common.gcs.filesystem import get_r2_filesystem
 
-        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
         fs = get_r2_filesystem()
 
         # List all bronze svineflytning directories
@@ -137,7 +137,7 @@ def process_specific_bronze_timestamp(
     Returns:
         Dict containing processing results
     """
-    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
     bronze_path = f"gs://{bucket_name}/bronze/svineflytning/{bronze_timestamp}/svineflytning.json"
 
     return run_silver_processing(

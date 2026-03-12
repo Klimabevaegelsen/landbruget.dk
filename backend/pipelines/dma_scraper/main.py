@@ -220,9 +220,7 @@ PREFIX_SILVER_SAVE_PATH = os.environ.get("SILVER_OUTPUT_DIR", "silver/dma")
 # Initialize storage backend based on environment
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 if ENVIRONMENT.lower() in ("production", "container"):
-    storage_backend = OptimizedStorageBackend(
-        os.environ.get("GCS_BUCKET", "landbrugsdata-raw-data")
-    )
+    storage_backend = OptimizedStorageBackend(os.environ.get("GCS_BUCKET", "landbruget-data"))
 else:
     storage_backend = LocalStorageBackend(os.environ.get("BRONZE_OUTPUT_DIR", "."))
 
@@ -308,7 +306,7 @@ def _save_discovered_cvr_numbers(data, timestamp: str):
                 pipeline_name="dma_scraper",
                 cvr_numbers=unique_cvr_numbers,
                 gcs_access=None,  # Will create default GCS access
-                bucket="landbrugsdata-raw-data",
+                bucket="landbruget-data",
                 timestamp=timestamp,
             )
 

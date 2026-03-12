@@ -57,7 +57,7 @@ class GrukosSilverConfig(BaseJobConfig):
     """
 
     dataset: str = "grukos"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     storage_batch_size: int = 8000
     namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",

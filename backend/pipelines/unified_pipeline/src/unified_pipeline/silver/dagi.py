@@ -54,7 +54,7 @@ class DAGISilverConfig(BaseJobConfig):
     type: str = "dawa_api_silver"
     description: str = "Processed administrative geographic divisions from Danish DAWA API"
     dataset: str = "dagi"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     target_crs: str = Field(
         default="EPSG:4326",

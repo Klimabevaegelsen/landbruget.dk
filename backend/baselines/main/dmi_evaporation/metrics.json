@@ -1,6 +1,6 @@
 {
   "dataset_name": "dmi_evaporation",
-  "source_path": "gs://landbrugsdata-raw-data/silver/dmi_pot_evaporation_makkink_dmi_pot_evaporation_makkink/20260116_233425/data.parquet",
+  "source_path": "gs://landbruget-data/silver/dmi_pot_evaporation_makkink_dmi_pot_evaporation_makkink/20260116_233425/data.parquet",
   "generated_at": "2026-01-17T11:15:24.117916",
   "record_count": 7525,
   "unique_identifiers": {},

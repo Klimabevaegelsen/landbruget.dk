@@ -226,8 +226,8 @@ geometry | TEXT | WKT geometry representation | "MULTIPOLYGON((...)"
 - **Watercourses**: Stream order, flow characteristics, catchment classifications
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/water_typology_{layer}/{timestamp}/`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/water_typology/{timestamp}/`
+- **Bronze**: `gs://landbruget-data/bronze/water_typology_{layer}/{timestamp}/`
+- **Silver**: `gs://landbruget-data/silver/water_typology/{timestamp}/`
 - **Integration**: Used by pesticide proximity and environmental analysis workflows
 
 ### Processing Infrastructure

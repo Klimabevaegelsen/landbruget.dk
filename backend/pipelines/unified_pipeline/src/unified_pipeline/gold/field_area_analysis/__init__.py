@@ -23,7 +23,7 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Comprehensive field area analysis with environmental factors"
     frequency: str = "yearly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
 
 class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInterface):

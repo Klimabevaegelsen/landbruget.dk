@@ -354,9 +354,9 @@ movement_purpose | VARCHAR | Purpose of movement | "sale"
 ```
 
 ### Storage Locations
-- **Bronze Output**: `gs://landbrugsdata-raw-data/bronze/chr/{timestamp}/`
-- **Silver Output**: `gs://landbrugsdata-raw-data/silver/chr/{timestamp}/`
-- **Gold Output**: `gs://landbrugsdata-raw-data/gold/chr/{timestamp}/`
+- **Bronze Output**: `gs://landbruget-data/bronze/chr/{timestamp}/`
+- **Silver Output**: `gs://landbruget-data/silver/chr/{timestamp}/`
+- **Gold Output**: `gs://landbruget-data/gold/chr/{timestamp}/`
 
 ### Processing Infrastructure
 - **Platform**: GitHub Actions with Docker containerization

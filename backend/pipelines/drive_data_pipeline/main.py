@@ -161,7 +161,7 @@ def _save_discovered_cvr_numbers(
 
             try:
                 gcs_access = GCSDataAccess()
-                bucket = "landbrugsdata-raw-data"
+                bucket = "landbruget-data"
 
                 # Find parquet files in GCS silver directory.
                 # Use recursive glob (**) to handle directory names with spaces
@@ -274,7 +274,7 @@ def _save_discovered_cvr_numbers(
                 pipeline_name="drive_data_pipeline",
                 cvr_numbers=unique_cvr_numbers,
                 gcs_access=gcs_access,
-                bucket="landbrugsdata-raw-data",
+                bucket="landbruget-data",
                 timestamp=timestamp,
             )
 

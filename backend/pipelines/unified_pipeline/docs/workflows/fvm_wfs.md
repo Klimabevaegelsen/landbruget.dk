@@ -323,8 +323,8 @@ processing_time | TIMESTAMP | Processing timestamp | "2025-01-15T10:30:00"
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/{dataset}_{year}/{timestamp}/data.parquet`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/{dataset}_{year}/{timestamp}/data.parquet`
+- **Bronze**: `gs://landbruget-data/bronze/{dataset}_{year}/{timestamp}/data.parquet`
+- **Silver**: `gs://landbruget-data/silver/{dataset}_{year}/{timestamp}/data.parquet`
 - **Layer Examples**:
   - `fvm_markblokke_2024`, `fvm_marker_2024`
   - `fvm_organic_areas_2024`, `fvm_organic_subsidies_2024`

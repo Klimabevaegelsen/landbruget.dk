@@ -27,7 +27,7 @@ class CVRCollectionConfig(BaseJobConfig):
     type: str = "cvr_collection"
     description: str = "Collect and deduplicate CVR numbers from all pipelines"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Shared configuration
     shared_config: CVREnrichmentSharedConfig = Field(

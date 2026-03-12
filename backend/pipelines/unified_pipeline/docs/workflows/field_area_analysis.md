@@ -287,8 +287,8 @@ field_wetland_coverage_pct | DOUBLE | Field wetland coverage percentage | 6.4
 ```
 
 ### Storage Locations
-- **Gold Output**: `gs://landbrugsdata-raw-data/gold/field_area_analysis/latest/data.parquet`
-- **Stage Outputs**: `gs://landbrugsdata-raw-data/gold/field_area_analysis_stage{N}_{year}/{timestamp}/`
+- **Gold Output**: `gs://landbruget-data/gold/field_area_analysis/latest/data.parquet`
+- **Stage Outputs**: `gs://landbruget-data/gold/field_area_analysis_stage{N}_{year}/{timestamp}/`
 - **Matrix Outputs**: Year-specific paths for parallel processing results
 
 ### Processing Infrastructure

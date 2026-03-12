@@ -49,7 +49,7 @@ class CVRBronzeConfig(BaseJobConfig):
     type: str = "api"
     description: str = "CVR company data from Danish Business Authority"
     frequency: str = "on-demand"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # CVR-specific configuration
     cvr_numbers: ClassVar[list[str]] = []

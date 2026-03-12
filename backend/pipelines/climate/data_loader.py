@@ -49,9 +49,9 @@ class ClimateDataLoader:
         Initialize the climate data loader.
 
         Args:
-            bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbrugsdata-raw-data'
+            bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbruget-data'
         """
-        self.bucket = bucket or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        self.bucket = bucket or os.getenv("GCS_BUCKET", "landbruget-data")
         self.gcs = GCSDataAccess()
         logger.info(f"ClimateDataLoader initialized with bucket: {self.bucket}")
 

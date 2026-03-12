@@ -258,8 +258,8 @@ geometry | GEOMETRY | Property boundary polygon | POLYGON((...)
 ```
 
 ### Storage Locations
-- **Gold Output**: `gs://landbrugsdata-raw-data/gold/property_cadastral_merged/{timestamp}/property_cadastral_merged.parquet`
-- **CVR Collection**: `gs://landbrugsdata-raw-data/cvr_collection/property_cadastral_merge/{timestamp}/cvr_numbers.json`
+- **Gold Output**: `gs://landbruget-data/gold/property_cadastral_merged/{timestamp}/property_cadastral_merged.parquet`
+- **CVR Collection**: `gs://landbruget-data/cvr_collection/property_cadastral_merge/{timestamp}/cvr_numbers.json`
 
 ### Processing Infrastructure
 - **Platform**: Automated monthly execution as dependent data source

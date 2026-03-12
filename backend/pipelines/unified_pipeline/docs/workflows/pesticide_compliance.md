@@ -270,7 +270,7 @@ analysis_timestamp | TIMESTAMP | Analysis execution time | "2025-01-15T10:30:00"
 - **NO_API_LIMIT**: No dosage limit available
 
 ### Storage Locations
-- **Gold Output**: `gs://landbrugsdata-raw-data/gold/pesticide_compliance/{timestamp}/`
+- **Gold Output**: `gs://landbruget-data/gold/pesticide_compliance/{timestamp}/`
 - **Compliance Data**: `compliance_analysis_{agricultural_year}.parquet`
 - **Summary Statistics**: `compliance_summary.json`
 - **Human Report**: `compliance_report.md`

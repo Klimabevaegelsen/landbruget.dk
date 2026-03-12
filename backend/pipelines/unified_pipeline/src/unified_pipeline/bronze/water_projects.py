@@ -63,7 +63,7 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
     description: str = "Water projects from various Danish programs"
     url: str = "https://geodata.fvm.dk/geoserver/wfs"
     frequency: str = "weekly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     batch_size: int = 100
     max_concurrent: int = 3

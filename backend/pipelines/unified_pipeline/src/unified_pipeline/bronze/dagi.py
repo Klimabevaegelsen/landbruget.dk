@@ -46,7 +46,7 @@ class DAGIBronzeConfig(BaseJobConfig):
     type: str = "dawa_api"
     description: str = "Administrative geographic divisions from Danish DAWA API"
     dataset: str = "dagi"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     base_url: str = Field(
         default="https://api.dataforsyningen.dk", description="Base URL for the DAWA API"

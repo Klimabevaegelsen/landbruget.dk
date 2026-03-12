@@ -36,7 +36,7 @@ class CVRDataParserConfig(BaseJobConfig):
     type: str = "data_parser"
     description: str = "Parse raw CVR JSON data into structured tables"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Processing configuration
     parsing_batch_size: int = Field(

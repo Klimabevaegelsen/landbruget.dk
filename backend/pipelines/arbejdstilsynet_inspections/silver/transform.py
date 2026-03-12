@@ -688,7 +688,7 @@ class SilverPipeline:
                     pipeline_name="arbejdstilsynet_inspections",
                     cvr_numbers=list(cvr_numbers),
                     gcs_access=None,  # Will use default GCS access
-                    bucket=self.gcs_bucket or "landbrugsdata-raw-data",
+                    bucket=self.gcs_bucket or "landbruget-data",
                     timestamp=self.timestamp,
                 )
 

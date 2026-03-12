@@ -1,6 +1,6 @@
 {
   "dataset_name": "bmd",
-  "source_path": "gs://landbrugsdata-raw-data/silver/bmd/20260101_035218/pesticide_products.parquet",
+  "source_path": "gs://landbruget-data/silver/bmd/20260101_035218/pesticide_products.parquet",
   "generated_at": "2026-01-17T11:15:27.506960",
   "record_count": 10367,
   "unique_identifiers": {},

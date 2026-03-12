@@ -28,7 +28,7 @@ class FinancialDocumentsConfig(BaseJobConfig):
     type: str = "cvr_api"
     description: str = "Fetch and parse financial documents from CVR register"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Shared configuration
     shared_config: CVREnrichmentSharedConfig = Field(

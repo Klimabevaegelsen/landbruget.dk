@@ -25,7 +25,7 @@ class PropertyCadastralMergeGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Merge property owners with cadastral data for business analytics"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Input silver datasets
     property_owners_dataset: str = "property_owners"

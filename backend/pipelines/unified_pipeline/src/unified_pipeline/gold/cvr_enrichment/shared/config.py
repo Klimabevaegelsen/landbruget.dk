@@ -31,7 +31,7 @@ class CVREnrichmentSharedConfig(BaseModel):
     """
 
     # Data storage configuration
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     dataset: str = "cvr_enrichment"
 
     # CVR API configuration
@@ -146,7 +146,7 @@ def get_step_output_path(
     step: CVREnrichmentStep,
     date_pattern: str,
     batch_number: int | None = None,
-    bucket: str = "landbrugsdata-raw-data",
+    bucket: str = "landbruget-data",
 ) -> str:
     """
     Get the GCS output path for a specific pipeline step.
@@ -171,7 +171,7 @@ def get_step_input_paths(
     step: CVREnrichmentStep,
     date_pattern: str,
     total_batches: int | None = None,
-    bucket: str = "landbrugsdata-raw-data",
+    bucket: str = "landbruget-data",
     enable_independent_execution: bool = True,
     max_days_back: int = 30,
 ) -> list[str]:
@@ -550,7 +550,7 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
 
 
 def _get_traditional_input_paths(
-    step: CVREnrichmentStep, date_pattern: str, bucket: str = "landbrugsdata-raw-data"
+    step: CVREnrichmentStep, date_pattern: str, bucket: str = "landbruget-data"
 ) -> list[str]:
     """
     Get traditional pipeline dependency input paths (original behavior).

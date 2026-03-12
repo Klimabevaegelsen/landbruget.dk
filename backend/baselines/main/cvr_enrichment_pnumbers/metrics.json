@@ -1,6 +1,6 @@
 {
   "dataset_name": "cvr_enrichment_pnumbers",
-  "source_path": "gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/20260116_231814/data.parquet",
+  "source_path": "gs://landbruget-data/gold/cvr_enrichment_pnumbers/20260116_231814/data.parquet",
   "generated_at": "2026-01-17T11:15:30.169369",
   "record_count": 0,
   "unique_identifiers": {},

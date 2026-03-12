@@ -26,7 +26,7 @@ Next.js Frontend (Visualization)
 - Python 3.9+ with pip
 - Google Cloud SDK (for GCS access)
 - Supabase account
-- Access to the `landbrugsdata-raw-data` GCS bucket
+- Access to the `landbruget-data` GCS bucket
 
 ## Step 1: Set Up Supabase Project
 
@@ -258,7 +258,7 @@ print('Connection successful!')
 
 ```bash
 # Check GCS authentication
-gsutil ls gs://landbrugsdata-raw-data/gold/h3_pesticide_2023/
+gsutil ls gs://landbruget-data/gold/h3_pesticide_2023/
 
 # If authentication fails, run:
 gcloud auth application-default login

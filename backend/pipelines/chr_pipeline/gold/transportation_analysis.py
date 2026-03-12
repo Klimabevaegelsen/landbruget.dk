@@ -39,7 +39,7 @@ def load_transportation_data_sources(gcs_access) -> dict[str, bool]:
     Returns:
         Dict mapping table names to whether they were loaded successfully
     """
-    bucket = "landbrugsdata-raw-data"
+    bucket = "landbruget-data"
     loaded_tables = {}
 
     # Define data source patterns for transportation analysis
@@ -1430,7 +1430,7 @@ def process_transportation_analysis(
             if table_exists:
                 # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
                 if gcs_access and migrate_save_data_pattern:
-                    bucket = "landbrugsdata-raw-data"
+                    bucket = "landbruget-data"
                     # Use subdataset parameter to create separate filenames
                     migrate_save_data_pattern(
                         gcs_access,

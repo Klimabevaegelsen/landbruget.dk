@@ -30,7 +30,7 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
         "Comprehensive spatial analysis of agricultural fields with environmental coverage"
     )
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Input silver datasets
     agricultural_fields_dataset: str = "fvm_marker"

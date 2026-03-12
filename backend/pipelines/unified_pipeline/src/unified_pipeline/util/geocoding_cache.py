@@ -33,7 +33,7 @@ class GeocodingCache:
     2. Address Text Cache: Normalized address string lookup (fallback)
     """
 
-    def __init__(self, bucket: str = "landbrugsdata-raw-data", cache_version: int = 1):
+    def __init__(self, bucket: str = "landbruget-data", cache_version: int = 1):
         """
         Initialize the geocoding cache.
 

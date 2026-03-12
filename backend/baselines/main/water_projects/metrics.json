@@ -1,6 +1,6 @@
 {
   "dataset_name": "water_projects",
-  "source_path": "gs://landbrugsdata-raw-data/silver/water_projects/20260116_221936/data.parquet",
+  "source_path": "gs://landbruget-data/silver/water_projects/20260116_221936/data.parquet",
   "generated_at": "2026-01-17T11:19:50.018389",
   "record_count": 3967,
   "unique_identifiers": {},

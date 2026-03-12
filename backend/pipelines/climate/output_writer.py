@@ -9,7 +9,7 @@ The writer uses the GCSDataAccess pattern for optimal performance and
 follows the medallion architecture gold layer standards.
 
 Output Structure:
-- GCS: gs://landbrugsdata-raw-data/gold/carbon_emissions/<YYYYMMDD_HHMMSS>/
+- GCS: gs://landbruget-data/gold/carbon_emissions/<YYYYMMDD_HHMMSS>/
   - emissions.parquet (main report data)
   - categories.parquet (emission categories breakdown)
   - metadata.json (run metadata)
@@ -48,9 +48,9 @@ class ClimateOutputWriter:
         Initialize the climate output writer.
 
         Args:
-            bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbrugsdata-raw-data'
+            bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbruget-data'
         """
-        self.bucket = bucket or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        self.bucket = bucket or os.getenv("GCS_BUCKET", "landbruget-data")
         self.gcs = GCSDataAccess()
         self._duckdb_conn = duckdb.connect()
         logger.info(f"ClimateOutputWriter initialized with bucket: {self.bucket}")

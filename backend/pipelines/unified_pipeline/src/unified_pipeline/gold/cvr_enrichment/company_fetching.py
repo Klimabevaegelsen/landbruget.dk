@@ -35,7 +35,7 @@ class CompanyFetchingConfig(BaseJobConfig):
     type: str = "cvr_api"
     description: str = "Fetch raw company JSON data from CVR register with minimal processing"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Shared configuration
     shared_config: CVREnrichmentSharedConfig = Field(

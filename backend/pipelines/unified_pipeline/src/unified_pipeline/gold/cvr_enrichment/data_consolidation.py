@@ -31,7 +31,7 @@ class DataConsolidationConfig(BaseJobConfig):
     type: str = "data_consolidation"
     description: str = "Consolidate Silver layer data into Gold layer format"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     # Shared configuration
     shared_config: CVREnrichmentSharedConfig = Field(

@@ -160,7 +160,7 @@ self._protected_tables = {
 
 ### GCS Organization
 ```
-gs://landbrugsdata-raw-data/gold/
+gs://landbruget-data/gold/
 ├── h3_pesticide_2022_res10/
 │   ├── 2022/
 │   │   └── h3_pesticide_2022_res10.parquet

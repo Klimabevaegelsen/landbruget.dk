@@ -48,7 +48,7 @@ class SoilTypesBronzeConfig(BaseJobConfig):
     layer_name: str = "landbrugsdrift:DJF_FGJOR"
     dataset: str = "soil_types"
     frequency: str = "monthly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
     # CRS: Use server native EPSG:25832 (Danish UTM) to avoid unnecessary server-side transformation.
     # The silver layer will transform to EPSG:4326 for storage.
     # See docs/GEOSPATIAL_CRS_AUDIT.md for details on this decision.

@@ -27,7 +27,7 @@ permissions:
 
 env:
   PYTHON_VERSION: '3.11'
-  R2_BUCKET: 'landbrugsdata-raw-data'
+  R2_BUCKET: 'landbruget-data'
 
 jobs:
   # ==========================================================================

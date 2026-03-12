@@ -707,7 +707,7 @@ class BMDTransformer:
             if OptimizedGCSDataAccess:
                 try:
                     gcs_access = OptimizedGCSDataAccess()
-                    bucket_name = "landbrugsdata-raw-data"
+                    bucket_name = "landbruget-data"
                     gcs_path = (
                         f"gs://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
                     )

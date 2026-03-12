@@ -981,7 +981,7 @@ def _upload_bronze_data_to_gcs(
 
     try:
         gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
 
         # Upload building IDs as JSON
         building_ids_path = (
@@ -1096,7 +1096,7 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
 
     try:
         gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
 
         # Determine which timestamp to use
         if timestamp:
@@ -1371,7 +1371,7 @@ def _load_bronze_data_from_gcs(
 
     try:
         gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
 
         # Load building IDs from INSPIRE subdirectory
         building_ids_path = (
@@ -1411,7 +1411,7 @@ def _upload_silver_data_to_gcs(
 
     try:
         gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+        bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
 
         # Upload processed files (with coordinate fixes) if available
         processed_dir = silver_output_dir / "processed"

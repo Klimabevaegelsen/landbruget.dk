@@ -105,18 +105,14 @@ export default function PipelinePage() {
               <p>Results are stored in GCS at:</p>
               <ul>
                 <li>
-                  <code>
-                    gs://landbrugsdata-raw-data/gold/h3_pesticide_YYYY_resN/
-                  </code>
+                  <code>gs://landbruget-data/gold/h3_pesticide_YYYY_resN/</code>
+                </li>
+                <li>
+                  <code>gs://landbruget-data/gold/kommune_pesticide_YYYY/</code>
                 </li>
                 <li>
                   <code>
-                    gs://landbrugsdata-raw-data/gold/kommune_pesticide_YYYY/
-                  </code>
-                </li>
-                <li>
-                  <code>
-                    gs://landbrugsdata-raw-data/gold/pmtiles/h3_pfas_YYYY_resN/
+                    gs://landbruget-data/gold/pmtiles/h3_pfas_YYYY_resN/
                   </code>
                 </li>
               </ul>

@@ -1,6 +1,6 @@
 {
   "dataset_name": "dagi_postnumre",
-  "source_path": "gs://landbrugsdata-raw-data/silver/dagi_postnumre/20260116_221927/data.parquet",
+  "source_path": "gs://landbruget-data/silver/dagi_postnumre/20260116_221927/data.parquet",
   "generated_at": "2026-01-17T11:15:22.828212",
   "record_count": 1089,
   "unique_identifiers": {

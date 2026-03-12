@@ -44,7 +44,7 @@ def test_water_projects_bronze_config() -> None:
     assert config.dataset == "water_projects"
     assert config.type == "wfs"
     assert config.url == "https://geodata.fvm.dk/geoserver/wfs"
-    assert config.bucket == "landbrugsdata-raw-data"
+    assert config.bucket == "landbruget-data"
     assert config.batch_size == 100
     assert config.max_concurrent == 3
     assert len(config.layers) > 0

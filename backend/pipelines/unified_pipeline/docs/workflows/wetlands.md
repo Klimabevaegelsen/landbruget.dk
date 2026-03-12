@@ -227,9 +227,9 @@ geometry | GEOMETRY | Merged wetland polygon boundary | MULTIPOLYGON((...))
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/wetlands/{timestamp}/`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/wetlands/{timestamp}/`
-- **Silver Dissolved**: `gs://landbrugsdata-raw-data/silver/wetlands_dissolved/{timestamp}/`
+- **Bronze**: `gs://landbruget-data/bronze/wetlands/{timestamp}/`
+- **Silver**: `gs://landbruget-data/silver/wetlands/{timestamp}/`
+- **Silver Dissolved**: `gs://landbruget-data/silver/wetlands_dissolved/{timestamp}/`
 - **Integration**: Used by Field Area Analysis gold layer
 
 ### Processing Infrastructure

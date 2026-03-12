@@ -44,7 +44,7 @@ import json
 from datetime import datetime
 
 # Get all available CHR bronze timestamps
-result = subprocess.run(['gsutil', 'ls', 'gs://landbrugsdata-raw-data/bronze/chr/'],
+result = subprocess.run(['gsutil', 'ls', 'gs://landbruget-data/bronze/chr/'],
                        capture_output=True, text=True)
 timestamps = [line.strip().split('/')[-2] for line in result.stdout.strip().split('\n') if line]
 
@@ -62,8 +62,8 @@ Based on our audit findings:
 
 ```bash
 # Monthly bronze runs with 15 years of historical data
-gs://landbrugsdata-raw-data/bronze/chr/20250810_075014_2025-01/chr_dyr_movement_summaries.parquet
-gs://landbrugsdata-raw-data/bronze/chr/20250810_075014_2025-02/chr_dyr_movement_summaries.parquet
+gs://landbruget-data/bronze/chr/20250810_075014_2025-01/chr_dyr_movement_summaries.parquet
+gs://landbruget-data/bronze/chr/20250810_075014_2025-02/chr_dyr_movement_summaries.parquet
 # ... through 2025-08 (covers 2011-2025)
 ```
 
@@ -71,8 +71,8 @@ gs://landbrugsdata-raw-data/bronze/chr/20250810_075014_2025-02/chr_dyr_movement_
 
 ```bash
 # Weekly bronze runs with 4 years of data
-gs://landbrugsdata-raw-data/bronze/svineflytning/20250901_065848/svineflytning.json
-gs://landbrugsdata-raw-data/bronze/svineflytning/20250825_065657/svineflytning.json
+gs://landbruget-data/bronze/svineflytning/20250901_065848/svineflytning.json
+gs://landbruget-data/bronze/svineflytning/20250825_065657/svineflytning.json
 # ... covers 2022-2025
 ```
 
@@ -80,7 +80,7 @@ gs://landbrugsdata-raw-data/bronze/svineflytning/20250825_065657/svineflytning.j
 
 ```bash
 # Only July 2025 data available - limited backfill value
-gs://landbrugsdata-raw-data/silver/chr/20250822_161056/antibiotic_usage.parquet
+gs://landbruget-data/silver/chr/20250822_161056/antibiotic_usage.parquet
 ```
 
 ### Step 2: Create Backfill Workflows
@@ -168,10 +168,10 @@ jobs:
           IFS=',' read -ra TIMESTAMPS <<< "${{ inputs.bronze_timestamps }}"
 
           for timestamp in "${TIMESTAMPS[@]}"; do
-            echo "Checking: gs://landbrugsdata-raw-data/bronze/chr/$timestamp/"
-            if gsutil ls "gs://landbrugsdata-raw-data/bronze/chr/$timestamp/" > /dev/null 2>&1; then
+            echo "Checking: gs://landbruget-data/bronze/chr/$timestamp/"
+            if gsutil ls "gs://landbruget-data/bronze/chr/$timestamp/" > /dev/null 2>&1; then
               echo "✅ $timestamp - Available"
-              gsutil ls "gs://landbrugsdata-raw-data/bronze/chr/$timestamp/*movement*" || echo "   ⚠️ No movement files found"
+              gsutil ls "gs://landbruget-data/bronze/chr/$timestamp/*movement*" || echo "   ⚠️ No movement files found"
             else
               echo "❌ $timestamp - Not found"
               exit 1
@@ -214,10 +214,10 @@ jobs:
             if [ "${{ inputs.dry_run }}" = "true" ]; then
               # Dry run - just validate
               echo "  🔍 Validating bronze data structure..."
-              gsutil ls -la "gs://landbrugsdata-raw-data/bronze/chr/$timestamp/" | head -10
+              gsutil ls -la "gs://landbruget-data/bronze/chr/$timestamp/" | head -10
               
               # Check for movement data specifically
-              if gsutil ls "gs://landbrugsdata-raw-data/bronze/chr/$timestamp/*movement*" > /dev/null 2>&1; then
+              if gsutil ls "gs://landbruget-data/bronze/chr/$timestamp/*movement*" > /dev/null 2>&1; then
                 echo "  ✅ Movement data found"
               else
                 echo "  ⚠️ No movement data found"
@@ -254,11 +254,11 @@ jobs:
           echo "🔍 Validating backfill output..."
 
           # Check silver output directory
-          if gsutil ls "gs://landbrugsdata-raw-data/silver/chr/" | grep -E '[0-9]{8}_[0-9]{6}' | tail -5; then
+          if gsutil ls "gs://landbruget-data/silver/chr/" | grep -E '[0-9]{8}_[0-9]{6}' | tail -5; then
             echo "✅ Silver data generated"
             
             # Check for movement data in latest silver run
-            LATEST_SILVER=$(gsutil ls "gs://landbrugsdata-raw-data/silver/chr/" | grep -E '[0-9]{8}_[0-9]{6}' | sort | tail -1 | sed 's|/$||')
+            LATEST_SILVER=$(gsutil ls "gs://landbruget-data/silver/chr/" | grep -E '[0-9]{8}_[0-9]{6}' | sort | tail -1 | sed 's|/$||')
             
             if gsutil ls "$LATEST_SILVER/*movement*" > /dev/null 2>&1; then
               echo "✅ Movement data found in silver output"
@@ -308,11 +308,11 @@ jobs:
 
           # Validate CHR data
           echo "CHR Data Coverage:"
-          gsutil ls -la "gs://landbrugsdata-raw-data/silver/chr/" | tail -10
+          gsutil ls -la "gs://landbruget-data/silver/chr/" | tail -10
 
           # Validate Svineflytning data  
           echo "Svineflytning Data Coverage:"
-          gsutil ls -la "gs://landbrugsdata-raw-data/silver/svineflytning/" | tail -10
+          gsutil ls -la "gs://landbruget-data/silver/svineflytning/" | tail -10
 
           echo "✅ Historical backfill validation completed"
 ```
@@ -404,7 +404,7 @@ def validate_backfill_completeness():
         MAX(movement_date) as latest_date,
         COUNT(*) as total_movements,
         COUNT(DISTINCT chr_number) as unique_herds
-    FROM read_parquet('gs://landbrugsdata-raw-data/silver/chr/*/chr_animal_movements.parquet')
+    FROM read_parquet('gs://landbruget-data/silver/chr/*/chr_animal_movements.parquet')
     """).fetchall()
 
     for row in result:
@@ -434,8 +434,8 @@ After backfill completion:
 
 ```bash
 # Measure data volume created
-gsutil du -sh gs://landbrugsdata-raw-data/silver/chr/
-gsutil du -sh gs://landbrugsdata-raw-data/silver/svineflytning/
+gsutil du -sh gs://landbruget-data/silver/chr/
+gsutil du -sh gs://landbruget-data/silver/svineflytning/
 
 # Check Supabase data volume (if synced)
 # Validate incremental processing is ready to start

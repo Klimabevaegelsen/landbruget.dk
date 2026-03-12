@@ -205,8 +205,8 @@ data_quality | TEXT | Quality validation status | "validated"
 ```
 
 ### Storage Locations
-- **Bronze**: `gs://landbrugsdata-raw-data/bronze/soil_types/{timestamp}/`
-- **Silver**: `gs://landbrugsdata-raw-data/silver/soil_types/{timestamp}/`
+- **Bronze**: `gs://landbruget-data/bronze/soil_types/{timestamp}/`
+- **Silver**: `gs://landbruget-data/silver/soil_types/{timestamp}/`
 - **Integration**: Used by Field Area Analysis gold layer
 
 ### Processing Infrastructure

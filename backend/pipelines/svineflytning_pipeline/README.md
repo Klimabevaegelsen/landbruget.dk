@@ -102,14 +102,14 @@ The pipeline outputs data to the following locations:
 
 ### Bronze Layer
 - **Local**: `/data/raw/svineflytning/{timestamp}/svineflytning.json`
-- **GCS**: `gs://landbrugsdata-raw-data/bronze/svineflytning/{timestamp}/svineflytning.json`
+- **GCS**: `gs://landbruget-data/bronze/svineflytning/{timestamp}/svineflytning.json`
 
 ### Silver Layer
 - **Local**: `/data/silver/svineflytning/{timestamp}/`
   - `movements.parquet` - Main pig movement records
   - `properties.parquet` - Property/farm information
   - `vehicles.parquet` - Transport vehicle data
-- **GCS**: `gs://landbrugsdata-raw-data/silver/svineflytning/{timestamp}/`
+- **GCS**: `gs://landbruget-data/silver/svineflytning/{timestamp}/`
 
 ### Data Schema
 

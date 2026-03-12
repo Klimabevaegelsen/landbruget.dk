@@ -24,7 +24,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
         "Comprehensive nitrogen washout estimates using the NLES5 model with real climate data"
     )
     frequency: str = "monthly$"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
     # Input silver datasets - Updated to match actual GCS structure
     soil_types_dataset: str = "soil_types"

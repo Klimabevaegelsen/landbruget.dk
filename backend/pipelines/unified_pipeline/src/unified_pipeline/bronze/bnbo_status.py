@@ -59,7 +59,7 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
     description: str = "Municipal status for well-near protection areas (BNBO)"
     url: str = "https://arealeditering-dist-geo.miljoeportal.dk/geoserver/wfs"
     frequency: str = "weekly"
-    bucket: str = "landbrugsdata-raw-data"
+    bucket: str = "landbruget-data"
 
     batch_size: int = 100
     max_concurrent: int = 3

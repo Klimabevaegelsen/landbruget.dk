@@ -13,7 +13,7 @@ Usage:
     python sync_to_r2.py [--dry-run] [--verbose]
 
 Environment Variables:
-    GCS_BUCKET: Source GCS bucket name (e.g., 'landbrugsdata-raw-data')
+    GCS_BUCKET: Source GCS bucket name (e.g., 'landbruget-data')
     R2_BUCKET: Destination R2 bucket name
     R2_ACCOUNT_ID: Cloudflare R2 account ID
     R2_ACCESS_KEY_ID: R2 access key ID
