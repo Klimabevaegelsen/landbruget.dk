@@ -65,7 +65,7 @@ class BronzeStorageManager:
 
         # Store timestamp for use in create_folder_structure
         # The actual directory creation happens in create_folder_structure based on subfolder
-        if self.storage_manager.storage_type.lower() == "gcs":
+        if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
             # GCS storage - use bronze as base
             run_dir = Path("bronze")
         else:
@@ -203,7 +203,7 @@ class BronzeStorageManager:
                         f"backend at {file_path}"
                     )
                     # For GCS, try a brief retry since there might be eventual consistency issues
-                    if self.storage_manager.storage_type.lower() == "gcs":
+                    if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
                         import time
 
                         time.sleep(0.5)  # Brief wait for GCS consistency

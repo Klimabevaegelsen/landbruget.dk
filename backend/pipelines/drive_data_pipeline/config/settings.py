@@ -17,6 +17,7 @@ class StorageType(str, Enum):
 
     LOCAL = "local"
     GCS = "gcs"
+    R2 = "r2"
 
 
 class LogLevel(str, Enum):
@@ -43,8 +44,14 @@ class Settings(BaseModel):
     )
 
     # Storage settings
-    storage_type: StorageType = Field(StorageType.LOCAL, description="Storage type (local or gcs)")
+    storage_type: StorageType = Field(
+        StorageType.LOCAL, description="Storage type (local, gcs, or r2)"
+    )
     gcs_bucket: str | None = Field(None, description="GCS bucket name (if using GCS)")
+    r2_bucket: str | None = Field(None, description="R2 bucket name (if using R2)")
+    r2_access_key_id: str | None = Field(None, description="R2 access key ID")
+    r2_secret_access_key: str | None = Field(None, description="R2 secret access key")
+    r2_account_id: str | None = Field(None, description="R2 account ID")
 
     # Logging settings
     log_level: LogLevel = Field(LogLevel.INFO, description="Logging level")
@@ -70,6 +77,10 @@ class Settings(BaseModel):
         # Validate GCS bucket
         if self.storage_type == StorageType.GCS and not self.gcs_bucket:
             raise ValueError("GCS bucket must be specified when using GCS storage")
+
+        # Validate R2 bucket
+        if self.storage_type == StorageType.R2 and not self.r2_bucket:
+            raise ValueError("R2 bucket must be specified when using R2 storage")
 
         # Validate credentials file
         if not self.use_public_access and self.google_application_credentials is not None:
@@ -98,9 +109,15 @@ def get_settings() -> Settings:
     environment = os.getenv("ENVIRONMENT", "development")
 
     # Auto-configure storage type based on environment
+    # R2 takes precedence if credentials are available
+    r2_bucket = os.getenv("R2_BUCKET")
     if environment.lower() in ("production", "container"):
-        default_storage_type = "gcs"
-        default_gcs_bucket = os.getenv("GCS_BUCKET", "landbruget-data")
+        if r2_bucket or os.getenv("R2_ACCESS_KEY_ID"):
+            default_storage_type = "r2"
+            default_gcs_bucket = None
+        else:
+            default_storage_type = "gcs"
+            default_gcs_bucket = os.getenv("GCS_BUCKET", "landbruget-data")
     else:
         default_storage_type = "local"
         default_gcs_bucket = None
@@ -114,6 +131,10 @@ def get_settings() -> Settings:
         use_public_access=os.getenv("USE_PUBLIC_ACCESS", "false").lower() in ("true", "1", "yes"),
         storage_type=os.getenv("STORAGE_TYPE", default_storage_type),
         gcs_bucket=os.getenv("GCS_BUCKET", default_gcs_bucket),
+        r2_bucket=r2_bucket,
+        r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID"),
+        r2_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY"),
+        r2_account_id=os.getenv("R2_ACCOUNT_ID"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         max_workers=int(os.getenv("MAX_WORKERS", "4")),
     )
