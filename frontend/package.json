@@ -55,7 +55,7 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^12.10.4",
     "lodash": "^4.17.21",
-    "lucide-react": "^0.508.0",
+    "lucide-react": "^0.577.0",
     "maplibre-gl": "^5.6.2",
     "next": "^16.1.1",
     "next-themes": "^0.4.6",
