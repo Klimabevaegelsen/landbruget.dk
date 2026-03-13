@@ -395,8 +395,6 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
 
         # Create a temporary connection for checking file structure
         temp_conn = duckdb.connect()
-        temp_conn.install_extension("spatial")
-        temp_conn.load_extension("spatial")
 
         # Use s3fs filesystem from the common R2 layer
         fs = get_r2_filesystem()

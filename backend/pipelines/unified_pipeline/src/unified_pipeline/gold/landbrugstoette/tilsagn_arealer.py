@@ -78,9 +78,6 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
         self.conn.execute("SET temp_directory = '/tmp'")
         self.conn.execute("SET s3_region = 'europe-west1'")
 
-        # Load spatial extension for geometry handling
-        self.conn.execute("INSTALL spatial; LOAD spatial;")
-
     @timed
     async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, str] | None:
         """Execute spatial subsidies gold processing."""

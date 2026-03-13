@@ -10,7 +10,7 @@ https://duckdb.org/docs/stable/core_extensions/spatial/functions
 Key patterns:
 - ST_Transform(geometry, 'source_crs', 'target_crs') for CRS conversion
 - ST_Buffer requires metric CRS (use EPSG:25832 for Denmark)
-- ST_Area_Spheroid expects LAT/LON order (not lon/lat)
+- ST_Area_Spheroid uses LON/LAT (x, y) order since DuckDB 1.5 (geometry_always_xy=true default)
 """
 
 import logging
