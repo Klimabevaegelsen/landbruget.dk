@@ -329,6 +329,32 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             f"📊 Processing {total_fields:,} fields in batches of {self.config.batch_size}"
         )
 
+        # Pre-filter buildings to residential only (created ONCE, reused across all chunks)
+        # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
+        building_geom_expr = (
+            "geometry"
+            if USE_UTM_PROCESSING
+            else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
+        )
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE residential_buildings AS
+            SELECT
+                address,
+                {building_geom_expr} as building_geom_utm
+            FROM data_bbr_buildings_silver
+            WHERE category_group = 'residential'
+              AND address IS NOT NULL
+              AND geometry IS NOT NULL
+        """)
+        # R-tree index for faster spatial joins
+        try:
+            self.conn.execute(
+                "CREATE INDEX idx_res_bldg ON residential_buildings USING RTREE(building_geom_utm)"
+            )
+            self.log.info("✅ Created R-tree index on residential_buildings")
+        except Exception as e:
+            self.log.warning(f"Could not create spatial index on residential_buildings: {e}")
+
         # Initialize results table
         self.conn.execute("""
             CREATE OR REPLACE TABLE residential_proximity (
@@ -358,7 +384,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                 f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
-            # Step 1: Create current batch of fields with consistent ordering
+            # Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
                 SELECT * FROM fields_with_geometry
@@ -366,25 +392,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
 
-            # Step 2: Pre-filter buildings to residential only
-            # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
-            building_geom_expr = (
-                "geometry"
-                if USE_UTM_PROCESSING
-                else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
-            )
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE residential_buildings AS
-                SELECT
-                    address,
-                    {building_geom_expr} as building_geom_utm
-                FROM data_bbr_buildings_silver
-                WHERE category_group = 'residential'
-                  AND address IS NOT NULL
-                  AND geometry IS NOT NULL
-            """)
-
-            # Step 3: Simple spatial join with distance calculation
+            # Spatial join using ST_DWithin (index-friendly, avoids buffer creation)
             self.conn.execute(f"""
                 INSERT INTO residential_proximity
                 SELECT
@@ -400,9 +408,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                         ELSE ''
                     END as residential_buildings_formatted
                 FROM current_field_batch f
-                LEFT JOIN residential_buildings b ON ST_Intersects(
-                    ST_Buffer(f.field_geom_utm, {self.config.building_proximity_distance_m}),
-                    b.building_geom_utm
+                LEFT JOIN residential_buildings b ON ST_DWithin(
+                    f.field_geom_utm,
+                    b.building_geom_utm,
+                    {self.config.building_proximity_distance_m}
                 )
                 GROUP BY f.field_uuid
             """)
@@ -429,6 +438,31 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         # Step 4: Create educational proximity using step-by-step approach
         self.log.info("🏫 Processing educational facility proximity...")
+
+        # Pre-filter buildings to educational only (created ONCE, reused across all chunks)
+        building_geom_expr = (
+            "geometry"
+            if USE_UTM_PROCESSING
+            else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
+        )
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE educational_buildings AS
+            SELECT
+                address,
+                {building_geom_expr} as building_geom_utm
+            FROM data_bbr_buildings_silver
+            WHERE category_group = 'publicServices'
+              AND address IS NOT NULL
+              AND geometry IS NOT NULL
+        """)
+        # R-tree index for faster spatial joins
+        try:
+            self.conn.execute(
+                "CREATE INDEX idx_edu_bldg ON educational_buildings USING RTREE(building_geom_utm)"
+            )
+            self.log.info("✅ Created R-tree index on educational_buildings")
+        except Exception as e:
+            self.log.warning(f"Could not create spatial index on educational_buildings: {e}")
 
         # Initialize results table
         self.conn.execute("""
@@ -458,7 +492,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                 f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
-            # Step 1: Create current batch of fields with consistent ordering
+            # Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
                 SELECT * FROM fields_with_geometry
@@ -466,25 +500,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
 
-            # Step 2: Pre-filter buildings to educational only
-            # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
-            building_geom_expr = (
-                "geometry"
-                if USE_UTM_PROCESSING
-                else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
-            )
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE educational_buildings AS
-                SELECT
-                    address,
-                    {building_geom_expr} as building_geom_utm
-                FROM data_bbr_buildings_silver
-                WHERE category_group = 'publicServices'
-                  AND address IS NOT NULL
-                  AND geometry IS NOT NULL
-            """)
-
-            # Step 3: Simple spatial join with distance calculation
+            # Spatial join using ST_DWithin (index-friendly, avoids buffer creation)
             self.conn.execute(f"""
                 INSERT INTO educational_proximity
                 SELECT
@@ -500,9 +516,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                         ELSE ''
                     END as educational_facilities_formatted
                 FROM current_field_batch f
-                LEFT JOIN educational_buildings b ON ST_Intersects(
-                    ST_Buffer(f.field_geom_utm, {self.config.building_proximity_distance_m}),
-                    b.building_geom_utm
+                LEFT JOIN educational_buildings b ON ST_DWithin(
+                    f.field_geom_utm,
+                    b.building_geom_utm,
+                    {self.config.building_proximity_distance_m}
                 )
                 GROUP BY f.field_uuid
             """)
@@ -529,6 +546,29 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         # Step 5: Create water proximity using step-by-step approach
         self.log.info("💧 Processing water feature proximity...")
+
+        # Pre-filter water features (created ONCE, reused across all chunks)
+        # With USE_UTM_PROCESSING, silver layer stores WKT in EPSG:25832
+        water_geom_expr = (
+            "ST_GeomFromText(geometry)"
+            if USE_UTM_PROCESSING
+            else "ST_Transform(ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832')"
+        )
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE water_features AS
+            SELECT
+                {water_geom_expr} as water_geom_utm
+            FROM data_water_typology_silver
+            WHERE geometry IS NOT NULL AND geometry != ''
+        """)
+        # R-tree index for faster spatial joins
+        try:
+            self.conn.execute(
+                "CREATE INDEX idx_water ON water_features USING RTREE(water_geom_utm)"
+            )
+            self.log.info("✅ Created R-tree index on water_features")
+        except Exception as e:
+            self.log.warning(f"Could not create spatial index on water_features: {e}")
 
         # Initialize results table
         self.conn.execute("""
@@ -558,7 +598,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                 f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
-            # Step 1: Create current batch of fields with consistent ordering
+            # Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
                 SELECT * FROM fields_with_geometry
@@ -566,22 +606,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
 
-            # Step 2: Pre-filter water features
-            # With USE_UTM_PROCESSING, silver layer stores WKT in EPSG:25832
-            water_geom_expr = (
-                "ST_GeomFromText(geometry)"
-                if USE_UTM_PROCESSING
-                else "ST_Transform(ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832')"
-            )
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE water_features AS
-                SELECT
-                    {water_geom_expr} as water_geom_utm
-                FROM data_water_typology_silver
-                WHERE geometry IS NOT NULL AND geometry != ''
-            """)
-
-            # Step 3: Simple spatial join with distance calculation
+            # Spatial join using ST_DWithin (index-friendly, avoids buffer creation)
             self.conn.execute(f"""
                 INSERT INTO water_proximity
                 SELECT
@@ -592,9 +617,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
                         ELSE ''
                     END as water_distance_formatted
                 FROM current_field_batch f
-                LEFT JOIN water_features w ON ST_Intersects(
-                    ST_Buffer(f.field_geom_utm, {self.config.water_proximity_distance_m}),
-                    w.water_geom_utm
+                LEFT JOIN water_features w ON ST_DWithin(
+                    f.field_geom_utm,
+                    w.water_geom_utm,
+                    {self.config.water_proximity_distance_m}
                 )
                 GROUP BY f.field_uuid
             """)

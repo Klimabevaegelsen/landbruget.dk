@@ -143,6 +143,32 @@ class SharedDuckDBProcessor:
         """Execute a query and return results."""
         return self.conn.execute(query).fetchall()
 
+    def create_spatial_index(
+        self, table_name: str, geometry_column: str = "geometry", index_name: str | None = None
+    ) -> bool:
+        """
+        Create an R-tree spatial index on a geometry column.
+
+        Best practice: Call AFTER populating the table (bulk-load algorithm is faster).
+        The index accelerates ST_Intersects, ST_Within, ST_Contains, ST_Covers, etc.
+
+        Args:
+            table_name: Table to index
+            geometry_column: Name of the geometry column
+            index_name: Optional custom index name (auto-generated if None)
+
+        Returns:
+            True if index was created successfully, False otherwise
+        """
+        if index_name is None:
+            index_name = f"idx_{table_name}_{geometry_column}_rtree"
+        try:
+            self.conn.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} USING RTREE({geometry_column})")
+            return True
+        except Exception as e:
+            print(f"Warning: Could not create spatial index on {table_name}.{geometry_column}: {e}")
+            return False
+
     def drop_table_if_exists(self, table_name: str) -> None:
         """Drop a table if it exists."""
         with contextlib.suppress(Exception):
