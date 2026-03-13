@@ -11,8 +11,8 @@ updates:
       dev-dependencies:
         dependency-type: "development"
 
-  # Backend Python packages
-  - package-ecosystem: "pip"
+  # Backend Python packages (uv)
+  - package-ecosystem: "uv"
     directories:
       - "/backend/common"
       - "/backend/pipelines/unified_pipeline"
