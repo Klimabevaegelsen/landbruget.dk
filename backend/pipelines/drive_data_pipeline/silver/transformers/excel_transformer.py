@@ -506,7 +506,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     escaped_old = old_col.replace('"', '""')
                     alter_statements.append(
                         f'ALTER TABLE "{escaped_table}" ADD COLUMN "{escaped_old}" '
-                        f'AS "{escaped_new}"'
+                        f'AS ("{escaped_new}")'
                     )
 
             # Execute all alter statements
