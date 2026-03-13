@@ -13,7 +13,7 @@
 - **Charts**: Recharts
 - **Testing**: Playwright (E2E)
 - **Linting**: oxlint (50-100x faster than ESLint)
-- **Formatting**: Prettier with Tailwind plugin
+- **Formatting**: oxfmt (Tailwind class sorting included)
 
 ## Directory Structure
 
@@ -438,7 +438,7 @@ const apiUrl = process.env.API_URL;
 
 ```bash
 npm run lint     # Run oxlint (fast!)
-npm run format   # Format with Prettier
+npm run format   # Format with oxfmt
 npm test         # Run E2E tests
 ```
 

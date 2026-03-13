@@ -72,7 +72,7 @@ export function MobileBottomPanel({
   );
 
   const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
+    (_e: React.TouchEvent) => {
       if (!isDragging) return;
 
       setIsDragging(false);

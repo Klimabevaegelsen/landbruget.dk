@@ -290,7 +290,9 @@ export default function RankingTableEnhanced({
                 </Button>
                 <p className="text-muted-foreground mt-2 text-xs">
                   Viser{' '}
-                  {showAll ? items.length : Math.min(showTop, items.length)} af{' '}
+                  {showAll
+                    ? items.length
+                    : Math.min(showTop, items.length)} af{' '}
                   {items.length} virksomheder
                 </p>
               </div>

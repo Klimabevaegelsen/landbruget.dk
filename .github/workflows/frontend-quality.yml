@@ -1,5 +1,5 @@
 # Frontend Code Quality Checks
-# This workflow runs oxlint, prettier, and type checking on frontend changes
+# This workflow runs oxlint, oxfmt, and type checking on frontend changes
 
 name: Frontend Code Quality
 
@@ -35,7 +35,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
 
@@ -57,7 +57,7 @@ jobs:
           fi
 
   frontend-format:
-    name: Frontend Formatting (Prettier)
+    name: Frontend Formatting (oxfmt)
     runs-on: ubuntu-latest
 
     strategy:
@@ -71,7 +71,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
 
@@ -82,7 +82,7 @@ jobs:
       - name: Check formatting
         working-directory: ${{ matrix.project }}
         run: |
-          echo "## Prettier Formatting Check for ${{ matrix.project }}" >> $GITHUB_STEP_SUMMARY
+          echo "## oxfmt Formatting Check for ${{ matrix.project }}" >> $GITHUB_STEP_SUMMARY
           if npm run format:check; then
             echo "✅ **All files are properly formatted**" >> $GITHUB_STEP_SUMMARY
           else
@@ -107,7 +107,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: ${{ matrix.project }}/package-lock.json
 
