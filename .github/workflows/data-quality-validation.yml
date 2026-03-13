@@ -76,7 +76,7 @@ jobs:
           echo "| Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: identifier-validation-results
@@ -126,7 +126,7 @@ jobs:
           echo "All CRS validation tests passed." >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: geospatial-validation-results
@@ -176,7 +176,7 @@ jobs:
           echo "All area calculation tests passed." >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: area-validation-results
@@ -226,7 +226,7 @@ jobs:
           echo "All CHR discovery tests passed." >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: chr-validation-results
@@ -301,7 +301,7 @@ jobs:
           fi
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: baseline-comparison-results

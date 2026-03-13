@@ -92,14 +92,14 @@ jobs:
         echo "{\"batches\": $(seq 0 $((batch_count - 1)) | jq -R . | jq -s .)}" > /tmp/batches_${{ matrix.year }}.json
 
     - name: Upload CVR list artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: cvrs-${{ matrix.year }}
         path: /tmp/cvrs_${{ matrix.year }}.json
         retention-days: 1
 
     - name: Upload batch info artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: batches-${{ matrix.year }}
         path: /tmp/batches_${{ matrix.year }}.json
@@ -187,7 +187,7 @@ jobs:
           --output-dir /tmp/climate_output_2021
 
     - name: Upload batch result
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: batch-2021-${{ matrix.batch }}
         path: /tmp/climate_output_2021/batch_*.parquet
@@ -243,7 +243,7 @@ jobs:
           --output-dir /tmp/climate_output_2022
 
     - name: Upload batch result
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: batch-2022-${{ matrix.batch }}
         path: /tmp/climate_output_2022/batch_*.parquet
@@ -299,7 +299,7 @@ jobs:
           --output-dir /tmp/climate_output_2023
 
     - name: Upload batch result
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: batch-2023-${{ matrix.batch }}
         path: /tmp/climate_output_2023/batch_*.parquet

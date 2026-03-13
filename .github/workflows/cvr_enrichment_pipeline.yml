@@ -153,7 +153,7 @@ jobs:
           echo "success=true" >> $GITHUB_OUTPUT
 
       - name: Upload CVR Collection Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-collection-data
           path: /tmp/cvr_collection_data.parquet
@@ -431,7 +431,7 @@ jobs:
           fi
 
       - name: Upload Consolidated Raw Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-raw-company-data
           path: /tmp/cvr_raw_data.parquet
@@ -492,7 +492,7 @@ jobs:
           echo "✅ Data Parsing completed successfully"
 
       - name: Upload Silver Layer Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-silver-data
           path: /tmp/cvr_companies_silver.parquet
@@ -553,7 +553,7 @@ jobs:
           echo "✅ Data Consolidation completed successfully"
 
       - name: Upload Company Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-company-data
           path: /tmp/cvr_company_data.parquet
@@ -648,7 +648,7 @@ jobs:
           fi
 
       - name: Upload P-Number Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-pnumber-data
           path: /tmp/cvr_pnumber_data.parquet
@@ -737,7 +737,7 @@ jobs:
           fi
 
       - name: Upload Financial Data Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-financial-data
           path: /tmp/cvr_financial_data.parquet
@@ -831,7 +831,7 @@ jobs:
           fi
 
       - name: Upload Address Data Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-address-data
           path: /tmp/cvr_address_data.parquet
