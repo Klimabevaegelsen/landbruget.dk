@@ -63,7 +63,7 @@
     "pmtiles": "^4.3.0",
     "react": "^19.0.0",
     "react-day-picker": "^9.9.0",
-    "react-dom": "^19.0.0",
+    "react-dom": "^19.2.4",
     "react-hook-form": "^7.62.0",
     "react-resizable-panels": "^3.0.5",
     "react-vertical-timeline-component": "^3.5.3",
