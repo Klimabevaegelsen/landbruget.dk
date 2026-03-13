@@ -807,10 +807,9 @@ class SilverProcessor:
             is_gcs_path = output_path_str.startswith("gs://")
 
             # Check if we're using GCS storage but have a local path
-            using_gcs_storage = (
-                hasattr(self.storage_manager, "storage_type")
-                and self.storage_manager.storage_type.lower() == "gcs"
-            )
+            using_gcs_storage = hasattr(
+                self.storage_manager, "storage_type"
+            ) and self.storage_manager.storage_type.lower() in ("gcs", "r2")
 
             if is_gcs_path or using_gcs_storage:
                 # Use the persistent GCSDataAccess instance to avoid connection closure
@@ -819,7 +818,7 @@ class SilverProcessor:
                 # Construct GCS path if needed
                 if not is_gcs_path and using_gcs_storage:
                     bucket = getattr(self.storage_manager, "bucket", "landbruget-data")
-                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                    gcs_path = f"{bucket}/silver/{output_path_str}"
                 else:
                     gcs_path = output_path_str
 
@@ -885,10 +884,9 @@ class SilverProcessor:
             is_gcs_path = output_path_str.startswith("gs://")
 
             # Also check if we're using GCS storage but have a local path
-            using_gcs_storage = (
-                hasattr(self.storage_manager, "storage_type")
-                and self.storage_manager.storage_type.lower() == "gcs"
-            )
+            using_gcs_storage = hasattr(
+                self.storage_manager, "storage_type"
+            ) and self.storage_manager.storage_type.lower() in ("gcs", "r2")
 
             if is_gcs_path or using_gcs_storage:
                 # Use the persistent GCSDataAccess instance to avoid connection closure
@@ -899,7 +897,7 @@ class SilverProcessor:
                     # Convert local path to GCS path using storage manager's bucket and base path
                     # The output_path is relative to the silver base path
                     bucket = getattr(self.storage_manager, "bucket", "landbruget-data")
-                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                    gcs_path = f"{bucket}/silver/{output_path_str}"
                 else:
                     gcs_path = output_path_str
 

@@ -167,7 +167,7 @@ def _save_discovered_cvr_numbers(
                 # Use recursive glob (**) to handle directory names with spaces
                 # (e.g. "work permits", "animal welfare", "pig international movements")
                 # that a flat silver/*/*/*.parquet pattern would miss.
-                silver_pattern = f"gs://{bucket}/silver/**/*.parquet"
+                silver_pattern = f"{bucket}/silver/**/*.parquet"
                 parquet_files = sorted(set(gcs_access.list_files(silver_pattern)))
 
                 # Filter to only recent files (within reasonable timeframe of pipeline run)
