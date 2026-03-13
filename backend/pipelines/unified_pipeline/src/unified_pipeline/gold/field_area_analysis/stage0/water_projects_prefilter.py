@@ -57,68 +57,21 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
         self.log.info("🌍 Validating water projects coordinate bounds and order...")
 
-        # Try coordinate validation with error handling
-        # Since we know geometry is GEOMETRY type, use direct approach first
+        # Coordinate validation: geometry is stored as WKB (BLOB) in parquet files
         try:
             coord_validation = self.conn.execute("""
                 SELECT
-                    MIN(ST_XMin(geometry)) as min_x,
-                    MAX(ST_XMax(geometry)) as max_x,
-                    MIN(ST_YMin(geometry)) as min_y,
-                    MAX(ST_YMax(geometry)) as max_y
+                    MIN(ST_XMin(ST_GeomFromWKB(geometry))) as min_x,
+                    MAX(ST_XMax(ST_GeomFromWKB(geometry))) as max_x,
+                    MIN(ST_YMin(ST_GeomFromWKB(geometry))) as min_y,
+                    MAX(ST_YMax(ST_GeomFromWKB(geometry))) as max_y
                 FROM water_projects_raw
                 WHERE geometry IS NOT NULL
                 LIMIT 1000
             """).fetchone()
         except Exception as e:
-            self.log.warning(f"⚠️ Direct coordinate validation failed: {e}")
-            self.log.info("🔄 Trying with type-safe CASE statement...")
-            try:
-                coord_validation = self.conn.execute("""
-                    SELECT
-                        MIN(ST_XMin(
-                            CASE
-                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                    ST_GeomFromText(geometry)
-                                WHEN typeof(geometry) = 'BLOB' THEN
-                                    ST_GeomFromWKB(geometry)
-                                ELSE geometry
-                            END
-                        )) as min_x,
-                        MAX(ST_XMax(
-                            CASE
-                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                    ST_GeomFromText(geometry)
-                                WHEN typeof(geometry) = 'BLOB' THEN
-                                    ST_GeomFromWKB(geometry)
-                                ELSE geometry
-                            END
-                        )) as max_x,
-                        MIN(ST_YMin(
-                            CASE
-                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                    ST_GeomFromText(geometry)
-                                WHEN typeof(geometry) = 'BLOB' THEN
-                                    ST_GeomFromWKB(geometry)
-                                ELSE geometry
-                            END
-                        )) as min_y,
-                        MAX(ST_YMax(
-                            CASE
-                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                    ST_GeomFromText(geometry)
-                                WHEN typeof(geometry) = 'BLOB' THEN
-                                    ST_GeomFromWKB(geometry)
-                                ELSE geometry
-                            END
-                        )) as max_y
-                    FROM water_projects_raw
-                    WHERE geometry IS NOT NULL
-                    LIMIT 1000
-                """).fetchone()
-            except Exception as e2:
-                self.log.warning(f"⚠️ Fallback coordinate validation also failed: {e2}")
-                coord_validation = None
+            self.log.warning(f"⚠️ Coordinate validation failed: {e}")
+            coord_validation = None
 
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
@@ -150,7 +103,7 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             self.log.info("🧭 WATER PROJECTS COORDINATE ORDER CHECK - Fetching sample centroids...")
             sample_wkt = self.conn.execute("""
                 SELECT
-                    ST_AsText(ST_Centroid(geometry)) as wkt_centroid
+                    ST_AsText(ST_Centroid(ST_GeomFromWKB(geometry))) as wkt_centroid
                 FROM water_projects_raw
                 WHERE geometry IS NOT NULL
                 LIMIT 5
@@ -248,39 +201,15 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
 
             self.log.warning(f"   Traceback: {traceback.format_exc()}")
 
-        # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
-        # Use simpler approach: since we know geometry is GEOMETRY type, use it directly
-        try:
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE water_projects_full AS
-                SELECT
-                    project_id,
-                    UNNEST(ST_Dump(geometry)).geom as geometry
-                FROM water_projects_raw
-                WHERE geometry IS NOT NULL
-            """)
-        except Exception as e:
-            self.log.warning(f"⚠️ Failed with direct geometry approach: {e}")
-            self.log.info("🔄 Trying with type-safe CASE statement...")
-
-            # Fallback: Use type-safe approach with explicit type checking
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE water_projects_full AS
-                SELECT
-                    project_id,
-                    UNNEST(ST_Dump(
-                        CASE
-                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                ST_GeomFromText(geometry)
-                            WHEN typeof(geometry) = 'BLOB' THEN
-                                ST_GeomFromWKB(geometry)
-                            ELSE
-                                geometry
-                        END
-                    )).geom as geometry
-                FROM water_projects_raw
-                WHERE geometry IS NOT NULL
-            """)
+        # Geometry is stored as WKB (BLOB) in parquet files - convert with ST_GeomFromWKB
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE water_projects_full AS
+            SELECT
+                project_id,
+                UNNEST(ST_Dump(ST_GeomFromWKB(geometry))).geom as geometry
+            FROM water_projects_raw
+            WHERE geometry IS NOT NULL
+        """)
 
         # Log dataset sizes
         raw_count = self.conn.execute("SELECT COUNT(*) FROM water_projects_raw").fetchone()[0]

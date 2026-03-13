@@ -1055,10 +1055,10 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Running as part of split job - use part subdirectory
-                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                    raw_gcs_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
                 else:
                     # Running as single job - use flat structure
-                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                    raw_gcs_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
                 raw_batch_patterns.append(raw_gcs_path)
 
