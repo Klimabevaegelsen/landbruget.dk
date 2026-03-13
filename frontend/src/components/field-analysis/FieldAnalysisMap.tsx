@@ -21,6 +21,7 @@ import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
 import { getDecileBreakpoints, getColorScheme } from './colorUtils';
 import { SearchBar } from './SearchBar';
 import { ColorLegend } from './ColorLegend';
+import { computeCentroid } from '@/utils/geo';
 
 // Type for MapLibre map instance - updated for @vis.gl/react-maplibre
 interface MapInstance {
@@ -2026,8 +2027,15 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     const uniqueFields: Record<string, FieldAnalysisData> = {};
 
     fieldFeatures.forEach((feature) => {
-      const fieldData = feature.properties as FieldAnalysisData;
+      const fieldData = { ...feature.properties } as FieldAnalysisData;
       if (fieldData.field_uuid && !uniqueFields[fieldData.field_uuid]) {
+        // Compute centroid from geometry for coordinate export
+        if (feature.geometry && !fieldData.click_coordinates) {
+          const centroid = computeCentroid(feature.geometry);
+          if (centroid) {
+            fieldData.click_coordinates = centroid;
+          }
+        }
         uniqueFields[fieldData.field_uuid] = fieldData;
       }
     });
