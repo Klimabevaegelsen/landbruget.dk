@@ -306,15 +306,15 @@ jobs:
           TODAY=$(date -u +%Y%m%d)
           echo "Looking for data from: $TODAY"
 
-          # List available part directories
-          PART_DIRS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | head -1 || echo "")
+          # List available part directories - sort and take the latest (in case of multiple runs today)
+          PART_DIRS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | sort | tail -1 || echo "")
 
           if [ -z "$PART_DIRS" ]; then
             echo "❌ No data directories found for today"
             exit 1
           fi
 
-          # Extract timestamp from the first directory found
+          # Extract timestamp from the latest directory found
           TIMESTAMP=$(echo "$PART_DIRS" | grep -oE '[0-9]{8}_[0-9]{6}' | head -1)
           echo "Found timestamp: $TIMESTAMP"
 
@@ -354,8 +354,6 @@ jobs:
               raise RuntimeError("R2 credentials not configured")
 
           conn = duckdb.connect()
-          conn.install_extension("spatial")
-          conn.load_extension("spatial")
           conn.register_filesystem(fs)
 
           timestamp = "${TIMESTAMP}"
@@ -404,9 +402,9 @@ jobs:
           echo "🧹 Cleaning up part directories to save storage space..."
           R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
-          # Find the timestamp we used
+          # Find the timestamp we used - sort to get the latest (in case of multiple runs today)
           TODAY=$(date -u +%Y%m%d)
-          PART_DIRS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | head -1 || echo "")
+          PART_DIRS=$(aws s3 ls s3://landbruget-data/bronze/cvr_raw_companies/${TODAY} --endpoint-url $R2_ENDPOINT 2>/dev/null | sort | tail -1 || echo "")
           TIMESTAMP=$(echo "$PART_DIRS" | grep -oE '[0-9]{8}_[0-9]{6}' | head -1)
 
           if [ -n "$TIMESTAMP" ]; then

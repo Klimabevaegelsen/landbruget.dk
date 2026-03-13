@@ -1362,7 +1362,9 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS without loading into memory
-            with open(tmp.name, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+            # s3fs expects plain bucket/path without gs:// or r2:// prefix
+            storage_path = gcs_path.removeprefix("gs://").removeprefix("r2://")
+            with open(tmp.name, "rb") as src, self.gcs_access.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
         self.log.info(f"✅ Saved {table_name} directly to {gcs_path} (optimized)")
