@@ -133,15 +133,15 @@ class DriveStorageManager:
                         gcs_relative_path = f"silver/{gcs_relative_path}"
 
                 if self.use_optimized and self.gcs_access:
-                    # Use optimized GCS access
-                    gcs_path = f"gs://{self.bucket_name}/{gcs_relative_path}"
+                    # Use optimized GCS/R2 access (bucket/path works for both gcsfs and s3fs)
+                    storage_path = f"{self.bucket_name}/{gcs_relative_path}"
 
                     # Use streaming upload for better performance
-                    with self.gcs_access.fs.open(gcs_path, "wb") as gcs_file:
+                    with self.gcs_access.fs.open(storage_path, "wb") as gcs_file:
                         gcs_file.write(file_bytes)
 
                     logger.info(
-                        f"✅ Saved file to GCS (optimized): {gcs_path} ({len(file_bytes)} bytes)"
+                        f"✅ Saved file to storage (optimized): {storage_path} ({len(file_bytes)} bytes)"
                     )
                 else:
                     # Use s3fs fallback storage
@@ -184,12 +184,12 @@ class DriveStorageManager:
         try:
             if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
-                    gcs_path = f"gs://{self.bucket_name}/{path}"
+                    storage_path = f"{self.bucket_name}/{path}"
 
-                    with self.gcs_access.fs.open(gcs_path, "rb") as gcs_file:
+                    with self.gcs_access.fs.open(storage_path, "rb") as gcs_file:
                         data = gcs_file.read()
 
-                    logger.debug(f"Read file from GCS (optimized): {gcs_path}")
+                    logger.debug(f"Read file from storage (optimized): {storage_path}")
                 else:
                     # Use s3fs fallback storage
                     r2_path = f"{self.bucket_name}/{path}"
@@ -222,9 +222,9 @@ class DriveStorageManager:
         try:
             if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
-                    gcs_path = f"gs://{self.bucket_name}/{path}"
-                    self.gcs_access.upload_json(data, gcs_path)
-                    logger.debug(f"Saved JSON to GCS (optimized): {gcs_path}")
+                    storage_path = f"{self.bucket_name}/{path}"
+                    self.gcs_access.upload_json(data, storage_path)
+                    logger.debug(f"Saved JSON to storage (optimized): {storage_path}")
                 else:
                     # Use s3fs fallback storage
                     import json
@@ -264,9 +264,9 @@ class DriveStorageManager:
         try:
             if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
-                    gcs_path = f"gs://{self.bucket_name}/{path}"
-                    data = self.gcs_access.download_json(gcs_path)
-                    logger.debug(f"Read JSON from GCS (optimized): {gcs_path}")
+                    storage_path = f"{self.bucket_name}/{path}"
+                    data = self.gcs_access.download_json(storage_path)
+                    logger.debug(f"Read JSON from storage (optimized): {storage_path}")
                 else:
                     # Use s3fs fallback storage
                     import json
@@ -306,19 +306,19 @@ class DriveStorageManager:
         try:
             if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
-                    # Use optimized GCS file listing
+                    # Use optimized GCS/R2 file listing (bucket/path works for both gcsfs and s3fs)
                     prefix = (
-                        f"gs://{self.bucket_name}/{path}".rstrip("/") + "/"
+                        f"{self.bucket_name}/{path}".rstrip("/") + "/"
                         if path
-                        else f"gs://{self.bucket_name}/"
+                        else f"{self.bucket_name}/"
                     )
                     files = self.gcs_access.list_files(prefix + "*")
 
                     # Convert to relative paths and filter
                     result = []
                     for file_path in files:
-                        # Remove the gs://bucket/ prefix
-                        relative_path = file_path.replace(f"gs://{self.bucket_name}/", "")
+                        # Remove the bucket/ prefix
+                        relative_path = file_path.replace(f"{self.bucket_name}/", "", 1)
                         if not relative_path.endswith("/"):  # Skip directories
                             if pattern:
                                 if pattern.replace("*", "") in relative_path:
@@ -391,8 +391,8 @@ class DriveStorageManager:
         try:
             if self.storage_type.lower() in ("gcs", "r2"):
                 if self.use_optimized and self.gcs_access:
-                    gcs_path = f"gs://{self.bucket_name}/{path}"
-                    return self.gcs_access.file_exists(gcs_path)
+                    storage_path = f"{self.bucket_name}/{path}"
+                    return self.gcs_access.file_exists(storage_path)
                 # Use s3fs fallback storage
                 r2_path = f"{self.bucket_name}/{path}"
                 return self.fs.exists(r2_path)
