@@ -151,13 +151,13 @@ class GEUSDataversePesticidesBronze(
         """
         run_timestamp = self.date_pattern
         relative_path = f"bronze/{self.config.dataset}/{run_timestamp}/{filename}"
-        gcs_path = f"gs://{self.config.bucket}/{relative_path}"
+        storage_path = f"{self.config.bucket}/{relative_path}"
 
-        # Stream binary content directly to GCS using gcsfs
-        with self.gcs_access.fs.open(gcs_path, "wb") as f:
+        # Stream binary content directly to storage using s3fs (R2)
+        with self.gcs_access.fs.open(storage_path, "wb") as f:
             f.write(rds_content)
 
-        self.log.info(f"Saved {filename} to {gcs_path}")
+        self.log.info(f"Saved {filename} to {storage_path}")
         return relative_path
 
     async def run(self) -> dict[str, Any] | None:
