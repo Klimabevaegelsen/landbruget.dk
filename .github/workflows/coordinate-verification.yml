@@ -25,6 +25,7 @@ on:
   # Allow manual triggering for testing
   workflow_dispatch:
 
+
 jobs:
   static-analysis:
     name: Coordinate Code Analysis
@@ -32,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Analyze coordinate handling in changed files
         run: |
@@ -89,10 +90,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 

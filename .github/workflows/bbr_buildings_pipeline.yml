@@ -36,6 +36,7 @@ on:
           - ERROR
         default: 'INFO'
 
+
 jobs:
   # Generate shared timestamp for all bronze layer jobs
   generate-timestamp:
@@ -84,7 +85,7 @@ jobs:
       buildings-count: ${{ steps.fetch-geodanmark.outputs.buildings-count }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Download bronze timestamp artifact
       uses: actions/download-artifact@v4
@@ -93,7 +94,7 @@ jobs:
         path: /tmp/
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 
@@ -186,7 +187,7 @@ jobs:
       buildings-count: ${{ steps.fetch-inspire.outputs.buildings-count }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Download bronze timestamp artifact
       uses: actions/download-artifact@v4
@@ -195,7 +196,7 @@ jobs:
         path: /tmp/
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 
@@ -267,10 +268,10 @@ jobs:
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 

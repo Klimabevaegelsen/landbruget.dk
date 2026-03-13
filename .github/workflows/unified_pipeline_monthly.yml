@@ -48,6 +48,7 @@ on:
           - "1"
           - "2"
 
+
 jobs:
   # Batch 1: Foundation sources (no dependencies) - can run in parallel
   monthly-foundation:
@@ -103,7 +104,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Free up disk space for memory-intensive jobs
         if: matrix.source == 'fvm_wfs' || matrix.source == 'cadastral'
@@ -137,7 +138,7 @@ jobs:
           echo "✅ Sufficient disk space: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
@@ -347,7 +348,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Free up disk space for memory-intensive jobs
         if: contains(fromJson('["property_cadastral_merge","field_area_analysis"]'), matrix.source)
@@ -381,7 +382,7 @@ jobs:
           echo "✅ Sufficient disk space: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"

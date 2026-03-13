@@ -1,0 +1,49 @@
+version: 2
+updates:
+  # Frontend (npm)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+
+  # Backend Python packages (uv)
+  - package-ecosystem: "uv"
+    directories:
+      - "/backend/common"
+      - "/backend/pipelines/unified_pipeline"
+      - "/backend/pipelines/chr_pipeline"
+      - "/backend/pipelines/drive_data_pipeline"
+      - "/backend/pipelines/svineflytning_pipeline"
+      - "/backend/pipelines/arbejdstilsynet_inspections"
+      - "/backend/pipelines/bbr_buildings"
+      - "/backend/pipelines/bmd_scraper"
+      - "/backend/pipelines/climate"
+      - "/backend/pipelines/dma_scraper"
+      - "/backend/pipelines/h3_pfas_exposure_pipeline"
+      - "/backend/pipelines/property_owners_sftp"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      all-actions:
+        patterns:
+          - "*"

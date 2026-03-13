@@ -9,6 +9,7 @@ on:
       - "backend/api/**"
   workflow_dispatch:
 
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -17,7 +18,7 @@ jobs:
       PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install yq
         run: |
