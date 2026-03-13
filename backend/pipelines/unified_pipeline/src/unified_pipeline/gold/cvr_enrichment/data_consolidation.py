@@ -144,7 +144,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         """Find the latest Silver layer file for a given table type."""
         # Try current date pattern first
         current_path = (
-            f"gs://{self.config.bucket}/silver/{table_type}/{self.date_pattern}/data.parquet"
+            f"r2://{self.config.bucket}/silver/{table_type}/{self.date_pattern}/data.parquet"
         )
 
         try:
