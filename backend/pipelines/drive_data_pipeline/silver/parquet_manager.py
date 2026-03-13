@@ -82,9 +82,9 @@ class ParquetManager(DuckDBProcessor):
         try:
             logger.info(f"Saving DuckDB table '{table_name}' to Parquet: {output_path}")
 
-            # Check if we're using GCS storage
-            if self.storage_manager.storage_type.lower() == "gcs":
-                # GCS storage - write to temp file first, then upload
+            # Check if we're using cloud storage (GCS or R2)
+            if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
+                # Cloud storage - write to temp file first, then upload
                 with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
                     temp_path = temp_file.name
 
@@ -117,11 +117,11 @@ class ParquetManager(DuckDBProcessor):
                         table = table.replace_schema_metadata(new_metadata)
                         pq.write_table(table, temp_path, compression=self.compression)
 
-                    # Upload to GCS
+                    # Upload to cloud storage
                     with open(temp_path, "rb") as f:
                         self.storage_manager.save_file(f.read(), output_path)
 
-                    logger.info(f"✅ Saved Parquet file to GCS: {output_path}")
+                    logger.info(f"✅ Saved Parquet file to cloud storage: {output_path}")
                     return output_path
 
                 finally:
@@ -279,9 +279,9 @@ class ParquetManager(DuckDBProcessor):
         try:
             logger.info(f"Saving spatial table '{table_name}' to GeoParquet: {output_path}")
 
-            # Check if we're using GCS storage
-            if self.storage_manager.storage_type.lower() == "gcs":
-                # GCS storage - need to convert through geopandas for GeoParquet
+            # Check if we're using cloud storage (GCS or R2)
+            if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
+                # Cloud storage - need to convert through geopandas for GeoParquet
                 with tempfile.NamedTemporaryFile(suffix=".geoparquet", delete=False) as temp_file:
                     temp_path = temp_file.name
 
