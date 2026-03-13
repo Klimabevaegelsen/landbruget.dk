@@ -433,7 +433,7 @@ jobs:
           uv pip install --system -e ".[production]"
 
       - name: Download output path artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: output-paths-year*
           path: downloaded-artifacts/

@@ -116,7 +116,7 @@ jobs:
 
     steps:
     - name: Download batch info
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: batches-*
         path: /tmp/batch_info
@@ -171,7 +171,7 @@ jobs:
         uv pip install --system pandas pyarrow
 
     - name: Download CVR list
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: cvrs-2021
         path: /tmp
@@ -227,7 +227,7 @@ jobs:
         uv pip install --system pandas pyarrow
 
     - name: Download CVR list
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: cvrs-2022
         path: /tmp
@@ -283,7 +283,7 @@ jobs:
         uv pip install --system pandas pyarrow
 
     - name: Download CVR list
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: cvrs-2023
         path: /tmp
@@ -331,14 +331,14 @@ jobs:
         uv pip install --system pandas pyarrow
 
     - name: Download all batch results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: batch-2021-*
         path: /tmp/climate_output_2021
         merge-multiple: true
 
     - name: Download CVR info for batch count
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: cvrs-2021
         path: /tmp
@@ -392,14 +392,14 @@ jobs:
         uv pip install --system pandas pyarrow
 
     - name: Download all batch results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: batch-2022-*
         path: /tmp/climate_output_2022
         merge-multiple: true
 
     - name: Download CVR info for batch count
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: cvrs-2022
         path: /tmp
@@ -453,14 +453,14 @@ jobs:
         uv pip install --system pandas pyarrow
 
     - name: Download all batch results
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: batch-2023-*
         path: /tmp/climate_output_2023
         merge-multiple: true
 
     - name: Download CVR info for batch count
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: cvrs-2023
         path: /tmp
@@ -522,7 +522,7 @@ jobs:
 
     steps:
     - name: Download all CVR lists
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: cvrs-*
         path: /tmp/cvr_lists

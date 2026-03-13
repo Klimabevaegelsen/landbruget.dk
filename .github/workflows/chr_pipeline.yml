@@ -353,13 +353,13 @@ jobs:
 
 
       - name: Download context artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chr-context-data
           path: /tmp/
 
       - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bronze-timestamp
           path: /tmp/
@@ -528,13 +528,13 @@ jobs:
 
 
       - name: Download context artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chr-context-data
           path: /tmp/
 
       - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bronze-timestamp
           path: /tmp/
@@ -686,13 +686,13 @@ jobs:
 
 
       - name: Download context artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chr-context-data
           path: /tmp/
 
       - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bronze-timestamp
           path: /tmp/
@@ -816,13 +816,13 @@ jobs:
 
 
       - name: Download context artifact with herd details
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chr-context-with-details
           path: /tmp/
 
       - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bronze-timestamp
           path: /tmp/
@@ -976,13 +976,13 @@ jobs:
 
 
       - name: Download context artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chr-context-data
           path: /tmp/
 
       - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bronze-timestamp
           path: /tmp/
@@ -1116,13 +1116,13 @@ jobs:
 
 
       - name: Download context artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chr-context-with-details
           path: /tmp/
 
       - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bronze-timestamp
           path: /tmp/
@@ -1292,7 +1292,7 @@ jobs:
 
 
       - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bronze-timestamp
           path: /tmp/
@@ -1504,7 +1504,7 @@ jobs:
           fi
 
       - name: Download bronze timestamp artifact (if available)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           name: bronze-timestamp
