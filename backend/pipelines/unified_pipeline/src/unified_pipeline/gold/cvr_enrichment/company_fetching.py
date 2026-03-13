@@ -342,10 +342,11 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     ORDER BY cvr_number
                 """).fetchall()
             else:
-                # Load CVR numbers directly from GCS using DuckDB (fallback)
+                # Load CVR numbers directly from R2 using DuckDB (fallback)
+                duckdb_collection_path = collection_path.replace("gs://", "r2://", 1)
                 result = self.conn.execute(f"""
                     SELECT cvr_number, collection_metadata
-                    FROM read_parquet('{collection_path}')
+                    FROM read_parquet('{duckdb_collection_path}')
                     ORDER BY cvr_number
                 """).fetchall()
 
