@@ -11,6 +11,8 @@ export function convertToCSV(fields: FieldAnalysisData[]): string {
   // Define CSV headers in Danish
   const headers = [
     'Mark UUID',
+    'Markblok',
+    'Marknr',
     'Kommune',
     'CVR Nummer',
     'Areal (ha)',
@@ -53,6 +55,8 @@ export function convertToCSV(fields: FieldAnalysisData[]): string {
   // Convert data rows
   const rows = fields.map((field) => [
     field.field_uuid || '',
+    field.markblok_id || '',
+    field.mark_id || '',
     field.kommune || '',
     field.cvr_number || '',
     field.area_hectares?.toString() || '',

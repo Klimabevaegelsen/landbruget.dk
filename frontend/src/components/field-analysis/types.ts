@@ -1,5 +1,7 @@
 export interface FieldAnalysisData {
   field_uuid: string;
+  mark_id?: string;
+  markblok_id?: string;
   kommune: string;
   cvr_number: string;
   area_hectares: number;
