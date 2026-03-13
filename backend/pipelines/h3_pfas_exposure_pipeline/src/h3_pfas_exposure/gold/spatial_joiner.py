@@ -33,6 +33,15 @@ class SpatialJoiner:
 
         self.log.info(f"🎯 Starting chunked spatial join for {h3_count:,} H3 cells")
 
+        # Create R-tree spatial index on fields table for faster ST_Intersects joins
+        try:
+            self.conn.execute(
+                f"CREATE INDEX idx_{fields_table}_geom ON {fields_table} USING RTREE(geometry)"
+            )
+            self.log.info(f"✅ Created R-tree spatial index on {fields_table}.geometry")
+        except Exception as e:
+            self.log.warning(f"Could not create spatial index on {fields_table}: {e}")
+
         # Calculate chunking strategy
         total_chunks = math.ceil(h3_count / self.config.chunk_size)
         self.log.info(
