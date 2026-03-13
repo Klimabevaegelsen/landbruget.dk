@@ -90,8 +90,7 @@ const MobileMenuSection = React.forwardRef<
 });
 MobileMenuSection.displayName = 'MobileMenuSection';
 
-interface MobileMenuItemProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface MobileMenuItemProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.ReactNode;
   label: string;
   active?: boolean;

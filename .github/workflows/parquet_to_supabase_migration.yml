@@ -235,7 +235,7 @@ jobs:
           cp logs/migration/migration_${{ github.event.inputs.environment }}_*.log migration_artifacts/ || true
 
       - name: Upload Migration Logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: migration-logs-${{ matrix.phase }}-${{ needs.pre_migration_checks.outputs.migration_id }}
@@ -357,7 +357,7 @@ jobs:
           fi
 
       - name: Upload Validation Reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: validation-reports-${{ needs.pre_migration_checks.outputs.migration_id }}
@@ -452,7 +452,7 @@ jobs:
           cat migration_summary.md
 
       - name: Comment on PR (if applicable)
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         if: github.event_name == 'pull_request'
         with:
           script: |
