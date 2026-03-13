@@ -62,6 +62,7 @@ on:
           - "both"
         default: "both"
 
+
 jobs:
   run-unified-pipeline:
     name: Run Unified Pipeline
@@ -104,7 +105,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Normalize and validate R2 environment
         run: |
@@ -165,7 +166,7 @@ jobs:
           echo "✅ Sufficient disk space for memory-intensive processing: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
@@ -325,7 +326,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Normalize and validate R2 environment
         run: |
@@ -385,7 +386,7 @@ jobs:
           echo "✅ Sufficient disk space for pesticide processing: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
