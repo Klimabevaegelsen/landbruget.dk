@@ -512,10 +512,12 @@ export class H3DataSyncer {
       const batch = data.slice(i, i + this.config.batch_size);
 
       try {
-        const { error } = await supabase.from(tableName).upsert(batch as any, {
-          onConflict: conflictColumns.join(','),
-          ignoreDuplicates: false,
-        });
+        const { error } = await supabase
+          .from(tableName)
+          .upsert(batch as never, {
+            onConflict: conflictColumns.join(','),
+            ignoreDuplicates: false,
+          });
 
         if (error) {
           console.error(`Batch sync error for ${tableName}:`, error);

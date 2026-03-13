@@ -8,7 +8,6 @@ import { DataSidebar } from '@/components/overlays/DataSidebar';
 import { MobileBottomPanel } from '@/components/overlays/MobileBottomPanel';
 import {
   useMapStore,
-  useDataState,
   useLoadingState,
   useTooltipState,
   type YearSelection,
@@ -31,7 +30,7 @@ export default function Home() {
   const [showSidebar, setShowSidebar] = useState(true); // Start with sidebar visible
 
   // Store state
-  const { selectedYear } = useDataState();
+
   const { error } = useLoadingState();
   const { showTooltip, tooltipData, tooltipPosition } = useTooltipState();
   const { isMobile, setIsMobile, showMobilePanel, setShowMobilePanel } =

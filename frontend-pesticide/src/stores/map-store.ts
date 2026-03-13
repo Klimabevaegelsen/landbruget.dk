@@ -1,3 +1,4 @@
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
@@ -191,8 +192,7 @@ export const useMapStore = create<MapState & MapActions>()(
         }
 
         try {
-          // Cast to any to access MapLibre methods
-          const map = mapInstance as any;
+          const map = mapInstance as MapLibreMap;
 
           if (typeof map.flyTo === 'function') {
             console.log('🗺️ Flying to location:', location);
