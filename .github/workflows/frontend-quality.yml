@@ -18,6 +18,7 @@ on:
       - "frontend/**/*.{ts,tsx,js,jsx,json,css,md}"
       - "frontend-pesticide/**/*.{ts,tsx,js,jsx,json,css,md}"
 
+
 jobs:
   frontend-lint:
     name: Frontend Linting (Oxlint)
@@ -29,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -65,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -101,7 +102,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

@@ -44,6 +44,7 @@ env:
   R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
   LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
+
 jobs:
   # Verify silver data availability before running stage0 prefilters
   verify-silver-data:
@@ -131,10 +132,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -166,10 +167,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -201,10 +202,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -235,10 +236,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -270,10 +271,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -305,10 +306,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -341,10 +342,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -376,10 +377,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -411,7 +412,7 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Free up disk space for memory-intensive processing
         run: |
@@ -435,7 +436,7 @@ jobs:
           df -h
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -473,10 +474,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -509,10 +510,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -544,10 +545,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -579,10 +580,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -615,10 +616,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -650,10 +651,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -686,10 +687,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -721,10 +722,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -757,10 +758,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -792,10 +793,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -828,10 +829,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -908,10 +909,10 @@ jobs:
         agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'

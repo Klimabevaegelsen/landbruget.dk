@@ -13,6 +13,7 @@ env:
   R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
   LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
+
 jobs:
   transfer-and-process:
     name: Transfer and Process Property Owners Data
@@ -24,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Create SFTP Transfer and Processing VM
         run: |
