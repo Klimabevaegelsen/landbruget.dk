@@ -374,8 +374,8 @@ class SilverProcessor:
 
             # Also check subdirectories for metadata files
             # For GCS, we need to list files recursively
-            if self.storage_manager.storage_type.lower() == "gcs":
-                # GCS storage - list with recursive prefix
+            if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
+                # Cloud storage - list with recursive prefix
                 prefix = str(bronze_run_path).rstrip("/") + "/"
                 if hasattr(self.storage_manager, "gcs_bucket") and self.storage_manager.gcs_bucket:
                     blobs = self.storage_manager.gcs_bucket.list_blobs(prefix=prefix)
@@ -817,7 +817,7 @@ class SilverProcessor:
 
                 # Construct GCS path if needed
                 if not is_gcs_path and using_gcs_storage:
-                    bucket = getattr(self.storage_manager, "bucket", "landbruget-data")
+                    bucket = getattr(self.storage_manager, "bucket_name", "landbruget-data")
                     gcs_path = f"{bucket}/silver/{output_path_str}"
                 else:
                     gcs_path = output_path_str
@@ -896,7 +896,7 @@ class SilverProcessor:
                 if not is_gcs_path and using_gcs_storage:
                     # Convert local path to GCS path using storage manager's bucket and base path
                     # The output_path is relative to the silver base path
-                    bucket = getattr(self.storage_manager, "bucket", "landbruget-data")
+                    bucket = getattr(self.storage_manager, "bucket_name", "landbruget-data")
                     gcs_path = f"{bucket}/silver/{output_path_str}"
                 else:
                     gcs_path = output_path_str
