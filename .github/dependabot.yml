@@ -6,10 +6,11 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     groups:
-      dev-dependencies:
-        dependency-type: "development"
+      all-dependencies:
+        patterns:
+          - "*"
 
   # Backend Python packages (uv)
   - package-ecosystem: "uv"
@@ -29,7 +30,11 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -37,4 +42,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    groups:
+      all-actions:
+        patterns:
+          - "*"
