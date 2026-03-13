@@ -51,8 +51,6 @@ def main() -> None:
 
     # Get final count
     conn = duckdb.connect()
-    conn.execute("INSTALL spatial")
-    conn.execute("LOAD spatial")
     try:
         result = conn.execute(
             'SELECT COUNT(*) FROM read_parquet("data/geodanmark_buildings_complete.geoparquet")'

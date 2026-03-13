@@ -63,13 +63,6 @@ class SchemaDocumentationGenerator:
         except Exception as e:
             print(f"Warning: Could not load httpfs extension: {e}")
 
-        try:
-            self.conn.execute("INSTALL spatial")
-            self.conn.execute("LOAD spatial")
-            print("✅ DuckDB spatial extension loaded")
-        except Exception as e:
-            print(f"Warning: Could not load spatial extension: {e}")
-
         # Setup GCS authentication if credentials available
         gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
         gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")

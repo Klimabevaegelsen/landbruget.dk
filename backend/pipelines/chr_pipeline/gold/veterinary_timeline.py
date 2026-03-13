@@ -1176,13 +1176,8 @@ def process_veterinary_timeline(
 
             pipeline_run_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Initialize DuckDB connection with spatial extension first (unified pipeline pattern)
+        # Initialize DuckDB connection
         con = duckdb.connect()
-        try:
-            con.install_extension("spatial")
-            con.load_extension("spatial")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not load spatial extension: {e}")
 
         # Initialize GCS access with shared connection (unified pipeline pattern)
         if gcs_access is None and GCS_AVAILABLE:

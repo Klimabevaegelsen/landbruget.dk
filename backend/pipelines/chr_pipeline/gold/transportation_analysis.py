@@ -21,11 +21,7 @@ logger = logging.getLogger(__name__)
 
 def setup_database(conn: duckdb.DuckDBPyConnection) -> None:
     """Set up DuckDB with necessary extensions and settings."""
-    try:
-        conn.install_extension("spatial")
-        conn.load_extension("spatial")
-    except Exception as e:
-        logger.warning(f"⚠️ Could not load spatial extension: {e}")
+    pass
 
 
 def load_transportation_data_sources(gcs_access) -> dict[str, bool]:

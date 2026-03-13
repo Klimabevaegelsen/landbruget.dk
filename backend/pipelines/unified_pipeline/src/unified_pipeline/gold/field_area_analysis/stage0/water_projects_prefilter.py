@@ -73,7 +73,7 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             self.log.warning(f"⚠️ Coordinate validation failed: {e}")
             coord_validation = None
 
-        if coord_validation:
+        if coord_validation and all(v is not None for v in coord_validation):
             min_x, max_x, min_y, max_y = coord_validation
             self.log.info(
                 f"📍 Water projects bounds: X({min_x:.2f}, {max_x:.2f}), "

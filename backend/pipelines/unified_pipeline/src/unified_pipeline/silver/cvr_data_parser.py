@@ -275,12 +275,14 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
             )
 
         raw_data_path = input_paths[0]  # Should be the consolidated.parquet file
+        # DuckDB reads R2 via r2:// prefix (TYPE r2 secret); gs:// would use GCS which no longer holds the files
+        duckdb_path = raw_data_path.replace("gs://", "r2://", 1)
 
         try:
-            self.log.info(f"Loading raw data from: {raw_data_path}")
+            self.log.info(f"Loading raw data from: {duckdb_path}")
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} AS
-                SELECT * FROM read_parquet('{raw_data_path}')
+                SELECT * FROM read_parquet('{duckdb_path}')
             """)
 
             # Check data loaded successfully

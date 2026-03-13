@@ -44,10 +44,6 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         """Setup pipeline components."""
         logger.info("Setting up PMTiles generator pipeline")
 
-        # Install and load spatial extension on inherited connection
-        self.duckdb_conn.execute("INSTALL spatial")
-        self.duckdb_conn.execute("LOAD spatial")
-
         # Ensure GCS credentials are properly configured for DuckDB
         self._ensure_gcs_credentials()
 

@@ -1262,11 +1262,9 @@ def process_chr_data(
         # Install necessary DuckDB extensions if not already present
         con.execute("INSTALL httpfs;")
         con.execute("LOAD httpfs;")
-        con.execute("INSTALL spatial;")
-        con.execute("LOAD spatial;")
         con.execute("INSTALL json;")
         con.execute("LOAD json;")
-        logging.info("DuckDB extensions httpfs, spatial, json loaded.")
+        logging.info("DuckDB extensions httpfs, json loaded.")
     except Exception as e:
         logging.error(f"Failed to initialize DuckDB or load extensions: {e}", exc_info=True)
         sys.exit(1)

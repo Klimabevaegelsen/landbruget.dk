@@ -153,7 +153,6 @@ class GCSMigrationHelper:
             conn.execute("SET memory_limit = '12GB'")
             conn.execute("SET max_memory = '12GB'")
             conn.execute("SET threads = 4")
-            conn.execute("INSTALL spatial; LOAD spatial;")
 
             # Register gcsfs filesystem
             import os
