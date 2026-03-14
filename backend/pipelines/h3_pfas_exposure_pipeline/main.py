@@ -22,8 +22,6 @@ import dotenv
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 from loguru import logger
 
-PIPELINE_METADATA_AVAILABLE = True
-
 # Load environment variables
 # Only load .env file if it exists (for local development)
 # In GitHub Actions, environment variables are set directly
@@ -297,12 +295,8 @@ def main():
     output_dir = setup_directories()
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     logger.info("🏗️ H3 PFAS Exposure Analysis Pipeline")
     logger.info(f"📊 Mode: {args.mode}")

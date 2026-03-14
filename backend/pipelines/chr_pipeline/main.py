@@ -59,8 +59,6 @@ except ImportError:
 from common.logging_utils import setup_pipeline_logger
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-PIPELINE_METADATA_AVAILABLE = True
-
 logger = logging.getLogger(__name__)
 
 
@@ -1074,12 +1072,8 @@ def main():
     setup_logging(args["log_level"])
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     try:
         # Determine steps to run first to decide if we need FVM credentials

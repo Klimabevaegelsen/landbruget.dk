@@ -20,8 +20,6 @@ from bronze import BMDScraper
 from bronze.export import GCSStorage
 from silver import BMDTransformer, upload_to_gcs
 
-PIPELINE_METADATA_AVAILABLE = True
-
 # Load environment variables
 dotenv.load_dotenv()
 
@@ -216,12 +214,8 @@ def main() -> None:
     start_time = datetime.now()
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     # Run selected stages
     bronze_file = None

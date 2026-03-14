@@ -17,8 +17,6 @@ from .drive import DriveFile, DriveFolder, GoogleDriveFetcher
 from .metadata import MetadataManager
 from .storage import BronzeStorageManager
 
-PIPELINE_METADATA_AVAILABLE = True
-
 # Get logger
 logger = get_logger()
 
@@ -56,12 +54,8 @@ class BronzeProcessor:
         self.metadata_manager = MetadataManager(settings.bronze_path, storage_manager)
 
         # Initialize pipeline metadata manager (pipeline-level data tracing)
-        if PIPELINE_METADATA_AVAILABLE:
-            self.pipeline_metadata_manager = PipelineMetadataManager()
-            logger.info("✅ Pipeline metadata system initialized for data tracing")
-        else:
-            self.pipeline_metadata_manager = None
-            logger.warning("⚠️  Pipeline metadata system not available")
+        self.pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized for data tracing")
 
         # Use provided pipeline start time or generate one
         if pipeline_start_time is not None:

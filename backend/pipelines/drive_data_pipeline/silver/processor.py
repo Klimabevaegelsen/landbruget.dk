@@ -20,8 +20,6 @@ logger = get_logger()
 # Import the new data tracing system
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager  # noqa: E402
 
-PIPELINE_METADATA_AVAILABLE = True
-
 
 class SilverProcessor:
     """Processor for the Silver layer."""
@@ -56,12 +54,8 @@ class SilverProcessor:
         self.metadata_manager = metadata_manager
 
         # Initialize pipeline metadata manager (pipeline-level data tracing)
-        if PIPELINE_METADATA_AVAILABLE:
-            self.pipeline_metadata_manager = PipelineMetadataManager()
-            logger.info("✅ Pipeline metadata system initialized for Silver layer data tracing")
-        else:
-            self.pipeline_metadata_manager = None
-            logger.warning("⚠️  Pipeline metadata system not available in Silver layer")
+        self.pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized for Silver layer data tracing")
 
         # Initialize specialized managers
         self.parquet_manager = ParquetManager(

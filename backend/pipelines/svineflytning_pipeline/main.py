@@ -19,8 +19,6 @@ from bronze.load_svineflytning import (
     get_fvm_credentials,
 )
 
-PIPELINE_METADATA_AVAILABLE = True
-
 logger = logging.getLogger(__name__)
 
 # Constants for resource management
@@ -232,12 +230,8 @@ def main():
     setup_logging(args["log_level"])
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     logger.warning(f"Starting Svineflytning pipeline - Stage: {args['stage']}")
 
