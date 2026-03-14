@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowRight, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AskInputProps {
@@ -23,6 +23,13 @@ interface ApiResponse {
   details?: string;
 }
 
+const EXAMPLES = [
+  'Top 10 farms by land area',
+  'Most common crop types',
+  'Farms in Region Midtjylland',
+  'How many organic farms?',
+];
+
 export function AskInput({
   onSqlGenerated,
   disabled = false,
@@ -31,55 +38,41 @@ export function AskInput({
   const [question, setQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastResult, setLastResult] = useState<{
-    sql: string;
-    explanation: string;
-  } | null>(null);
+  const [lastExplanation, setLastExplanation] = useState<string | null>(null);
 
   async function handleAsk() {
-    if (!question.trim() || isLoading || disabled) {
-      return;
-    }
+    if (!question.trim() || isLoading || disabled) return;
 
     setIsLoading(true);
     setError(null);
-    setLastResult(null);
+    setLastExplanation(null);
 
     try {
       const response = await fetch('/api/ask', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: question.trim() }),
       });
 
       const data: ApiResponse = await response.json();
 
       if (!response.ok) {
-        // Handle error responses
         const errorMessage = data.error || 'Failed to generate SQL query';
-        const details = data.details ? ` Details: ${data.details}` : '';
+        const details = data.details ? ` — ${data.details}` : '';
         setError(`${errorMessage}${details}`);
         return;
       }
 
-      // Success - store result and pass SQL + table URLs to parent
-      setLastResult({
-        sql: data.sql,
-        explanation: data.explanation,
-      });
-
+      setLastExplanation(data.explanation);
       onSqlGenerated(data.sql, data.tableUrls, {
         question: question.trim(),
         explanation: data.explanation,
       });
     } catch (err) {
-      console.error('Error calling /api/ask:', err);
       setError(
         err instanceof Error
           ? err.message
-          : 'Network error. Please check your connection and try again.'
+          : 'Network error. Please check your connection.'
       );
     } finally {
       setIsLoading(false);
@@ -87,141 +80,153 @@ export function AskInput({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter to submit (Shift+Enter for new line)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleAsk();
     }
   }
 
-  function handleClearResults() {
-    setLastResult(null);
-    setError(null);
-  }
-
   return (
-    <div className={cn('flex flex-col gap-3', className)}>
-      {/* Input area */}
+    <div className={cn('', className)}>
+      {/* Section label */}
+      <div className="mb-3 flex items-center justify-between">
+        <span
+          className="text-[10px] font-semibold tracking-[0.2em] uppercase"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          Ask
+        </span>
+        {lastExplanation && (
+          <button
+            type="button"
+            onClick={() => setLastExplanation(null)}
+            className="text-[10px] tracking-wider uppercase transition-colors"
+            style={{ color: 'var(--muted-foreground)' }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {/* Main input container — left border accent */}
       <div
         className={cn(
-          'rounded-lg border bg-card transition-all',
-          disabled && 'opacity-50 pointer-events-none'
+          'border-l-2 pl-4 transition-all',
+          disabled && 'pointer-events-none opacity-40'
         )}
+        style={{
+          borderColor: question.trim() ? 'var(--primary)' : 'var(--border)',
+        }}
       >
         <textarea
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask a question about the data... (e.g., 'Show me the top 10 farms by area')"
           disabled={disabled || isLoading}
           rows={3}
-          className={cn(
-            'w-full px-4 py-3 bg-transparent resize-none',
-            'placeholder:text-muted-foreground',
-            'focus:outline-none focus-visible:ring-0',
-            'disabled:cursor-not-allowed'
-          )}
+          placeholder="Ask a question about the data…"
+          className="w-full resize-none bg-transparent text-base leading-relaxed outline-none placeholder:italic disabled:cursor-not-allowed"
+          style={{
+            fontFamily: 'var(--font-fraunces), Georgia, serif',
+            color: 'var(--foreground)',
+          }}
         />
 
-        {/* Action buttons */}
-        <div className="bg-muted/30 flex items-center justify-between border-t px-4 py-3">
-          <div className="text-muted-foreground text-xs">
-            Press{' '}
-            <kbd className="bg-background rounded border px-1.5 py-0.5 text-xs">
-              Enter
-            </kbd>{' '}
-            to ask,{' '}
-            <kbd className="bg-background rounded border px-1.5 py-0.5 text-xs">
-              Shift+Enter
-            </kbd>{' '}
-            for new line
+        {/* Bottom bar */}
+        <div className="flex items-center justify-between pt-2 pb-1">
+          <div
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]"
+            style={{ color: 'var(--muted-foreground)' }}
+          >
+            <span className="text-[10px] tracking-wider uppercase opacity-60">
+              Try:
+            </span>
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                onClick={() => setQuestion(example)}
+                disabled={isLoading || disabled}
+                className="transition-colors hover:underline disabled:opacity-40"
+                style={{ color: 'var(--muted-foreground)' }}
+              >
+                {example}
+              </button>
+            ))}
           </div>
+
           <button
             type="button"
             onClick={handleAsk}
             disabled={!question.trim() || isLoading || disabled}
             className={cn(
-              'inline-flex items-center justify-center gap-2',
-              'px-4 py-2 rounded-lg font-semibold text-sm',
-              'transition-all',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'bg-primary text-primary-foreground hover:bg-primary/90',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+              'flex-shrink-0 ml-4 flex items-center gap-1.5 px-4 py-1.5',
+              'text-[11px] font-semibold uppercase tracking-wider',
+              'transition-all disabled:opacity-40 disabled:cursor-not-allowed'
             )}
+            style={{
+              background: 'var(--primary)',
+              color: 'var(--primary-foreground)',
+            }}
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Thinking...</span>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Thinking</span>
               </>
             ) : (
               <>
                 <span>Ask</span>
-                <ArrowRight className="h-4 w-4" />
+                <span className="text-[13px] leading-none">→</span>
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* Error display */}
+      {/* Error */}
       {error && (
-        <div className="border-destructive/50 bg-destructive/10 rounded-lg border px-4 py-3">
-          <div className="flex gap-3">
-            <AlertCircle className="text-destructive mt-0.5 h-5 w-5 flex-shrink-0" />
-            <div className="flex-1 space-y-1">
-              <p className="text-destructive text-sm font-semibold">Error</p>
-              <p className="text-destructive/90 text-sm">{error}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setError(null)}
-              className="text-destructive/70 hover:text-destructive transition-colors"
+        <div
+          className="mt-3 flex items-start gap-2.5 border-l-2 pl-4"
+          style={{ borderColor: 'var(--destructive)' }}
+        >
+          <AlertCircle
+            className="mt-0.5 h-3.5 w-3.5 flex-shrink-0"
+            style={{ color: 'var(--destructive)' }}
+          />
+          <div className="flex-1">
+            <p
+              className="text-xs leading-relaxed"
+              style={{ color: 'var(--destructive)' }}
             >
-              <span className="sr-only">Dismiss</span>×
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Success result display */}
-      {lastResult && (
-        <div className="border-primary/20 bg-primary/5 rounded-md border px-4 py-3">
-          <div className="flex gap-3">
-            <CheckCircle className="text-primary mt-0.5 h-4 w-4 flex-shrink-0" />
-            <p className="text-foreground flex-1 text-sm">
-              {lastResult.explanation}
+              {error}
             </p>
-            <button
-              type="button"
-              onClick={handleClearResults}
-              className="text-muted-foreground hover:text-foreground leading-none transition-colors"
-            >
-              <span className="sr-only">Dismiss</span>×
-            </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="text-xs leading-none transition-colors"
+            style={{ color: 'var(--muted-foreground)' }}
+          >
+            ×
+          </button>
         </div>
       )}
 
-      {/* Example questions as clickable chips */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          'Top 10 farms by land area',
-          'Most common crop types',
-          'Farms in Region Midtjylland',
-          'How many organic farms?',
-        ].map((example) => (
-          <button
-            key={example}
-            type="button"
-            onClick={() => setQuestion(example)}
-            disabled={isLoading || disabled}
-            className="border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40"
+      {/* Explanation */}
+      {lastExplanation && !error && (
+        <div
+          className="mt-3 border-l-2 pl-4"
+          style={{ borderColor: 'var(--accent)' }}
+        >
+          <p
+            className="text-xs leading-relaxed"
+            style={{ color: 'var(--muted-foreground)' }}
           >
-            {example}
-          </button>
-        ))}
-      </div>
+            {lastExplanation}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
