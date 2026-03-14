@@ -77,6 +77,7 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
     layers: ClassVar[list[str]] = [
         "N2000_projekter:Hydrologi_E",
         "N2000_projekter:Hydrologi_F",
+        "landbrugsdrift:N2000_HYDROLOGI",
         "Ovrige_projekter:Vandloebsrestaurering_E",
         "Ovrige_projekter:Vandloebsrestaurering_F",
         "Vandprojekter:Fosfor_E_samlet",
@@ -92,6 +93,7 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
         "Klima_lavbund_demarkation___offentlige_projekter:0",
     ]
     url_mapping: ClassVar[dict[str, str]] = {
+        "landbrugsdrift:N2000_HYDROLOGI": "https://arld-extgeo.miljoeportal.dk/geoserver/wfs",
         "vandprojekter:kla_projektforslag": "https://wfs2-miljoegis.mim.dk/vandprojekter/wfs",
         "vandprojekter:kla_projektomraader": "https://wfs2-miljoegis.mim.dk/vandprojekter/wfs",
         "Klima_lavbund_demarkation___offentlige_projekter:0": "https://gis.nst.dk/server/rest/services/autonom/Klima_lavbund_demarkation___offentlige_projekter/FeatureServer",
@@ -422,8 +424,8 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
                     ]  # Add layer as metadata
                     raw_features.extend(raw_data_with_metadata)
                 except Exception as e:
-                    self.log.error(f"Error occured while fetching chunk: {e}")
-                    raise e
+                    self.log.warning(f"Failed to fetch layer {layer} (skipping): {e}")
+                    continue
         if not raw_features:
             self.log.warning("No raw features fetched")
             return None
