@@ -597,84 +597,38 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 )
         table_name = "water_projects_processed"
 
-        # Create the final table, handling geometry conversion failures gracefully
-        # First, create a table with valid geometries only
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE {table_name}_temp AS
-            SELECT *
-            FROM temp_features
-            WHERE geometry IS NOT NULL
-            AND geometry LIKE '%))' -- Only include properly closed geometries
-        """)
-
-        # Now add geometry_spatial column by testing each geometry individually
-        self.conn.execute(f"""
-            ALTER TABLE {table_name}_temp ADD COLUMN geometry_spatial GEOMETRY
-        """)
-
-        # Process geometries in batches to handle failures gracefully
-        total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}_temp").fetchone()[0]
-        batch_size = 100
-        successful_conversions = 0
-        failed_conversions = 0
-
-        for offset in range(0, total_rows, batch_size):
-            batch_geometries = self.conn.execute(f"""
-                SELECT geometry FROM {table_name}_temp
-                LIMIT {batch_size} OFFSET {offset}
-            """).fetchall()
-
-            for i, (geom_wkt,) in enumerate(batch_geometries):
-                try:
-                    # Test the geometry conversion first
-                    self.conn.execute("CREATE OR REPLACE TABLE temp_geom_test (wkt TEXT)")
-                    self.conn.execute("INSERT INTO temp_geom_test VALUES (?)", [geom_wkt])
-                    self.conn.execute("SELECT ST_GeomFromText(wkt) FROM temp_geom_test").fetchone()
-
-                    # If successful, update the main table
-                    self.conn.execute(
-                        f"""
-                        UPDATE {table_name}_temp
-                        SET geometry_spatial = ST_GeomFromText(?)
-                        WHERE geometry = ?
-                    """,
-                        [geom_wkt, geom_wkt],
-                    )
-                    successful_conversions += 1
-
-                except Exception as e:
-                    failed_conversions += 1
-                    self.log.warning(f"Failed to convert geometry {offset + i + 1}: {e!s}")
-                    self.log.warning(
-                        f"Geometry length: {len(geom_wkt)}, starts with: {geom_wkt[:100]}"
-                    )
-                    # Leave geometry_spatial as NULL for this row
-
-        # Create the final table with only successfully converted geometries
+        # Create the final table using TRY() to handle geometry conversion failures gracefully
+        # DuckDB's TRY() returns NULL instead of raising an error for failed conversions
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
-            SELECT * FROM {table_name}_temp
+            SELECT
+                * EXCLUDE (geometry),
+                geometry,
+                TRY(ST_GeomFromText(geometry)) as geometry_spatial
+            FROM temp_features
+            WHERE geometry IS NOT NULL
+            AND geometry LIKE '%))'
+        """)
+
+        # Filter to only rows with successfully converted geometries
+        total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {table_name} AS
+            SELECT * FROM {table_name}
             WHERE geometry_spatial IS NOT NULL
         """)
 
-        # Clean up temporary table
-        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}_temp")
-        self.conn.execute("DROP TABLE IF EXISTS temp_geom_test")
-
         feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-
-        total_processed = successful_conversions + failed_conversions
-        success_rate = (
-            (successful_conversions / total_processed * 100) if total_processed > 0 else 0
-        )
+        failed_conversions = total_rows - feature_count
 
         self.log.info("Geometry conversion results:")
-        self.log.info(f"  - Successfully converted: {successful_conversions:,} geometries")
+        self.log.info(f"  - Successfully converted: {feature_count:,} geometries")
         self.log.info(f"  - Failed conversions: {failed_conversions:,} geometries")
-        self.log.info(
-            f"  - Total success rate: {success_rate:.1f}% "
-            f"({successful_conversions:,}/{total_processed:,})"
-        )
+        if total_rows > 0:
+            self.log.info(
+                f"  - Total success rate: {feature_count / total_rows * 100:.1f}% "
+                f"({feature_count:,}/{total_rows:,})"
+            )
         self.log.info(f"  - Final feature count: {feature_count:,} features")
 
         if failed_conversions > 0:
