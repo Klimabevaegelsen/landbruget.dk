@@ -78,12 +78,12 @@ source /opt/transfer-env/bin/activate
 # Install uv (canonical method for Linux VMs)
 log_with_timestamp "Installing uv..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
+UV=/root/.local/bin/uv
 
 # Install required Python packages
 # Note: 'uuid' is Python stdlib — no install needed
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
+$UV pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
