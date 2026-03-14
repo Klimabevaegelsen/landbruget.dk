@@ -54,10 +54,18 @@ fi
 
 log_with_timestamp "✅ Sufficient disk space available"
 
+# Wait for unattended-upgrades to release the dpkg lock (Debian 12 holds it at boot)
+log_with_timestamp "Waiting for dpkg lock to be released..."
+timeout 300 bash -c 'while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+    log_with_timestamp "dpkg/apt lock held, waiting 10s..."
+    sleep 10
+done' || log_with_timestamp "WARNING: Timed out waiting for dpkg lock, proceeding anyway"
+log_with_timestamp "✅ dpkg lock released"
+
 # Install required packages
 log_with_timestamp "Installing required packages..."
-apt-get update
-apt-get install -y python3-pip python3-venv git dnsutils iputils-ping unzip
+DEBIAN_FRONTEND=noninteractive apt-get update -q
+DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-pip python3-venv git dnsutils iputils-ping unzip
 
 log_with_timestamp "✅ System packages installed"
 check_resources
@@ -67,13 +75,15 @@ log_with_timestamp "Creating Python virtual environment..."
 python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
-# Install uv first
+# Install uv (canonical method for Linux VMs)
 log_with_timestamp "Installing uv..."
-pip3 install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
-# Install required Python packages (added ijson, pyarrow, uuid for processing)
+# Install required Python packages
+# Note: 'uuid' is Python stdlib — no install needed
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
+uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
