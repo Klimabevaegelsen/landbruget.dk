@@ -37,6 +37,24 @@
             "command": "bash -c 'cmd=$(jq -r \".tool_input.command // empty\"); [[ -z \"$cmd\" ]] && exit 0; echo \"$cmd\" | grep -qE \"rm\\s+-rf\\s+/\" && { echo \"BLOCKED: Dangerous rm -rf / command\" >&2; exit 2; } || exit 0'"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cmd=$(jq -r \".tool_input.command // empty\"); [[ -z \"$cmd\" ]] && exit 0; echo \"$cmd\" | grep -qE \"git\\s+push.*--force|git\\s+push.*-f\\b\" && { echo \"BLOCKED: Force push is dangerous. Use --force-with-lease if you must, or create a new commit instead.\" >&2; exit 2; } || exit 0'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cmd=$(jq -r \".tool_input.command // empty\"); [[ -z \"$cmd\" ]] && exit 0; echo \"$cmd\" | grep -qE \"git\\s+push\\s+(origin\\s+)?(main|master)\\b\" && { echo \"BLOCKED: Do not push directly to main/master. Create a feature branch and open a PR instead.\" >&2; exit 2; } || exit 0'"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -45,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; case \"$f\" in *.ts|*.tsx) npx oxlint --fix \"$f\" 2>/dev/null || true ;; esac; exit 0'"
+            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; case \"$f\" in *.ts|*.tsx) cd \"$CLAUDE_PROJECT_DIR/frontend\" 2>/dev/null && npx oxlint --fix \"$f\" 2>/dev/null || true ;; esac; exit 0'"
           }
         ]
       },
@@ -54,7 +72,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; case \"$f\" in *.py) ruff format \"$f\" 2>/dev/null || true ;; esac; exit 0'"
+            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; case \"$f\" in *.py) ruff check --select I --fix \"$f\" 2>/dev/null; ruff format \"$f\" 2>/dev/null || true ;; esac; exit 0'"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; case \"$f\" in *.ts|*.tsx|*.js|*.jsx) cd \"$CLAUDE_PROJECT_DIR/frontend\" 2>/dev/null && npx oxfmt \"$f\" 2>/dev/null || true ;; esac; exit 0'"
           }
         ]
       }
