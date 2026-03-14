@@ -7,17 +7,8 @@ import { DynamicDataTable } from '@/components/table/dynamic-table';
 import { ColumnDef } from '@tanstack/react-table';
 import { Building2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-
-interface RankingItem {
-  company_id: string;
-  cvr_number: string;
-  company_name: string;
-  municipality?: string;
-  rank: number;
-  value: number;
-  formatted_value: string;
-  year?: number;
-}
+import { RankingItem } from '@/lib/rankings';
+import { getCategoryColor, getCategoryLabel } from '@/lib/category-utils';
 
 interface IndividualRankingTableProps {
   rankingId: string;
@@ -26,40 +17,6 @@ interface IndividualRankingTableProps {
   description: string;
   initialLimit?: number;
 }
-
-const getCategoryColor = (category: string) => {
-  switch (category) {
-    case 'financial':
-      return 'bg-organic/10 text-organic border-organic/20';
-    case 'field':
-      return 'bg-low-risk/10 text-low-risk border-low-risk/20';
-    case 'environment':
-      return 'bg-destructive/10 text-destructive border-destructive/20';
-    case 'animal':
-      return 'bg-conventional/10 text-conventional border-conventional/20';
-    case 'worker':
-      return 'bg-primary/10 text-primary border-primary/20';
-    default:
-      return 'bg-muted text-muted-foreground border-border';
-  }
-};
-
-const getCategoryLabel = (category: string) => {
-  switch (category) {
-    case 'financial':
-      return 'Økonomi';
-    case 'field':
-      return 'Landbrugsareal';
-    case 'environment':
-      return 'Miljø';
-    case 'animal':
-      return 'Husdyr';
-    case 'worker':
-      return 'Medarbejdere';
-    default:
-      return category;
-  }
-};
 
 export default function IndividualRankingTable({
   rankingId,

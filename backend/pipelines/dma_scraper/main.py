@@ -18,8 +18,6 @@ from bronze.fetch_company_data import DMAScraper  # noqa: E402
 from bronze.fetch_company_detail import DMACompanyDetailScraper  # noqa: E402
 from silver.transformation import transform_dma_json  # noqa: E402
 
-PIPELINE_METADATA_AVAILABLE = True
-
 
 def _get_optimized_storage():
     """
@@ -375,12 +373,8 @@ if __name__ == "__main__":
     timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        print("✅ Pipeline metadata system initialized")
-    else:
-        print("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    print("✅ Pipeline metadata system initialized")
 
     args = parse_args()
     data = None

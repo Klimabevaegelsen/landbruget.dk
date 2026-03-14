@@ -21,6 +21,7 @@ import {
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { FieldAnalysisData } from '@/components/field-analysis/types';
+import { formatNumber } from '@/lib/formatting';
 import {
   formatWgs84Coordinates,
   generateSkraafotoUrl,
@@ -33,24 +34,6 @@ interface FieldDetailsContentProps {
 
 export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
-
-  const formatNumber = (
-    num: number | undefined | null,
-    decimals: number = 2
-  ): string | null => {
-    // Handle null, undefined, or NaN values
-    if (num == null || isNaN(num)) return null;
-
-    // Don't display if the value is effectively zero
-    if (num < 0.001) return null;
-
-    // For very small values, show more precision
-    if (num < 1 && decimals === 0) {
-      return num.toLocaleString('da-DK', { maximumFractionDigits: 3 });
-    }
-
-    return num.toLocaleString('da-DK', { maximumFractionDigits: decimals });
-  };
 
   // Handle coordinate copying
   const handleCopyCoordinates = async () => {

@@ -2,7 +2,6 @@
 
 import contextlib
 import json
-import logging
 import os
 import sys
 import traceback
@@ -26,9 +25,9 @@ except ImportError:
     # Fallback for different import paths
     import sys
 
-    sys.path.append(
-        "/Users/martincollignon/landbrugsdata/landbruget.dk/backend/pipelines/unified_pipeline/src"
-    )
+    unified_pipeline_path = Path(__file__).parent.parent / "unified_pipeline" / "src"
+    if unified_pipeline_path.exists():
+        sys.path.append(str(unified_pipeline_path))
     from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 # Import schema documentation and pipeline metadata system
@@ -55,8 +54,9 @@ except ImportError:
     PIPELINE_METADATA_AVAILABLE = False
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+from common.logging_utils import setup_pipeline_logger
+
+logger = setup_pipeline_logger("property_owners_sftp", level=os.getenv("LOG_LEVEL", "INFO"))
 
 
 def flush_logs():

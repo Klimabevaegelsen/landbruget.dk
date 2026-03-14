@@ -8,6 +8,7 @@ from datetime import date, datetime
 from typing import Any
 
 # Import pipeline metadata system for data tracing
+from common.logging_utils import setup_pipeline_logger
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -18,9 +19,7 @@ from bronze.load_svineflytning import (
     get_fvm_credentials,
 )
 
-PIPELINE_METADATA_AVAILABLE = True
-
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # Replaced in setup_logging()
 
 # Constants for resource management
 DEFAULT_MAX_CONCURRENT_FETCHES = 5  # Number of parallel API calls
@@ -30,21 +29,11 @@ DEFAULT_BUFFER_SIZE = 50  # Number of responses to accumulate before writing to 
 
 def setup_logging(log_level: str):
     """Configure logging with the specified level."""
+    global logger
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    # Remove all existing handlers to start fresh
-    root = logging.getLogger()
-    for handler in root.handlers[:]:
-        root.removeHandler(handler)
-
-    # Set up root logger at WARNING by default with a format that works well with tqdm
-    logging.basicConfig(
-        level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    # Configure our pipeline loggers
-    pipeline_logger = logging.getLogger("svineflytning_pipeline")
-    pipeline_logger.setLevel(numeric_level)
+    # Set up pipeline logger using common utility
+    logger = setup_pipeline_logger("svineflytning_pipeline", level=log_level)
 
     # Configure bronze module loggers
     bronze_logger = logging.getLogger("svineflytning_pipeline.bronze")
@@ -242,12 +231,8 @@ def main():
     setup_logging(args["log_level"])
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     logger.warning(f"Starting Svineflytning pipeline - Stage: {args['stage']}")
 

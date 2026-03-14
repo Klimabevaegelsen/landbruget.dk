@@ -1,18 +1,13 @@
 import { KPIGroup } from '@/services/supabase/types';
 import { ClimateEmission } from '@/services/supabase/climate';
+import { formatNumberFixed } from '@/lib/formatting';
 
 interface CarbonAccountingKPIsProps {
   emission: ClimateEmission;
 }
 
 export function CarbonAccountingKPIs({ emission }: CarbonAccountingKPIsProps) {
-  // Format numbers with Danish locale
-  const formatNumber = (value: number, decimals: number = 0) => {
-    return value.toLocaleString('da-DK', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-  };
+  const formatNumber = formatNumberFixed;
 
   // Create KPI data structure matching the existing pattern
   const kpiGroup: KPIGroup = {

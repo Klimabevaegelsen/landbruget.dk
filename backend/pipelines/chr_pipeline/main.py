@@ -56,11 +56,10 @@ except ImportError:
     INCREMENTAL_PROCESSING_AVAILABLE = False
 
 # Import pipeline metadata system for data tracing
+from common.logging_utils import setup_pipeline_logger
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-PIPELINE_METADATA_AVAILABLE = True
-
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # Replaced in setup_logging()
 
 
 def calculate_date_range(processing_mode: str) -> tuple[str | None, str | None]:
@@ -130,20 +129,11 @@ def determine_processing_mode(bronze_timestamp: str) -> tuple[str, str | None]:
 
 def setup_logging(log_level: str):
     """Configure logging with the specified level."""
+    global logger
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    root = logging.getLogger()
-    for handler in root.handlers[:]:
-        root.removeHandler(handler)
-
-    # Set up root logger at WARNING by default with a format that works well with tqdm
-    logging.basicConfig(
-        level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    # Configure our pipeline loggers
-    pipeline_logger = logging.getLogger("backend.pipelines.chr_pipeline")
-    pipeline_logger.setLevel(numeric_level)
+    # Set up pipeline logger using common utility
+    logger = setup_pipeline_logger("backend.pipelines.chr_pipeline", level=log_level)
 
     # Configure bronze module loggers
     bronze_logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze")
@@ -1083,12 +1073,8 @@ def main():
     setup_logging(args["log_level"])
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     try:
         # Determine steps to run first to decide if we need FVM credentials

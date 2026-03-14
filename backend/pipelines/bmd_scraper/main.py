@@ -5,7 +5,6 @@ This script orchestrates the Bronze and Silver stage processing for BMD data.
 """
 
 import argparse
-import logging
 import os
 import sys
 from datetime import datetime
@@ -14,26 +13,18 @@ from pathlib import Path
 import dotenv
 
 # Import pipeline metadata system for data tracing
+from common.logging_utils import setup_pipeline_logger
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 from bronze import BMDScraper
 from bronze.export import GCSStorage
 from silver import BMDTransformer, upload_to_gcs
 
-PIPELINE_METADATA_AVAILABLE = True
-
 # Load environment variables
 dotenv.load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger("bmd_pipeline")
+logger = setup_pipeline_logger("bmd_pipeline", level=os.getenv("LOG_LEVEL", "INFO"))
 
 
 def setup_directories() -> tuple[Path, Path]:
@@ -223,12 +214,8 @@ def main() -> None:
     start_time = datetime.now()
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     # Run selected stages
     bronze_file = None

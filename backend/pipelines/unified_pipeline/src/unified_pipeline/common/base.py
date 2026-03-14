@@ -28,8 +28,6 @@ from unified_pipeline.common.native_schema_manager import NativeSchemaManager
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
-PIPELINE_METADATA_AVAILABLE = True
-
 # Import schema documentation
 try:
     from backend.common.schema_documentation import SchemaDocumentationManager
@@ -218,14 +216,9 @@ class BaseSource(Generic[T], ABC):
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
         # Initialize pipeline metadata manager (pipeline-level data tracing)
-        if PIPELINE_METADATA_AVAILABLE:
-            self.pipeline_metadata_manager = PipelineMetadataManager()
-            self.processing_start_time = time.time()
-            self.log.info("✅ Pipeline metadata system initialized for unified pipeline")
-        else:
-            self.pipeline_metadata_manager = None
-            self.processing_start_time = None
-            self.log.warning("⚠️  Pipeline metadata system not available")
+        self.pipeline_metadata_manager = PipelineMetadataManager()
+        self.processing_start_time = time.time()
+        self.log.info("✅ Pipeline metadata system initialized for unified pipeline")
 
         # Use pipeline start time consistently (not save time)
         # Check if shared timestamp is provided via environment variable (for GitHub Actions)

@@ -11,8 +11,6 @@ from dotenv import load_dotenv
 import bronze.export
 import silver.transform
 
-PIPELINE_METADATA_AVAILABLE = True
-
 PIPELINE_ROOT = os.path.dirname(os.path.abspath(__file__))
 print("[DEBUG] DISPLAY =", os.environ.get("DISPLAY"))
 print("[DEBUG] DOCKER_ENV =", os.environ.get("DOCKER_ENV"))
@@ -73,12 +71,8 @@ if __name__ == "__main__":
     logger.info(f"Starting pipeline with args: {args}")
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     # Determine GCS bucket to use
     actual_gcs_bucket = args.gcs_bucket

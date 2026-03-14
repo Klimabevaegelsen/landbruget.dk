@@ -33,8 +33,6 @@ from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 from config import Settings, get_settings
 from utils.logger import setup_logger
 
-PIPELINE_METADATA_AVAILABLE = True
-
 try:
     import psutil
 
@@ -766,12 +764,8 @@ def main() -> None:
     pipeline_start_time = datetime.now()
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+    pipeline_metadata_manager = PipelineMetadataManager()
+    logger.info("✅ Pipeline metadata system initialized")
 
     try:
         bronze_result = None
