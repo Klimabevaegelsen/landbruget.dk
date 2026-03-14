@@ -156,7 +156,19 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         # Try using DuckDB's spatial extension first for xlsx support
         try:
             self.conn.execute("INSTALL spatial; LOAD spatial;")
-            return self._read_excel_with_spatial(file_path)
+            results = self._read_excel_with_spatial(file_path)
+            # If spatial only found one "default" sheet, st_layers likely failed
+            # and we may be missing sheets. Fall back to openpyxl for proper
+            # multi-sheet enumeration.
+            if len(results) == 1 and results[0][0] == "default":
+                logger.info(
+                    "Spatial read only found 'default' sheet — "
+                    "falling back to openpyxl for multi-sheet support"
+                )
+                # Clean up the spatial table before falling through
+                self.drop_table(results[0][1])
+                return self._read_excel_with_openpyxl(file_path)
+            return results
         except Exception as e:
             logger.debug(f"Spatial extension not available or failed: {e}")
 

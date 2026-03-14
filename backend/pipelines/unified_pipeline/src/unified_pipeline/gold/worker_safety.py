@@ -86,7 +86,12 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             raise
 
     async def _load_silver_data(self, silver_data: dict[str, Any] | None) -> None:
-        """Load worker safety silver data from GCS."""
+        """Load worker safety silver data from GCS.
+
+        Supports two formats:
+        1. Two-file format: worker_safety_2020-2024_mv.parquet + _skadeart.parquet
+        2. Single-file format: worker_safety_2020-2024.parquet (from drive pipeline)
+        """
 
         if silver_data:
             self.log.warning("In-memory data passing not implemented for worker safety - using GCS")
@@ -98,23 +103,78 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
 
         self.log.info(f"Loading worker safety data from: {silver_path}")
 
-        # Load both parquet files using temp download pattern (like field_production.py)
+        # List all parquet files in the directory
+        pattern = f"{silver_path}/worker_safety*.parquet"
+        available_files = self.gcs_access.list_files(pattern)
+        filenames = [f.split("/")[-1] for f in available_files]
+        self.log.info(f"Available silver files: {filenames}")
+
         mv_path = f"{silver_path}/worker_safety_2020-2024_mv.parquet"
         skadeart_path = f"{silver_path}/worker_safety_2020-2024_skadeart.parquet"
 
-        # Load main injury data (total by CVR and year)
-        with self.gcs_access._temp_download(mv_path) as temp_mv_file:
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE worker_safety_raw AS
-                SELECT * FROM read_parquet('{temp_mv_file}')
-            """)
+        has_mv = any("_mv.parquet" in f for f in available_files)
+        has_skadeart = any("_skadeart.parquet" in f for f in available_files)
 
-        # Load injury type data (detailed by CVR, year, and injury type)
-        with self.gcs_access._temp_download(skadeart_path) as temp_skadeart_file:
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS
-                SELECT * FROM read_parquet('{temp_skadeart_file}')
-            """)
+        if has_mv and has_skadeart:
+            # Original two-file format
+            self.log.info("Loading two-file format (mv + skadeart)")
+            with self.gcs_access._temp_download(mv_path) as temp_mv_file:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE worker_safety_raw AS
+                    SELECT * FROM read_parquet('{temp_mv_file}')
+                """)
+
+            with self.gcs_access._temp_download(skadeart_path) as temp_skadeart_file:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS
+                    SELECT * FROM read_parquet('{temp_skadeart_file}')
+                """)
+        else:
+            # Single-file format from drive pipeline — load and detect content
+            single_file = available_files[-1]  # Latest file
+            self.log.info(f"Loading single-file format: {single_file}")
+
+            with self.gcs_access._temp_download(single_file) as temp_file:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE worker_safety_single AS
+                    SELECT * FROM read_parquet('{temp_file}')
+                """)
+
+            # Check columns to determine if this is mv or skadeart data
+            columns = [
+                row[0] for row in self.conn.execute("DESCRIBE worker_safety_single").fetchall()
+            ]
+            self.log.info(f"Single file columns: {columns}")
+
+            # The mv sheet has CVR + year columns without injury type
+            # The skadeart sheet has CVR + injury_type + year columns
+            # Detect by checking for injury-type-like column patterns
+            has_injury_type_col = any("skadeart" in c.lower() for c in columns)
+
+            if has_injury_type_col:
+                self.log.info("Detected as skadeart (injury type) data")
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS
+                    SELECT * FROM worker_safety_single
+                """)
+                # Create empty mv table so processing doesn't fail
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE worker_safety_raw AS
+                    SELECT * FROM worker_safety_single WHERE 1=0
+                """)
+            else:
+                self.log.info("Detected as mv (main totals) data")
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE worker_safety_raw AS
+                    SELECT * FROM worker_safety_single
+                """)
+                # Create empty skadeart table so processing doesn't fail
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS
+                    SELECT * FROM worker_safety_single WHERE 1=0
+                """)
+
+            self.conn.execute("DROP TABLE IF EXISTS worker_safety_single")
 
         self.log.info("✅ Silver data loaded successfully")
 
@@ -324,11 +384,17 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
     def _get_latest_silver_path(self, dataset: str) -> str | None:
         """Get the latest silver data directory path for a dataset."""
         try:
-            # Look for the specific worker safety files
+            # Try specific _mv files first (original two-file format)
             pattern = (
                 f"gs://{self.config.bucket}/silver/{dataset}/*/worker_safety_2020-2024_mv.parquet"
             )
             files = self.gcs_access.list_files(pattern)
+
+            if not files:
+                # Fall back to any worker_safety parquet files
+                # (drive pipeline may produce a single file without _mv/_skadeart suffix)
+                pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/worker_safety*.parquet"
+                files = self.gcs_access.list_files(pattern)
 
             if not files:
                 self.log.warning(f"No worker safety files found for dataset: {dataset}")
@@ -336,10 +402,6 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
 
             # Get the latest file and extract its directory
             latest_file = sorted(files)[-1]
-            # Extract directory from file path
-            # Example: gs://bucket/silver/worker safety/20240802_224643/
-            #          worker_safety_2020-2024_mv.parquet
-            # Should return: gs://bucket/silver/worker safety/20240802_224643
             directory_path = "/".join(latest_file.split("/")[:-1])
 
             self.log.info(f"Found latest worker safety silver data directory: {directory_path}")
