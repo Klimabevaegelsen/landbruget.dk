@@ -264,20 +264,34 @@ class SilverProcessor:
                     # Calculate total file size processed
                     total_file_size = sum(item.get("file_size", 0) for item in file_data.values())
 
-                    # Create pipeline metadata for Silver layer
-                    pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
-                        source_key="drive_pesticide_reports",  # Same source as Bronze
-                        record_count=processed_count,
-                        processing_duration=processing_duration,
-                        file_size_bytes=total_file_size,
-                    )
+                    # Derive source_key from the specific subfolder being processed.
+                    # Pattern: drive_<subfolder_lowercased_underscored>
+                    # Skip metadata when processing multiple/no subfolders (no single key applies).
+                    if specific_subfolders and len(specific_subfolders) == 1:
+                        source_key = "drive_" + specific_subfolders[0].lower().replace(" ", "_")
+                    else:
+                        logger.debug(
+                            "Skipping pipeline metadata: multiple or no subfolders specified"
+                        )
+                        source_key = None
 
-                    # Save pipeline metadata
-                    pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
-                        pipeline_metadata, silver_run_path / "pipeline_metadata.json"
-                    )
+                    if source_key is not None:
+                        # Create pipeline metadata for Silver layer
+                        pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                            source_key=source_key,
+                            record_count=processed_count,
+                            processing_duration=processing_duration,
+                            file_size_bytes=total_file_size,
+                        )
 
-                    logger.info(f"✅ Silver pipeline metadata saved to {pipeline_metadata_path}")
+                        # Save pipeline metadata
+                        pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
+                            pipeline_metadata, silver_run_path / "pipeline_metadata.json"
+                        )
+
+                        logger.info(
+                            f"✅ Silver pipeline metadata saved to {pipeline_metadata_path}"
+                        )
 
                 except Exception as e:
                     logger.error(f"❌ Failed to create Silver pipeline metadata: {e}")

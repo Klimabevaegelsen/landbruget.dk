@@ -22,7 +22,7 @@ on:
       use_matrix:
         description: 'Run as matrix job (one job per top-level folder)'
         type: boolean
-        default: false
+        default: true
       max_parallel_jobs:
         description: 'Maximum number of parallel jobs (for matrix mode)'
         type: string
