@@ -56,6 +56,7 @@ except ImportError:
     INCREMENTAL_PROCESSING_AVAILABLE = False
 
 # Import pipeline metadata system for data tracing
+from common.logging_utils import setup_pipeline_logger
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 PIPELINE_METADATA_AVAILABLE = True
@@ -132,18 +133,8 @@ def setup_logging(log_level: str):
     """Configure logging with the specified level."""
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
-    root = logging.getLogger()
-    for handler in root.handlers[:]:
-        root.removeHandler(handler)
-
-    # Set up root logger at WARNING by default with a format that works well with tqdm
-    logging.basicConfig(
-        level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    # Configure our pipeline loggers
-    pipeline_logger = logging.getLogger("backend.pipelines.chr_pipeline")
-    pipeline_logger.setLevel(numeric_level)
+    # Set up pipeline logger using common utility
+    setup_pipeline_logger("backend.pipelines.chr_pipeline", level=log_level)
 
     # Configure bronze module loggers
     bronze_logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze")
