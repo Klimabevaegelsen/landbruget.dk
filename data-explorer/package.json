@@ -15,15 +15,21 @@
     "@codemirror/view": "^6.39.9",
     "@duckdb/duckdb-wasm": "^1.29.0",
     "@google/generative-ai": "^0.24.1",
+    "@json-render/core": "^0.14.0",
+    "@json-render/react": "^0.14.0",
+    "@json-render/shadcn": "^0.14.0",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "lucide-react": "^0.562.0",
+    "maplibre-gl": "^5.20.1",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "tailwind-merge": "^3.4.0"
+    "recharts": "^3.8.0",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

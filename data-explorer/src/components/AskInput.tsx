@@ -1,11 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, Loader2, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowRight, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AskInputProps {
-  onSqlGenerated: (sql: string, tableUrls?: Record<string, string>) => void;
+  onSqlGenerated: (
+    sql: string,
+    tableUrls?: Record<string, string>,
+    meta?: { question: string; explanation: string }
+  ) => void;
   disabled?: boolean;
   className?: string;
 }
@@ -19,7 +23,11 @@ interface ApiResponse {
   details?: string;
 }
 
-export function AskInput({ onSqlGenerated, disabled = false, className }: AskInputProps) {
+export function AskInput({
+  onSqlGenerated,
+  disabled = false,
+  className,
+}: AskInputProps) {
   const [question, setQuestion] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +70,10 @@ export function AskInput({ onSqlGenerated, disabled = false, className }: AskInp
         explanation: data.explanation,
       });
 
-      onSqlGenerated(data.sql, data.tableUrls);
+      onSqlGenerated(data.sql, data.tableUrls, {
+        question: question.trim(),
+        explanation: data.explanation,
+      });
     } catch (err) {
       console.error('Error calling /api/ask:', err);
       setError(
@@ -89,13 +100,7 @@ export function AskInput({ onSqlGenerated, disabled = false, className }: AskInp
   }
 
   return (
-    <div className={cn('flex flex-col gap-4', className)}>
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-5 w-5 text-primary" />
-        <h3 className="text-sm font-semibold">Ask in Natural Language</h3>
-      </div>
-
+    <div className={cn('flex flex-col gap-3', className)}>
       {/* Input area */}
       <div
         className={cn(
@@ -119,11 +124,16 @@ export function AskInput({ onSqlGenerated, disabled = false, className }: AskInp
         />
 
         {/* Action buttons */}
-        <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
-          <div className="text-xs text-muted-foreground">
-            Press <kbd className="px-1.5 py-0.5 bg-background rounded border text-xs">Enter</kbd> to
-            ask,{' '}
-            <kbd className="px-1.5 py-0.5 bg-background rounded border text-xs">Shift+Enter</kbd>{' '}
+        <div className="bg-muted/30 flex items-center justify-between border-t px-4 py-3">
+          <div className="text-muted-foreground text-xs">
+            Press{' '}
+            <kbd className="bg-background rounded border px-1.5 py-0.5 text-xs">
+              Enter
+            </kbd>{' '}
+            to ask,{' '}
+            <kbd className="bg-background rounded border px-1.5 py-0.5 text-xs">
+              Shift+Enter
+            </kbd>{' '}
             for new line
           </div>
           <button
@@ -146,8 +156,8 @@ export function AskInput({ onSqlGenerated, disabled = false, className }: AskInp
               </>
             ) : (
               <>
-                <MessageSquare className="h-4 w-4" />
                 <span>Ask</span>
+                <ArrowRight className="h-4 w-4" />
               </>
             )}
           </button>
@@ -156,12 +166,12 @@ export function AskInput({ onSqlGenerated, disabled = false, className }: AskInp
 
       {/* Error display */}
       {error && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3">
+        <div className="border-destructive/50 bg-destructive/10 rounded-lg border px-4 py-3">
           <div className="flex gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+            <AlertCircle className="text-destructive mt-0.5 h-5 w-5 flex-shrink-0" />
             <div className="flex-1 space-y-1">
-              <p className="text-sm font-semibold text-destructive">Error</p>
-              <p className="text-sm text-destructive/90">{error}</p>
+              <p className="text-destructive text-sm font-semibold">Error</p>
+              <p className="text-destructive/90 text-sm">{error}</p>
             </div>
             <button
               type="button"
@@ -176,28 +186,16 @@ export function AskInput({ onSqlGenerated, disabled = false, className }: AskInp
 
       {/* Success result display */}
       {lastResult && (
-        <div className="rounded-lg border border-green-500/50 bg-green-500/10 px-4 py-3">
+        <div className="border-primary/20 bg-primary/5 rounded-md border px-4 py-3">
           <div className="flex gap-3">
-            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 space-y-2">
-              <p className="text-sm font-semibold text-green-900 dark:text-green-100">
-                SQL Generated
-              </p>
-              <p className="text-sm text-green-800 dark:text-green-200">{lastResult.explanation}</p>
-              <div className="bg-green-950/20 rounded px-3 py-2 mt-2">
-                <code className="text-xs text-green-900 dark:text-green-100 font-mono break-all">
-                  {lastResult.sql}
-                </code>
-              </div>
-              <p className="text-xs text-green-700 dark:text-green-300 mt-2">
-                The SQL query has been loaded into the editor below. You can review and edit it
-                before running.
-              </p>
-            </div>
+            <CheckCircle className="text-primary mt-0.5 h-4 w-4 flex-shrink-0" />
+            <p className="text-foreground flex-1 text-sm">
+              {lastResult.explanation}
+            </p>
             <button
               type="button"
               onClick={handleClearResults}
-              className="text-green-600/70 hover:text-green-600 transition-colors"
+              className="text-muted-foreground hover:text-foreground leading-none transition-colors"
             >
               <span className="sr-only">Dismiss</span>×
             </button>
@@ -205,15 +203,24 @@ export function AskInput({ onSqlGenerated, disabled = false, className }: AskInp
         </div>
       )}
 
-      {/* Help text */}
-      <div className="text-xs text-muted-foreground space-y-1">
-        <p className="font-semibold">Example questions:</p>
-        <ul className="list-disc list-inside space-y-0.5 ml-2">
-          <li>Show me the top 10 farms by land area</li>
-          <li>What are the most common crop types?</li>
-          <li>List all farms in Region Midtjylland</li>
-          <li>How many organic farms are there?</li>
-        </ul>
+      {/* Example questions as clickable chips */}
+      <div className="flex flex-wrap gap-2">
+        {[
+          'Top 10 farms by land area',
+          'Most common crop types',
+          'Farms in Region Midtjylland',
+          'How many organic farms?',
+        ].map((example) => (
+          <button
+            key={example}
+            type="button"
+            onClick={() => setQuestion(example)}
+            disabled={isLoading || disabled}
+            className="border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-40"
+          >
+            {example}
+          </button>
+        ))}
       </div>
     </div>
   );

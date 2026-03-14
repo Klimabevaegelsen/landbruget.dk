@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getAuthConfig } from '@/lib/auth';
 
-const AUTH_COOKIE = 'data_auth';
 const LOGIN_PATH = '/login';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const { authCookieName, cookieValue } = getAuthConfig();
 
   // Allow login page and auth API through unconditionally
   if (pathname === LOGIN_PATH || pathname.startsWith('/api/auth')) {
@@ -22,9 +23,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const cookie = request.cookies.get(AUTH_COOKIE);
+  const cookie = request.cookies.get(authCookieName);
 
-  if (cookie?.value === process.env.AUTH_COOKIE_VALUE) {
+  if (cookieValue && cookie?.value === cookieValue) {
     return NextResponse.next();
   }
 

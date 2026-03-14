@@ -222,11 +222,11 @@ await page.pause();
 
 ```typescript
 // Capture console messages
-page.on('console', (msg) => console.log('Browser:', msg.text()));
+page.on('console', (msg) => console_log('Browser:', msg.text()));
 
 // Capture network errors
 page.on('requestfailed', (request) =>
-  console.log('Failed:', request.url(), request.failure()?.errorText)
+  console_log('Failed:', request.url(), request.failure()?.errorText)
 );
 ```
 
