@@ -93,13 +93,24 @@ jobs:
           echo "VM Specs: e2-standard-8 (8 cores, 32GB RAM, 30GB SSD) - Standard instance"
           echo "Expected processing time: 10-30 minutes (optimized for large datasets)"
 
-          # Wait longer since processing now happens on the VM
-          echo "Waiting 45 minutes to check processing status..."
-          sleep 2700
+          # Early check: wait 5 minutes then verify startup script is progressing
+          echo "Waiting 5 minutes for VM startup and package installation..."
+          sleep 300
+
+          if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
+            echo "📋 Early serial port check (last 30 lines):"
+            gcloud compute instances get-serial-port-output $VM_NAME --zone=$ZONE --project=$PROJECT_ID 2>&1 | tail -30 || echo "Could not get serial port output"
+          fi
+
+          # Wait remaining time (40 more minutes = 45 total)
+          echo "Waiting 40 more minutes for SFTP transfer and processing..."
+          sleep 2400
 
           if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
             echo "⚠️ VM $VM_NAME still exists after 45 minutes - processing may have failed or still running."
-            echo "Check serial port output in Google Cloud Console for details (project: $PROJECT_ID, zone: $ZONE)."
+
+            echo "📋 Serial port output (last 50 lines):"
+            gcloud compute instances get-serial-port-output $VM_NAME --zone=$ZONE --project=$PROJECT_ID 2>&1 | tail -50 || echo "Could not get serial port output"
 
             # Give it another 15 minutes for large datasets
             echo "Giving it another 15 minutes for large dataset processing..."
@@ -108,21 +119,24 @@ jobs:
             if gcloud compute instances describe $VM_NAME --zone=$ZONE --project=$PROJECT_ID >/dev/null 2>&1; then
               echo "❌ VM $VM_NAME still exists after 60 minutes - FORCING SHUTDOWN to prevent cost overrun"
 
-              # Try to get final status and upload any partial results
-              echo "🔍 Getting final status before forced shutdown..."
+              # Get serial port output first (works even if SSH fails)
+              echo "🔍 Getting serial port output for debugging..."
+              gcloud compute instances get-serial-port-output $VM_NAME --zone=$ZONE --project=$PROJECT_ID 2>&1 | tail -100 || echo "Could not get serial port output"
+
+              # Try to get the actual log file and process status
+              echo "🔍 Getting VM log file and status..."
               gcloud compute ssh $VM_NAME --zone=$ZONE --project=$PROJECT_ID --command="
-                echo '=== TIMEOUT CLEANUP ==='
-                echo 'VM has exceeded 60 minute timeout'
-                echo 'Current processes:'
-                ps aux | grep -E '(python|processing|sftp)' | grep -v grep || echo 'No relevant processes'
-                echo 'Disk usage:'
-                df -h /tmp 2>/dev/null || echo 'Could not check disk'
-                echo 'Attempting emergency upload of any partial data...'
-                if [ -d '/tmp/property_owners_data' ]; then
-                  gsutil -m cp -r /tmp/property_owners_data/ gs://landbruget-data/bronze/property_owners/timeout_$(date +%Y%m%d_%H%M%S)/ || echo 'Emergency upload failed'
-                fi
+                echo '=== STARTUP SCRIPT LOG ==='
+                cat /var/log/sftp-transfer.log 2>/dev/null | tail -80 || echo 'No log file found'
+                echo '=== PROCESS LIST ==='
+                ps aux | grep -v '\[' | head -30
+                echo '=== DISK USAGE ==='
+                df -h / 2>/dev/null || echo 'Could not check disk'
+                echo '=== STARTUP SCRIPT STATUS ==='
+                # Check if startup script is still tracked by systemd
+                journalctl -u google-startup-scripts.service --no-pager -n 30 2>/dev/null || echo 'No systemd journal entry'
                 echo '=== END TIMEOUT CLEANUP ==='
-              " 2>/dev/null || echo "Could not connect for timeout cleanup"
+              " 2>/dev/null || echo "Could not connect via SSH for timeout cleanup"
 
               # Force delete the VM
               echo "🗑️ Force deleting VM $VM_NAME..."

@@ -559,9 +559,33 @@ class SFTPToGCSTransferWithProcessing:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
         self.bucket_name = "landbruget-data"
-        self.storage_client = storage.Client(project=self.project_id)
-        self.secret_client = secretmanager.SecretManagerServiceClient()
         self.processor = PropertyDataProcessor()
+
+        # Initialize GCP clients with explicit error handling
+        # google-auth mTLS to metadata server has been a recurring issue on GCE VMs
+        logger.info("Initializing GCP clients...")
+        flush_logs()
+        try:
+            self.storage_client = storage.Client(project=self.project_id)
+            logger.info("storage.Client initialized OK")
+            flush_logs()
+        except Exception as e:
+            logger.error(f"Failed to create storage.Client: {e}")
+            logger.error(f"GCE_METADATA_MTLS_MODE={os.environ.get('GCE_METADATA_MTLS_MODE', 'NOT SET')}")
+            logger.error(traceback.format_exc())
+            flush_logs()
+            raise
+
+        try:
+            self.secret_client = secretmanager.SecretManagerServiceClient()
+            logger.info("SecretManagerServiceClient initialized OK")
+            flush_logs()
+        except Exception as e:
+            logger.error(f"Failed to create SecretManagerServiceClient: {e}")
+            logger.error(traceback.format_exc())
+            flush_logs()
+            raise
+
         logger.info("SFTPToGCSTransferWithProcessing initialized.")
         flush_logs()
 
@@ -910,13 +934,39 @@ validate_success() {
     fi
 }
 
-# Force HTTP for GCE metadata server - newer google-auth versions may attempt
-# mTLS/HTTPS metadata endpoint which fails SSL cert verification on this VM.
-# GCE_METADATA_HOST bypasses DNS and goes directly to the metadata IP over HTTP.
-# GCE_METADATA_ROOT sets the full base URL (fallback for older google-auth versions).
-export GCE_METADATA_HOST="169.254.169.254"
-export GCE_METADATA_ROOT="http://metadata.google.internal"
-log_with_timestamp "✅ GCE metadata configured: HOST=169.254.169.254 (bypasses DNS + mTLS)"
+# Disable mTLS for GCE metadata server.
+# Debian 12 GCE images ship with mTLS certs at /run/google-mds-mtls/{root.crt,client.key}.
+# google-auth's default mode auto-enables mTLS when those files exist, which fails
+# because the metadata server at 169.254.169.254 doesn't support mTLS from user VMs.
+# GCE_METADATA_MTLS_MODE=none tells google-auth to skip mTLS entirely (the real fix).
+export GCE_METADATA_MTLS_MODE="none"
+log_with_timestamp "✅ GCE metadata mTLS disabled (GCE_METADATA_MTLS_MODE=none)"
+
+# Verify metadata server is actually reachable before running Python
+log_with_timestamp "Testing metadata server connectivity..."
+if curl -s -f -H "Metadata-Flavor: Google" "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email" 2>/dev/null; then
+    log_with_timestamp "✅ Metadata server reachable"
+else
+    log_with_timestamp "❌ WARNING: Metadata server not reachable via curl"
+fi
+
+# Smoke test: verify Python can authenticate to GCP before doing expensive SFTP work
+log_with_timestamp "Smoke-testing Python GCP auth..."
+log_with_timestamp "mTLS certs present: $(ls -la /run/google-mds-mtls/ 2>/dev/null || echo 'no')"
+if python3 -c "
+from google.cloud import storage
+client = storage.Client(project='landbrugsdata-1')
+list(client.list_blobs('landbruget-data', prefix='silver/property_owners/', max_results=1))
+print('GCP auth OK')
+"; then
+    log_with_timestamp "✅ Python GCP auth smoke test passed"
+else
+    log_with_timestamp "❌ Python GCP auth smoke test FAILED"
+    log_with_timestamp "Dumping google-auth version info..."
+    python3 -c "import google.auth; print(f'google-auth version: {google.auth.__version__}')" 2>&1 || true
+    log_with_timestamp "This VM cannot authenticate to GCP. Check mTLS/metadata config."
+    # Don't exit — let the main script run so we get a detailed error in the log
+fi
 
 # Run the enhanced transfer script
 log_with_timestamp "Executing enhanced transfer script with processing..."
