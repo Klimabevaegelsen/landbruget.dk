@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
+import { getR2BaseUrl } from '@/lib/r2';
 import type { ManifestData } from '@/types';
 
 const DISPLAY_FONT = 'var(--font-fraunces), Georgia, "Times New Roman", serif';
@@ -70,8 +71,7 @@ export default function HomePage() {
   const [featuresRef, featuresVisible] = useInView(0.1);
   const [ctaRef, ctaVisible] = useInView(0.2);
 
-  const R2_BASE_URL =
-    process.env.NEXT_PUBLIC_R2_BASE_URL || 'https://your-r2-bucket.r2.dev';
+  const R2_BASE_URL = getR2BaseUrl();
 
   useEffect(() => {
     async function loadStats() {
