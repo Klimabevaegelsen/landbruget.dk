@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCachedPesticideCompanyDetails } from '@/lib/server-cache';
 
+// This handler reads request-specific URL params, so it must stay dynamic.
+export const dynamic = 'force-dynamic';
+
 // Revalidate this route every 7 days (server-side caching)
 // Data updates weekly on Tuesdays - use POST /api/revalidate-cache after data updates
 export const revalidate = 604800; // 7 days in seconds
