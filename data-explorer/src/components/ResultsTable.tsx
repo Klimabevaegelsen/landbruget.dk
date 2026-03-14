@@ -15,13 +15,8 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Download,
-  Table as TableIcon,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Loader2,
-  AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { exportToCSV } from '@/lib/duckdb';
@@ -41,42 +36,59 @@ export function ResultsTable({
 }: ResultsTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
 
-  // Generate columns from data
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
     if (data.length === 0) return [];
-
     const firstRow = data[0];
-    return Object.keys(firstRow).map(key => ({
+    return Object.keys(firstRow).map((key) => ({
       accessorKey: key,
-      header: ({ column }) => {
-        return (
-          <button
-            type="button"
-            onClick={() => column.toggleSorting()}
-            className="flex items-center gap-2 hover:text-primary transition-colors font-semibold"
-          >
-            <span className="truncate">{key}</span>
-            {column.getIsSorted() === 'asc' ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : column.getIsSorted() === 'desc' ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronsUpDown className="h-4 w-4 opacity-50" />
-            )}
-          </button>
-        );
-      },
+      header: ({ column }) => (
+        <button
+          type="button"
+          onClick={() => column.toggleSorting()}
+          className="flex items-center gap-1.5 transition-colors"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          <span className="truncate text-[10px] font-semibold tracking-[0.12em] uppercase">
+            {key}
+          </span>
+          {column.getIsSorted() === 'asc' ? (
+            <ChevronUp
+              className="h-3 w-3 flex-shrink-0"
+              style={{ color: 'var(--primary)' }}
+            />
+          ) : column.getIsSorted() === 'desc' ? (
+            <ChevronDown
+              className="h-3 w-3 flex-shrink-0"
+              style={{ color: 'var(--primary)' }}
+            />
+          ) : (
+            <ChevronsUpDown className="h-3 w-3 flex-shrink-0 opacity-30" />
+          )}
+        </button>
+      ),
       cell: ({ getValue }) => {
         const value = getValue();
 
-        // Handle different value types
         if (value === null || value === undefined) {
-          return <span className="text-muted-foreground italic">null</span>;
+          return (
+            <span
+              className="text-[11px] italic"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              null
+            </span>
+          );
         }
 
         if (typeof value === 'boolean') {
           return (
-            <span className={cn('font-semibold', value ? 'text-green-600' : 'text-red-600')}>
+            <span
+              className="text-[11px] font-semibold"
+              style={{
+                fontFamily: 'var(--font-geist-mono)',
+                color: value ? '#2d7a4f' : '#c53030',
+              }}
+            >
               {value.toString()}
             </span>
           );
@@ -84,7 +96,13 @@ export function ResultsTable({
 
         if (typeof value === 'number') {
           return (
-            <span className="font-mono text-right block">
+            <span
+              className="block text-right text-[11px] tabular-nums"
+              style={{
+                fontFamily: 'var(--font-geist-mono)',
+                color: 'var(--foreground)',
+              }}
+            >
               {new Intl.NumberFormat('da-DK').format(value)}
             </span>
           );
@@ -92,13 +110,26 @@ export function ResultsTable({
 
         if (typeof value === 'object') {
           return (
-            <code className="text-xs bg-muted px-1 py-0.5 rounded">
+            <span
+              className="block truncate text-[11px]"
+              style={{
+                fontFamily: 'var(--font-geist-mono)',
+                color: 'var(--muted-foreground)',
+              }}
+            >
               {JSON.stringify(value)}
-            </code>
+            </span>
           );
         }
 
-        return <span className="truncate block">{String(value)}</span>;
+        return (
+          <span
+            className="block truncate text-[12px]"
+            style={{ color: 'var(--foreground)' }}
+          >
+            {String(value)}
+          </span>
+        );
       },
     }));
   }, [data]);
@@ -106,51 +137,64 @@ export function ResultsTable({
   const table = useReactTable({
     data,
     columns,
-    state: {
-      sorting,
-    },
+    state: { sorting },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 50,
-      },
-    },
+    initialState: { pagination: { pageSize: 50 } },
   });
 
   function handleExportCSV() {
     if (data.length === 0) return;
-
-    // Generate filename with timestamp
     const timestamp = new Date().toISOString().split('T')[0];
-    const filename = `query_results_${timestamp}.csv`;
-
-    exportToCSV(data, filename);
+    exportToCSV(data, `query_results_${timestamp}.csv`);
   }
 
-  // Loading state
   if (loading) {
     return (
-      <div className={cn('rounded-lg border p-8', className)}>
-        <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="font-semibold">Executing query...</span>
+      <div className={cn('py-12', className)}>
+        <div className="flex flex-col items-center gap-3">
+          <Loader2
+            className="h-6 w-6 animate-spin"
+            style={{ color: 'var(--primary)' }}
+          />
+          <span
+            className="text-[11px] tracking-wider uppercase"
+            style={{ color: 'var(--muted-foreground)' }}
+          >
+            Executing query
+          </span>
         </div>
       </div>
     );
   }
 
-  // Error state
   if (error) {
     return (
-      <div className={cn('rounded-lg border border-destructive bg-destructive/10 p-6', className)}>
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <h3 className="font-semibold text-destructive mb-1">Query Error</h3>
-            <pre className="text-sm text-muted-foreground whitespace-pre-wrap font-mono bg-muted/50 p-3 rounded mt-2">
+      <div
+        className={cn('border-l-2 pl-4 py-2', className)}
+        style={{ borderColor: 'var(--destructive)' }}
+      >
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 flex-shrink-0"
+            style={{ color: 'var(--destructive)' }}
+          />
+          <div>
+            <p
+              className="mb-2 text-xs font-semibold"
+              style={{ color: 'var(--destructive)' }}
+            >
+              Query Error
+            </p>
+            <pre
+              className="text-[11px] whitespace-pre-wrap"
+              style={{
+                fontFamily: 'var(--font-geist-mono)',
+                color: 'var(--muted-foreground)',
+              }}
+            >
               {error}
             </pre>
           </div>
@@ -159,62 +203,73 @@ export function ResultsTable({
     );
   }
 
-  // Empty state
   if (data.length === 0) {
     return (
-      <div className={cn('rounded-lg border border-dashed p-8', className)}>
-        <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
-          <TableIcon className="h-12 w-12" />
-          <div className="text-center">
-            <h3 className="font-semibold mb-1">No Results</h3>
-            <p className="text-sm">
-              Run a query to see results here
-            </p>
-          </div>
-        </div>
+      <div className={cn('py-12 text-center', className)}>
+        <p
+          className="text-[11px] tracking-wider uppercase"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          Run a query to see results
+        </p>
       </div>
     );
   }
 
+  const { pageIndex, pageSize } = table.getState().pagination;
+  const from = pageIndex * pageSize + 1;
+  const to = Math.min((pageIndex + 1) * pageSize, data.length);
+
   return (
-    <div className={cn('space-y-4', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <TableIcon className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold">Query Results</h3>
-          <span className="text-sm text-muted-foreground">
-            ({new Intl.NumberFormat('da-DK').format(data.length)} rows)
+    <div className={cn('', className)}>
+      {/* Header row */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className="text-[10px] font-semibold tracking-[0.2em] uppercase"
+            style={{ color: 'var(--muted-foreground)' }}
+          >
+            Results
+          </span>
+          <span
+            className="text-[10px] tabular-nums"
+            style={{
+              fontFamily: 'var(--font-geist-mono)',
+              color: 'var(--muted-foreground)',
+            }}
+          >
+            {new Intl.NumberFormat('da-DK').format(data.length)} rows
           </span>
         </div>
         <button
           type="button"
           onClick={handleExportCSV}
-          className={cn(
-            'inline-flex items-center gap-2 px-3 py-2 rounded-lg',
-            'text-sm font-semibold',
-            'bg-secondary text-secondary-foreground',
-            'hover:bg-secondary/80 transition-colors',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-          )}
+          className="flex items-center gap-1.5 text-[10px] tracking-wider uppercase transition-colors"
+          style={{ color: 'var(--muted-foreground)' }}
         >
-          <Download className="h-4 w-4" />
-          <span>Export CSV</span>
+          <Download className="h-3 w-3" />
+          CSV
         </button>
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border overflow-hidden">
+      <div
+        className="overflow-hidden border"
+        style={{ borderColor: 'var(--border)' }}
+      >
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
-            <thead className="bg-muted/50">
-              {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map(header => (
-                    <th
-                      key={header.id}
-                      className="px-4 py-3 text-left text-sm border-b"
-                    >
+            <thead>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr
+                  key={headerGroup.id}
+                  style={{
+                    background: 'var(--muted)',
+                    borderBottom: `1px solid var(--border)`,
+                  }}
+                >
+                  {headerGroup.headers.map((header) => (
+                    <th key={header.id} className="px-4 py-2.5 text-left">
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -230,16 +285,17 @@ export function ResultsTable({
               {table.getRowModel().rows.map((row, idx) => (
                 <tr
                   key={row.id}
-                  className={cn(
-                    'hover:bg-accent/50 transition-colors',
-                    idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'
-                  )}
+                  className="transition-colors"
+                  style={{
+                    background:
+                      idx % 2 === 0
+                        ? 'var(--background)'
+                        : 'color-mix(in oklch, var(--muted) 30%, var(--background))',
+                    borderBottom: `1px solid var(--border)`,
+                  }}
                 >
-                  {row.getVisibleCells().map(cell => (
-                    <td
-                      key={cell.id}
-                      className="px-4 py-2 text-sm border-b max-w-md"
-                    >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="max-w-xs px-4 py-2">
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -254,72 +310,67 @@ export function ResultsTable({
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1} to{' '}
-          {Math.min(
-            (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-            data.length
-          )}{' '}
-          of {new Intl.NumberFormat('da-DK').format(data.length)} rows
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => table.setPageIndex(0)}
-            disabled={!table.getCanPreviousPage()}
-            className={cn(
-              'p-2 rounded-lg border transition-colors',
-              'hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-            aria-label="First page"
+      {table.getPageCount() > 1 && (
+        <div className="mt-3 flex items-center justify-between">
+          <span
+            className="text-[10px] tabular-nums"
+            style={{
+              fontFamily: 'var(--font-geist-mono)',
+              color: 'var(--muted-foreground)',
+            }}
           >
-            <ChevronsLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-            className={cn(
-              'p-2 rounded-lg border transition-colors',
-              'hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-
-          <span className="text-sm px-3">
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+            {from}–{to} of {new Intl.NumberFormat('da-DK').format(data.length)}
           </span>
 
-          <button
-            type="button"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-            className={cn(
-              'p-2 rounded-lg border transition-colors',
-              'hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-            aria-label="Next page"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-            disabled={!table.getCanNextPage()}
-            className={cn(
-              'p-2 rounded-lg border transition-colors',
-              'hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-            aria-label="Last page"
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+              className="text-[10px] tracking-wider uppercase transition-colors disabled:opacity-30"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              ⟨⟨
+            </button>
+            <button
+              type="button"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              className="text-[11px] transition-colors disabled:opacity-30"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              ←
+            </button>
+            <span
+              className="text-[10px] tabular-nums"
+              style={{
+                fontFamily: 'var(--font-geist-mono)',
+                color: 'var(--foreground)',
+              }}
+            >
+              {pageIndex + 1} / {table.getPageCount()}
+            </span>
+            <button
+              type="button"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              className="text-[11px] transition-colors disabled:opacity-30"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              →
+            </button>
+            <button
+              type="button"
+              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              disabled={!table.getCanNextPage()}
+              className="text-[10px] tracking-wider uppercase transition-colors disabled:opacity-30"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              ⟩⟩
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
