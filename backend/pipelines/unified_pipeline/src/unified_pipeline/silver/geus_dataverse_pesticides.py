@@ -102,16 +102,16 @@ class GEUSDataversePesticidesSilver(
         Returns:
             Path to the downloaded temporary file
         """
-        gcs_full_path = f"gs://{self.config.bucket}/{rds_path}"
-        self.log.info(f"Downloading .rds file from {gcs_full_path}")
+        storage_path = f"{self.config.bucket}/{rds_path}"
+        self.log.info(f"Downloading .rds file from {storage_path}")
 
         # Create temporary file
         tmp_file = tempfile.NamedTemporaryFile(suffix=".rds", delete=False)
         tmp_path = Path(tmp_file.name)
         tmp_file.close()
 
-        # Download using gcsfs directly (binary read)
-        with self.gcs_access.fs.open(gcs_full_path, "rb") as gcs_file:
+        # Download using s3fs (R2) directly (binary read)
+        with self.gcs_access.fs.open(storage_path, "rb") as gcs_file:
             with open(tmp_path, "wb") as local_file:
                 local_file.write(gcs_file.read())
 
