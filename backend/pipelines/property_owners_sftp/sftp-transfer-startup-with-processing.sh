@@ -910,6 +910,14 @@ validate_success() {
     fi
 }
 
+# Force HTTP for GCE metadata server - newer google-auth versions may attempt
+# mTLS/HTTPS metadata endpoint which fails SSL cert verification on this VM.
+# GCE_METADATA_HOST bypasses DNS and goes directly to the metadata IP over HTTP.
+# GCE_METADATA_ROOT sets the full base URL (fallback for older google-auth versions).
+export GCE_METADATA_HOST="169.254.169.254"
+export GCE_METADATA_ROOT="http://metadata.google.internal"
+log_with_timestamp "✅ GCE metadata configured: HOST=169.254.169.254 (bypasses DNS + mTLS)"
+
 # Run the enhanced transfer script
 log_with_timestamp "Executing enhanced transfer script with processing..."
 sync
