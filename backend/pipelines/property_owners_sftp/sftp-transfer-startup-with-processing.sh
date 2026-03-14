@@ -24,8 +24,9 @@ handle_error() {
 # Set error trap
 trap 'handle_error ${LINENO}' ERR
 
-# Log everything with timestamps
-exec > >(while IFS= read -r line; do log_with_timestamp "$line"; done) 2>&1
+# Log stdout with timestamps, keep stderr visible on serial port for debugging
+exec > >(while IFS= read -r line; do log_with_timestamp "$line"; done)
+exec 2> >(while IFS= read -r line; do log_with_timestamp "STDERR: $line"; done)
 
 log_with_timestamp "Starting enhanced SFTP to GCS transfer with processing"
 
@@ -75,15 +76,9 @@ log_with_timestamp "Creating Python virtual environment..."
 python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
-# Install uv (canonical method for Linux VMs)
-log_with_timestamp "Installing uv..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-UV=/root/.local/bin/uv
-
-# Install required Python packages
-# Note: 'uuid' is Python stdlib — no install needed
+# Install required Python packages using pip (simpler and more reliable on ephemeral VMs)
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-$UV pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
+pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
