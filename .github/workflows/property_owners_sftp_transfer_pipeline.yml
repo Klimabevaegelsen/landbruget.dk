@@ -1,4 +1,4 @@
-name: Weekly Property Owners SFTP to R2 Transfer Pipeline
+name: Weekly Property Owners SFTP to GCS Transfer Pipeline
 
 on:
   schedule:
@@ -8,9 +8,6 @@ on:
     # Allow manual triggering for testing
 
 env:
-  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
   LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
 
@@ -26,6 +23,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Create SFTP Transfer and Processing VM
         run: |
@@ -81,8 +86,8 @@ jobs:
           echo "  1. Install dependencies (Python, ijson, pyarrow)"
           echo "  2. Download latest ZIP from SFTP server"
           echo "  3. Extract and process JSON with privacy transformations"
-          echo "  4. Upload processed Parquet to: s3://landbruget-data/silver/property_owners/"
-          echo "  5. Upload original ZIP backup to: s3://landbruget-data/bronze/property_owners/"
+          echo "  4. Upload processed Parquet to: gs://landbruget-data/silver/property_owners/"
+          echo "  5. Upload original ZIP backup to: gs://landbruget-data/bronze/property_owners/"
           echo "  6. Delete itself when complete"
           echo ""
           echo "VM Specs: e2-standard-8 (8 cores, 32GB RAM, 30GB SSD) - Standard instance"
@@ -114,7 +119,7 @@ jobs:
                 df -h /tmp 2>/dev/null || echo 'Could not check disk'
                 echo 'Attempting emergency upload of any partial data...'
                 if [ -d '/tmp/property_owners_data' ]; then
-                  aws s3 cp /tmp/property_owners_data/ s3://landbruget-data/bronze/property_owners/timeout_$(date +%Y%m%d_%H%M%S)/ --recursive --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com || echo 'Emergency upload failed'
+                  gsutil -m cp -r /tmp/property_owners_data/ gs://landbruget-data/bronze/property_owners/timeout_$(date +%Y%m%d_%H%M%S)/ || echo 'Emergency upload failed'
                 fi
                 echo '=== END TIMEOUT CLEANUP ==='
               " 2>/dev/null || echo "Could not connect for timeout cleanup"
@@ -130,3 +135,55 @@ jobs:
           else
             echo "✅ VM has been deleted - transfer and processing completed successfully"
           fi
+
+  sync-to-r2:
+    name: Sync Property Owners to R2
+    runs-on: ubuntu-latest
+    needs: transfer-and-process
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Install rclone
+        run: |
+          curl -LsSf https://downloads.rclone.org/rclone-current-linux-amd64.zip -o rclone.zip
+          unzip -q rclone.zip
+          sudo mv rclone-*-linux-amd64/rclone /usr/local/bin/
+          sudo chmod +x /usr/local/bin/rclone
+          rclone version
+
+      - name: Configure rclone remotes
+        run: |
+          # GCS remote (uses application default credentials)
+          rclone config create gcs "google cloud storage" --non-interactive
+
+          # R2 remote (S3-compatible)
+          rclone config create r2 s3 \
+            access_key_id=${{ secrets.R2_ACCESS_KEY_ID }} \
+            secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }} \
+            endpoint=https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com \
+            provider=Cloudflare \
+            --non-interactive
+
+      - name: Sync property_owners from GCS to R2
+        run: |
+          echo "🚀 Syncing property_owners from GCS to R2..."
+          rclone sync \
+            gcs:${{ secrets.GCS_BUCKET }}/silver/property_owners \
+            r2:${{ secrets.R2_BUCKET }}/silver/property_owners \
+            --transfers 8 \
+            --checkers 8 \
+            --stats 10s \
+            --stats-one-line \
+            --verbose
+          echo "✅ Property owners synced to R2"
