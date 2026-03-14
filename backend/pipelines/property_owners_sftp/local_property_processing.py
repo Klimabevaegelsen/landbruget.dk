@@ -2,7 +2,6 @@
 
 import contextlib
 import json
-import logging
 import os
 import sys
 import traceback
@@ -55,8 +54,9 @@ except ImportError:
     PIPELINE_METADATA_AVAILABLE = False
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+from common.logging_utils import setup_pipeline_logger
+
+logger = setup_pipeline_logger("property_owners_sftp", level=os.getenv("LOG_LEVEL", "INFO"))
 
 
 def flush_logs():
