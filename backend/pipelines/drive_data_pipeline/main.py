@@ -784,6 +784,22 @@ def main() -> int:
                 print("Error: No files were processed in Silver layer")
             return 1
 
+        if not args.bronze_only:
+            silver_total = progress.silver_stats["total_files"]
+            silver_errors = progress.silver_stats["processing_errors"]
+            if silver_total > 0 and silver_errors > 0:
+                error_rate = silver_errors / silver_total
+                if error_rate > 0.5:
+                    logger.error(
+                        f"Pipeline failed: {silver_errors}/{silver_total} Silver files failed "
+                        f"({error_rate:.1%} error rate exceeds 50% threshold)"
+                    )
+                    if not args.quiet:
+                        print(
+                            f"Error: {silver_errors}/{silver_total} files failed ({error_rate:.1%})"
+                        )
+                    return 1
+
         # Generate schema documentation for processed data
         if not args.bronze_only:
             try:
