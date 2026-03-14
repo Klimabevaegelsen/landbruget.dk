@@ -22,17 +22,8 @@ import {
 import { useState } from 'react';
 import { useCompanyNavigation } from '@/hooks/useCompanyNavigation';
 import { useCompanyCache } from '@/hooks/useCompanyCache';
-
-interface RankingItem {
-  company_id: string;
-  cvr_number: string;
-  company_name: string;
-  municipality?: string;
-  rank: number;
-  value: number;
-  formatted_value: string;
-  year?: number;
-}
+import { RankingItem } from '@/types/rankings';
+import { getCategoryColor, getCategoryLabel } from '@/lib/category-utils';
 
 interface RankingTableEnhancedProps {
   id: string;
@@ -47,40 +38,6 @@ interface RankingTableEnhancedProps {
 
 type SortField = 'rank' | 'company_name' | 'value' | 'municipality';
 type SortDirection = 'asc' | 'desc';
-
-const getCategoryColor = (category: string) => {
-  switch (category) {
-    case 'financial':
-      return 'bg-organic/10 text-organic border-organic/20';
-    case 'field':
-      return 'bg-low-risk/10 text-low-risk border-low-risk/20';
-    case 'environment':
-      return 'bg-destructive/10 text-destructive border-destructive/20';
-    case 'animal':
-      return 'bg-conventional/10 text-conventional border-conventional/20';
-    case 'worker':
-      return 'bg-primary/10 text-primary border-primary/20';
-    default:
-      return 'bg-muted text-muted-foreground border-border';
-  }
-};
-
-const getCategoryLabel = (category: string) => {
-  switch (category) {
-    case 'financial':
-      return 'Økonomi';
-    case 'field':
-      return 'Landbrugsareal';
-    case 'environment':
-      return 'Miljø';
-    case 'animal':
-      return 'Husdyr';
-    case 'worker':
-      return 'Medarbejdere';
-    default:
-      return category;
-  }
-};
 
 export default function RankingTableEnhanced({
   title,
