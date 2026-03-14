@@ -149,20 +149,32 @@ class BronzeProcessor:
                             item.get("file_size", 0) for item in in_memory_data.values()
                         )
 
-                    # Create pipeline metadata
-                    pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
-                        source_key="drive_pesticide_reports",  # From DATA_SOURCE_REGISTRY
-                        record_count=processed_count,
-                        processing_duration=processing_duration,
-                        file_size_bytes=total_file_size,
-                    )
+                    # Derive source_key from the specific subfolder being processed.
+                    # Pattern: drive_<subfolder_lowercased_underscored>
+                    # Skip metadata when processing multiple subfolders (no single key applies).
+                    if specific_subfolders and len(specific_subfolders) == 1:
+                        source_key = "drive_" + specific_subfolders[0].lower().replace(" ", "_")
+                    else:
+                        logger.debug(
+                            "Skipping pipeline metadata: multiple or no subfolders specified"
+                        )
+                        source_key = None
 
-                    # Save pipeline metadata alongside the run
-                    pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
-                        pipeline_metadata, self.run_path / "pipeline_metadata.json"
-                    )
+                    if source_key is not None:
+                        # Create pipeline metadata
+                        pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                            source_key=source_key,
+                            record_count=processed_count,
+                            processing_duration=processing_duration,
+                            file_size_bytes=total_file_size,
+                        )
 
-                    logger.info(f"✅ Pipeline metadata saved to {pipeline_metadata_path}")
+                        # Save pipeline metadata alongside the run
+                        pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
+                            pipeline_metadata, self.run_path / "pipeline_metadata.json"
+                        )
+
+                        logger.info(f"✅ Pipeline metadata saved to {pipeline_metadata_path}")
 
                 except Exception as e:
                     logger.error(f"❌ Failed to create pipeline metadata: {e}")
