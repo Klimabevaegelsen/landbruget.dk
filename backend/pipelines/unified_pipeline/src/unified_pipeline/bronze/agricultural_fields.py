@@ -370,6 +370,8 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
 
             self.log.info("Agricultural Fields bronze job completed successfully for all years")
 
-            # Return metadata indicating data was saved to storage
-            # Silver layer will read from storage instead of using in-memory data
-            return None  # Force silver layer to read from storage
+            # Return sentinel to signal success to the app (None = failure in app.py:248).
+            # Silver detects "saved_to_r2" and falls through to reading from R2 storage.
+            return {
+                "saved_to_r2": True,
+            }

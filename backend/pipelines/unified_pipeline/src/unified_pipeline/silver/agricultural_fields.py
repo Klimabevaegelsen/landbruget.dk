@@ -590,6 +590,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
         processed_data = {}
 
         async with AsyncTimer("Agricultural Fields Silver Job (DuckDB-spatial)"):
+            # Bronze returns a sentinel dict when it saved directly to R2 (instead of in-memory).
+            # Convert it to None so we fall through to R2 reading below.
+            if isinstance(bronze_data, dict) and bronze_data.get("saved_to_r2"):
+                self.log.info("Bronze saved data to R2 - reading from storage")
+                bronze_data = None
+
             # Log initial memory usage
             self._log_memory_usage("at start of processing")
 
