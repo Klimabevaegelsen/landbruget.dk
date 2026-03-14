@@ -26,9 +26,9 @@ except ImportError:
     # Fallback for different import paths
     import sys
 
-    sys.path.append(
-        "/Users/martincollignon/landbrugsdata/landbruget.dk/backend/pipelines/unified_pipeline/src"
-    )
+    unified_pipeline_path = Path(__file__).parent.parent / "unified_pipeline" / "src"
+    if unified_pipeline_path.exists():
+        sys.path.append(str(unified_pipeline_path))
     from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 # Import schema documentation and pipeline metadata system
