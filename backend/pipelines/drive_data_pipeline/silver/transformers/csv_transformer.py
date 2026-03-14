@@ -155,7 +155,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
                             AUTO_DETECT=TRUE,
                             HEADER=TRUE,
                             ENCODING='{encoding}',
-                            DELIMITER=';',
+                            delim=';',
                             IGNORE_ERRORS=true
                         )
                     """)
@@ -191,7 +191,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
                     SELECT * FROM read_csv('{file_path}',
                         AUTO_DETECT=TRUE,
                         HEADER=TRUE,
-                        DELIMITER=';',
+                        delim=';',
                         IGNORE_ERRORS=true
                     )
                 """)
