@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload sync manifest
         if: ${{ !inputs.dry_run && !inputs.skip_sync }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: r2-sync-manifest
           path: backend/scripts/manifest.json
@@ -180,7 +180,7 @@ jobs:
 
       - name: Upload schema documentation artifacts
         if: ${{ !inputs.skip_schema }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: schema-documentation
           path: backend/scripts/schema/
