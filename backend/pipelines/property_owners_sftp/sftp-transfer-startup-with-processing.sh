@@ -76,9 +76,13 @@ log_with_timestamp "Creating Python virtual environment..."
 python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
-# Install required Python packages using pip (simpler and more reliable on ephemeral VMs)
+# Install uv for fast package installation (pip install puts it on the venv PATH)
+log_with_timestamp "Installing uv..."
+pip3 install uv
+
+# Install required Python packages
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
+uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
