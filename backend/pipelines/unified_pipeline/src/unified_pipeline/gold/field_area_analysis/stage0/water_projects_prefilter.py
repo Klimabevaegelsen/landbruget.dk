@@ -273,7 +273,13 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
 
         # Final statistics
         processing_time = time.time() - start_time
-        reduction_pct = (1 - intersecting_count / total_projects) * 100
+        if total_projects == 0:
+            self.log.warning(
+                "⚠️ No water projects found after decomposition - dataset may be empty or missing"
+            )
+            reduction_pct = 0.0
+        else:
+            reduction_pct = (1 - intersecting_count / total_projects) * 100
 
         self.log.info(
             f"🎯 WATER PROJECTS REDUCTION: {total_projects:,} → {intersecting_count:,} "
