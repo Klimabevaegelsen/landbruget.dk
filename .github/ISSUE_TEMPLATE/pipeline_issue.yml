@@ -1,0 +1,50 @@
+name: Pipeline Issue
+description: Report a data pipeline failure or data quality issue
+labels: ["pipeline", "data"]
+body:
+  - type: dropdown
+    id: pipeline
+    attributes:
+      label: Pipeline
+      options:
+        - unified_pipeline
+        - chr_pipeline
+        - svineflytning_pipeline
+        - drive_data_pipeline
+        - bmd_scraper
+        - dma_scraper
+        - climate_pipeline
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Pipeline Stage
+      options:
+        - Bronze (data ingestion)
+        - Silver (data cleaning)
+        - Gold (aggregation/upload)
+        - CI/CD workflow
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What went wrong? Include error messages if available.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Paste the relevant error output
+      render: shell
+  - type: input
+    id: run_url
+    attributes:
+      label: GitHub Actions Run URL
+      description: Link to the failed workflow run (if applicable)
+      placeholder: https://github.com/...

@@ -1,0 +1,19 @@
+# Default owner for everything
+* @martincollignon
+
+# Frontend
+/frontend/ @martincollignon
+/frontend-pesticide/ @martincollignon
+
+# Backend & Pipelines
+/backend/ @martincollignon
+/backend/pipelines/ @martincollignon
+
+# Database
+/supabase/ @martincollignon
+
+# CI/CD
+/.github/ @martincollignon
+
+# Agent configuration
+/.claude/ @martincollignon

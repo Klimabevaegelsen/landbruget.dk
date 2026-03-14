@@ -15,6 +15,14 @@ repos:
       - id: debug-statements
         language_version: python3
 
+  # Stage 1b: Commit message validation (conventional commits)
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, docs, refactor, test, chore, ci, perf, build]
+
   # Stage 2: Python formatting and linting (sequenced properly)
   # IMPORTANT: Keep rev in sync with ruff version in .github/workflows/code-quality.yml
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -67,18 +75,17 @@ repos:
   # Stage 5: Frontend processing (improved reliability)
   - repo: local
     hooks:
-      # Frontend formatting with proper error handling
-      # Uses --prefer-offline for speed, falls back to full install if needed
-      - id: prettier-frontend
-        name: Prettier (Frontend)
+      # Frontend formatting with oxfmt
+      - id: oxfmt-frontend
+        name: oxfmt (Frontend)
         entry: bash
         args: [-c, "cd frontend && npm ci --prefer-offline && npm run format:check"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
 
-      - id: prettier-frontend-pesticide
-        name: Prettier (Frontend Pesticide)
+      - id: oxfmt-frontend-pesticide
+        name: oxfmt (Frontend Pesticide)
         entry: bash
         args: [-c, "cd frontend-pesticide && npm ci --prefer-offline && npm run format:check"]
         language: system
