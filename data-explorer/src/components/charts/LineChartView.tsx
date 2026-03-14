@@ -38,34 +38,49 @@ export function LineChartView({
   return (
     <div>
       {title && (
-        <h3 className="text-foreground mb-3 text-sm font-semibold">{title}</h3>
+        <p
+          className="mb-4 text-[10px] font-semibold tracking-[0.2em] uppercase"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          {title}
+        </p>
       )}
       <ResponsiveContainer width="100%" height={height ?? 350}>
         <RechartsLineChart
           data={data}
           margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-          <XAxis dataKey={xKey} tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} />
+          <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" />
+          <XAxis
+            dataKey={xKey}
+            tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+            axisLine={{ stroke: 'var(--border)' }}
+            tickLine={false}
+          />
+          <YAxis
+            tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+            axisLine={false}
+            tickLine={false}
+          />
           <Tooltip
             contentStyle={{
-              backgroundColor: 'var(--background)',
+              backgroundColor: 'var(--card)',
               border: '1px solid var(--border)',
-              borderRadius: '8px',
-              fontSize: '12px',
+              borderRadius: '0',
+              fontSize: '11px',
+              fontFamily: 'var(--font-geist-mono)',
             }}
           />
-          {yKeys.length > 1 && <Legend />}
+          {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px' }} />}
           {yKeys.map((key, i) => (
             <Line
               key={key}
               type="monotone"
               dataKey={key}
               stroke={COLORS[i % COLORS.length]}
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              activeDot={{ r: 5 }}
+              strokeWidth={1.5}
+              dot={{ r: 2.5 }}
+              activeDot={{ r: 4 }}
             />
           ))}
         </RechartsLineChart>

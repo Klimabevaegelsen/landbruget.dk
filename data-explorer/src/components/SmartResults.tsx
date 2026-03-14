@@ -2,7 +2,7 @@
 
 import { Renderer } from '@json-render/react';
 import { registry } from '@/lib/render/registry';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import type { Spec } from '@/lib/render/spec-utils';
 
 interface SmartResultsProps {
@@ -14,10 +14,16 @@ interface SmartResultsProps {
 export function SmartResults({ spec, loading, error }: SmartResultsProps) {
   if (loading) {
     return (
-      <div className="bg-card flex items-center gap-3 rounded-lg border p-6">
-        <Loader2 className="text-primary h-5 w-5 animate-spin" />
-        <span className="text-muted-foreground text-sm">
-          Generating visualization...
+      <div className="flex items-center gap-3 py-6">
+        <Loader2
+          className="h-4 w-4 flex-shrink-0 animate-spin"
+          style={{ color: 'var(--primary)' }}
+        />
+        <span
+          className="text-[11px] tracking-wider uppercase"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          Generating visualization…
         </span>
       </div>
     );
@@ -25,13 +31,30 @@ export function SmartResults({ spec, loading, error }: SmartResultsProps) {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3">
-        <p className="text-sm text-amber-800 dark:text-amber-200">
-          Could not generate visualization: {error}
-        </p>
-        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-          Showing table view instead.
-        </p>
+      <div
+        className="border-l-2 py-2 pl-4"
+        style={{ borderColor: 'var(--destructive)' }}
+      >
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle
+            className="mt-0.5 h-3.5 w-3.5 flex-shrink-0"
+            style={{ color: 'var(--destructive)' }}
+          />
+          <div>
+            <p
+              className="text-xs leading-relaxed"
+              style={{ color: 'var(--destructive)' }}
+            >
+              Could not generate visualization: {error}
+            </p>
+            <p
+              className="mt-0.5 text-[11px]"
+              style={{ color: 'var(--muted-foreground)' }}
+            >
+              Showing table view instead.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -39,12 +62,26 @@ export function SmartResults({ spec, loading, error }: SmartResultsProps) {
   if (!spec) return null;
 
   return (
-    <div className="bg-card rounded-lg border p-6">
+    <div>
+      <div className="mb-4">
+        <span
+          className="text-[10px] font-semibold tracking-[0.2em] uppercase"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          Visualization
+        </span>
+      </div>
       <Renderer
         spec={spec}
         registry={registry}
         fallback={({ element }) => (
-          <div className="text-muted-foreground rounded border border-dashed p-4 text-sm">
+          <div
+            className="border-l-2 py-2 pl-4 text-[11px]"
+            style={{
+              borderColor: 'var(--border)',
+              color: 'var(--muted-foreground)',
+            }}
+          >
             Unknown component: {element.type}
           </div>
         )}

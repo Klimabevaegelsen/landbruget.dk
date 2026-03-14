@@ -9,15 +9,32 @@ export function KPICard({ label, value, format, description }: KPICardProps) {
   const formattedValue = formatValue(value, format);
 
   return (
-    <div className="bg-card border-l-primary rounded-r-md border-y border-r border-l-[3px] py-5 pr-6 pl-5">
-      <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+    <div
+      className="border-t pt-4 pb-2"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <p
+        className="text-[10px] font-semibold tracking-[0.2em] uppercase"
+        style={{ color: 'var(--muted-foreground)' }}
+      >
         {label}
       </p>
-      <p className="text-foreground mt-1.5 text-2xl font-semibold tabular-nums">
+      <p
+        className="mt-2 text-3xl leading-none font-semibold tabular-nums"
+        style={{
+          fontFamily: 'var(--font-geist-mono)',
+          color: 'var(--foreground)',
+        }}
+      >
         {formattedValue}
       </p>
       {description && (
-        <p className="text-muted-foreground mt-1 text-xs">{description}</p>
+        <p
+          className="mt-1.5 text-[11px]"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          {description}
+        </p>
       )}
     </div>
   );

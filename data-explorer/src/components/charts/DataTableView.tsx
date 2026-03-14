@@ -69,33 +69,60 @@ export function DataTableView({
 
   return (
     <div>
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
+      <div
+        className="overflow-x-auto border"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        <table className="w-full border-collapse">
+          <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
+              <tr
+                key={headerGroup.id}
+                style={{
+                  background: 'var(--muted)',
+                  borderBottom: '1px solid var(--border)',
+                }}
+              >
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
                     onClick={header.column.getToggleSortingHandler()}
-                    className="text-muted-foreground hover:text-foreground cursor-pointer px-3 py-2 text-left font-medium whitespace-nowrap select-none"
+                    className="cursor-pointer px-3 py-2.5 text-left whitespace-nowrap select-none"
                   >
-                    {flexRender(
-                      header.column.columnDef.header,
-                      header.getContext()
-                    )}
-                    {header.column.getIsSorted() === 'asc' && ' ↑'}
-                    {header.column.getIsSorted() === 'desc' && ' ↓'}
+                    <span
+                      className="text-[10px] font-semibold tracking-[0.12em] uppercase"
+                      style={{ color: 'var(--muted-foreground)' }}
+                    >
+                      {flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                      {header.column.getIsSorted() === 'asc' && ' ↑'}
+                      {header.column.getIsSorted() === 'desc' && ' ↓'}
+                    </span>
                   </th>
                 ))}
               </tr>
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-muted/30 border-t">
+            {table.getRowModel().rows.map((row, idx) => (
+              <tr
+                key={row.id}
+                style={{
+                  background:
+                    idx % 2 === 0
+                      ? 'var(--background)'
+                      : 'color-mix(in oklch, var(--muted) 30%, var(--background))',
+                  borderBottom: '1px solid var(--border)',
+                }}
+              >
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-3 py-2 whitespace-nowrap">
+                  <td
+                    key={cell.id}
+                    className="px-3 py-2 text-[12px] whitespace-nowrap"
+                    style={{ color: 'var(--foreground)' }}
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -106,27 +133,35 @@ export function DataTableView({
       </div>
 
       {table.getPageCount() > 1 && (
-        <div className="text-muted-foreground mt-3 flex items-center justify-between text-xs">
-          <span>
-            Page {table.getState().pagination.pageIndex + 1} of{' '}
-            {table.getPageCount()} ({data.length.toLocaleString('da-DK')} rows)
+        <div className="mt-3 flex items-center justify-between">
+          <span
+            className="text-[10px] tabular-nums"
+            style={{
+              fontFamily: 'var(--font-geist-mono)',
+              color: 'var(--muted-foreground)',
+            }}
+          >
+            {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}{' '}
+            ({data.length.toLocaleString('da-DK')} rows)
           </span>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-4">
             <button
               type="button"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
-              className="hover:bg-muted rounded border px-2 py-1 disabled:opacity-30"
+              className="text-[11px] transition-colors disabled:opacity-30"
+              style={{ color: 'var(--muted-foreground)' }}
             >
-              Previous
+              ←
             </button>
             <button
               type="button"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
-              className="hover:bg-muted rounded border px-2 py-1 disabled:opacity-30"
+              className="text-[11px] transition-colors disabled:opacity-30"
+              style={{ color: 'var(--muted-foreground)' }}
             >
-              Next
+              →
             </button>
           </div>
         </div>

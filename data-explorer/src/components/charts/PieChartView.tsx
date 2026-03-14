@@ -41,7 +41,12 @@ export function PieChartView({
   return (
     <div>
       {title && (
-        <h3 className="text-foreground mb-3 text-sm font-semibold">{title}</h3>
+        <p
+          className="mb-4 text-[10px] font-semibold tracking-[0.2em] uppercase"
+          style={{ color: 'var(--muted-foreground)' }}
+        >
+          {title}
+        </p>
       )}
       <ResponsiveContainer width="100%" height={height ?? 350}>
         <RechartsPieChart>
@@ -53,11 +58,11 @@ export function PieChartView({
             cy="50%"
             outerRadius={120}
             innerRadius={60}
-            paddingAngle={2}
+            paddingAngle={1}
             label={({ name, percent }: { name?: string; percent?: number }) =>
               `${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`
             }
-            labelLine={{ strokeWidth: 1 }}
+            labelLine={{ strokeWidth: 0.5, stroke: 'var(--muted-foreground)' }}
           >
             {data.map((_, index) => (
               <Cell key={index} fill={COLORS[index % COLORS.length]} />
@@ -65,13 +70,14 @@ export function PieChartView({
           </Pie>
           <Tooltip
             contentStyle={{
-              backgroundColor: 'var(--background)',
+              backgroundColor: 'var(--card)',
               border: '1px solid var(--border)',
-              borderRadius: '8px',
-              fontSize: '12px',
+              borderRadius: '0',
+              fontSize: '11px',
+              fontFamily: 'var(--font-geist-mono)',
             }}
           />
-          <Legend />
+          <Legend wrapperStyle={{ fontSize: '11px' }} />
         </RechartsPieChart>
       </ResponsiveContainer>
     </div>
