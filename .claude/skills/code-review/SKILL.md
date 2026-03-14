@@ -63,10 +63,10 @@ import DOMPurify from 'dompurify';
 
 ```typescript
 // ❌ BAD - Logging sensitive data
-console.log('User data:', userData);
+console_log('User data:', userData);
 
 // ✅ GOOD - Redact sensitive fields
-console.log('User ID:', userData.id);
+console_log('User ID:', userData.id);
 
 // ❌ BAD - Exposing API keys in client
 const apiKey = process.env.SUPABASE_KEY; // This might be service key!
@@ -342,7 +342,7 @@ ST_Intersects(geom1, ST_Buffer(geom2, 1000))
 
 ### Code Quality
 - [ ] No commented-out code
-- [ ] No console.log in production code
+- [ ] No debug logging in production code
 - [ ] Meaningful variable names
 - [ ] Components under 200 lines
 - [ ] Single responsibility principle

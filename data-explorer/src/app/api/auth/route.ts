@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const AUTH_COOKIE = 'data_auth';
-// Cookie lives for 7 days
-const MAX_AGE = 60 * 60 * 24 * 7;
+import { getAuthConfig } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   const { password } = await request.json();
 
-  const sitePassword = process.env.SITE_PASSWORD;
-  const cookieValue = process.env.AUTH_COOKIE_VALUE;
+  const { sitePassword, cookieValue, authCookieName, cookieMaxAge, isConfigured } = getAuthConfig();
 
-  if (!sitePassword || !cookieValue) {
+  if (!isConfigured || !sitePassword || !cookieValue) {
     return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
   }
 
@@ -19,11 +15,11 @@ export async function POST(request: NextRequest) {
   }
 
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(AUTH_COOKIE, cookieValue, {
+  response.cookies.set(authCookieName, cookieValue, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: MAX_AGE,
+    maxAge: cookieMaxAge,
     path: '/',
   });
 

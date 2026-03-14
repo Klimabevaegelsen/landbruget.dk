@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Database, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const from = searchParams.get('from') || '/';
 
@@ -24,13 +23,16 @@ export default function LoginForm() {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ password }),
       });
 
       if (res.ok) {
-        router.replace(from);
+        const safeFrom = from.startsWith('/') ? from : '/';
+        window.location.assign(safeFrom);
       } else {
-        setError('Forkert adgangskode');
+        const data = await res.json().catch(() => null);
+        setError(data?.error === 'Server misconfigured' ? 'Serveren er ikke konfigureret korrekt.' : 'Forkert adgangskode');
         setPassword('');
         inputRef.current?.focus();
       }

@@ -1,10 +1,63 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Database, ArrowRight, Table, HardDrive, FileSpreadsheet, Sparkles } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ArrowUpRight } from 'lucide-react';
 import type { ManifestData } from '@/types';
+
+const DISPLAY_FONT = 'var(--font-fraunces), Georgia, "Times New Roman", serif';
+const EASE = 'var(--ease-out-quint)';
+
+const DATASET_NAMES = [
+  'Markblok',
+  'CHR Register',
+  'Husdyrhold',
+  'Afgrødekort',
+  'Pesticidkontrol',
+  'Jordstykker',
+  'CVR Landbrug',
+  'Gødningsregnskab',
+  'Vandmiljøplan',
+  'Naturarealer',
+  'Skovregistret',
+  'Ejendomsvurdering',
+  'Svineflytninger',
+  'Kvægtælling',
+  'Sprøjtejournaler',
+  'Markplan',
+  'Nitratklasser',
+  'Dyrevelfærd',
+];
+
+// Deterministic grid — no Math.random() to avoid hydration mismatch
+function makeGridCells(count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const v = (i * 7919 + 3571) % 9999;
+    const opacity = 0.035 + ((i * 17 + 3) % 60) / 2000;
+    return { value: String(v).padStart(4, '0'), opacity };
+  });
+}
+
+const GRID_CELLS = makeGridCells(120);
+
+/** One-shot intersection observer — fires `true` once element enters viewport */
+function useInView(threshold = 0.15) {
+  const ref = useRef<HTMLElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setVisible(true);
+      },
+      { threshold }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return [ref, visible] as const;
+}
 
 export default function HomePage() {
   const [stats, setStats] = useState<{
@@ -12,256 +65,404 @@ export default function HomePage() {
     totalRows: number;
     totalSize: number;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  // R2 base URL - should match your actual R2 bucket
-  const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || 'https://your-r2-bucket.r2.dev';
+  const [statsRef, statsVisible] = useInView(0.2);
+  const [featuresRef, featuresVisible] = useInView(0.1);
+  const [ctaRef, ctaVisible] = useInView(0.2);
+
+  const R2_BASE_URL =
+    process.env.NEXT_PUBLIC_R2_BASE_URL || 'https://your-r2-bucket.r2.dev';
 
   useEffect(() => {
     async function loadStats() {
       try {
-        const manifestUrl = `${R2_BASE_URL}/manifest.json`;
-        const response = await fetch(manifestUrl);
-
-        if (!response.ok) {
-          throw new Error('Failed to load manifest');
-        }
-
+        const response = await fetch(`${R2_BASE_URL}/manifest.json`);
+        if (!response.ok) return;
         const manifest: ManifestData = await response.json();
-
-        // Calculate statistics
-        const totalRows = manifest.datasets.reduce((sum, ds) => sum + ds.rowCount, 0);
-        const totalSize = manifest.datasets.reduce((sum, ds) => sum + ds.sizeBytes, 0);
-
         setStats({
           datasets: manifest.datasets.length,
-          totalRows,
-          totalSize,
+          totalRows: manifest.datasets.reduce((s, d) => s + d.rowCount, 0),
+          totalSize: manifest.datasets.reduce((s, d) => s + d.sizeBytes, 0),
         });
-      } catch (err) {
-        console.error('Error loading statistics:', err);
-      } finally {
-        setLoading(false);
+      } catch {
+        // Stats are decorative — fail silently
       }
     }
-
     loadStats();
   }, [R2_BASE_URL]);
 
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  function fmtRows(n: number) {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+    return String(n);
   }
 
-  function formatNumber(num: number): string {
-    return new Intl.NumberFormat('da-DK').format(num);
+  function fmtSize(bytes: number) {
+    if (bytes >= 1_073_741_824)
+      return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`;
+    return `${bytes} B`;
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <div className="border-b bg-gradient-to-b from-background to-muted/20">
-        <div className="container mx-auto px-4 py-16 md:py-24">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <div className="inline-flex items-center gap-3 px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-semibold mb-4">
-              <Database className="h-4 w-4" />
-              <span>Danish Agricultural Data</span>
-            </div>
+    <div className="bg-background min-h-screen">
+      {/* ── Navigation ─────────────────────────────────────────────── */}
+      <nav
+        className="motion-animate flex items-center justify-between px-6 pt-8 sm:px-10 lg:px-16"
+        style={{ animation: `fadeUp 0.5s ${EASE} 0s both` }}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="text-foreground text-sm font-semibold tracking-tight">
+            Landbruget.dk
+          </span>
+          <span className="text-border">·</span>
+          <span className="text-muted-foreground text-sm">Data Explorer</span>
+        </div>
+        <Link
+          href="/explore"
+          className="border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground rounded-full border px-4 py-1.5 text-xs font-semibold transition-all duration-200 active:scale-95"
+        >
+          Open Explorer
+        </Link>
+      </nav>
 
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-              Explore Agricultural Data
+      {/* ── Hero ───────────────────────────────────────────────────── */}
+      <section className="px-6 pt-16 sm:px-10 lg:px-16">
+        <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-5 lg:gap-6">
+          {/* Left: Editorial headline — staggered entrance */}
+          <div className="lg:col-span-3">
+            <p
+              className="motion-animate text-muted-foreground mb-8 text-xs font-semibold tracking-[0.2em] uppercase"
+              style={{ animation: `fadeUp 0.6s ${EASE} 0.15s both` }}
+            >
+              Danish Agricultural Transparency
+            </p>
+
+            <h1
+              className="motion-animate text-foreground mb-8 text-[clamp(3.25rem,8vw,6.5rem)] leading-[0.9] font-bold"
+              style={{
+                fontFamily: DISPLAY_FONT,
+                animation: `fadeUp 0.9s ${EASE} 0.3s both`,
+              }}
+            >
+              Agricultural
+              <br />
+              data,
+              <br />
+              <em className="text-primary not-italic">open.</em>
             </h1>
 
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Query and analyze comprehensive datasets from Danish agricultural registries.
-              Powered by DuckDB-WASM for instant browser-based analytics.
+            <p
+              className="motion-animate text-muted-foreground mb-10 max-w-[420px] text-base leading-relaxed"
+              style={{ animation: `fadeUp 0.6s ${EASE} 0.55s both` }}
+            >
+              Query, analyze, and download data from 18+ Danish agricultural
+              registries — directly in your browser. No account required.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6">
+            <div
+              className="motion-animate flex items-center gap-6"
+              style={{ animation: `fadeUp 0.6s ${EASE} 0.7s both` }}
+            >
               <Link
                 href="/explore"
-                className={cn(
-                  'inline-flex items-center justify-center gap-2',
-                  'px-6 py-3 rounded-lg font-semibold text-base',
-                  'bg-primary text-primary-foreground hover:bg-primary/90',
-                  'transition-all shadow-lg hover:shadow-xl',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-                )}
+                className="group bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center gap-2 rounded-sm px-6 py-3 text-sm font-semibold transition-colors active:scale-[0.97]"
               >
-                <span>Start Exploring</span>
-                <ArrowRight className="h-5 w-5" />
+                Start Exploring
+                <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </Link>
-
               <a
                 href="https://landbruget.dk"
                 target="_blank"
                 rel="noopener noreferrer"
-                className={cn(
-                  'inline-flex items-center justify-center gap-2',
-                  'px-6 py-3 rounded-lg font-semibold text-base',
-                  'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-                  'transition-all',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-                )}
+                className="text-muted-foreground decoration-border hover:text-foreground text-sm font-semibold underline underline-offset-4 transition-colors"
               >
-                <span>About Landbruget.dk</span>
+                About the project
               </a>
             </div>
           </div>
+
+          {/* Right: Data-field texture — fades in alongside copy */}
+          <div
+            className="motion-animate hidden lg:col-span-2 lg:flex lg:justify-end"
+            style={{ animation: `fadeUp 1s ${EASE} 0.45s both` }}
+          >
+            <DataFieldVisual />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Dataset ticker ─────────────────────────────────────────── */}
+      <div
+        className="motion-animate border-border mt-16 overflow-hidden border-t border-b"
+        style={{ animation: `fadeUp 0.5s ${EASE} 0.85s both` }}
+      >
+        <div
+          className="text-muted-foreground flex py-3 text-[10px] font-semibold tracking-[0.15em] whitespace-nowrap uppercase"
+          style={{
+            animation: 'marquee 45s linear infinite',
+            willChange: 'transform',
+          }}
+          aria-hidden="true"
+        >
+          {[...DATASET_NAMES, ...DATASET_NAMES].map((name, i) => (
+            <span key={i} className="inline-flex items-center gap-5 px-5">
+              <span>{name}</span>
+              <span className="opacity-30">—</span>
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Statistics Section */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-          <StatCard
-            icon={Table}
-            label="Datasets"
-            value={loading ? '...' : stats ? formatNumber(stats.datasets) : 'N/A'}
-            description="Available tables"
+      {/* ── Stats strip ────────────────────────────────────────────── */}
+      {/* ref on section for IntersectionObserver; each StatItem animates independently */}
+      <section ref={statsRef} className="px-6 py-16 sm:px-10 lg:px-16">
+        <div className="flex max-w-2xl flex-col gap-10 sm:flex-row sm:items-start sm:gap-0">
+          <StatItem
+            value={stats ? `${stats.datasets}` : '—'}
+            suffix={stats ? '+' : ''}
+            label="Datasets available"
+            visible={statsVisible}
+            delay={0}
           />
-          <StatCard
-            icon={FileSpreadsheet}
-            label="Total Rows"
-            value={loading ? '...' : stats ? formatNumber(stats.totalRows) : 'N/A'}
-            description="Across all datasets"
+          <div className="border-border hidden self-stretch border-r sm:mx-10 sm:block lg:mx-14" />
+          <div className="bg-border h-px sm:hidden" />
+          <StatItem
+            value={stats ? fmtRows(stats.totalRows) : '—'}
+            label="Total rows of data"
+            visible={statsVisible}
+            delay={150}
           />
-          <StatCard
-            icon={HardDrive}
-            label="Data Size"
-            value={loading ? '...' : stats ? formatBytes(stats.totalSize) : 'N/A'}
-            description="Compressed Parquet"
+          <div className="border-border hidden self-stretch border-r sm:mx-10 sm:block lg:mx-14" />
+          <div className="bg-border h-px sm:hidden" />
+          <StatItem
+            value={stats ? fmtSize(stats.totalSize) : '—'}
+            label="Compressed Parquet"
+            visible={statsVisible}
+            delay={300}
           />
         </div>
+      </section>
+
+      {/* ── Thin rule ──────────────────────────────────────────────── */}
+      <div className="px-6 sm:px-10 lg:px-16">
+        <div className="bg-border h-px" />
       </div>
 
-      {/* Features Section */}
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">
-            Powerful Data Exploration
+      {/* ── Features ───────────────────────────────────────────────── */}
+      <section ref={featuresRef} className="px-6 py-16 sm:px-10 lg:px-16">
+        <div
+          className="motion-animate mb-12"
+          style={
+            featuresVisible
+              ? { animation: `fadeUp 0.6s ${EASE} 0ms both` }
+              : { opacity: 0 }
+          }
+        >
+          <h2
+            className="text-foreground text-[clamp(1.5rem,3vw,2.25rem)] leading-tight font-bold"
+            style={{ fontFamily: DISPLAY_FONT }}
+          >
+            What you can do
           </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <FeatureCard
-              icon={Sparkles}
-              title="Natural Language Queries"
-              description="Ask questions in plain language and get SQL queries generated automatically using AI."
-            />
-            <FeatureCard
-              icon={Database}
-              title="Browser-Based Analytics"
-              description="No downloads required. Query millions of rows directly in your browser using DuckDB-WASM."
-            />
-            <FeatureCard
-              icon={Table}
-              title="Multiple Data Sources"
-              description="Access data from CVR, CHR, BFE registries and more, all joinable and ready to explore."
-            />
-            <FeatureCard
-              icon={FileSpreadsheet}
-              title="Export to CSV"
-              description="Download your query results as CSV files for further analysis in Excel, Python, or R."
-            />
-          </div>
         </div>
-      </div>
 
-      {/* CTA Section */}
-      <div className="border-t bg-muted/30">
-        <div className="container mx-auto px-4 py-16">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <h2 className="text-3xl font-bold">
-              Ready to dive in?
-            </h2>
-            <p className="text-lg text-muted-foreground">
-              Start exploring Danish agricultural data with powerful SQL queries and AI-assisted analysis.
-            </p>
-            <Link
-              href="/explore"
-              className={cn(
-                'inline-flex items-center justify-center gap-2',
-                'px-6 py-3 rounded-lg font-semibold text-base',
-                'bg-primary text-primary-foreground hover:bg-primary/90',
-                'transition-all shadow-lg hover:shadow-xl',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
-              )}
+        <div className="grid max-w-4xl grid-cols-1 gap-x-20 gap-y-10 md:grid-cols-2">
+          <FeatureItem
+            number="01"
+            title="Ask in plain language"
+            description="Type a question, get a SQL query. AI translates your intent across all available datasets — no SQL knowledge required."
+            visible={featuresVisible}
+            delay={80}
+          />
+          <FeatureItem
+            number="02"
+            title="Runs entirely in your browser"
+            description="DuckDB-WASM processes millions of rows client-side. No data leaves your machine, no server roundtrips."
+            visible={featuresVisible}
+            delay={180}
+          />
+          <FeatureItem
+            number="03"
+            title="Join across registries"
+            description="All datasets connect on CVR, CHR, and BFE identifiers — company, herd, and cadastral IDs link the full agricultural picture."
+            visible={featuresVisible}
+            delay={280}
+          />
+          <FeatureItem
+            number="04"
+            title="Export and take it further"
+            description="Download query results as CSV. Bring them into Python, R, Excel, or any analysis tool of your choosing."
+            visible={featuresVisible}
+            delay={380}
+          />
+        </div>
+      </section>
+
+      {/* ── CTA ────────────────────────────────────────────────────── */}
+      <section
+        ref={ctaRef}
+        className="border-border border-t px-6 py-16 sm:px-10 lg:px-16"
+      >
+        <div
+          className="motion-animate flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between"
+          style={
+            ctaVisible
+              ? { animation: `fadeUp 0.7s ${EASE} 0ms both` }
+              : { opacity: 0 }
+          }
+        >
+          <div>
+            <h2
+              className="text-foreground mb-3 text-[clamp(2rem,5vw,3.75rem)] leading-[0.92] font-bold"
+              style={{ fontFamily: DISPLAY_FONT }}
             >
-              <span>Launch Explorer</span>
-              <ArrowRight className="h-5 w-5" />
-            </Link>
+              Ready to explore
+              <br />
+              the data?
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              Updates weekly. All datasets under open data licenses.
+            </p>
           </div>
-        </div>
-      </div>
 
-      {/* Footer */}
-      <div className="border-t">
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center text-sm text-muted-foreground">
-            <p>
-              Part of{' '}
-              <a
-                href="https://landbruget.dk"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-foreground hover:text-primary transition-colors"
-              >
-                Landbruget.dk
-              </a>
-              {' '}- Organizing information about the Danish agricultural sector
-            </p>
-            <p className="mt-2 text-xs">
-              Data updates weekly. All datasets are publicly available under open data licenses.
-            </p>
-          </div>
+          <Link
+            href="/explore"
+            className="group bg-primary text-primary-foreground hover:bg-primary/90 inline-flex shrink-0 items-center gap-3 self-start rounded-sm px-7 py-4 text-sm font-semibold transition-colors active:scale-[0.97] sm:self-auto"
+          >
+            Launch Explorer
+            <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
         </div>
-      </div>
+      </section>
+
+      {/* ── Footer ─────────────────────────────────────────────────── */}
+      <footer className="border-border border-t px-6 py-8 sm:px-10 lg:px-16">
+        <div className="text-muted-foreground flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Part of{' '}
+            <a
+              href="https://landbruget.dk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground hover:text-primary font-semibold transition-colors"
+            >
+              Landbruget.dk
+            </a>{' '}
+            — Organizing Danish agricultural information
+          </span>
+          <span>DuckDB-WASM · Gemini AI · Open Data</span>
+        </div>
+      </footer>
     </div>
   );
 }
 
-interface StatCardProps {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  description: string;
-}
-
-function StatCard({ icon: Icon, label, value, description }: StatCardProps) {
+function DataFieldVisual() {
   return (
-    <div className="rounded-lg border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="p-2 bg-primary/10 rounded-lg">
-          <Icon className="h-5 w-5 text-primary" />
-        </div>
-        <span className="text-sm font-semibold text-muted-foreground">{label}</span>
+    <div className="relative w-full max-w-[320px]" aria-hidden="true">
+      {/* Faint grid of data numbers — the "field" texture */}
+      <div
+        className="grid gap-x-2 gap-y-1 select-none"
+        style={{ gridTemplateColumns: 'repeat(10, 1fr)' }}
+      >
+        {GRID_CELLS.map((cell, i) => (
+          <span
+            key={i}
+            className="text-primary font-mono text-[9px]"
+            style={{ opacity: cell.opacity }}
+          >
+            {cell.value}
+          </span>
+        ))}
       </div>
-      <div className="text-3xl font-bold mb-1">{value}</div>
-      <p className="text-sm text-muted-foreground">{description}</p>
+
+      {/* Ghost number: very slow breathe — like a pulse of data */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <span
+          className="text-primary text-[clamp(5rem,12vw,8rem)] leading-none font-bold select-none"
+          style={{
+            fontFamily: DISPLAY_FONT,
+            opacity: 0.1,
+            animation: 'breathe 7s ease-in-out infinite',
+          }}
+        >
+          18+
+        </span>
+      </div>
     </div>
   );
 }
 
-interface FeatureCardProps {
-  icon: React.ComponentType<{ className?: string }>;
+function StatItem({
+  value,
+  label,
+  suffix = '',
+  visible = true,
+  delay = 0,
+}: {
+  value: string;
+  label: string;
+  suffix?: string;
+  visible?: boolean;
+  delay?: number;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Number blurs into focus — "data resolving" */}
+      <div
+        className="motion-animate text-foreground text-[clamp(2.75rem,6vw,4rem)] leading-none font-bold"
+        style={{
+          fontFamily: DISPLAY_FONT,
+          ...(visible
+            ? {
+                animation: `blurReveal 0.9s var(--ease-out-quint) ${delay}ms both`,
+              }
+            : { opacity: 0 }),
+        }}
+      >
+        {value}
+        {suffix && <span className="text-primary">{suffix}</span>}
+      </div>
+      <p className="text-muted-foreground text-[10px] font-semibold tracking-[0.15em] uppercase">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function FeatureItem({
+  number,
+  title,
+  description,
+  visible = true,
+  delay = 0,
+}: {
+  number: string;
   title: string;
   description: string;
-}
-
-function FeatureCard({ icon: Icon, title, description }: FeatureCardProps) {
+  visible?: boolean;
+  delay?: number;
+}) {
   return (
-    <div className="flex gap-4">
-      <div className="flex-shrink-0">
-        <div className="p-3 bg-primary/10 rounded-lg">
-          <Icon className="h-6 w-6 text-primary" />
-        </div>
-      </div>
+    <div
+      className="motion-animate flex gap-5"
+      style={
+        visible
+          ? {
+              animation: `fadeUp 0.6s var(--ease-out-quint) ${delay}ms both`,
+            }
+          : { opacity: 0 }
+      }
+    >
+      <span className="text-muted-foreground/40 mt-0.5 shrink-0 pt-px font-mono text-xs font-bold">
+        {number}
+      </span>
       <div>
-        <h3 className="text-lg font-semibold mb-2">{title}</h3>
-        <p className="text-muted-foreground">{description}</p>
+        <h3 className="text-foreground mb-2 text-sm font-semibold">{title}</h3>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          {description}
+        </p>
       </div>
     </div>
   );
