@@ -225,8 +225,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Helper method to upload file using gcs_access."""
         import shutil
 
-        gcs_path = f"gs://{bucket_name}/{destination_blob_name}"
-        with open(source_file_path, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+        # s3fs expects plain bucket/path without gs:// or r2:// prefix
+        storage_path = f"{bucket_name}/{destination_blob_name}"
+        with (
+            open(source_file_path, "rb") as src,
+            self.gcs_access.fs.open(storage_path, "wb") as dst,
+        ):
             shutil.copyfileobj(src, dst)
 
     def _validate_strategy_results(self, strategy_name: str, processed_count: int) -> None:
