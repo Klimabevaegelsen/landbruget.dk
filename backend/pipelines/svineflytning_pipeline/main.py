@@ -19,7 +19,7 @@ from bronze.load_svineflytning import (
     get_fvm_credentials,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # Replaced in setup_logging()
 
 # Constants for resource management
 DEFAULT_MAX_CONCURRENT_FETCHES = 5  # Number of parallel API calls
@@ -29,10 +29,11 @@ DEFAULT_BUFFER_SIZE = 50  # Number of responses to accumulate before writing to 
 
 def setup_logging(log_level: str):
     """Configure logging with the specified level."""
+    global logger
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
     # Set up pipeline logger using common utility
-    setup_pipeline_logger("svineflytning_pipeline", level=log_level)
+    logger = setup_pipeline_logger("svineflytning_pipeline", level=log_level)
 
     # Configure bronze module loggers
     bronze_logger = logging.getLogger("svineflytning_pipeline.bronze")

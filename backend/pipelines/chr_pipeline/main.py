@@ -59,7 +59,7 @@ except ImportError:
 from common.logging_utils import setup_pipeline_logger
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # Replaced in setup_logging()
 
 
 def calculate_date_range(processing_mode: str) -> tuple[str | None, str | None]:
@@ -129,10 +129,11 @@ def determine_processing_mode(bronze_timestamp: str) -> tuple[str, str | None]:
 
 def setup_logging(log_level: str):
     """Configure logging with the specified level."""
+    global logger
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
 
     # Set up pipeline logger using common utility
-    setup_pipeline_logger("backend.pipelines.chr_pipeline", level=log_level)
+    logger = setup_pipeline_logger("backend.pipelines.chr_pipeline", level=log_level)
 
     # Configure bronze module loggers
     bronze_logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze")

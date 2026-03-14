@@ -22,7 +22,7 @@ import {
 import { useState } from 'react';
 import { useCompanyNavigation } from '@/hooks/useCompanyNavigation';
 import { useCompanyCache } from '@/hooks/useCompanyCache';
-import { RankingItem } from '@/types/rankings';
+import { RankingItem } from '@/lib/rankings';
 import { getCategoryColor, getCategoryLabel } from '@/lib/category-utils';
 
 interface RankingTableEnhancedProps {

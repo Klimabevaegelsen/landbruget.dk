@@ -7,7 +7,7 @@ import { DynamicDataTable } from '@/components/table/dynamic-table';
 import { ColumnDef } from '@tanstack/react-table';
 import { Building2, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import { RankingItem } from '@/types/rankings';
+import { RankingItem } from '@/lib/rankings';
 import { getCategoryColor, getCategoryLabel } from '@/lib/category-utils';
 
 interface IndividualRankingTableProps {
