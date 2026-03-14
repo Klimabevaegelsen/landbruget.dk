@@ -1,4 +1,5 @@
 import { FieldAnalysisData, VisualizationMode, ColorUnit } from './types';
+import { formatNumberOrZero } from '@/lib/formatting';
 
 /**
  * Color utility functions for field analysis visualization
@@ -313,13 +314,7 @@ export function formatVisualizationValue(
   mode: VisualizationMode,
   unit: ColorUnit
 ): string {
-  const formatNumber = (
-    num: number | undefined | null,
-    decimals: number = 2
-  ): string => {
-    if (num == null || isNaN(num)) return '0';
-    return num.toLocaleString('da-DK', { maximumFractionDigits: decimals });
-  };
+  const formatNumber = formatNumberOrZero;
 
   // Handle null/undefined values
   if (value == null || isNaN(value)) {

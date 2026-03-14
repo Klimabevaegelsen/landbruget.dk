@@ -7,6 +7,7 @@ import {
   generateSkraafotoUrl,
   copyCoordinatesToClipboard,
 } from './coordinateUtils';
+import { formatNumber } from '@/lib/formatting';
 import {
   MapPin,
   Copy,
@@ -39,23 +40,6 @@ export function FieldDetailsPanel({
   onClose,
 }: FieldDetailsPanelProps) {
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
-
-  const formatNumber = (
-    num: number | undefined | null,
-    decimals: number = 2
-  ): string | null => {
-    // Handle null, undefined, or NaN values
-    if (num == null || isNaN(num)) return null;
-    // Don't display if the value is effectively zero
-    if (num < 0.001) return null;
-
-    // For very small values, show more precision
-    if (num < 1 && decimals === 0) {
-      return num.toLocaleString('da-DK', { maximumFractionDigits: 3 });
-    }
-
-    return num.toLocaleString('da-DK', { maximumFractionDigits: decimals });
-  };
 
   // Handle coordinate copying
   const handleCopyCoordinates = async () => {
