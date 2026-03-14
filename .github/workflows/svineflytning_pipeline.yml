@@ -188,7 +188,7 @@ jobs:
           exit 1
 
       - name: Upload bronze artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always() # Upload even if the pipeline fails
         with:
           name: bronze-output
@@ -196,7 +196,7 @@ jobs:
           retention-days: 7
 
       - name: Upload silver artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always() # Upload even if the pipeline fails
         with:
           name: silver-output
