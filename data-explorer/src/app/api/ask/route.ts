@@ -2,8 +2,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { getR2BaseUrl } from '@/lib/r2';
 
-const R2_BASE_URL = process.env.NEXT_PUBLIC_R2_BASE_URL || 'https://pub-b8c2f72ba51b4fe6804e9bb92280567c.r2.dev';
+const R2_BASE_URL = getR2BaseUrl();
 
 type Dataset = {
   name: string;

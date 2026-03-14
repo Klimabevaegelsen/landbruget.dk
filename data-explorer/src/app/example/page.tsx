@@ -6,6 +6,7 @@ import { SQLEditor } from '@/components/SQLEditor';
 import { ResultsTable } from '@/components/ResultsTable';
 import { AskInput } from '@/components/AskInput';
 import { executeQuery, registerParquetTable } from '@/lib/duckdb';
+import { getR2BaseUrl } from '@/lib/r2';
 import type { DatasetMetadata } from '@/types';
 
 export default function ExamplePage() {
@@ -15,8 +16,7 @@ export default function ExamplePage() {
   const [error, setError] = useState<string | null>(null);
   const [currentQuery, setCurrentQuery] = useState<string>('');
 
-  // Replace with your actual R2 base URL
-  const R2_BASE_URL = 'https://your-r2-bucket.r2.dev';
+  const R2_BASE_URL = getR2BaseUrl();
 
   async function handleTableSelect(dataset: DatasetMetadata) {
     setSelectedDataset(dataset);
