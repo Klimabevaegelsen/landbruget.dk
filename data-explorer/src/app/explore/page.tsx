@@ -10,6 +10,7 @@ import { ResultsTable } from '@/components/ResultsTable';
 import { SmartResults } from '@/components/SmartResults';
 import { executeQuery, registerParquetTable } from '@/lib/duckdb';
 import { injectData, type Spec } from '@/lib/render/spec-utils';
+import { getR2BaseUrl } from '@/lib/r2';
 import { cn } from '@/lib/utils';
 import type { DatasetMetadata } from '@/types';
 
@@ -36,8 +37,7 @@ export default function ExplorePage() {
     explanation: string;
   } | null>(null);
 
-  const R2_BASE_URL =
-    process.env.NEXT_PUBLIC_R2_BASE_URL || 'https://your-r2-bucket.r2.dev';
+  const R2_BASE_URL = getR2BaseUrl();
 
   async function handleTableSelect(dataset: DatasetMetadata) {
     setSelectedDataset(dataset);
