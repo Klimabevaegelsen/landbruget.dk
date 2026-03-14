@@ -455,14 +455,13 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 GROUP BY status_category
             """)
 
-            # Check what categories we have
-            categories_result = self.conn.execute(f"""
-                SELECT status_category, dissolved_geometry
-                FROM {dissolved_table_name}
-                ORDER BY status_category
-            """).fetchall()
+            # Check what categories we have - use COUNT to avoid fetching GEOMETRY to Python
+            # (DuckDB 1.5+ cannot deserialize GEOMETRY type to Python via fetchone/fetchall)
+            total_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {dissolved_table_name}"
+            ).fetchone()[0]
 
-            if not categories_result:
+            if total_count == 0:
                 self.log.warning("No valid geometries to dissolve")
                 # Create empty table with proper schema
                 self.conn.execute(f"""
@@ -475,18 +474,24 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 """)
                 return dissolved_table_name
 
-            # Handle overlaps - remove completed areas that overlap with action required
-            action_required_geom = None
-            completed_geom = None
+            has_action_required = (
+                self.conn.execute(f"""
+                SELECT COUNT(*) FROM {dissolved_table_name}
+                WHERE status_category = 'Action Required'
+            """).fetchone()[0]
+                > 0
+            )
 
-            for category, dissolved_geom in categories_result:
-                if category == "Action Required":
-                    action_required_geom = dissolved_geom
-                elif category == "Completed":
-                    completed_geom = dissolved_geom
+            has_completed = (
+                self.conn.execute(f"""
+                SELECT COUNT(*) FROM {dissolved_table_name}
+                WHERE status_category = 'Completed'
+            """).fetchone()[0]
+                > 0
+            )
 
             # Process overlaps using DuckDB-spatial ST_Difference
-            if action_required_geom and completed_geom:
+            if has_action_required and has_completed:
                 self.log.info("Handling overlaps between Action Required and Completed areas...")
 
                 # Create final table with overlap handling
