@@ -205,6 +205,16 @@ devenv.lock
 pmtiles/
 *.pmtiles
 
+# DuckDB temp files (never commit these — can be GB in size)
+backend/.tmp/
+**/.tmp/
+*.tmp
+
+# Large static data files (store in GCS, not git)
+backend/src/sources/static/**/*.xlsx
+backend/pipelines/**/sample_*.xml
+backend/pipelines/**/wfs_capabilities.xml
+
 # Caching
 .pytest_cache/
 .ruff_cache/
