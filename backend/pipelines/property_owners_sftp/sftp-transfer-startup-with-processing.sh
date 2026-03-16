@@ -76,10 +76,15 @@ pip3 install uv
 
 # Install required Python packages (added ijson, pyarrow, uuid for processing)
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-uv pip install --system google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
+uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
+
+# Get GCS bucket name from instance metadata (passed from GitHub Actions secrets)
+GCS_BUCKET=$(curl -H "Metadata-Flavor: Google" -s "http://metadata.google.internal/computeMetadata/v1/instance/attributes/gcs-bucket")
+log_with_timestamp "Using GCS bucket: $GCS_BUCKET"
+export GCS_BUCKET
 
 # Create the enhanced transfer script with processing
 cat > /opt/transfer_script.py << 'EOF'
@@ -504,7 +509,7 @@ class PropertyDataProcessor:
 class SFTPToGCSTransferWithProcessing:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
-        self.bucket_name = "landbrugsdata-raw-data"
+        self.bucket_name = os.environ.get('GCS_BUCKET', 'landbrugsdata-raw-data')
         self.storage_client = storage.Client(project=self.project_id)
         self.secret_client = secretmanager.SecretManagerServiceClient()
         self.processor = PropertyDataProcessor()
@@ -818,11 +823,11 @@ validate_success() {
     log_with_timestamp "=== VALIDATING PROCESSING SUCCESS ==="
 
     # Check if silver directory was created
-    if gsutil ls gs://landbrugsdata-raw-data/silver/property_owners/ >/dev/null 2>&1; then
+    if gsutil ls gs://${GCS_BUCKET}/silver/property_owners/ >/dev/null 2>&1; then
         log_with_timestamp "✅ Silver directory exists"
 
         # Check if parquet file was created in last hour
-        recent_files=$(gsutil ls -l gs://landbrugsdata-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
+        recent_files=$(gsutil ls -l gs://${GCS_BUCKET}/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
         if [ "$recent_files" -gt 0 ]; then
             log_with_timestamp "✅ Recent Parquet file found in silver directory"
             return 0
@@ -831,7 +836,7 @@ validate_success() {
             return 1
         fi
     else
-        log_with_timestamp "❌ Silver property_owners directory does not exist"
+        log_with_timestamp "❌ Silver property_owners directory does not exist in gs://${GCS_BUCKET}"
         return 1
     fi
 }

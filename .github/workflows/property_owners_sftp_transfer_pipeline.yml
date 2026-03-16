@@ -49,7 +49,7 @@ jobs:
           --image-family=debian-12 \
           --image-project=debian-cloud \
           --scopes=https://www.googleapis.com/auth/cloud-platform \
-          --metadata=enable-oslogin=true \
+          --metadata=enable-oslogin=true,gcs-bucket=${{ secrets.GCS_BUCKET }} \
           --metadata-from-file=startup-script=backend/pipelines/property_owners_sftp/sftp-transfer-startup-with-processing.sh \
           --preemptible \
           --no-restart-on-failure \
