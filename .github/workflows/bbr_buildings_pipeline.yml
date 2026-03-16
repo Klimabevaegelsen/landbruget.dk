@@ -81,7 +81,7 @@ jobs:
       buildings-count: ${{ steps.fetch-geodanmark.outputs.buildings-count }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     
     - name: Download bronze timestamp artifact
       uses: actions/download-artifact@v4
@@ -184,7 +184,7 @@ jobs:
       buildings-count: ${{ steps.fetch-inspire.outputs.buildings-count }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     
     - name: Download bronze timestamp artifact
       uses: actions/download-artifact@v4
@@ -271,7 +271,7 @@ jobs:
       ENVIRONMENT: production
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python
       uses: actions/setup-python@v5

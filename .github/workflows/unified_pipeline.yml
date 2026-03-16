@@ -82,7 +82,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Free up disk space for memory-intensive jobs
         if: matrix.source == 'field_area_analysis' || matrix.source == 'property_cadastral_merge'
@@ -240,7 +240,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Free up disk space for pesticide processing
         run: |
