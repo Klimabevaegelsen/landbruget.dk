@@ -472,7 +472,7 @@ class LocalSFTPToGCSTransfer:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
         self.bucket_name = "landbrugsdata-raw-data"
-        self.storage_client = storage.Client()
+        self.storage_client = storage.Client(project=self.project_id)
         self.secret_client = secretmanager.SecretManagerServiceClient()
         self.processor = PropertyDataProcessor()
         logger.info("LocalSFTPToGCSTransfer initialized.")
