@@ -23,7 +23,7 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^12.10.4",
     "lucide-react": "^0.508.0",
-    "maplibre-gl": "^5.5.0",
+    "maplibre-gl": "^5.20.1",
     "next": "^16.1.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
