@@ -36,7 +36,7 @@ export function GlobalSearch({
       className={cn(
         " relative overflow flex flex-col gap-y-4 items-center w-full ",
         className,
-        parentOpen === false && "hidden"
+        parentOpen === false && "hidden",
       )}
     >
       <Input
@@ -138,10 +138,7 @@ function SearchOverlay({
   const overlayRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (
-        overlayRef.current &&
-        !overlayRef.current.contains(e.target as Node)
-      ) {
+      if (overlayRef.current && !overlayRef.current.contains(e.target as Node)) {
         onClose();
       }
     }
@@ -161,7 +158,7 @@ function SearchOverlay({
       <div
         className={cn(
           "w-full  h-auto shadow-lg  rounded-lg",
-          !borderless && "border border-gray-100"
+          !borderless && "border border-gray-100",
         )}
       >
         <Input
@@ -180,8 +177,7 @@ function SearchOverlay({
               onClick={() => setActiveTab(i)}
               className={cn(
                 "flex-1 px-4 py-4 text-center text-xs cursor-pointer hover:font-semibold",
-                activeTab === i &&
-                  "border-b-2 border-b-primary font-bold hover:font-bold"
+                activeTab === i && "border-b-2 border-b-primary font-bold hover:font-bold",
               )}
             >
               {tab}
@@ -204,13 +200,7 @@ function SearchOverlay({
   );
 }
 
-function SearchResultCard({
-  result,
-  onClick,
-}: {
-  result: SearchResult;
-  onClick: () => void;
-}) {
+function SearchResultCard({ result, onClick }: { result: SearchResult; onClick: () => void }) {
   return (
     <Link
       href={`/virksomhed/${result.id}`}
@@ -220,20 +210,11 @@ function SearchResultCard({
     >
       <div className="flex  gap-2 items-center justify-between hover:bg-gray-100 p-4 group">
         <div className="flex gap-2 items-center">
-          <Image
-            src={"/farm-icon.png"}
-            alt={result.name}
-            width={25}
-            height={25}
-          />
+          <Image src={"/farm-icon.png"} alt={result.name} width={25} height={25} />
 
           <div className="flex-col text-left">
-            <div className="text-sm font-medium group-hover:underline">
-              {result.name}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {result.address}
-            </div>
+            <div className="text-sm font-medium group-hover:underline">{result.name}</div>
+            <div className="text-xs text-muted-foreground">{result.address}</div>
           </div>
         </div>
         <div className="flex-col">

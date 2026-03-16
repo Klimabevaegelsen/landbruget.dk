@@ -1,10 +1,7 @@
 "use client";
 
 import { Timeline } from "@/services/supabase/types";
-import {
-  VerticalTimeline,
-  VerticalTimelineElement,
-} from "react-vertical-timeline-component";
+import { VerticalTimeline, VerticalTimelineElement } from "react-vertical-timeline-component";
 import "react-vertical-timeline-component/style.min.css";
 import { format } from "date-fns";
 import { da } from "date-fns/locale";
@@ -43,13 +40,14 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
     if (!timeline.config?.filterColumns?.length) {
       return {};
     }
-    const types = Array.from(
-      new Set(validEvents.map((event) => event.event_type))
+    const types = Array.from(new Set(validEvents.map((event) => event.event_type)));
+    return types.reduce(
+      (acc, type, index) => {
+        acc[type] = VizColors[index % VizColors.length];
+        return acc;
+      },
+      {} as Record<string, string>,
     );
-    return types.reduce((acc, type, index) => {
-      acc[type] = VizColors[index % VizColors.length];
-      return acc;
-    }, {} as Record<string, string>);
   }, [timeline.events, timeline.config?.filterColumns]);
 
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => {
@@ -64,16 +62,14 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
   const filteredEvents = useMemo(() => {
     if (!timeline.config?.filterColumns?.length) {
       return timeline.events.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
       );
     }
 
     const validEvents = timeline.events.filter(isValidEvent);
     // If no filterColumns, return all valid events
     if (!timeline.config?.filterColumns?.length) {
-      return validEvents.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+      return validEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     return validEvents
       .filter((event) => selectedTypes.has(event.event_type))
@@ -114,15 +110,9 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
               key={type}
               onClick={() => toggleEventType(type)}
               className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors
-                ${
-                  selectedTypes.has(type)
-                    ? "text-white"
-                    : "text-gray-600 hover:bg-gray-100"
-                }`}
+                ${selectedTypes.has(type) ? "text-white" : "text-gray-600 hover:bg-gray-100"}`}
               style={{
-                backgroundColor: selectedTypes.has(type)
-                  ? color
-                  : "transparent",
+                backgroundColor: selectedTypes.has(type) ? color : "transparent",
                 border: `1px solid ${color}`,
               }}
             >

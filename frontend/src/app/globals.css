@@ -32,7 +32,9 @@
 
 @layer utilities {
   .animate-typing {
-    animation: typing 2s steps(20, end), blink 0.75s step-end infinite;
+    animation:
+      typing 2s steps(20, end),
+      blink 0.75s step-end infinite;
   }
   .animate-morph {
     animation: morphShape 5s ease-in-out infinite;

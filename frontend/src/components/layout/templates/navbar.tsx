@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  Disclosure,
-  DisclosureButton,
-  DisclosurePanel,
-} from "@headlessui/react";
+import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import { Bars3Icon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/layout/templates/logo";
@@ -121,7 +117,7 @@ export function Navbar({ banner }: { banner?: React.ReactNode }) {
         <div
           className={cn(
             "absolute py-2 px-6 top-0 left-0 right-0 bottom-0 z-50",
-            !searchOpen && "hidden"
+            !searchOpen && "hidden",
           )}
         >
           <GlobalSearch

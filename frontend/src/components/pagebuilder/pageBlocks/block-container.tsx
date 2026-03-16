@@ -24,10 +24,7 @@ export function BlockContainer({
     if (stickyTitle && headerRef.current) {
       const updateHeaderHeight = () => {
         const height = headerRef.current?.offsetHeight ?? 0;
-        document.documentElement.style.setProperty(
-          "--sticky-header-height",
-          `${height}px`
-        );
+        document.documentElement.style.setProperty("--sticky-header-height", `${height}px`);
       };
 
       updateHeaderHeight();
@@ -42,20 +39,15 @@ export function BlockContainer({
         ref={headerRef}
         className={cn(
           "flex flex-col md:flex-row md:items-center gap-2 group overflow-hidden",
-          stickyTitle && "sticky top-0 z-40 bg-white py-4"
+          stickyTitle && "sticky top-0 z-40 bg-white py-4",
         )}
       >
         <h2 className="text-xl md:text-2xl font-bold">{title}</h2>
         <div className="flex items-center gap-2">
-          <Link
-            href={href}
-            className="md:hidden group-hover:block items-center gap-2"
-          >
+          <Link href={href} className="md:hidden group-hover:block items-center gap-2">
             <LinkIcon className="size-6 text-primary" />
           </Link>
-          {secondaryTitle && (
-            <h3 className="text-xs  italic">{secondaryTitle}</h3>
-          )}
+          {secondaryTitle && <h3 className="text-xs  italic">{secondaryTitle}</h3>}
         </div>
       </div>
       {children}
