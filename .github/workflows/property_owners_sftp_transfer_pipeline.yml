@@ -29,6 +29,20 @@ jobs:
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
 
+    - name: Clean up any stuck VMs from previous runs
+      run: |
+        PROJECT_ID="landbrugsdata-1"
+        ZONE="europe-west1-b"
+        echo "Checking for stuck property-owners-pipeline VMs..."
+        STUCK_VMS=$(gcloud compute instances list --project=$PROJECT_ID --zones=$ZONE --filter="name~'property-owners-pipeline'" --format="value(name)" 2>/dev/null || true)
+        if [ -n "$STUCK_VMS" ]; then
+          echo "Found stuck VMs: $STUCK_VMS"
+          echo "$STUCK_VMS" | xargs -I{} gcloud compute instances delete {} --zone=$ZONE --project=$PROJECT_ID --quiet
+          echo "✅ Deleted stuck VMs"
+        else
+          echo "✅ No stuck VMs found"
+        fi
+
     - name: Create SFTP Transfer and Processing VM
       run: |
         # Generate unique VM name with timestamp
