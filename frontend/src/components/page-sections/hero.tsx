@@ -20,9 +20,7 @@ export default function Hero() {
 
           <p className="text-sm font-medium text-pretty text-white sm:text-xl/8">
             <span className="font-bold"> 123.300 datapunkter</span> fordelt på
-            <span className="font-bold">
-              2.643 danske landbrugsvirksomheder
-            </span>
+            <span className="font-bold">2.643 danske landbrugsvirksomheder</span>
             .<br /> Data gennemsigtighed. Fri adgang og open source.
           </p>
         </div>

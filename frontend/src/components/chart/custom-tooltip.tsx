@@ -1,8 +1,5 @@
 import { TooltipProps } from "recharts";
-import {
-  NameType,
-  ValueType,
-} from "recharts/types/component/DefaultTooltipContent";
+import { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 export default function CustomTooltip({
   active,

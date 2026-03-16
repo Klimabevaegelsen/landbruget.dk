@@ -110,7 +110,7 @@ function SidenavClient({
       className={cn(
         "flex flex-1 flex-col transition-all duration-300",
 
-        className
+        className,
       )}
     >
       <div className="mb-4 flex items-center justify-between">
@@ -136,7 +136,7 @@ function SidenavClient({
             role="list"
             className={cn(
               "space-y-1 divide-y divide-slate-300 text-sm transition-all duration-300",
-              isCollapsed && "opacity-0"
+              isCollapsed && "opacity-0",
             )}
           >
             {navigation.map((item) => {
@@ -150,18 +150,13 @@ function SidenavClient({
                       isCurrent
                         ? "text-black font-bold"
                         : "font-medium text-gray-700 hover:font-semibold hover:text-black",
-                      "group flex gap-x-3 p-4 pl-0 cursor-pointer"
+                      "group flex gap-x-3 p-4 pl-0 cursor-pointer",
                     )}
                     onClick={() => {
                       handleClick(item);
                     }}
                   >
-                    <div
-                      className={cn(
-                        "pl-3",
-                        isCurrent && "border-l-2 border-primary"
-                      )}
-                    >
+                    <div className={cn("pl-3", isCurrent && "border-l-2 border-primary")}>
                       {!isCollapsed && item.name}
                     </div>
                   </div>
@@ -178,17 +173,14 @@ function SidenavClient({
                                 isSubCurrent
                                   ? "text-black font-bold"
                                   : "font-medium text-gray-700 hover:font-semibold hover:text-black",
-                                "group flex gap-x-3 p-4 pl-0 cursor-pointer"
+                                "group flex gap-x-3 p-4 pl-0 cursor-pointer",
                               )}
                               onClick={() => {
                                 handleClick(subItem, true);
                               }}
                             >
                               <div
-                                className={cn(
-                                  "pl-6",
-                                  isSubCurrent && "border-l-2 border-primary"
-                                )}
+                                className={cn("pl-6", isSubCurrent && "border-l-2 border-primary")}
                               >
                                 {!isCollapsed && subItem.name}
                               </div>

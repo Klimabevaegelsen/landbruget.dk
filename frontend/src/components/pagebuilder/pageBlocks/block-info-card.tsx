@@ -7,10 +7,7 @@ export function BlockInfoCard({ infoCard }: { infoCard: InfoCard }) {
     <div className="bg-primary-foreground rounded-lg p-4">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-x-auto">
         {items.map((item, index) => (
-          <div
-            key={`${infoCard._key}-${index}`}
-            className="flex flex-col gap-2"
-          >
+          <div key={`${infoCard._key}-${index}`} className="flex flex-col gap-2">
             <label className="font-bold">{item.label}</label>
             <p className="text-sm ">{item.value}</p>
           </div>

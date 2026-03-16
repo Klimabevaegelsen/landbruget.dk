@@ -275,7 +275,34 @@ class GCSDataAccess:
                 {query}
                 FROM read_parquet('{temp_file}')
             """
-            self.duckdb_conn.execute(full_query)
+            try:
+                self.duckdb_conn.execute(full_query)
+            except Exception as e:
+                if "st_geomfromwkb" in str(e) and "GEOMETRY" in str(e):
+                    # Parquet contains CRS-annotated geometry that DuckDB can't auto-deserialize.
+                    # Retry with explicit GEOMETRY cast to strip CRS metadata.
+                    self.log.warning(
+                        f"CRS-annotated geometry detected in {gcs_path}, retrying with cast"
+                    )
+                    cols = self.duckdb_conn.execute(
+                        f"DESCRIBE SELECT * FROM read_parquet('{temp_file}')"
+                    ).fetchall()
+                    select_parts = []
+                    for col in cols:
+                        col_name = col[0]
+                        col_type = str(col[1])
+                        if "GEOMETRY" in col_type.upper() and col_type != "GEOMETRY":
+                            select_parts.append(f"CAST({col_name} AS GEOMETRY) AS {col_name}")
+                        else:
+                            select_parts.append(col_name)
+                    cast_query = f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT {', '.join(select_parts)}
+                        FROM read_parquet('{temp_file}')
+                    """
+                    self.duckdb_conn.execute(cast_query)
+                else:
+                    raise
 
             # Log table info for debugging
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]

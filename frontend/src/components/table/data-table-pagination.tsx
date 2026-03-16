@@ -20,12 +20,8 @@ interface DataTablePaginationProps<TData> {
   table: Table<TData>;
 }
 
-export function DataTablePagination<TData>({
-  table,
-}: DataTablePaginationProps<TData>) {
-  const [pageSize, setPageSize] = useState(
-    table.getState().pagination.pageSize
-  );
+export function DataTablePagination<TData>({ table }: DataTablePaginationProps<TData>) {
+  const [pageSize, setPageSize] = useState(table.getState().pagination.pageSize);
   const [hide, setHide] = useState(false);
 
   useEffect(() => {
@@ -64,8 +60,7 @@ export function DataTablePagination<TData>({
           </Select>
         </div>
         <div className="flex w-[100px] items-center justify-center text-sm font-medium">
-          Side {table.getState().pagination.pageIndex + 1} af{" "}
-          {table.getPageCount()}
+          Side {table.getState().pagination.pageIndex + 1} af {table.getPageCount()}
         </div>
         <div className="flex items-center space-x-2">
           <Button

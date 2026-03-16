@@ -27,6 +27,9 @@ trap 'handle_error ${LINENO}' ERR
 # Log everything with timestamps
 exec > >(while IFS= read -r line; do log_with_timestamp "$line"; done) 2>&1
 
+# Bypass mTLS for GCE metadata server to prevent google-auth failures
+export GCE_METADATA_MTLS_MODE=none
+
 log_with_timestamp "Starting enhanced SFTP to GCS transfer with processing"
 
 # System resource check
@@ -502,7 +505,7 @@ class SFTPToGCSTransferWithProcessing:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
         self.bucket_name = "landbrugsdata-raw-data"
-        self.storage_client = storage.Client()
+        self.storage_client = storage.Client(project=self.project_id)
         self.secret_client = secretmanager.SecretManagerServiceClient()
         self.processor = PropertyDataProcessor()
         logger.info("SFTPToGCSTransferWithProcessing initialized.")

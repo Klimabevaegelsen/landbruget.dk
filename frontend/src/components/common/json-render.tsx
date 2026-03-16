@@ -103,13 +103,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
   return null;
 }
 
-export function JsonRender({
-  json,
-  title,
-}: {
-  json: JsonValue;
-  title?: string;
-}) {
+export function JsonRender({ json, title }: { json: JsonValue; title?: string }) {
   return (
     <div className="font-mono text-sm overflow-auto p-4 bg-primary-foreground rounded">
       {title && <h3 className="text-lg font-medium mb-3">{title}</h3>}

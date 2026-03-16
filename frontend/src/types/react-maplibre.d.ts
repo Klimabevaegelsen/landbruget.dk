@@ -10,7 +10,5 @@ declare module "@vis.gl/react-maplibre" {
   export const MapContext: React.Context<MapContextValue>;
 
   // Override the Map component to use the correct context type
-  export const Map: React.ForwardRefExoticComponent<
-    MapProps & React.RefAttributes<MapRef>
-  >;
+  export const Map: React.ForwardRefExoticComponent<MapProps & React.RefAttributes<MapRef>>;
 }

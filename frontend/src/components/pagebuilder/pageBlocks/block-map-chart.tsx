@@ -1,12 +1,7 @@
 "use client";
 
 import * as React from "react";
-import Map, {
-  Layer,
-  Source,
-  MapLayerMouseEvent,
-  NavigationControl,
-} from "react-map-gl/maplibre";
+import Map, { Layer, Source, MapLayerMouseEvent, NavigationControl } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MapChart } from "@/services/supabase/types";
 import { VizColors } from "@/lib/utils";
@@ -74,9 +69,7 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
       {Object.entries(properties).map(([key, value]) => (
         <p key={key} className="text-sm font-medium mt-1">
           <span className="font-medium">{key}:</span>{" "}
-          {typeof value === "number"
-            ? value.toLocaleString("da-DK")
-            : String(value)}
+          {typeof value === "number" ? value.toLocaleString("da-DK") : String(value)}
         </p>
       ))}
     </div>
@@ -111,7 +104,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
         setHoverInfo(null);
       }
     },
-    [layers]
+    [layers],
   );
 
   return (
@@ -180,8 +173,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
               <div
                 className="size-4 rounded-full"
                 style={{
-                  backgroundColor:
-                    style.fillColor || style.strokeColor || style.circleColor,
+                  backgroundColor: style.fillColor || style.strokeColor || style.circleColor,
                 }}
               />
               <span className="text-xs font-medium">{layer.name}</span>

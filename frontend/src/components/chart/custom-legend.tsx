@@ -5,10 +5,7 @@ interface CustomLegendProps {
   onLegendClick?: (dataKey: string) => void;
 }
 
-export default function CustomLegend({
-  payload,
-  onLegendClick,
-}: CustomLegendProps) {
+export default function CustomLegend({ payload, onLegendClick }: CustomLegendProps) {
   if (!payload || !payload.length) {
     return null;
   }

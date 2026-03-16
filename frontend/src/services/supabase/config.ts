@@ -5,7 +5,7 @@ export const apiFetch = async (
     body?: BodyInit;
     headers?: HeadersInit;
     cache?: RequestCache;
-  }
+  },
 ) => {
   const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/${path}`, {
     method: options?.method || "GET",

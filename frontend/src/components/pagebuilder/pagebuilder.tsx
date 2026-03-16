@@ -11,13 +11,7 @@ import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
 import { BlockMapChart } from "./pageBlocks/block-map-chart";
 import { BlockIteratedSection } from "./pageBlocks/block-iterated-section";
 
-export function PageBlock({
-  block,
-  level = 0,
-}: {
-  block: PageBuilderItem;
-  level?: number;
-}) {
+export function PageBlock({ block, level = 0 }: { block: PageBuilderItem; level?: number }) {
   switch (block._type) {
     case "kpiGroup":
       return <BlockKpiGroup kpiGroup={block} />;
