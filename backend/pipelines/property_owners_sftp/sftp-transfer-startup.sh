@@ -7,6 +7,9 @@ set -e
 
 # Log everything
 exec > >(tee /var/log/sftp-transfer.log) 2>&1
+# Bypass mTLS for GCE metadata server to prevent google-auth failures
+export GCE_METADATA_MTLS_MODE=none
+
 echo "Starting SFTP to GCS transfer at $(date)"
 sync # Try to flush initial log
 
@@ -63,8 +66,8 @@ def flush_logs():
 class SFTPToGCSTransfer:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
-        self.bucket_name = "landbruget-data"
-        self.storage_client = storage.Client()
+        self.bucket_name = "landbrugsdata-raw-data"
+        self.storage_client = storage.Client(project=self.project_id)
         self.secret_client = secretmanager.SecretManagerServiceClient()
         logger.info("SFTPToGCSTransfer class initialized.")
         flush_logs()

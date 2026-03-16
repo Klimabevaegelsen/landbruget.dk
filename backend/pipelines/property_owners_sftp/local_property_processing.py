@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
-import contextlib
 import json
+import logging
 import os
 import sys
 import traceback
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -16,21 +17,7 @@ from google.cloud import secretmanager, storage
 from pyproj import Transformer
 from shapely.geometry import shape
 
-# Import UUID utilities
-try:
-    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import (
-        LandbrugsdataUUID,
-    )
-except ImportError:
-    # Fallback for different import paths
-    import sys
-
-    unified_pipeline_path = Path(__file__).parent.parent / "unified_pipeline" / "src"
-    if unified_pipeline_path.exists():
-        sys.path.append(str(unified_pipeline_path))
-    from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
-
-# Import schema documentation and pipeline metadata system
+# Import schema documentation
 try:
     import duckdb
 
@@ -39,24 +26,16 @@ try:
     except ImportError as e:
         import warnings
 
-        warnings.warn(f"Schema documentation not available: {e}", stacklevel=2)
+        warnings.warn(f"Schema documentation not available: {e}")
         SchemaDocumentationManager = None
-
-    # Import pipeline metadata system for data tracing
-    from pipeline_metadata import MetadataManager as PipelineMetadataManager
-
-    PIPELINE_METADATA_AVAILABLE = True
 except ImportError:
     # Fallback for when running standalone
     duckdb = None
     SchemaDocumentationManager = None
-    PipelineMetadataManager = None
-    PIPELINE_METADATA_AVAILABLE = False
 
 # Configure logging
-from common.logging_utils import setup_pipeline_logger
-
-logger = setup_pipeline_logger("property_owners_sftp", level=os.getenv("LOG_LEVEL", "INFO"))
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def flush_logs():
@@ -88,8 +67,10 @@ class PropertyDataProcessor:
     def __del__(self):
         """Clean up DuckDB connection."""
         if self.conn:
-            with contextlib.suppress(Exception):
+            try:
                 self.conn.close()
+            except:
+                pass
 
     def detect_and_setup_crs_transformer(self, sample_geometry):
         """Detect CRS from sample geometry and setup transformer if needed."""
@@ -106,9 +87,9 @@ class PropertyDataProcessor:
             def flatten_coords(obj):
                 if isinstance(obj, list):
                     for item in obj:
-                        if isinstance(item, list | tuple):
+                        if isinstance(item, (list, tuple)):
                             flatten_coords(item)
-                        elif isinstance(item, int | float):
+                        elif isinstance(item, (int, float)):
                             flat_coords.append(item)
 
             flatten_coords(coords)
@@ -141,8 +122,7 @@ class PropertyDataProcessor:
                         self.source_crs = "EPSG:25832"
                     else:
                         logger.warning(
-                            f"Uncertain CRS detection. X range: {min_x:.0f}-{max_x:.0f}, "
-                            f"Y range: {min_y:.0f}-{max_y:.0f}"
+                            f"Uncertain CRS detection. X range: {min_x:.0f}-{max_x:.0f}, Y range: {min_y:.0f}-{max_y:.0f}"
                         )
                         logger.warning("Assuming Danish UTM Zone 32N (EPSG:25832)")
                         self.source_crs = "EPSG:25832"
@@ -184,7 +164,7 @@ class PropertyDataProcessor:
                 x, y = self.crs_transformer.transform(geom.x, geom.y)
                 return {"type": "Point", "coordinates": [x, y]}
 
-            if geom.geom_type == "Polygon":
+            elif geom.geom_type == "Polygon":
 
                 def transform_coord_list(coords):
                     return [list(self.crs_transformer.transform(x, y)) for x, y in coords]
@@ -193,10 +173,11 @@ class PropertyDataProcessor:
                 holes = [transform_coord_list(hole.coords) for hole in geom.interiors]
 
                 if holes:
-                    return {"type": "Polygon", "coordinates": [exterior, *holes]}
-                return {"type": "Polygon", "coordinates": [exterior]}
+                    return {"type": "Polygon", "coordinates": [exterior] + holes}
+                else:
+                    return {"type": "Polygon", "coordinates": [exterior]}
 
-            if geom.geom_type == "MultiPolygon":
+            elif geom.geom_type == "MultiPolygon":
                 transformed_coords = []
                 for polygon in geom.geoms:
                     exterior = [
@@ -208,27 +189,25 @@ class PropertyDataProcessor:
                         for hole in polygon.interiors
                     ]
                     if holes:
-                        transformed_coords.append([exterior, *holes])
+                        transformed_coords.append([exterior] + holes)
                     else:
                         transformed_coords.append([exterior])
                 return {"type": "MultiPolygon", "coordinates": transformed_coords}
 
-            logger.warning(f"Unsupported geometry type for transformation: {geom.geom_type}")
-            return geometry
+            else:
+                logger.warning(f"Unsupported geometry type for transformation: {geom.geom_type}")
+                return geometry
 
         except Exception as e:
-            logger.error(f"Failed to transform geometry: {e}")
-            return None  # Return None to signal transformation failure
+            logger.warning(f"Failed to transform geometry: {e}")
+            return geometry  # Return original if transformation fails
 
     def generate_uuid_for_cpr(self, cpr_id):
-        """Generate consistent deterministic UUID for CPR numbers."""
+        """Generate consistent UUID for CPR numbers."""
         if not cpr_id:
             return None
         if cpr_id not in self.cpr_to_uuid_mapping:
-            # Generate deterministic UUID based on CPR number
-            self.cpr_to_uuid_mapping[cpr_id] = LandbrugsdataUUID.generate_deterministic_uuid(
-                "cpr", str(cpr_id)
-            )
+            self.cpr_to_uuid_mapping[cpr_id] = str(uuid.uuid4())
         return self.cpr_to_uuid_mapping[cpr_id]
 
     def has_foreign_address(self, person_data):
@@ -300,14 +279,24 @@ class PropertyDataProcessor:
             for key, value in obj.items():
                 cleaned_value = self.clean_empty_structures(value)
                 # Only keep non-empty values
-                if True:
+                if (
+                    cleaned_value
+                    or cleaned_value == 0
+                    or cleaned_value is False
+                    or cleaned_value == ""
+                ):
                     # Keep primitive values and non-empty containers
-                    if not isinstance(cleaned_value, dict | list) or cleaned_value:
+                    if not isinstance(cleaned_value, (dict, list)) or cleaned_value:
                         cleaned[key] = cleaned_value
             return cleaned
-        if isinstance(obj, list):
-            return [self.clean_empty_structures(item) for item in obj if True]
-        return obj
+        elif isinstance(obj, list):
+            return [
+                self.clean_empty_structures(item)
+                for item in obj
+                if item or item == 0 or item is False or item == ""
+            ]
+        else:
+            return obj
 
     def normalize_schema_across_features(self, all_features):
         """Ensure consistent schema across all features."""
@@ -387,7 +376,6 @@ class PropertyDataProcessor:
         batch_size = 500000  # Process in batches to manage memory
         batch_num = 0
         all_features = []
-        geometry_transform_failures = 0
 
         with open(json_file_path, "rb") as f:
             # Use ijson to stream parse the large JSON file
@@ -401,13 +389,8 @@ class PropertyDataProcessor:
                     feature["properties"] = self.clean_empty_structures(feature["properties"])
 
                 # Transform geometry to EPSG:4326
-                if feature.get("geometry"):
-                    transformed_geometry = self.transform_geometry_to_4326(feature["geometry"])
-                    if transformed_geometry is None:
-                        # Skip features with failed geometry transformation
-                        geometry_transform_failures += 1
-                        continue
-                    feature["geometry"] = transformed_geometry
+                if "geometry" in feature and feature["geometry"]:
+                    feature["geometry"] = self.transform_geometry_to_4326(feature["geometry"])
 
                 current_batch.append(feature)
 
@@ -437,10 +420,6 @@ class PropertyDataProcessor:
                 all_features.extend(current_batch)
 
         logger.info(f"Loaded {len(all_features)} features total from {batch_num} batches")
-        if geometry_transform_failures > 0:
-            logger.error(
-                f"Skipped {geometry_transform_failures} features due to geometry transformation failures"
-            )
         flush_logs()
 
         # Normalize schema across all features
@@ -522,8 +501,8 @@ class PropertyDataProcessor:
 class LocalSFTPToGCSTransfer:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
-        self.bucket_name = "landbruget-data"
-        self.storage_client = storage.Client()
+        self.bucket_name = "landbrugsdata-raw-data"
+        self.storage_client = storage.Client(project=self.project_id)
         self.secret_client = secretmanager.SecretManagerServiceClient()
         self.processor = PropertyDataProcessor()
         logger.info("LocalSFTPToGCSTransfer initialized.")
@@ -604,19 +583,8 @@ class LocalSFTPToGCSTransfer:
 
 def main_local_test():
     """Main function for local testing."""
-    # Record start time for execution tracking
-    start_time = datetime.now()
-
     logger.info("=== Starting Local Property Owners Processing Test ===")
     flush_logs()
-
-    # Initialize pipeline metadata manager
-    pipeline_metadata_manager = None
-    if PIPELINE_METADATA_AVAILABLE:
-        pipeline_metadata_manager = PipelineMetadataManager()
-        logger.info("✅ Pipeline metadata system initialized")
-    else:
-        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     try:
         transfer_instance = LocalSFTPToGCSTransfer()
@@ -661,32 +629,6 @@ def main_local_test():
                 logger.info(f"Person data sample: {str(sample_result[0])[:100]}...")
 
         conn.close()
-
-        # Create and save metadata for property owners SFTP data
-        if pipeline_metadata_manager:
-            try:
-                import time
-
-                processing_duration = time.time() - start_time.timestamp()
-
-                # Create metadata for property owners SFTP data
-                property_owners_metadata = pipeline_metadata_manager.create_metadata(
-                    source_key="property_owners_sftp",
-                    record_count=row_count,
-                    processing_duration=processing_duration,
-                    file_size_bytes=None,  # Will be calculated automatically
-                    source_datasets=None,
-                )
-
-                # Save metadata to output directory
-                metadata_path = pipeline_metadata_manager.save_metadata(
-                    property_owners_metadata,
-                    Path(local_output_dir) / "property_owners_sftp_metadata.json",
-                )
-                logger.info(f"✅ Property owners SFTP metadata saved to {metadata_path}")
-
-            except Exception as e:
-                logger.error(f"❌ Failed to create Property Owners SFTP pipeline metadata: {e}")
 
         flush_logs()
         return True

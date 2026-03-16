@@ -79,7 +79,7 @@ repos:
       - id: oxfmt-frontend
         name: oxfmt (Frontend)
         entry: bash
-        args: [-c, "cd frontend && npm ci --prefer-offline && npm run format:check"]
+        args: [-c, "cd frontend && npm ci --prefer-offline && npm run fmt:check"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
@@ -87,7 +87,7 @@ repos:
       - id: oxfmt-frontend-pesticide
         name: oxfmt (Frontend Pesticide)
         entry: bash
-        args: [-c, "cd frontend-pesticide && npm ci --prefer-offline && npm run format:check"]
+        args: [-c, "cd frontend-pesticide && npm ci --prefer-offline && npm run fmt:check"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
@@ -109,14 +109,14 @@ repos:
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
-      # Playwright smoke tests (optimized for speed)
-      - id: playwright-smoke-test
-        name: Playwright Smoke Test (Fast)
-        entry: bash
-        args: [-c, "cd frontend && npm run test:smoke:fast || (echo '⚠️ Smoke tests failed - check with: npm run test:debug' && exit 1)"]
-        language: system
-        files: '^frontend/src/.*\.(ts|tsx|js|jsx)$'
-        pass_filenames: false
+      # Playwright smoke tests (disabled until test:smoke:fast script is added)
+      # - id: playwright-smoke-test
+      #   name: Playwright Smoke Test (Fast)
+      #   entry: bash
+      #   args: [-c, "cd frontend && npm run test:smoke:fast || (echo '⚠️ Smoke tests failed - check with: npm run test:debug' && exit 1)"]
+      #   language: system
+      #   files: '^frontend/src/.*\.(ts|tsx|js|jsx)$'
+      #   pass_filenames: false
 
       # Essential protection hooks (improved patterns)
       - id: check-data-directories

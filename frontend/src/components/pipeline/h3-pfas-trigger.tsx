@@ -9,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { TestTube, Rocket } from 'lucide-react';
 
 interface PipelineConfig {
   years: string;
@@ -33,6 +32,7 @@ export function H3PfasTrigger() {
 
   const triggerPipeline = async () => {
     setIsLoading(true);
+
     try {
       // GitHub Actions workflow dispatch API call
       const response = await fetch('/api/trigger-h3-pfas', {
@@ -57,11 +57,9 @@ export function H3PfasTrigger() {
   };
 
   return (
-    <div className="bg-background mx-auto max-w-2xl rounded-lg p-6 shadow-lg">
-      <h2 className="mb-6 flex items-center text-2xl font-bold">
-        <TestTube className="mr-2 h-6 w-6" />
-        H3 PFAS Pipeline Trigger
-      </h2>
+    <div className="mx-auto max-w-2xl rounded-lg bg-white p-6 shadow-lg">
+      <h2 className="mb-6 text-2xl font-bold">🧪 H3 PFAS Pipeline Trigger</h2>
+
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Years Selection */}
         <div>
@@ -147,7 +145,7 @@ export function H3PfasTrigger() {
       </div>
 
       {/* Current Configuration Display */}
-      <div className="bg-muted mb-6 rounded-lg p-4">
+      <div className="mb-6 rounded-lg bg-gray-50 p-4">
         <h3 className="mb-2 font-medium">Current Configuration:</h3>
         <div className="space-y-1 text-sm">
           <div>
@@ -182,14 +180,11 @@ export function H3PfasTrigger() {
             Triggering Pipeline...
           </>
         ) : (
-          <>
-            <Rocket className="mr-2 h-4 w-4" />
-            Trigger H3 PFAS Analysis
-          </>
+          <>🚀 Trigger H3 PFAS Analysis</>
         )}
       </Button>
 
-      <div className="text-muted-foreground mt-4 text-sm">
+      <div className="mt-4 text-sm text-gray-600">
         <p>
           <strong>Note:</strong> This will trigger the optimized pipeline that
           processes all resolutions in a single job to avoid redundant data

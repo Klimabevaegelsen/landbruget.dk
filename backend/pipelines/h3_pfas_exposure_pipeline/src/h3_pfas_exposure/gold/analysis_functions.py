@@ -182,13 +182,17 @@ async def run_cumulative_analysis(
 
                 # Load year-specific data
                 field_year = year + 1
-                fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
-                fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
+                try:
+                    fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+                    fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-                pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
-                pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
-                    pesticide_table, bmd_table, year
-                )
+                    pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+                    pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
+                        pesticide_table, bmd_table, year
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Skipping year {year} in cumulative H3 analysis: {e}")
+                    continue
 
                 # Perform spatial join for this year
                 year_results_table = processor.spatial_joiner.perform_chunked_spatial_join(
@@ -370,13 +374,17 @@ async def run_cumulative_analysis(
 
                 # Load year-specific data
                 field_year = year + 1
-                fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
-                fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
+                try:
+                    fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+                    fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-                pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
-                pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
-                    pesticide_table, bmd_table, year
-                )
+                    pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+                    pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
+                        pesticide_table, bmd_table, year
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Skipping year {year} in cumulative kommune analysis: {e}")
+                    continue
 
                 # Perform kommune spatial join for this year
                 year_kommune_results = processor._perform_kommune_spatial_join(
@@ -1744,13 +1752,17 @@ async def run_combined_analysis(
             # Load year-specific data once
             logger.info(f"📊 Loading shared data for year {year}")
             field_year = year + 1
-            fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
-            fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
+            try:
+                fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+                fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-            pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
-            pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
-                pesticide_table, bmd_table, year
-            )
+                pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+                pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
+                    pesticide_table, bmd_table, year
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Skipping year {year} due to missing data: {e}")
+                continue
 
             # Run H3 analysis for each resolution
             for resolution in h3_resolutions:

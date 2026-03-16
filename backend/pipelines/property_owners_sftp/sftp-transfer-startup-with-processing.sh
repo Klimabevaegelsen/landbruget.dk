@@ -24,9 +24,11 @@ handle_error() {
 # Set error trap
 trap 'handle_error ${LINENO}' ERR
 
-# Log stdout with timestamps, keep stderr visible on serial port for debugging
-exec > >(while IFS= read -r line; do log_with_timestamp "$line"; done)
-exec 2> >(while IFS= read -r line; do log_with_timestamp "STDERR: $line"; done)
+# Log everything with timestamps
+exec > >(while IFS= read -r line; do log_with_timestamp "$line"; done) 2>&1
+
+# Bypass mTLS for GCE metadata server to prevent google-auth failures
+export GCE_METADATA_MTLS_MODE=none
 
 log_with_timestamp "Starting enhanced SFTP to GCS transfer with processing"
 
@@ -55,18 +57,10 @@ fi
 
 log_with_timestamp "✅ Sufficient disk space available"
 
-# Wait for unattended-upgrades to release the dpkg lock (Debian 12 holds it at boot)
-log_with_timestamp "Waiting for dpkg lock to be released..."
-timeout 300 bash -c 'while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
-    log_with_timestamp "dpkg/apt lock held, waiting 10s..."
-    sleep 10
-done' || log_with_timestamp "WARNING: Timed out waiting for dpkg lock, proceeding anyway"
-log_with_timestamp "✅ dpkg lock released"
-
 # Install required packages
 log_with_timestamp "Installing required packages..."
-DEBIAN_FRONTEND=noninteractive apt-get update -q
-DEBIAN_FRONTEND=noninteractive apt-get install -y -q python3-pip python3-venv git dnsutils iputils-ping unzip
+apt-get update
+apt-get install -y python3-pip python3-venv git dnsutils iputils-ping unzip
 
 log_with_timestamp "✅ System packages installed"
 check_resources
@@ -76,13 +70,13 @@ log_with_timestamp "Creating Python virtual environment..."
 python3 -m venv /opt/transfer-env
 source /opt/transfer-env/bin/activate
 
-# Install uv for fast package installation (pip install puts it on the venv PATH)
+# Install uv first
 log_with_timestamp "Installing uv..."
 pip3 install uv
 
-# Install required Python packages
+# Install required Python packages (added ijson, pyarrow, uuid for processing)
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow geopandas shapely pyproj
+uv pip install --system google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
@@ -99,6 +93,7 @@ import json
 import ijson
 import pyarrow as pa
 import pyarrow.parquet as pq
+import uuid
 import zipfile
 import geopandas as gpd
 from shapely.geometry import shape
@@ -109,54 +104,6 @@ from google.cloud import storage, secretmanager
 import subprocess
 import sys
 import traceback
-import hashlib
-
-# Inlined UUID generation to avoid repository dependency
-class LandbrugsdataUUID:
-    """
-    Inlined UUID generation for property_owners pipeline.
-    Uses MD5-based UUID5 format to match the centralized uuid_utils.
-    """
-    _namespace = None
-
-    @classmethod
-    def _get_namespace(cls):
-        """Get the UUID namespace from environment variable."""
-        if cls._namespace is None:
-            namespace_str = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
-            if not namespace_str:
-                raise ValueError(
-                    "LANDBRUGSDATA_UUID_NAMESPACE environment variable is required"
-                )
-            cls._namespace = namespace_str
-        return cls._namespace
-
-    @classmethod
-    def generate_deterministic_uuid(cls, entity_type, identifier):
-        """
-        Generate deterministic UUID for any entity type with custom identifier.
-
-        Args:
-            entity_type: Type of entity (e.g., 'cpr', 'company', etc.)
-            identifier: Unique identifier string for this entity
-
-        Returns:
-            UUID string
-        """
-        if not identifier:
-            raise ValueError("Identifier cannot be empty")
-
-        # Use MD5-based UUID generation to match DuckDB implementation
-        namespace_str = str(cls._get_namespace())
-        input_str = f"{namespace_str}{entity_type}-{identifier}"
-        md5_hash = hashlib.md5(input_str.encode()).hexdigest()
-
-        # Format as UUID5 (version 5, variant 10)
-        uuid_str = (
-            f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
-            f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
-        )
-        return uuid_str
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -289,12 +236,11 @@ class PropertyDataProcessor:
             return geometry  # Return original if transformation fails
 
     def generate_uuid_for_cpr(self, cpr_id):
-        """Generate consistent deterministic UUID for CPR numbers."""
+        """Generate consistent UUID for CPR numbers."""
         if not cpr_id:
             return None
         if cpr_id not in self.cpr_to_uuid_mapping:
-            # Generate deterministic UUID based on CPR number
-            self.cpr_to_uuid_mapping[cpr_id] = LandbrugsdataUUID.generate_deterministic_uuid("cpr", str(cpr_id))
+            self.cpr_to_uuid_mapping[cpr_id] = str(uuid.uuid4())
         return self.cpr_to_uuid_mapping[cpr_id]
 
     def has_foreign_address(self, person_data):
@@ -558,34 +504,10 @@ class PropertyDataProcessor:
 class SFTPToGCSTransferWithProcessing:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
-        self.bucket_name = "landbruget-raw-data"
+        self.bucket_name = "landbrugsdata-raw-data"
+        self.storage_client = storage.Client(project=self.project_id)
+        self.secret_client = secretmanager.SecretManagerServiceClient()
         self.processor = PropertyDataProcessor()
-
-        # Initialize GCP clients with explicit error handling
-        # google-auth mTLS to metadata server has been a recurring issue on GCE VMs
-        logger.info("Initializing GCP clients...")
-        flush_logs()
-        try:
-            self.storage_client = storage.Client(project=self.project_id)
-            logger.info("storage.Client initialized OK")
-            flush_logs()
-        except Exception as e:
-            logger.error(f"Failed to create storage.Client: {e}")
-            logger.error(f"GCE_METADATA_MTLS_MODE={os.environ.get('GCE_METADATA_MTLS_MODE', 'NOT SET')}")
-            logger.error(traceback.format_exc())
-            flush_logs()
-            raise
-
-        try:
-            self.secret_client = secretmanager.SecretManagerServiceClient()
-            logger.info("SecretManagerServiceClient initialized OK")
-            flush_logs()
-        except Exception as e:
-            logger.error(f"Failed to create SecretManagerServiceClient: {e}")
-            logger.error(traceback.format_exc())
-            flush_logs()
-            raise
-
         logger.info("SFTPToGCSTransferWithProcessing initialized.")
         flush_logs()
 
@@ -805,9 +727,8 @@ class SFTPToGCSTransferWithProcessing:
                 logger.info(f"Processing complete. Parquet file size: {parquet_file_path.stat().st_size / (1024**2):.1f} MB")
                 flush_logs()
 
-                # Upload Parquet to GCS using unified pipeline naming convention
-                # Use new standardized format: silver/{dataset}/{timestamp}/data.parquet
-                gcs_filename = f"silver/property_owners/{timestamp}/data.parquet"
+                # Upload Parquet to GCS
+                gcs_filename = f"silver/property_owners/{timestamp}_property_owners_processed.parquet"
                 bucket = self.storage_client.bucket(self.bucket_name)
                 blob = bucket.blob(gcs_filename)
 
@@ -883,15 +804,6 @@ VM_NAME=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/comp
 ZONE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone | awk -F/ '{print $NF}')
 PROJECT_ID=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
 
-# Get UUID namespace from instance metadata and export for Python script
-LANDBRUGSDATA_UUID_NAMESPACE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/LANDBRUGSDATA_UUID_NAMESPACE 2>/dev/null || echo "")
-if [ -z "$LANDBRUGSDATA_UUID_NAMESPACE" ]; then
-  log_with_timestamp "ERROR: LANDBRUGSDATA_UUID_NAMESPACE not found in VM metadata"
-  exit 1
-fi
-export LANDBRUGSDATA_UUID_NAMESPACE
-log_with_timestamp "✅ LANDBRUGSDATA_UUID_NAMESPACE loaded from VM metadata"
-
 # Function to delete the VM
 delete_vm() {
   log_with_timestamp "Attempting to delete VM: $VM_NAME in zone: $ZONE project: $PROJECT_ID"
@@ -906,67 +818,23 @@ validate_success() {
     log_with_timestamp "=== VALIDATING PROCESSING SUCCESS ==="
 
     # Check if silver directory was created
-    if gsutil ls gs://landbruget-raw-data/silver/property_owners/ >/dev/null 2>&1; then
+    if gsutil ls gs://landbrugsdata-raw-data/silver/property_owners/ >/dev/null 2>&1; then
         log_with_timestamp "✅ Silver directory exists"
 
-        # Check if data.parquet file was created in timestamped directory (new format)
-        # Look for directories created today and check for data.parquet files
-        today=$(date +%Y%m%d)
-        recent_files=$(gsutil ls gs://landbruget-raw-data/silver/property_owners/${today}*/data.parquet 2>/dev/null | wc -l)
+        # Check if parquet file was created in last hour
+        recent_files=$(gsutil ls -l gs://landbrugsdata-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
         if [ "$recent_files" -gt 0 ]; then
-            log_with_timestamp "✅ Recent data.parquet file found in timestamped directory (new format)"
+            log_with_timestamp "✅ Recent Parquet file found in silver directory"
             return 0
         else
-            log_with_timestamp "❌ No recent data.parquet files found in timestamped directories"
-            # Also check legacy format as fallback
-            legacy_files=$(gsutil ls -l gs://landbruget-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
-            if [ "$legacy_files" -gt 0 ]; then
-                log_with_timestamp "✅ Recent Parquet file found in legacy format"
-                return 0
-            else
-                log_with_timestamp "❌ No recent Parquet files found in either format"
-                return 1
-            fi
+            log_with_timestamp "❌ No recent Parquet files found in silver directory"
+            return 1
         fi
     else
         log_with_timestamp "❌ Silver property_owners directory does not exist"
         return 1
     fi
 }
-
-# Disable mTLS for GCE metadata server.
-# Debian 12 GCE images ship with mTLS certs at /run/google-mds-mtls/{root.crt,client.key}.
-# google-auth's default mode auto-enables mTLS when those files exist, which fails
-# because the metadata server at 169.254.169.254 doesn't support mTLS from user VMs.
-# GCE_METADATA_MTLS_MODE=none tells google-auth to skip mTLS entirely (the real fix).
-export GCE_METADATA_MTLS_MODE="none"
-log_with_timestamp "✅ GCE metadata mTLS disabled (GCE_METADATA_MTLS_MODE=none)"
-
-# Verify metadata server is actually reachable before running Python
-log_with_timestamp "Testing metadata server connectivity..."
-if curl -s -f -H "Metadata-Flavor: Google" "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email" 2>/dev/null; then
-    log_with_timestamp "✅ Metadata server reachable"
-else
-    log_with_timestamp "❌ WARNING: Metadata server not reachable via curl"
-fi
-
-# Smoke test: verify Python can authenticate to GCP before doing expensive SFTP work
-log_with_timestamp "Smoke-testing Python GCP auth..."
-log_with_timestamp "mTLS certs present: $(ls -la /run/google-mds-mtls/ 2>/dev/null || echo 'no')"
-if python3 -c "
-from google.cloud import storage
-client = storage.Client(project='landbrugsdata-1')
-list(client.list_blobs('landbruget-raw-data', prefix='silver/property_owners/', max_results=1))
-print('GCP auth OK')
-"; then
-    log_with_timestamp "✅ Python GCP auth smoke test passed"
-else
-    log_with_timestamp "❌ Python GCP auth smoke test FAILED"
-    log_with_timestamp "Dumping google-auth version info..."
-    python3 -c "import google.auth; print(f'google-auth version: {google.auth.__version__}')" 2>&1 || true
-    log_with_timestamp "This VM cannot authenticate to GCP. Check mTLS/metadata config."
-    # Don't exit — let the main script run so we get a detailed error in the log
-fi
 
 # Run the enhanced transfer script
 log_with_timestamp "Executing enhanced transfer script with processing..."
