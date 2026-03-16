@@ -124,7 +124,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 2: Creating field_bnbo_water_intersections (3-way water-covered)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_water_intersections AS
-            SELECT 
+            SELECT
                 fbi.field_uuid,
                 fbi.field_id,
                 fbi.block_id,
@@ -135,9 +135,9 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 wpbi.project_id,
                 ST_Intersection(fbi.field_bnbo_geometry, wpbi.intersection_geometry) as field_bnbo_water_geometry
             FROM field_bnbo_intersections fbi
-            JOIN water_projects_bnbo_intersections wpbi 
-                ON fbi.bnbo_id = wpbi.bnbo_id  -- FIX: Ensure same BNBO to prevent cross-contamination
-                AND ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
+            JOIN water_projects_bnbo_intersections wpbi
+                ON ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
+            WHERE fbi.bnbo_id = wpbi.bnbo_id
         """)
 
         # Get result statistics
