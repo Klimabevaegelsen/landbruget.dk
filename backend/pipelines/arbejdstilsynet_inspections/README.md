@@ -1,6 +1,29 @@
 # Arbejdstilsynet Inspections Pipeline
 
-This document describes the `arbejdstilsynet_inspections` data pipeline.
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: Worker Safety in Agriculture
+
+Agriculture is one of Denmark's most dangerous industries. Workers face risks from heavy machinery, chemical exposure, livestock handling, and physically demanding labor. **Arbejdstilsynet** (the Danish Working Environment Authority) conducts inspections of workplaces across Denmark and publishes their findings — but the raw data is difficult to analyze at scale.
+
+### What This Pipeline Does
+
+This pipeline automatically:
+
+1. **Downloads inspection records**: Fetches the latest inspection data from Arbejdstilsynet
+2. **Preserves raw data**: Stores the original CSV records (Bronze layer)
+3. **Cleans and normalizes**: Filters by date range, standardizes Danish characters, anonymizes any PII, and converts to efficient Parquet format (Silver layer)
+
+### Why This Data Matters
+
+The results help:
+- **Worker safety advocates** identify industries and regions with the most violations
+- **Journalists** investigate patterns in workplace safety enforcement
+- **Policymakers** assess where inspections are most needed
+- **Researchers** study occupational health trends in agriculture
+- **Unions** advocate for better working conditions with data
+
+---
 
 ## Overview
 
@@ -15,7 +38,7 @@ The pipeline supports the following command-line arguments:
 * `--start-date`: Start date in YYYY-MM-DD format (default: 6 months ago)
 * `--end-date`: End date in YYYY-MM-DD format (default: today)
 * `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR) (default: INFO)
-* `--gcs-bucket`: Google Cloud Storage bucket for export (optional)
+* `--gcs-bucket`: Cloudflare R2 bucket for export (optional)
 * `--stage`: Pipeline stage to run ('all', 'bronze', 'silver') (default: 'all')
 
 ### Usage Example
@@ -50,8 +73,8 @@ The Bronze layer fetches the raw inspection data and stores it without any modif
         cp .env.example .env
         # Then edit .env with the correct values:
         # - SOURCE_CSV_URL (required)
-        # - GOOGLE_APPLICATION_CREDENTIALS (required for GCS export)
-        # - GCS_BUCKET (optional)
+        # - GOOGLE_APPLICATION_CREDENTIALS (required for R2 export)
+        # - R2_BUCKET (optional)
         ```
 
 2.  **Navigate to the pipeline directory**:
@@ -85,8 +108,8 @@ The Bronze layer fetches the raw inspection data and stores it without any modif
 ### Environment Variables
 
 *   `SOURCE_CSV_URL`: **Required**. The URL to the source CSV data file.
-*   `GOOGLE_APPLICATION_CREDENTIALS`: Path to your Google Cloud service account key JSON file. Required only if using Google Cloud Storage export.
-*   `GCS_BUCKET`: Optional default Google Cloud Storage bucket name. Can be overridden with the `--gcs-bucket` command line argument.
+*   `GOOGLE_APPLICATION_CREDENTIALS`: Path to your Google Cloud service account key JSON file. Required only if using Cloudflare R2 export.
+*   `R2_BUCKET`: Optional default Cloudflare R2 bucket name. Can be overridden with the `--gcs-bucket` command line argument.
 
 ### Output Structure (Bronze Layer)
 
@@ -145,15 +168,15 @@ Upon successful execution, the Silver layer will produce the following in the `b
 
 *(To be implemented. This layer will provide aggregated data ready for consumption, e.g., for APIs or visualizations.)*
 
-## Google Cloud Storage Export
+## Cloudflare R2 Export
 
-When the `--gcs-bucket` parameter is provided, the pipeline will export data to the specified Google Cloud Storage bucket in addition to local storage. This enables:
+When the `--gcs-bucket` parameter is provided, the pipeline will export data to the specified Cloudflare R2 bucket in addition to local storage. This enables:
 
 1. **Data Integration**: Seamlessly integrate with other GCP services like BigQuery
 2. **Data Sharing**: Make data accessible to other applications and teams
 3. **Backup**: Maintain a cloud backup of all pipeline outputs
 
-### Setup for GCS Export
+### Setup for R2 Export
 
 1. **Authentication**: Configure Google Cloud authentication by either:
    * Setting the `GOOGLE_APPLICATION_CREDENTIALS` environment variable in your `.env` file to point to a service account key JSON file
@@ -165,12 +188,12 @@ When the `--gcs-bucket` parameter is provided, the pipeline will export data to 
    * `storage.objects.get`
    * `storage.objects.list`
 
-3. **Data Storage Path**: The pipeline will export data to: `gs://<bucket-name>/arbejdstilsynet_inspections/<layer>/<timestamp>/`
+3. **Data Storage Path**: The pipeline will export data to: `<bucket-name>/arbejdstilsynet_inspections/<layer>/<timestamp>/`
 
 ### Example Usage
 
 ```bash
-# Run the pipeline with GCS export
+# Run the pipeline with R2 export
 python main.py --gcs-bucket your-landbruget-data-bucket --stage all
 ```
 

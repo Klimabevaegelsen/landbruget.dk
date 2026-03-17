@@ -1,5 +1,30 @@
 # Property Owners SFTP Pipeline
 
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: Land Ownership Transparency
+
+Understanding who owns Danish agricultural land is fundamental to transparency in the farming sector. Property ownership data is available through **Datafordeleren** (the Danish Data Distribution Authority), but it contains sensitive personal information (CPR numbers) that must be handled with strict privacy protections.
+
+### What This Pipeline Does
+
+This pipeline:
+
+1. **Securely downloads property data**: Creates an isolated Google Cloud VM to connect to Datafordeleren's SFTP server (which requires IP whitelisting)
+2. **Applies privacy protections**: Replaces CPR numbers with anonymous UUIDs, removes personal addresses and birth dates — while preserving the relationships needed for analysis
+3. **Produces analysis-ready data**: Outputs clean, privacy-safe Parquet files
+4. **Cleans up**: Automatically deletes the temporary VM after processing
+
+### Why This Data Matters
+
+The results help:
+- **Journalists** investigate land ownership patterns and agricultural consolidation
+- **Researchers** study land use changes and ownership structures
+- **Policymakers** understand the distribution of agricultural land ownership
+- **Citizens** access land ownership information while personal privacy is protected
+
+---
+
 This pipeline fetches Danish property ownership data from Datafordeleren's SFTP server and processes it with privacy transformations. Due to the sensitive nature of the data (contains CPR numbers) and IP whitelisting requirements, this pipeline uses a secure Google Cloud VM approach.
 
 ## Overview

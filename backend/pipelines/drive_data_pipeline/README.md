@@ -1,6 +1,29 @@
-"""Update the README with new features from Sprint 5."""
-
 # Google Drive Data Pipeline
+
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: Regulatory Data Locked in Documents
+
+Danish agricultural regulatory data — fertilizer usage reports, pesticide records, worker safety incidents, environmental violations — is often submitted as PDFs and Excel spreadsheets stored in Google Drive folders. These documents are difficult to search, compare, or analyze at scale.
+
+### What This Pipeline Does
+
+This pipeline acts as an automated document processor that:
+
+1. **Connects to Google Drive**: Accesses folders containing regulatory compliance documents
+2. **Downloads raw files**: Preserves original PDFs and Excel files exactly as received (Bronze layer)
+3. **Extracts and structures data**: Converts Excel files into standardized, machine-readable Parquet format (Silver layer)
+4. **Enables analysis**: Makes previously inaccessible document data queryable and joinable with other datasets via CVR numbers
+
+### Why This Data Matters
+
+The results help:
+- **Journalists** investigate regulatory compliance patterns across farms
+- **Researchers** analyze trends in agricultural regulatory submissions
+- **Regulators** cross-reference compliance data with other datasets
+- **Citizens** access information about agricultural practices in their area
+
+---
 
 A data pipeline that fetches files from Google Drive, processes them according to the medallion architecture (Bronze and Silver layers), and prepares them for analysis.
 
@@ -91,7 +114,7 @@ The pipeline can be configured using the following environment variables:
 - `GOOGLE_APPLICATION_CREDENTIALS`: Path to service account credentials file (optional if using public access)
 - `USE_PUBLIC_ACCESS`: Set to "true" to access public Google Drive folders without authentication (default: false)
 - `STORAGE_TYPE`: Storage type ("local" or "gcs")
-- `GCS_BUCKET`: GCS bucket name (if applicable)
+- `R2_BUCKET`: R2 bucket name (if applicable)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
 - `MAX_WORKERS`: Number of workers for parallel processing
 
@@ -116,7 +139,7 @@ The pipeline follows a medallion architecture with the following components:
    - **PDF Transformer**: Extracts data from PDFs into structured formats
 4. **Storage Manager**: Handles file storage and organization
    - **LocalStorageManager**: For local file system operations
-   - **GCSStorageManager**: Placeholder for Google Cloud Storage
+   - **CloudStorageManager**: Cloud storage (R2/S3-compatible)
 
 ## Project Structure
 
@@ -178,7 +201,7 @@ The storage system provides abstraction over different storage backends:
 
 - **StorageManager**: Abstract base class defining the interface
 - **LocalStorageManager**: Concrete implementation for local file system
-- **GCSStorageManager**: Placeholder for Google Cloud Storage
+- **CloudStorageManager**: Cloud storage (R2/S3-compatible)
 
 ## Progress Tracking and Reporting
 
