@@ -1,6 +1,6 @@
 # Frontend — Landbruget.dk
 
-Next.js 15 (App Router, Turbopack), React 19, TypeScript strict, Tailwind CSS 4, oxlint + oxfmt.
+Next.js 16 (App Router, Turbopack), React 19, TypeScript strict, Tailwind CSS 4, oxlint + oxfmt.
 
 ## Commands
 
@@ -70,13 +70,6 @@ src/
 ├── types/         # .d.ts for third-party type defs only
 └── content/       # Static content
 ```
-
-## Style Rules
-
-- **Tailwind-first** — no CSS modules, no styled-components, no inline `style` except dynamic values
-- **Mobile-first** responsive (`sm:`, `md:`, `lg:` breakpoints)
-- **Dark mode** via `dark:` prefix (next-themes)
-- **Custom colors**: Primary `#2a8b4e` defined in `tailwind.config.js`
 
 ## Common Mistakes to Avoid
 
