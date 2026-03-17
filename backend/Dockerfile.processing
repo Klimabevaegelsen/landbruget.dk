@@ -23,7 +23,7 @@ RUN pip install \
     pandas \
     shapely \
     fsspec>=2024.10.0 \
-    gcsfs>=2024.10.0 \
+    s3fs>=2024.1.0 \
     pyarrow
 
 # Copy the dataflow directory (which includes setup.py)
