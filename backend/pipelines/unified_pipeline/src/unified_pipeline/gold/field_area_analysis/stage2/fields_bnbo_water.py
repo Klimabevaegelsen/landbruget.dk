@@ -155,9 +155,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                     field_bnbo_water_geometry
             FROM field_bnbo_intersections fbi
             JOIN water_projects_bnbo_intersections wpbi
-                ON fbi.bnbo_id = wpbi.bnbo_id
-                    -- FIX: Ensure same BNBO to prevent cross-contamination
-                AND ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
+                ON ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
+            WHERE fbi.bnbo_id = wpbi.bnbo_id
         """)
 
         # Get result statistics

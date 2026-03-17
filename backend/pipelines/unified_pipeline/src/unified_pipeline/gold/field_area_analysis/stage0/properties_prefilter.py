@@ -10,6 +10,7 @@ PERFORMANCE IMPACT: Reduces Stage 1 complexity from 3.9B to 300M combinations (1
 import time
 from typing import Any
 
+from ..config import CONFIG
 from .base import PreFilteringStageBase
 
 
@@ -28,9 +29,15 @@ class PropertiesPreFilter(PreFilteringStageBase):
         # Load fields for filtering (BUILD side)
         self._load_fields_for_filtering()
 
-        # Load full cadastral dataset (PROBE side - the massive dataset)
-        self.log.info("Loading full cadastral dataset (6.5M properties)...")
-        self._load_silver_dataset("cadastral", "properties_raw")
+        # Load full properties dataset (PROBE side - the massive dataset)
+        # property_cadastral_merged is a gold layer dataset, not silver
+        self.log.info("Loading full properties dataset (6.5M properties)...")
+        pattern = f"gs://{CONFIG.bucket}/gold/{CONFIG.properties_dataset}/*/*.parquet"
+        files = self.gcs_access.list_files(pattern)
+        if not files:
+            raise FileNotFoundError(f"No gold data found for {CONFIG.properties_dataset}")
+        latest_path = sorted(files)[-1]
+        self.gcs_access.query_parquet_direct(latest_path, "SELECT *", "properties_full")
 
         # Detect CRS/axis mismatch between fields and properties, then normalize
         # properties to match fields so downstream field-property joins remain consistent.
