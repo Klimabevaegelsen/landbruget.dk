@@ -14,12 +14,6 @@ on:
         - WARNING
         - ERROR
 
-env:
-  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-
-
 jobs:
   run-migration:
     runs-on: ubuntu-latest
@@ -40,6 +34,11 @@ jobs:
 
       - name: Install dependencies
         run: source .venv/bin/activate && uv pip install -r backend/requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
       - name: Run Backfill Field UUIDs Script
         id: backfill

@@ -58,7 +58,7 @@ jobs:
         echo "$BRONZE_TIMESTAMP" > /tmp/bronze_timestamp.txt
 
     - name: Upload bronze timestamp artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: bronze-timestamp
         path: /tmp/bronze_timestamp.txt
@@ -84,7 +84,7 @@ jobs:
     - uses: actions/checkout@v6
 
     - name: Download bronze timestamp artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: bronze-timestamp
         path: /tmp/
@@ -113,12 +113,12 @@ jobs:
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
+      uses: 'google-github-actions/auth@v3'
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
     - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      uses: 'google-github-actions/setup-gcloud@v3'
 
     - name: Set up environment variables
       env:
@@ -187,7 +187,7 @@ jobs:
     - uses: actions/checkout@v6
 
     - name: Download bronze timestamp artifact
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: bronze-timestamp
         path: /tmp/
@@ -216,12 +216,12 @@ jobs:
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
+      uses: 'google-github-actions/auth@v3'
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
     - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      uses: 'google-github-actions/setup-gcloud@v3'
 
     - name: Set up environment variables
       env:
@@ -297,12 +297,12 @@ jobs:
 
     - id: 'auth'
       name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
+      uses: 'google-github-actions/auth@v3'
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
     - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      uses: 'google-github-actions/setup-gcloud@v3'
 
     - name: Set up environment variables
       env:
@@ -398,7 +398,7 @@ jobs:
         echo "✅ Silver layer processing completed!"
 
     - name: Upload Silver Pipeline Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: silver-pipeline-results

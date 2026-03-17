@@ -22,7 +22,7 @@ on:
       use_matrix:
         description: 'Run as matrix job (one job per top-level folder)'
         type: boolean
-        default: true
+        default: false
       max_parallel_jobs:
         description: 'Maximum number of parallel jobs (for matrix mode)'
         type: string
@@ -37,11 +37,6 @@ on:
           - WARNING
           - ERROR
         default: 'INFO'
-      max_workers:
-        description: 'Number of parallel workers for file downloads'
-        type: string
-        default: '4'
-
 
 jobs:
   discover-folders:
@@ -58,9 +53,6 @@ jobs:
 
     env:
       ENVIRONMENT: production
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
     steps:
     - uses: actions/checkout@v6
@@ -77,7 +69,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install unified pipeline dependencies FIRST (needed for R2 access)
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
 
@@ -93,26 +85,28 @@ jobs:
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v3'
+
     - name: Set up environment variables
       env:
-        R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         cd backend/pipelines/drive_data_pipeline
         echo "ENVIRONMENT=production" >> .env
-        echo "STORAGE_TYPE=r2" >> .env
-        echo "R2_BUCKET=$R2_BUCKET" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
-        echo "MAX_WORKERS=${{ inputs.max_workers || '4' }}" >> .env
 
     - name: Discover top-level folders
       id: get-folders
       working-directory: backend/pipelines/drive_data_pipeline
       env:
-        R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Create a Python script to discover folders
@@ -221,9 +215,6 @@ jobs:
 
     env:
       ENVIRONMENT: production
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
     steps:
     - uses: actions/checkout@v6
@@ -240,7 +231,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install unified pipeline dependencies FIRST (needed for R2 access)
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
 
@@ -256,27 +247,30 @@ jobs:
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v3'
+
     - name: Set up environment variables
       env:
-        R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         cd backend/pipelines/drive_data_pipeline
         echo "ENVIRONMENT=production" >> .env
-        echo "STORAGE_TYPE=r2" >> .env
-        echo "R2_BUCKET=$R2_BUCKET" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
-        echo "MAX_WORKERS=${{ inputs.max_workers || '4' }}" >> .env
 
     - name: Run pipeline for folder - ${{ matrix.folder }}
       working-directory: backend/pipelines/drive_data_pipeline
       env:
         ENVIRONMENT: production
-        STORAGE_TYPE: r2
-        R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        STORAGE_TYPE: gcs
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Build command for this specific folder
         CMD="python main.py --subfolders '${{ matrix.folder }}'"
@@ -319,9 +313,6 @@ jobs:
 
     env:
       ENVIRONMENT: production
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
     steps:
     - uses: actions/checkout@v6
@@ -338,7 +329,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install unified pipeline dependencies FIRST (needed for R2 access)
+        # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
 
@@ -354,27 +345,30 @@ jobs:
       with:
         credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v3'
+
     - name: Set up environment variables
       env:
-        R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         cd backend/pipelines/drive_data_pipeline
         echo "ENVIRONMENT=production" >> .env
-        echo "STORAGE_TYPE=r2" >> .env
-        echo "R2_BUCKET=$R2_BUCKET" >> .env
+        echo "STORAGE_TYPE=gcs" >> .env
+        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
         echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
-        echo "MAX_WORKERS=${{ inputs.max_workers || '4' }}" >> .env
 
     - name: Run Google Drive Pipeline (Single Mode)
       working-directory: backend/pipelines/drive_data_pipeline
       env:
         ENVIRONMENT: production
-        STORAGE_TYPE: r2
-        R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        STORAGE_TYPE: gcs
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
       run: |
         # Build command based on inputs
         CMD="python main.py"

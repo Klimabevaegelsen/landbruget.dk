@@ -58,12 +58,12 @@ jobs:
           pip install -e .
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Run CVR Collection
         id: collection
@@ -94,7 +94,7 @@ jobs:
           echo "success=true" >> $GITHUB_OUTPUT
 
       - name: Upload CVR Collection Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-collection-data
           path: /tmp/cvr_collection_data.parquet
@@ -122,15 +122,15 @@ jobs:
           pip install -e .
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Download CVR Collection Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-collection-data
           path: /tmp/
@@ -161,7 +161,7 @@ jobs:
           echo "✅ Company Fetching completed successfully"
 
       - name: Upload Company Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-company-data
           path: /tmp/cvr_company_data.parquet
@@ -189,15 +189,15 @@ jobs:
           pip install -e .
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Download Company Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-company-data
           path: /tmp/
@@ -219,7 +219,7 @@ jobs:
           $CMD
 
       - name: Upload P-Number Data
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-pnumber-data
           path: /tmp/cvr_pnumber_data.parquet
@@ -247,15 +247,15 @@ jobs:
           pip install -e .
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Download Company Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-company-data
           path: /tmp/
@@ -290,7 +290,7 @@ jobs:
           fi
 
       - name: Upload Financial Data Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-financial-data
           path: /tmp/cvr_financial_data.parquet
@@ -320,21 +320,21 @@ jobs:
           pip install -e .
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Download Company and P-Number Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-company-data
           path: /tmp/
 
       - name: Download P-Number Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-pnumber-data
           path: /tmp/
@@ -366,7 +366,7 @@ jobs:
           fi
 
       - name: Upload Address Data Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cvr-address-data
           path: /tmp/cvr_address_data.parquet
@@ -396,34 +396,34 @@ jobs:
           pip install -e .
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Download Company Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-company-data
           path: /tmp/
 
       - name: Download P-Number Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-pnumber-data
           path: /tmp/
 
       - name: Download Financial Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-financial-data
           path: /tmp/
         continue-on-error: true  # Don't fail if financial data not available
 
       - name: Download Address Data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: cvr-address-data
           path: /tmp/

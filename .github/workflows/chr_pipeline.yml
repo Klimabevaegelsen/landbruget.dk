@@ -7,11 +7,11 @@ concurrency:
 
 on:
   schedule:
-    - cron: "0 2 * * 1" # Every Monday at 2 AM UTC
+    - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC
   workflow_dispatch:
     inputs:
       step:
-        description: "Pipeline step to run"
+        description: 'Pipeline step to run'
         type: choice
         required: true
         options:
@@ -31,32 +31,32 @@ on:
           - ejendom
           - vetstat
           - silver_all
-        default: "all"
+        default: 'all'
       start_date:
-        description: "Start date (YYYY-MM-DD)"
+        description: 'Start date (YYYY-MM-DD)'
         type: string
         required: false
-        default: ""
+        default: ''
       end_date:
-        description: "End date (YYYY-MM-DD)"
+        description: 'End date (YYYY-MM-DD)'
         type: string
         required: false
-        default: ""
+        default: ''
       year_range:
         description: 'Year range for processing (e.g., "2020-2024" or single year "2023")'
         type: string
         required: false
-        default: "2021-2025"
+        default: '2022-2024'
       max_herds:
-        description: "Maximum number of herds to process"
+        description: 'Maximum number of herds to process'
         type: string
-        default: ""
+        default: ''
       species_codes:
-        description: "Comma-separated list of species codes"
+        description: 'Comma-separated list of species codes'
         type: string
-        default: ""
+        default: ''
       log_level:
-        description: "Logging level"
+        description: 'Logging level'
         type: choice
         required: true
         options:
@@ -64,29 +64,22 @@ on:
           - INFO
           - DEBUG
           - ERROR
-        default: "WARNING"
-      processing_mode:
-        description: "Processing mode for incremental updates"
-        type: choice
-        required: false
-        options:
-          - incremental
-          - full
-          - backfill
-        default: "incremental"
-      force_backfill_timestamp:
-        description: "Force specific bronze timestamp for backfill (YYYYMMDD_HHMMSS)"
-        type: string
-        required: false
-        default: ""
+        default: 'WARNING'
+      show_progress:
+        description: 'Show progress information'
+        type: boolean
+        default: true
       limit_herds_per_species:
-        description: "Limit number of herds processed per species"
+        description: 'Limit number of herds processed per species'
         type: string
-        default: ""
+        default: ''
+      max_concurrent_jobs:
+        description: 'Maximum number of concurrent matrix jobs'
+        type: string
+        default: '6'
 
 # Environment variables are set in individual jobs as needed
 # Bronze timestamp is generated in the bronze-foundation job and shared via artifacts
-
 
 jobs:
   # Job 0: Generate Monthly Matrix
@@ -101,64 +94,33 @@ jobs:
         run: |
           # Determine if we should process by month based on the step
           STEP="${{ inputs.step || 'all' }}"
-          PROCESSING_MODE="${{ inputs.processing_mode || 'incremental' }}"
+          YEAR_RANGE="${{ inputs.year_range || '2022-2024' }}"
 
-          # Only use monthly matrix for animal_movements, vetstat, or when processing all steps
-          if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" || "$STEP" == "vetstat" ]]; then
+          # Only use monthly matrix for animal_movements or when processing all steps
+          if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" ]]; then
             PROCESS_BY_MONTH="true"
 
-            # Calculate date range based on processing mode
-            if [[ "$PROCESSING_MODE" == "incremental" ]]; then
-              # Last 3 months for incremental
-              END_DATE=$(date +%Y-%m-%d)
-              START_DATE=$(date -d '3 months ago' +%Y-%m-%d)
-              START_YEAR=$(date -d '3 months ago' +%Y)
-              END_YEAR=$(date +%Y)
-              echo "🔄 Incremental mode: processing last 3 months ($START_DATE to $END_DATE)"
-            elif [[ "$PROCESSING_MODE" == "full" ]]; then
-              # Full range for full processing
-              START_YEAR=2021
-              END_YEAR=2025
-              echo "🔄 Full mode: processing complete range (2021-2025)"
+            # Parse year range
+            if [[ "$YEAR_RANGE" == *"-"* ]]; then
+              START_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f1)
+              END_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f2)
             else
-              # Backfill mode - use year_range input or default
-              YEAR_RANGE="${{ inputs.year_range || '2021-2025' }}"
-              if [[ "$YEAR_RANGE" == *"-"* ]]; then
-                START_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f1)
-                END_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f2)
-              else
-                START_YEAR="$YEAR_RANGE"
-                END_YEAR="$YEAR_RANGE"
-              fi
-              echo "🔄 Backfill mode: processing range ($START_YEAR-$END_YEAR)"
+              START_YEAR="$YEAR_RANGE"
+              END_YEAR="$YEAR_RANGE"
             fi
 
             # Generate array of months (year-month format)
             MONTHS="["
             FIRST_MONTH=true
-
-            if [[ "$PROCESSING_MODE" == "incremental" ]]; then
-              # For incremental, generate only the last 3 months
-              for i in {0..2}; do
-                MONTH_DATE=$(date -d "$i months ago" +%Y-%m)
+            for ((year=START_YEAR; year<=END_YEAR; year++)); do
+              for month in {1..12}; do
                 if [[ "$FIRST_MONTH" == "false" ]]; then
                   MONTHS="$MONTHS,"
                 fi
-                MONTHS="$MONTHS\"$MONTH_DATE\""
+                MONTHS="$MONTHS\"$year-$(printf "%02d" $month)\""
                 FIRST_MONTH=false
               done
-            else
-              # For full/backfill, generate all months in the year range
-              for ((year=START_YEAR; year<=END_YEAR; year++)); do
-                for month in {1..12}; do
-                  if [[ "$FIRST_MONTH" == "false" ]]; then
-                    MONTHS="$MONTHS,"
-                  fi
-                  MONTHS="$MONTHS\"$year-$(printf "%02d" $month)\""
-                  FIRST_MONTH=false
-                done
-              done
-            fi
+            done
             MONTHS="$MONTHS]"
 
             echo "months=$MONTHS" >> $GITHUB_OUTPUT
@@ -177,8 +139,8 @@ jobs:
     if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - uses: actions/checkout@v6
@@ -186,7 +148,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -195,7 +157,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -203,29 +165,29 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -248,13 +210,13 @@ jobs:
       - name: Run Foundation Steps
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           # Determine which foundation step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
-          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_discovery" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
-            STEP="herds"  # This will run stamdata -> herds (foundation steps)
+          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
+            STEP="herds"  # This will run stamdata -> herds
           elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
             STEP="$INPUT_STEP"
           else
@@ -263,7 +225,7 @@ jobs:
           fi
 
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="true"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
 
           CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
           if [[ "$SHOW_PROGRESS" == "true" ]]; then
@@ -317,16 +279,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: bronze-foundation
     if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'spf_su' }}
-    timeout-minutes: 360 # 6 hours timeout to prevent indefinite hanging
+    timeout-minutes: 360  # 6 hours timeout to prevent indefinite hanging
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     strategy:
       matrix:
         data_type: [diko, spf_su]
-      max-parallel: 2 # Limit concurrent jobs to reduce server load
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }}  # Limit concurrent jobs to reduce server load
 
     steps:
       - uses: actions/checkout@v6
@@ -334,7 +296,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -343,7 +305,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -351,6 +313,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -366,26 +336,18 @@ jobs:
 
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -400,22 +362,18 @@ jobs:
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
-      - name: Download Required Bronze Data from R2
+      - name: Download Required Bronze Data from GCS
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
-          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           # Download the bronze timestamp from artifact to know which folder to download from
           if [ -f "/tmp/bronze_timestamp.txt" ]; then
             BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
           else
             # If no timestamp file, try to find the latest timestamp from the foundation job
             echo "No bronze timestamp file found, trying to find latest bronze data..."
-            BRONZE_TIMESTAMP=$(aws s3 ls s3://$R2_BUCKET/bronze/chr/ --endpoint-url $R2_ENDPOINT | grep -oE '[0-9]{8}_[0-9]{6}' | sort | tail -n 1)
+            BRONZE_TIMESTAMP=$(gsutil ls gs://$GCS_BUCKET/bronze/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -n 1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
             if [ -z "$BRONZE_TIMESTAMP" ]; then
               echo "❌ Could not determine bronze timestamp"
               exit 1
@@ -428,13 +386,13 @@ jobs:
           mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
 
           # Download foundation data files that parallel jobs need
-          echo "Downloading foundation files from: s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+          echo "Downloading foundation files from: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
 
           # Download besaetning_list.json (needed by most steps)
-          aws s3 cp s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/besaetning_list.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "⚠️ besaetning_list.json not found (may not be needed)"
+          gsutil cp gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/besaetning_list.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ 2>/dev/null || echo "⚠️ besaetning_list.json not found (may not be needed)"
 
           # Download stamdata files if they exist
-          aws s3 cp s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ --recursive --exclude "*" --include "stamdata_*.json" --endpoint-url $R2_ENDPOINT 2>/dev/null || echo "⚠️ stamdata files not found (may not be needed)"
+          gsutil cp gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/stamdata_*.json /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ 2>/dev/null || echo "⚠️ stamdata files not found (may not be needed)"
 
           # List what we downloaded
           echo "=== Downloaded foundation files ==="
@@ -446,10 +404,10 @@ jobs:
       - name: Run Parallel Group 1 Step
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
-          CHR_MAX_WORKERS: 3
-          SPF_SU_MAX_WORKERS: "2"
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
+          SPF_SU_MAX_WORKERS: '2'
         run: |
           # Skip if this specific step is not requested
           INPUT_STEP="${{ inputs.step || 'all' }}"
@@ -460,7 +418,7 @@ jobs:
 
           STEP="${{ matrix.data_type }}"
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="true"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
 
           # IMPORTANT: Only run the specific step, not its dependencies
           # Dependencies have already been satisfied by previous jobs and context import
@@ -494,14 +452,14 @@ jobs:
     if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     strategy:
       matrix:
         month: ${{ fromJson(needs.generate-monthly-matrix.outputs.months) }}
-      fail-fast: false # Continue processing other months even if one fails
-      max-parallel: 6 # Limit concurrent monthly jobs to prevent overwhelming the server
+      fail-fast: false  # Continue processing other months even if one fails
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '6') }}  # Limit concurrent monthly jobs to prevent overwhelming the server
 
     steps:
       - uses: actions/checkout@v6
@@ -509,7 +467,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -518,7 +476,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -526,6 +484,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -541,26 +507,18 @@ jobs:
 
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -583,9 +541,9 @@ jobs:
       - name: Run Animal Movements for Month ${{ matrix.month }}
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
-          CHR_MAX_WORKERS: 3
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
           CONTEXT_IMPORT_PATH: /tmp/chr_context.json
         run: |
           MONTH="${{ matrix.month }}"
@@ -628,8 +586,9 @@ jobs:
           if [[ "${{ inputs.limit_herds_per_species }}" != "" ]]; then
             ARGS="$ARGS --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
           fi
-          # Always show progress
-          ARGS="$ARGS --progress"
+          if [[ "${{ inputs.show_progress }}" == "true" ]]; then
+            ARGS="$ARGS --progress"
+          fi
 
           # MINIMAL FIX: Add month-year suffix to bronze directory to prevent matrix job overwrites
           export BRONZE_MONTH_SUFFIX="_${{ matrix.month }}"
@@ -655,11 +614,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [bronze-foundation, generate-monthly-matrix]
     if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'false' && inputs.step == 'animal_movements' }}
-    timeout-minutes: 360 # 6 hours timeout for fallback
+    timeout-minutes: 360  # 6 hours timeout for fallback
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - uses: actions/checkout@v6
@@ -667,7 +626,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -676,7 +635,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -684,6 +643,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -699,26 +666,18 @@ jobs:
 
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -741,11 +700,11 @@ jobs:
       - name: Run Animal Movements (Traditional Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="true"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
 
           echo "Processing animal movements in traditional mode (not month-based)"
 
@@ -773,174 +732,6 @@ jobs:
           echo "Running animal movements command (traditional): $CMD"
           $CMD
 
-  # Job 2d: VetStat by Month and CHR Group (MONTHLY + CHR GROUP MATRIX PROCESSING)
-  bronze-vetstat-by-month:
-    runs-on: ubuntu-latest
-    needs: [bronze-herd-details, generate-monthly-matrix]
-    if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'vetstat') }}
-    timeout-minutes: 90 # Reduced timeout since each job processes 1/4 of CHRs (was 360 minutes)
-
-    permissions:
-      contents: "read"
-      id-token: "write"
-
-    strategy:
-      matrix:
-        month: ${{ fromJson(needs.generate-monthly-matrix.outputs.months) }}
-        chr_group: [1, 2, 3, 4] # Process CHRs in 4 groups to reduce timeout risk
-      fail-fast: false # Continue processing other combinations even if one fails
-      max-parallel: 6 # Increased from 3 since individual jobs are now smaller
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install dependencies
-        run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
-          cd backend/pipelines/unified_pipeline
-          uv pip install --system -e .
-
-          # Install CHR pipeline dependencies
-          cd ../chr_pipeline
-          uv pip install --system -e .
-
-
-      - name: Download context artifact with herd details
-        uses: actions/download-artifact@v8
-        with:
-          name: chr-context-with-details
-          path: /tmp/
-
-      - name: Download bronze timestamp artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: bronze-timestamp
-          path: /tmp/
-
-      - name: Set up environment variables
-        env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
-          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
-        run: |
-          cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
-          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
-          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-          echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
-
-          # Add VetStat credentials for robust authentication
-          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
-            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
-          fi
-          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
-            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
-          fi
-
-          # Use the shared bronze timestamp from foundation job
-          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
-          echo "Using shared bronze timestamp: $BRONZE_TIMESTAMP"
-
-          mkdir -p /tmp/data/bronze/chr
-          mkdir -p /tmp/data/silver/chr
-
-      - name: Run VetStat for Month ${{ matrix.month }}
-        working-directory: backend/pipelines/chr_pipeline
-        env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
-          CHR_MAX_WORKERS: 6
-          VETSTAT_MAX_WORKERS: "10"
-          CONTEXT_IMPORT_PATH: /tmp/chr_context_with_details.json
-        run: |
-          MONTH="${{ matrix.month }}"
-
-          # Parse month format (e.g., "2023-06") and set monthly date range
-          YEAR=$(echo "$MONTH" | cut -d'-' -f1)
-          MONTH_NUM=$(echo "$MONTH" | cut -d'-' -f2)
-
-          # Calculate first and last day of the month
-          START_DATE="$YEAR-$MONTH_NUM-01"
-
-          # Calculate last day of month (handle leap years and different month lengths)
-          if [[ "$MONTH_NUM" == "02" ]]; then
-            # February - check for leap year
-            if [[ $((YEAR % 4)) -eq 0 && ($((YEAR % 100)) -ne 0 || $((YEAR % 400)) -eq 0) ]]; then
-              END_DATE="$YEAR-$MONTH_NUM-29"
-            else
-              END_DATE="$YEAR-$MONTH_NUM-28"
-            fi
-          elif [[ "$MONTH_NUM" == "04" || "$MONTH_NUM" == "06" || "$MONTH_NUM" == "09" || "$MONTH_NUM" == "11" ]]; then
-            # April, June, September, November - 30 days
-            END_DATE="$YEAR-$MONTH_NUM-30"
-          else
-            # All other months - 31 days
-            END_DATE="$YEAR-$MONTH_NUM-31"
-          fi
-
-          echo "Processing VetStat for month $MONTH ($START_DATE to $END_DATE)"
-
-          # Determine additional arguments
-          ARGS=""
-          if [[ "${{ inputs.max_herds }}" != "" ]]; then
-            ARGS="$ARGS --limit-total-herds ${{ inputs.max_herds }}"
-          fi
-          if [[ "${{ inputs.species_codes }}" != "" ]]; then
-            ARGS="$ARGS --test-species-codes ${{ inputs.species_codes }}"
-          fi
-          if [[ "${{ inputs.limit_herds_per_species }}" != "" ]]; then
-            ARGS="$ARGS --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
-          fi
-          # Always show progress
-          ARGS="$ARGS --progress"
-
-          # Add month-year suffix to bronze directory to prevent matrix job overwrites
-          export BRONZE_MONTH_SUFFIX="_${{ matrix.month }}"
-          echo "🗓️ Using unique bronze directory suffix: $BRONZE_MONTH_SUFFIX"
-
-          # Add CHR group suffix to bronze directory for parallel processing
-          export BRONZE_CHR_GROUP_SUFFIX="_chr_group_${{ matrix.chr_group }}"
-          echo "🏷️ Using CHR group suffix: $BRONZE_CHR_GROUP_SUFFIX"
-
-          # Build command with CHR group parameter
-          CMD="python -m main --steps vetstat --start-date $START_DATE --end-date $END_DATE --chr-group ${{ matrix.chr_group }} --skip-dependencies --log-level ${{ inputs.log_level || 'WARNING' }} $ARGS"
-
-          echo "Running VetStat command for month $MONTH, CHR group ${{ matrix.chr_group }}: $CMD"
-
-          # Execute command
-          $CMD
-
-          if [[ $? -eq 0 ]]; then
-            echo "✅ Successfully processed VetStat for month ${{ matrix.month }}, CHR group ${{ matrix.chr_group }}"
-          else
-            echo "❌ Failed to process VetStat for month ${{ matrix.month }}, CHR group ${{ matrix.chr_group }}"
-            exit 1
-          fi
-
   # Job 3: Herd Details (needs foundation, required by ejendom + vetstat)
   bronze-herd-details:
     runs-on: ubuntu-latest
@@ -948,8 +739,8 @@ jobs:
     if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'herd_details' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - uses: actions/checkout@v6
@@ -957,7 +748,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -966,7 +757,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -974,6 +765,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -989,26 +788,18 @@ jobs:
 
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
@@ -1032,11 +823,11 @@ jobs:
       - name: Run Herd Details Step
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="true"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
 
           # IMPORTANT: Only run the herd_details step, not its dependencies
           # Dependencies have already been satisfied by the foundation job and context import
@@ -1064,32 +855,20 @@ jobs:
           path: /tmp/chr_context_with_details.json
           retention-days: 1
 
-  # Job 4: Parallel Data Collection - Group 2 (ejendom split into 4 CHR groups + vetstat when not using monthly processing)
+  # Job 4: Parallel Data Collection - Group 2 (ejendom + vetstat - need herd_details)
   bronze-parallel-group-2:
     runs-on: ubuntu-latest
-    needs: [bronze-herd-details, generate-monthly-matrix]
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || (inputs.step == 'vetstat' && needs.generate-monthly-matrix.outputs.process_by_month == 'false') }}
-    timeout-minutes: 360 # 6 hours timeout per CHR group (same as GitHub Actions max, ensures completion)
+    needs: bronze-herd-details
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     strategy:
       matrix:
-        # Ejendom is split into 4 CHR groups to prevent timeout
-        # VetStat is only included if not using monthly processing
-        include:
-          - data_type: ejendom
-            chr_group: 1
-          - data_type: ejendom
-            chr_group: 2
-          - data_type: ejendom
-            chr_group: 3
-          - data_type: ejendom
-            chr_group: 4
-      fail-fast: false # Continue other groups even if one fails
-      max-parallel: 4 # Process all ejendom groups in parallel
+        data_type: [ejendom, vetstat]
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }}  # Limit concurrent jobs to reduce server load
 
     steps:
       - uses: actions/checkout@v6
@@ -1097,7 +876,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -1106,7 +885,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1114,6 +893,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -1129,26 +916,18 @@ jobs:
 
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
           # Add VetStat credentials if provided
@@ -1168,22 +947,16 @@ jobs:
           mkdir -p /tmp/data/bronze/chr/$BRONZE_TIMESTAMP
           mkdir -p /tmp/data/silver/chr
 
-      - name: Download bronze data from R2
-        env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      - name: Download bronze data from GCS
         run: |
           cd backend/pipelines/chr_pipeline
-          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
           # Read the bronze timestamp
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
           echo "Downloading bronze data for timestamp: $BRONZE_TIMESTAMP"
 
-          # Download all bronze files from R2
-          aws s3 cp s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ --recursive --endpoint-url $R2_ENDPOINT || echo "Some bronze files may not exist (this is normal for optional steps)"
+          # Download all bronze files from GCS
+          gsutil -m cp -r gs://${{ secrets.GCS_BUCKET }}/bronze/chr/$BRONZE_TIMESTAMP/* /tmp/data/bronze/chr/$BRONZE_TIMESTAMP/ || echo "Some bronze files may not exist (this is normal for optional steps)"
 
           # List what was downloaded
           echo "Downloaded bronze files:"
@@ -1201,13 +974,13 @@ jobs:
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
-      - name: Run Parallel Group 2 Step (${{ matrix.data_type }} - CHR group ${{ matrix.chr_group }})
+      - name: Run Parallel Group 2 Step
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
-          CHR_MAX_WORKERS: 3
-          SPF_SU_MAX_WORKERS: "2"
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
+          SPF_SU_MAX_WORKERS: '2'
         run: |
           # Skip if this specific step is not requested
           INPUT_STEP="${{ inputs.step || 'all' }}"
@@ -1218,11 +991,11 @@ jobs:
 
           STEP="${{ matrix.data_type }}"
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="true"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
 
           # IMPORTANT: Only run the specific step, not its dependencies
           # Dependencies have already been satisfied by previous jobs and context import
-          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies --chr-group ${{ matrix.chr_group }}"
+          CMD="python -m main --steps $STEP --log-level $LOG_LEVEL --skip-dependencies"
           if [[ "$SHOW_PROGRESS" == "true" ]]; then
             CMD="$CMD --progress"
           fi
@@ -1242,30 +1015,20 @@ jobs:
             CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
           fi
 
-          # Add CHR group suffix to bronze directory for parallel processing
-          export BRONZE_CHR_GROUP_SUFFIX="_chr_group_${{ matrix.chr_group }}"
-          echo "🏷️ Using CHR group suffix: $BRONZE_CHR_GROUP_SUFFIX"
-
-          echo "Running parallel group 2 command for $STEP (CHR group ${{ matrix.chr_group }}): $CMD"
+          echo "Running parallel group 2 command for $STEP: $CMD"
           $CMD
+
+
 
   # Job 5: Silver Processing
   silver-processing:
     runs-on: ubuntu-latest
-    needs:
-      [
-        bronze-foundation,
-        bronze-parallel-group-1,
-        bronze-animal-movements-by-month,
-        bronze-vetstat-by-month,
-        bronze-herd-details,
-        bronze-parallel-group-2,
-      ]
+    needs: [bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-herd-details, bronze-parallel-group-2]
     if: ${{ always() && !cancelled() && ((inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_')) }}
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - uses: actions/checkout@v6
@@ -1273,7 +1036,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -1282,7 +1045,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1290,6 +1053,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Download bronze timestamp artifact
         uses: actions/download-artifact@v8
@@ -1299,13 +1070,8 @@ jobs:
 
       - name: Set up environment variables (NO FVM CREDENTIALS)
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
 
@@ -1314,54 +1080,33 @@ jobs:
           echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
 
           # Set up environment WITHOUT FVM credentials (silver doesn't need them)
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
-
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-
-          # Add Supabase credentials for incremental processing tracking
-          if [[ -n "$SUPABASE_URL" ]]; then
-            echo "SUPABASE_URL=$SUPABASE_URL" >> .env
-          fi
-          if [[ -n "$SUPABASE_ANON_KEY" ]]; then
-            echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
-          fi
-
-          # Set processing mode preferences
-          echo "CHR_PROCESSING_MODE=${{ inputs.processing_mode || 'incremental' }}" >> .env
-          if [[ -n "${{ inputs.force_backfill_timestamp }}" ]]; then
-            echo "CHR_FORCE_BACKFILL_TIMESTAMP=${{ inputs.force_backfill_timestamp }}" >> .env
-          fi
 
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
 
-      - name: Verify Bronze Data Exists in R2 (Streaming Mode)
+      - name: Verify Bronze Data Exists in GCS (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
-          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           # Read the bronze timestamp from artifact
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
-          echo "🚀 STREAMING MODE: Verifying bronze data exists in R2 for timestamp: $BRONZE_TIMESTAMP"
+          echo "🚀 STREAMING MODE: Verifying bronze data exists in GCS for timestamp: $BRONZE_TIMESTAMP"
 
-          # Just verify the data exists in R2 - DON'T download it
-          echo "Checking R2 path: s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
-          aws s3 ls s3://$R2_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ --endpoint-url $R2_ENDPOINT | head -10 || {
-            echo "❌ No bronze data found in R2 for timestamp: $BRONZE_TIMESTAMP"
+          # Just verify the data exists in GCS - DON'T download it
+          echo "Checking GCS path: gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/"
+          gsutil ls gs://$GCS_BUCKET/bronze/chr/$BRONZE_TIMESTAMP/ | head -10 || {
+            echo "❌ No bronze data found in GCS for timestamp: $BRONZE_TIMESTAMP"
             echo "Available timestamp folders:"
-            aws s3 ls s3://$R2_BUCKET/bronze/chr/ --endpoint-url $R2_ENDPOINT | head -10
+            gsutil ls gs://$GCS_BUCKET/bronze/chr/ | head -10
             exit 1
           }
 
-          echo "✅ Bronze data verified in R2 - will be processed via streaming mode"
-          echo "🔥 NO LOCAL DOWNLOAD - Using direct R2 access for memory efficiency"
+          echo "✅ Bronze data verified in GCS - will be processed via streaming mode"
+          echo "🔥 NO LOCAL DOWNLOAD - Using direct GCS access for memory efficiency"
 
       - name: Install uv
         run: |
@@ -1370,7 +1115,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1378,13 +1123,20 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth-silver'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
+
       - name: Run silver processing (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           CHR_FORCE_STREAMING: "true"
           GITHUB_ACTIONS: "true"
         run: |
@@ -1404,7 +1156,7 @@ jobs:
           fi
 
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="true"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
 
           CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
           if [[ "$SHOW_PROGRESS" == "true" ]]; then
@@ -1412,7 +1164,7 @@ jobs:
           fi
 
           echo "🚀 Running silver processing in STREAMING MODE: $CMD"
-          echo "📊 Processing data directly from R2 without local downloads"
+          echo "📊 Processing data directly from GCS without local downloads"
           $CMD
 
   # Job 6: Gold Processing (Veterinary Timeline + Transportation Analysis)
@@ -1422,8 +1174,8 @@ jobs:
     if: ${{ always() && !cancelled() && (needs.silver-processing.result == 'success' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') && ((inputs.step || 'all') == 'all' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') }}
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - uses: actions/checkout@v6
@@ -1431,7 +1183,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -1440,7 +1192,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1448,22 +1200,25 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth-gold'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
+
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
 
           # Set up environment for gold processing
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
-
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
           mkdir -p /tmp/data/silver/chr
@@ -1472,13 +1227,9 @@ jobs:
       - name: Find latest silver data
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
-          echo "🔍 Finding latest silver data in R2..."
-          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          echo "🔍 Finding latest silver data in GCS..."
 
           # If we have a bronze timestamp (from silver processing), use that
           if [ -f /tmp/bronze_timestamp.txt ]; then
@@ -1486,21 +1237,21 @@ jobs:
             echo "Using bronze timestamp from artifact: $BRONZE_TIMESTAMP"
 
             # Check if corresponding silver data exists
-            SILVER_PATH="s3://$R2_BUCKET/silver/chr/$BRONZE_TIMESTAMP/"
-            if aws s3 ls "$SILVER_PATH" --endpoint-url $R2_ENDPOINT > /dev/null 2>&1; then
+            SILVER_PATH="gs://$GCS_BUCKET/silver/chr/$BRONZE_TIMESTAMP/"
+            if gsutil ls "$SILVER_PATH" > /dev/null 2>&1; then
               echo "SILVER_TIMESTAMP=$BRONZE_TIMESTAMP" >> $GITHUB_ENV
               echo "Found silver data at: $SILVER_PATH"
             else
               echo "⚠️ No silver data found for bronze timestamp $BRONZE_TIMESTAMP"
               echo "Looking for latest silver data..."
-              LATEST_SILVER=$(aws s3 ls s3://$R2_BUCKET/silver/chr/ --endpoint-url $R2_ENDPOINT | grep -oE '[0-9]{8}_[0-9]{6}' | sort | tail -1)
+              LATEST_SILVER=$(gsutil ls gs://$GCS_BUCKET/silver/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
               echo "SILVER_TIMESTAMP=$LATEST_SILVER" >> $GITHUB_ENV
               echo "Using latest silver data: $LATEST_SILVER"
             fi
           else
             # Find latest silver data
             echo "No bronze timestamp found, finding latest silver data..."
-            LATEST_SILVER=$(aws s3 ls s3://$R2_BUCKET/silver/chr/ --endpoint-url $R2_ENDPOINT | grep -oE '[0-9]{8}_[0-9]{6}' | sort | tail -1)
+            LATEST_SILVER=$(gsutil ls gs://$GCS_BUCKET/silver/chr/ | grep -E '/[0-9]{8}_[0-9]{6}/$' | sort | tail -1 | sed 's|.*/\([0-9_]*\)/.*|\1|')
             echo "SILVER_TIMESTAMP=$LATEST_SILVER" >> $GITHUB_ENV
             echo "Using latest silver data: $LATEST_SILVER"
           fi
@@ -1515,21 +1266,17 @@ jobs:
       - name: Verify silver data exists
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
-          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           echo "🔍 Verifying silver data exists for timestamp: $SILVER_TIMESTAMP"
 
-          SILVER_PATH="s3://$R2_BUCKET/silver/chr/$SILVER_TIMESTAMP/"
-          echo "Checking R2 path: $SILVER_PATH"
+          SILVER_PATH="gs://$GCS_BUCKET/silver/chr/$SILVER_TIMESTAMP/"
+          echo "Checking GCS path: $SILVER_PATH"
 
-          if ! aws s3 ls "$SILVER_PATH" --endpoint-url $R2_ENDPOINT > /dev/null 2>&1; then
+          if ! gsutil ls "$SILVER_PATH" > /dev/null 2>&1; then
             echo "❌ No silver data found for timestamp: $SILVER_TIMESTAMP"
             echo "Available silver timestamps:"
-            aws s3 ls s3://$R2_BUCKET/silver/chr/ --endpoint-url $R2_ENDPOINT | head -10
+            gsutil ls gs://$GCS_BUCKET/silver/chr/ | head -10
             exit 1
           fi
 
@@ -1537,13 +1284,13 @@ jobs:
 
           # List key files to verify completeness
           echo "📋 Available silver files:"
-          aws s3 ls "$SILVER_PATH" --endpoint-url $R2_ENDPOINT | head -20
+          gsutil ls "$SILVER_PATH" | head -20
 
       - name: Run gold processing (Veterinary Timeline)
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GITHUB_ACTIONS: "true"
         run: |
           echo "🥇 Starting Gold Processing (Veterinary Timeline + Transportation Analysis)..."
@@ -1565,7 +1312,7 @@ jobs:
           # Process gold data using the silver timestamp
           success = process_gold_data(
               export_timestamp='$GOLD_TIMESTAMP',
-              silver_dir=None  # Will auto-find from R2
+              silver_dir=None  # Will auto-find from GCS
           )
 
           if success:
@@ -1579,45 +1326,41 @@ jobs:
       - name: Verify gold output
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
         run: |
-          R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           echo "🔍 Verifying gold output..."
 
           GOLD_TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-          GOLD_PATH="s3://$R2_BUCKET/gold/chr/"
+          GOLD_PATH="gs://$GCS_BUCKET/gold/chr/"
 
           echo "Checking for gold output in: $GOLD_PATH"
-          if aws s3 ls "$GOLD_PATH" --endpoint-url $R2_ENDPOINT > /dev/null 2>&1; then
+          if gsutil ls "$GOLD_PATH" > /dev/null 2>&1; then
             echo "📋 Gold layer contents:"
-            aws s3 ls "$GOLD_PATH" --endpoint-url $R2_ENDPOINT | tail -10
+            gsutil ls -la "$GOLD_PATH" | tail -10
 
             # Check for veterinary timeline specifically
-            if aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep -q "veterinary_timeline.parquet"; then
+            if gsutil ls "${GOLD_PATH}*/veterinary_timeline.parquet" > /dev/null 2>&1; then
               echo "✅ Veterinary timeline successfully created"
 
               # Get file size
-              TIMELINE_SIZE=$(aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT | grep "veterinary_timeline.parquet" | tail -1 | awk '{print $3}')
+              TIMELINE_SIZE=$(gsutil ls -la "${GOLD_PATH}*/veterinary_timeline.parquet" | awk '{print $1}' | tail -1)
               echo "📊 Timeline file size: $TIMELINE_SIZE bytes"
             else
               echo "⚠️ Veterinary timeline not found in gold output"
             fi
 
             # Check for transportation analysis specifically
-            if aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT 2>/dev/null | grep -q "transportation_analysis.parquet"; then
+            if gsutil ls "${GOLD_PATH}*/transportation_analysis.parquet" > /dev/null 2>&1; then
               echo "✅ Transportation analysis successfully created"
 
               # Get file size
-              TRANSPORT_SIZE=$(aws s3 ls "$GOLD_PATH" --recursive --endpoint-url $R2_ENDPOINT | grep "transportation_analysis.parquet" | tail -1 | awk '{print $3}')
+              TRANSPORT_SIZE=$(gsutil ls -la "${GOLD_PATH}*/transportation_analysis.parquet" | awk '{print $1}' | tail -1)
               echo "📊 Transportation analysis file size: $TRANSPORT_SIZE bytes"
             else
               echo "⚠️ Transportation analysis not found in gold output"
             fi
           else
-            echo "⚠️ No gold output found in R2"
+            echo "⚠️ No gold output found in GCS"
           fi
 
   # Job 7: Single Step Execution (for individual steps not covered above)
@@ -1626,8 +1369,8 @@ jobs:
     if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - uses: actions/checkout@v6
@@ -1635,7 +1378,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install uv
         run: |
@@ -1644,7 +1387,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Install unified pipeline dependencies FIRST (needed for R2 access)
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
@@ -1652,29 +1395,29 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v3'
 
       - name: Set up environment variables
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
-
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
-          echo "R2_BUCKET=$R2_BUCKET" >> .env
-          echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID" >> .env
-          echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY" >> .env
-          echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-
-          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
           # Set up VetStat credentials if provided
@@ -1691,12 +1434,12 @@ jobs:
       - name: Run Single Step
         working-directory: backend/pipelines/chr_pipeline
         env:
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           STEP="${{ inputs.step }}"
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="true"
+          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
 
           # Set default 3-year date range for animal_movements step
           if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
@@ -1741,7 +1484,7 @@ jobs:
           echo "1. FVM credentials (FVM_USERNAME/FVM_PASSWORD) invalid or expired"
           echo "2. VetStat certificate issues (VETSTAT_CERTIFICATE/VETSTAT_CERTIFICATE_PASSWORD)"
           echo "3. Network connectivity issues with FVM services"
-          echo "4. R2 authentication or bucket access issues"
+          echo "4. GCS authentication or bucket access issues"
           echo "5. Pipeline timeout or memory issues"
           echo ""
           echo "💡 Try running with smaller limits (max_herds, limit_herds_per_species) for testing"
@@ -1751,19 +1494,7 @@ jobs:
   # Job 8: Pipeline Summary and Optimization Report
   pipeline-summary:
     runs-on: ubuntu-latest
-    needs:
-      [
-        generate-monthly-matrix,
-        bronze-foundation,
-        bronze-parallel-group-1,
-        bronze-animal-movements-by-month,
-        bronze-vetstat-by-month,
-        bronze-animal-movements-fallback,
-        bronze-herd-details,
-        bronze-parallel-group-2,
-        silver-processing,
-        gold-processing,
-      ]
+    needs: [generate-monthly-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing, gold-processing]
     if: always() && !cancelled()
 
     steps:
@@ -1773,7 +1504,7 @@ jobs:
           echo ""
           echo "## 🔧 Configuration Used"
           echo "- **Step**: ${{ inputs.step || 'all' }}"
-          echo "- **Year Range**: ${{ inputs.year_range || '2021-2025' }}"
+          echo "- **Year Range**: ${{ inputs.year_range || '2022-2024' }}"
           echo "- **Monthly Processing**: ${{ needs.generate-monthly-matrix.outputs.process_by_month }}"
           echo "- **Log Level**: ${{ inputs.log_level || 'WARNING' }}"
           echo "- **Max Herds**: ${{ inputs.max_herds || 'unlimited' }}"
@@ -1821,8 +1552,7 @@ jobs:
           echo "| Animal Movements (Monthly) | ${{ needs.bronze-animal-movements-by-month.result || 'skipped' }} |"
           echo "| Animal Movements (Fallback) | ${{ needs.bronze-animal-movements-fallback.result || 'skipped' }} |"
           echo "| Herd Details | ${{ needs.bronze-herd-details.result || 'skipped' }} |"
-          echo "| VetStat Monthly Processing | ${{ needs.bronze-vetstat-by-month.result || 'skipped' }} |"
-          echo "| Group 2 (ejendom) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
+          echo "| Group 2 (ejendom, vetstat) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
           echo "| Silver Processing | ${{ needs.silver-processing.result || 'skipped' }} |"
           echo "| Gold Processing (Vet Timeline + Transport Analysis) | ${{ needs.gold-processing.result || 'skipped' }} |"
           echo ""
@@ -1843,9 +1573,6 @@ jobs:
           fi
           if [[ "${{ needs.bronze-herd-details.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS herd-details"
-          fi
-          if [[ "${{ needs.bronze-vetstat-by-month.result }}" == "failure" ]]; then
-            FAILED_JOBS="$FAILED_JOBS vetstat-monthly"
           fi
           if [[ "${{ needs.bronze-parallel-group-2.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS group-2"
