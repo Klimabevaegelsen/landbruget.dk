@@ -65,10 +65,10 @@ jobs:
       NODE_OPTIONS: "--max-old-space-size=4096"  # Limit Node.js memory to 4GB
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 
