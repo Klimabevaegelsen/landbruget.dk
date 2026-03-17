@@ -36,7 +36,10 @@ try:
     from common.logging_utils import setup_pipeline_logger
 except ImportError:
     # Fallback if common module not available
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     setup_pipeline_logger = None
 
 
@@ -103,7 +106,14 @@ class GCSToR2Syncer:
         self.logger.info("Configuring rclone remotes...")
 
         # Configure GCS remote
-        gcs_config = ["rclone", "config", "create", "gcs", "google cloud storage", "--non-interactive"]
+        gcs_config = [
+            "rclone",
+            "config",
+            "create",
+            "gcs",
+            "google cloud storage",
+            "--non-interactive",
+        ]
 
         # Add GCS authentication (uses application default credentials)
         gcs_env = os.environ.copy()
@@ -360,7 +370,13 @@ def validate_environment() -> Dict[str, str]:
     Raises:
         R2SyncError: If required environment variables are missing
     """
-    required_vars = ["GCS_BUCKET", "R2_BUCKET", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]
+    required_vars = [
+        "GCS_BUCKET",
+        "R2_BUCKET",
+        "R2_ACCOUNT_ID",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+    ]
 
     missing = [var for var in required_vars if not os.getenv(var)]
 
@@ -382,17 +398,28 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be synced without actually syncing")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be synced without actually syncing",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed progress")
     parser.add_argument(
-        "--manifest", type=str, default="manifest.json", help="Path to save manifest file (default: manifest.json)"
+        "--manifest",
+        type=str,
+        default="manifest.json",
+        help="Path to save manifest file (default: manifest.json)",
     )
 
     args = parser.parse_args()
 
     # Setup logging
     if setup_pipeline_logger:
-        logger = setup_pipeline_logger(name="r2_sync", level="DEBUG" if args.verbose else "INFO", console_output=True)
+        logger = setup_pipeline_logger(
+            name="r2_sync",
+            level="DEBUG" if args.verbose else "INFO",
+            console_output=True,
+        )
     else:
         logger = logging.getLogger("r2_sync")
         logger.setLevel(logging.DEBUG if args.verbose else logging.INFO)

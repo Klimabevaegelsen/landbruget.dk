@@ -254,11 +254,11 @@ class TestGetFvmCredentials:
         env_vars = mock_env_vars.copy()
         del env_vars["FVM_USERNAME"]
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            with pytest.raises(
-                ValueError, match="Missing required environment variables.*FVM_USERNAME"
-            ):
-                get_fvm_credentials()
+        with (
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(ValueError, match="Missing required environment variables.*FVM_USERNAME"),
+        ):
+            get_fvm_credentials()
 
     def test_get_credentials_missing_password(self, mock_env_vars):
         """Test credential retrieval fails with missing password."""
@@ -267,11 +267,11 @@ class TestGetFvmCredentials:
         env_vars = mock_env_vars.copy()
         del env_vars["FVM_PASSWORD"]
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            with pytest.raises(
-                ValueError, match="Missing required environment variables.*FVM_PASSWORD"
-            ):
-                get_fvm_credentials()
+        with (
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(ValueError, match="Missing required environment variables.*FVM_PASSWORD"),
+        ):
+            get_fvm_credentials()
 
     def test_get_credentials_missing_certificate(self, mock_env_vars):
         """Test credential retrieval fails with missing certificate."""
@@ -281,11 +281,13 @@ class TestGetFvmCredentials:
         del env_vars["VETSTAT_CERTIFICATE"]
         del env_vars["VETSTAT_CERTIFICATE_PATH"]
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            with pytest.raises(
+        with (
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(
                 ValueError, match="Missing required environment variables.*VETSTAT_CERTIFICATE"
-            ):
-                get_fvm_credentials()
+            ),
+        ):
+            get_fvm_credentials()
 
     def test_get_credentials_missing_certificate_password(self, mock_env_vars):
         """Test credential retrieval fails with missing certificate password."""
@@ -294,12 +296,14 @@ class TestGetFvmCredentials:
         env_vars = mock_env_vars.copy()
         del env_vars["VETSTAT_CERTIFICATE_PASSWORD"]
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            with pytest.raises(
+        with (
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(
                 ValueError,
                 match="Missing required environment variables.*VETSTAT_CERTIFICATE_PASSWORD",
-            ):
-                get_fvm_credentials()
+            ),
+        ):
+            get_fvm_credentials()
 
     def test_get_credentials_invalid_certificate_password(self, mock_env_vars):
         """Test credential retrieval fails with wrong certificate password."""
@@ -308,11 +312,11 @@ class TestGetFvmCredentials:
         env_vars = mock_env_vars.copy()
         env_vars["VETSTAT_CERTIFICATE_PASSWORD"] = "wrong_password"
 
-        with patch.dict(os.environ, env_vars, clear=True):
-            with pytest.raises(
-                ValueError, match="Failed to load certificate with provided password"
-            ):
-                get_fvm_credentials()
+        with (
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(ValueError, match="Failed to load certificate with provided password"),
+        ):
+            get_fvm_credentials()
 
 
 class TestCreateSoapClient:

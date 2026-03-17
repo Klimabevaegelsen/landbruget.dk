@@ -79,16 +79,16 @@ data-explorer/
 
 ## Tech Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Framework** | Next.js 16 | React framework with App Router |
-| **Language** | TypeScript | Type-safe development |
-| **Styling** | Tailwind CSS v4 | Utility-first CSS |
-| **Build Tool** | Turbopack | Fast bundler (dev mode) |
-| **Data Engine** | DuckDB WASM | In-browser SQL database |
-| **AI** | Google Gemini API | Natural language to SQL |
-| **Storage** | Cloudflare R2 | Parquet file hosting |
-| **Deployment** | Vercel | Serverless hosting |
+| Layer           | Technology        | Purpose                         |
+| --------------- | ----------------- | ------------------------------- |
+| **Framework**   | Next.js 16        | React framework with App Router |
+| **Language**    | TypeScript        | Type-safe development           |
+| **Styling**     | Tailwind CSS v4   | Utility-first CSS               |
+| **Build Tool**  | Turbopack         | Fast bundler (dev mode)         |
+| **Data Engine** | DuckDB WASM       | In-browser SQL database         |
+| **AI**          | Google Gemini API | Natural language to SQL         |
+| **Storage**     | Cloudflare R2     | Parquet file hosting            |
+| **Deployment**  | Vercel            | Serverless hosting              |
 
 ### Key Dependencies
 
@@ -111,12 +111,12 @@ data-explorer/
 
 ### Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server (with Turbopack) |
-| `npm run build` | Build for production |
-| `npm start` | Start production server locally |
-| `npm run lint` | Run ESLint |
+| Command         | Description                               |
+| --------------- | ----------------------------------------- |
+| `npm run dev`   | Start development server (with Turbopack) |
+| `npm run build` | Build for production                      |
+| `npm start`     | Start production server locally           |
+| `npm run lint`  | Run ESLint                                |
 
 ### Development Workflow
 
@@ -221,6 +221,7 @@ For complete deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 ### 1. SQL Editor
 
 Full-featured SQL editor powered by CodeMirror:
+
 - Syntax highlighting
 - Auto-completion
 - Multi-line editing
@@ -230,6 +231,7 @@ Full-featured SQL editor powered by CodeMirror:
 ### 2. Natural Language Queries
 
 Ask questions in plain language:
+
 - **Danish**: "Vis mig de første 10 bedrifter"
 - **English**: "Show me the first 10 farms"
 
@@ -238,6 +240,7 @@ Powered by Google Gemini Pro with custom prompting for agricultural domain knowl
 ### 3. Data Explorer
 
 Interactive interface for exploring datasets:
+
 - Dataset browser (Bronze/Silver/Gold layers)
 - Column metadata viewer
 - Sample data preview
@@ -246,6 +249,7 @@ Interactive interface for exploring datasets:
 ### 4. Parquet Support
 
 Direct querying of Parquet files via DuckDB WASM:
+
 - No server-side processing required
 - Efficient columnar storage
 - Supports complex queries (joins, aggregations, window functions)
@@ -255,17 +259,17 @@ Direct querying of Parquet files via DuckDB WASM:
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [README.md](./README.md) | This file - project overview |
-| [QUICK_START.md](./QUICK_START.md) | 5-minute getting started guide |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Production deployment guide |
-| [TESTING.md](./TESTING.md) | Testing strategies and procedures |
-| [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md) | Pre-deployment testing checklist |
-| [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md) | Technical implementation details |
-| [README_COMPONENTS.md](./README_COMPONENTS.md) | Component architecture |
-| [FEATURE_FLOW.md](./FEATURE_FLOW.md) | Feature documentation |
-| [docs/NATURAL_LANGUAGE_QUERIES.md](./docs/NATURAL_LANGUAGE_QUERIES.md) | NL query implementation |
+| Document                                                               | Description                       |
+| ---------------------------------------------------------------------- | --------------------------------- |
+| [README.md](./README.md)                                               | This file - project overview      |
+| [QUICK_START.md](./QUICK_START.md)                                     | 5-minute getting started guide    |
+| [DEPLOYMENT.md](./DEPLOYMENT.md)                                       | Production deployment guide       |
+| [TESTING.md](./TESTING.md)                                             | Testing strategies and procedures |
+| [TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)                         | Pre-deployment testing checklist  |
+| [IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)               | Technical implementation details  |
+| [README_COMPONENTS.md](./README_COMPONENTS.md)                         | Component architecture            |
+| [FEATURE_FLOW.md](./FEATURE_FLOW.md)                                   | Feature documentation             |
+| [docs/NATURAL_LANGUAGE_QUERIES.md](./docs/NATURAL_LANGUAGE_QUERIES.md) | NL query implementation           |
 
 ---
 
@@ -305,13 +309,13 @@ Direct querying of Parquet files via DuckDB WASM:
 
 ### Benchmarks
 
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Initial page load | < 2s | First visit |
-| SQL query execution | < 1s | 10MB Parquet file |
-| Natural language query | 1-3s | API call + SQL generation |
-| Parquet file download | 2-5s | 50MB file over Cloudflare CDN |
-| DuckDB initialization | < 500ms | WASM load and init |
+| Operation              | Time    | Notes                         |
+| ---------------------- | ------- | ----------------------------- |
+| Initial page load      | < 2s    | First visit                   |
+| SQL query execution    | < 1s    | 10MB Parquet file             |
+| Natural language query | 1-3s    | API call + SQL generation     |
+| Parquet file download  | 2-5s    | 50MB file over Cloudflare CDN |
+| DuckDB initialization  | < 500ms | WASM load and init            |
 
 ### Optimization Tips
 
@@ -345,14 +349,14 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md#cost-breakdown) for detailed cost analysis.
 
 ## Browser Support
 
-| Browser | Version | Status |
-|---------|---------|--------|
-| Chrome | 90+ | ✅ Fully supported |
-| Firefox | 90+ | ✅ Fully supported |
-| Safari | 15+ | ✅ Fully supported |
-| Edge | 90+ | ✅ Fully supported |
-| Mobile Safari | iOS 15+ | ⚠️ Limited (WASM performance) |
-| Chrome Mobile | Latest | ⚠️ Limited (large files may timeout) |
+| Browser       | Version | Status                               |
+| ------------- | ------- | ------------------------------------ |
+| Chrome        | 90+     | ✅ Fully supported                   |
+| Firefox       | 90+     | ✅ Fully supported                   |
+| Safari        | 15+     | ✅ Fully supported                   |
+| Edge          | 90+     | ✅ Fully supported                   |
+| Mobile Safari | iOS 15+ | ⚠️ Limited (WASM performance)        |
+| Chrome Mobile | Latest  | ⚠️ Limited (large files may timeout) |
 
 **Note**: DuckDB WASM requires modern browser with WebAssembly support.
 
@@ -375,6 +379,7 @@ For contribution guidelines, see the main repository README.
 ### Common Issues
 
 **Q: Natural language queries not working**
+
 ```bash
 # Check API key is set
 cat .env.local | grep GOOGLE_API_KEY
@@ -384,6 +389,7 @@ npm run dev
 ```
 
 **Q: CORS errors loading Parquet files**
+
 ```bash
 # Verify R2 URL is correct
 cat .env.local | grep NEXT_PUBLIC_R2_URL
@@ -392,6 +398,7 @@ cat .env.local | grep NEXT_PUBLIC_R2_URL
 ```
 
 **Q: Build fails with WASM errors**
+
 ```bash
 # Ensure asyncWebAssembly is enabled in next.config.ts
 # See DEPLOYMENT.md troubleshooting section
@@ -404,16 +411,19 @@ For more troubleshooting, see [DEPLOYMENT.md](./DEPLOYMENT.md#troubleshooting).
 ## Support & Resources
 
 ### Documentation
+
 - [Next.js Documentation](https://nextjs.org/docs)
 - [DuckDB WASM Documentation](https://duckdb.org/docs/api/wasm/)
 - [Google Gemini API Documentation](https://ai.google.dev/docs)
 - [Cloudflare R2 Documentation](https://developers.cloudflare.com/r2/)
 
 ### Community
+
 - [Next.js Discord](https://discord.gg/nextjs)
 - [DuckDB Discord](https://discord.duckdb.org)
 
 ### Internal
+
 - Main Repository: [landbruget.dk](https://github.com/landbruget/landbruget.dk)
 - Issue Tracker: [GitHub Issues](https://github.com/landbruget/landbruget.dk/issues)
 - Internal Docs: [`docs/`](../docs/)

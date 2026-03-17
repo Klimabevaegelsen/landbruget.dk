@@ -1,46 +1,45 @@
-import type { Metadata } from 'next';
-import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
-import './globals.css';
+import type { Metadata } from "next";
+import { Geist, Geist_Mono, Fraunces } from "next/font/google";
+import "./globals.css";
 
 const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
 });
 
 const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
 });
 
 const fraunces = Fraunces({
-  variable: '--font-fraunces',
-  subsets: ['latin'],
-  weight: ['300', '400', '700', '900'],
-  style: ['normal', 'italic'],
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["300", "400", "700", "900"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
   title: {
-    default: 'Data Explorer - Landbruget.dk',
-    template: '%s | Landbruget.dk Data Explorer',
+    default: "Data Explorer - Landbruget.dk",
+    template: "%s | Landbruget.dk Data Explorer",
   },
   description:
-    'Explore and analyze comprehensive Danish agricultural datasets. Powered by DuckDB-WASM for instant browser-based analytics.',
+    "Explore and analyze comprehensive Danish agricultural datasets. Powered by DuckDB-WASM for instant browser-based analytics.",
   keywords: [
-    'Danish agriculture',
-    'data explorer',
-    'agricultural data',
-    'DuckDB',
-    'SQL',
-    'data analysis',
+    "Danish agriculture",
+    "data explorer",
+    "agricultural data",
+    "DuckDB",
+    "SQL",
+    "data analysis",
   ],
-  authors: [{ name: 'Landbruget.dk' }],
+  authors: [{ name: "Landbruget.dk" }],
   openGraph: {
-    title: 'Data Explorer - Landbruget.dk',
-    description:
-      'Explore and analyze comprehensive Danish agricultural datasets',
-    type: 'website',
-    locale: 'da_DK',
+    title: "Data Explorer - Landbruget.dk",
+    description: "Explore and analyze comprehensive Danish agricultural datasets",
+    type: "website",
+    locale: "da_DK",
   },
 };
 

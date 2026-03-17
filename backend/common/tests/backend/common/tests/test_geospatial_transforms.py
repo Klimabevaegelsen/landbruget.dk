@@ -162,7 +162,9 @@ def test_transform_roundtrip_preserves_coordinates(
 # =============================================================================
 
 
-def test_denmark_bounds_wgs84_validation(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_denmark_bounds_wgs84_validation(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that coordinates are within Denmark bounds (WGS84)."""
     test_cases = [
         (12.5683, 55.6761, True, "Copenhagen (inside)"),
@@ -180,7 +182,9 @@ def test_denmark_bounds_wgs84_validation(mock_duckdb_connection: duckdb.DuckDBPy
         assert result == expected_inside, f"Point {description} at ({lon}, {lat}) validation failed"
 
 
-def test_denmark_bounds_utm_validation(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_denmark_bounds_utm_validation(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that coordinates are within Denmark bounds (UTM)."""
     test_cases = [
         (723626, 6176067, True, "Copenhagen (inside)"),
@@ -198,7 +202,9 @@ def test_denmark_bounds_utm_validation(mock_duckdb_connection: duckdb.DuckDBPyCo
         assert result == expected_inside, f"Point {description} at ({easting}, {northing}) validation failed"
 
 
-def test_sql_bounds_check_wgs84(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_sql_bounds_check_wgs84(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test SQL-based bounds checking for WGS84 coordinates."""
     # Create test points (some inside, some outside Denmark)
     pd.DataFrame(
@@ -289,7 +295,9 @@ def test_geometry_type_preserved_polygon(
     assert type_after == "POLYGON", "Transformed should still be Polygon"
 
 
-def test_geometry_type_preserved_linestring(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_geometry_type_preserved_linestring(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that LineString geometry type is preserved during transformation."""
     # Create a simple linestring in UTM coordinates
     linestring_utm = "LINESTRING(723000 6176000, 724000 6177000)"
@@ -361,7 +369,9 @@ def test_coordinate_precision_preserved(
 # =============================================================================
 
 
-def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_null_geometry_handling(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that NULL geometries are handled correctly."""
     pd.DataFrame({"id": [1, 2, 3], "geom_wkt": ["POINT(12.5 55.6)", None, "POINT(10.2 56.1)"]})
 
@@ -384,7 +394,9 @@ def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnectio
     assert result.loc[2, "geom"] is not None
 
 
-def test_invalid_wkt_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_invalid_wkt_handling(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that invalid WKT strings are rejected."""
     invalid_wkt = "POINT(invalid)"
 

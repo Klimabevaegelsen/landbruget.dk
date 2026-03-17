@@ -96,35 +96,35 @@ Type: CNAME | Name: r2 | Target: landbruget-data-explorer.r2.cloudflarestorage.c
 
 ## Environment Variables
 
-| Variable | Value | Where to Set |
-|----------|-------|--------------|
-| `NEXT_PUBLIC_R2_URL` | `https://r2.landbruget.dk` | Vercel Dashboard |
-| `GOOGLE_API_KEY` | Get from [Google AI Studio](https://aistudio.google.com/app/apikey) | Vercel Dashboard |
+| Variable             | Value                                                               | Where to Set     |
+| -------------------- | ------------------------------------------------------------------- | ---------------- |
+| `NEXT_PUBLIC_R2_URL` | `https://r2.landbruget.dk`                                          | Vercel Dashboard |
+| `GOOGLE_API_KEY`     | Get from [Google AI Studio](https://aistudio.google.com/app/apikey) | Vercel Dashboard |
 
 ---
 
 ## Cost Estimate
 
-| Service | Plan | Monthly Cost |
-|---------|------|--------------|
-| Vercel | Pro | $20 |
-| Cloudflare R2 | Pay-as-you-go | ~$1 |
-| Google Gemini | Free Tier | $0 |
-| **Total** | | **~$21** |
+| Service       | Plan          | Monthly Cost |
+| ------------- | ------------- | ------------ |
+| Vercel        | Pro           | $20          |
+| Cloudflare R2 | Pay-as-you-go | ~$1          |
+| Google Gemini | Free Tier     | $0           |
+| **Total**     |               | **~$21**     |
 
 ---
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `DEPLOYMENT.md` | Complete deployment guide |
-| `DEPLOYMENT_CHECKLIST.md` | Pre-deployment checklist |
-| `r2-cors-config.json` | CORS configuration for R2 |
-| `vercel.json` | Vercel configuration |
-| `.github/workflows/deploy.yml` | GitHub Actions CI/CD |
-| `scripts/upload-to-r2.sh` | Upload data to R2 |
-| `scripts/test-deployment.sh` | Test deployment health |
+| File                           | Purpose                   |
+| ------------------------------ | ------------------------- |
+| `DEPLOYMENT.md`                | Complete deployment guide |
+| `DEPLOYMENT_CHECKLIST.md`      | Pre-deployment checklist  |
+| `r2-cors-config.json`          | CORS configuration for R2 |
+| `vercel.json`                  | Vercel configuration      |
+| `.github/workflows/deploy.yml` | GitHub Actions CI/CD      |
+| `scripts/upload-to-r2.sh`      | Upload data to R2         |
+| `scripts/test-deployment.sh`   | Test deployment health    |
 
 ---
 
@@ -187,12 +187,14 @@ curl https://data.landbruget.dk/api/ask \
 ### Quick Rollback (< 2 minutes)
 
 **Option 1: Via Dashboard**
+
 1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
 2. Select project → Deployments
 3. Find last known good deployment
 4. Click ⋮ → "Promote to Production"
 
 **Option 2: Via CLI**
+
 ```bash
 # List recent deployments
 vercel ls landbruget-data-explorer
@@ -202,6 +204,7 @@ vercel promote [deployment-url] --prod
 ```
 
 **Option 3: Via Git**
+
 ```bash
 # Revert last commit
 git revert HEAD
@@ -216,6 +219,7 @@ git push origin main
 ### Uptime Monitoring
 
 **UptimeRobot** (Recommended - Free):
+
 - URL: https://data.landbruget.dk/api/health
 - Interval: 5 minutes
 - Alerts: Email + SMS
@@ -223,6 +227,7 @@ git push origin main
 ### Performance Monitoring
 
 **Vercel Analytics**:
+
 - Core Web Vitals
 - Real User Monitoring (RUM)
 - Function execution times
@@ -314,12 +319,12 @@ curl -I https://data.landbruget.dk/
 
 ## Support Contacts
 
-| Issue Type | Contact |
-|------------|---------|
-| Deployment Issues | devops@landbruget.dk |
-| Platform Outage | platform-alerts@landbruget.dk |
-| Security Issues | security@landbruget.dk |
-| General Questions | team@landbruget.dk |
+| Issue Type        | Contact                       |
+| ----------------- | ----------------------------- |
+| Deployment Issues | devops@landbruget.dk          |
+| Platform Outage   | platform-alerts@landbruget.dk |
+| Security Issues   | security@landbruget.dk        |
+| General Questions | team@landbruget.dk            |
 
 ---
 

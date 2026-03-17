@@ -78,7 +78,13 @@ class ValidationReportGenerator:
         if not result.is_valid:
             self.report.overall_passed = False
 
-    def add_custom_check(self, name: str, passed: bool, message: str, details: dict[str, Any] | None = None):
+    def add_custom_check(
+        self,
+        name: str,
+        passed: bool,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ):
         """Add custom check result to report."""
         self.report.custom_checks.append(
             {

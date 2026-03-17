@@ -8,10 +8,7 @@
         "http://localhost:3000",
         "http://localhost:3001"
       ],
-      "AllowedMethods": [
-        "GET",
-        "HEAD"
-      ],
+      "AllowedMethods": ["GET", "HEAD"],
       "AllowedHeaders": [
         "Content-Type",
         "Range",

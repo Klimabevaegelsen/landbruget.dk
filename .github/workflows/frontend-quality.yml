@@ -9,14 +9,17 @@ on:
     paths:
       - "frontend/**/*.{ts,tsx,js,jsx,json,css,md}"
       - "frontend-pesticide/**/*.{ts,tsx,js,jsx,json,css,md}"
+      - "data-explorer/**/*.{ts,tsx,js,jsx,json,css,md}"
       - "frontend/package.json"
       - "frontend-pesticide/package.json"
+      - "data-explorer/package.json"
       - ".github/workflows/frontend-quality.yml"
   push:
     branches: [main]
     paths:
       - "frontend/**/*.{ts,tsx,js,jsx,json,css,md}"
       - "frontend-pesticide/**/*.{ts,tsx,js,jsx,json,css,md}"
+      - "data-explorer/**/*.{ts,tsx,js,jsx,json,css,md}"
 
 
 jobs:
@@ -26,7 +29,7 @@ jobs:
 
     strategy:
       matrix:
-        project: [frontend, frontend-pesticide]
+        project: [frontend, frontend-pesticide, data-explorer]
 
     steps:
       - name: Checkout code
@@ -62,7 +65,7 @@ jobs:
 
     strategy:
       matrix:
-        project: [frontend, frontend-pesticide]
+        project: [frontend, frontend-pesticide, data-explorer]
 
     steps:
       - name: Checkout code
@@ -98,7 +101,7 @@ jobs:
 
     strategy:
       matrix:
-        project: [frontend, frontend-pesticide]
+        project: [frontend, frontend-pesticide, data-explorer]
 
     steps:
       - name: Checkout code

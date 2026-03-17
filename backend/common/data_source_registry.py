@@ -66,7 +66,10 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         data_source_type=DataSourceType.WFS,
         display_name="Matrikelgrænser",
         display_description="Officielle grænser for alle danske ejendomme og jordlodder",
-        custom_fields={"wfs_endpoint": "https://wfs.dataforsyning.dk/", "layer_name": "cadastral_parcels"},
+        custom_fields={
+            "wfs_endpoint": "https://wfs.dataforsyning.dk/",
+            "layer_name": "cadastral_parcels",
+        },
     ),
     "agricultural_fields": DataSourceInfo(
         source_authority="Vejdirektoratet",
@@ -310,7 +313,10 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         data_source_type=DataSourceType.API_REST,
         display_name="Dyreflytninger",
         display_description="Realtidssporing af husdyrflytninger mellem bedrifter",
-        custom_fields={"api_endpoint": "https://chr.fvst.dk/api/", "requires_authentication": True},
+        custom_fields={
+            "api_endpoint": "https://chr.fvst.dk/api/",
+            "requires_authentication": True,
+        },
     ),
     "chr_properties": DataSourceInfo(
         source_authority="Fødevarestyrelsen",
@@ -656,7 +662,10 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         data_source_type=DataSourceType.API_SOAP,
         display_name="Svineflytninger",
         display_description="Realtidssporing af svineflytninger mellem bedrifter",
-        custom_fields={"soap_service": "SvineflytningWS", "requires_fvm_credentials": True},
+        custom_fields={
+            "soap_service": "SvineflytningWS",
+            "requires_fvm_credentials": True,
+        },
     ),
     # ========================================
     # PROPERTY OWNERS SFTP PIPELINE

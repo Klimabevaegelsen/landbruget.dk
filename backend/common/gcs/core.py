@@ -214,7 +214,10 @@ class GCSDataAccess:
                     self.log.debug(f"Downloading {gcs_path} to {temp_file}")
 
                     # Fast download with gcsfs (5x faster than HTTPFS)
-                    with self.fs.open(gcs_path, "rb") as src, Path(temp_file).open("wb") as dst:
+                    with (
+                        self.fs.open(gcs_path, "rb") as src,
+                        Path(temp_file).open("wb") as dst,
+                    ):
                         shutil.copyfileobj(src, dst)
 
                     self.monitor.check_resources("post_download")
@@ -227,7 +230,10 @@ class GCSDataAccess:
                         Path(temp_file).unlink()
                         self.log.debug(f"Cleaned up temp file: {temp_file}")
                     except Exception as e:
-                        warnings.warn(f"Failed to cleanup temp file {temp_file}: {e}", stacklevel=2)
+                        warnings.warn(
+                            f"Failed to cleanup temp file {temp_file}: {e}",
+                            stacklevel=2,
+                        )
 
         return temp_file_context()
 
@@ -329,7 +335,11 @@ class GCSDataAccess:
         self.log.info(f"Exported DuckDB table {table_name} ({count:,} rows) directly to {gcs_path}")
 
     def process_gcs_to_gcs_direct(
-        self, input_gcs_path: str, output_gcs_path: str, processing_query: str, **parquet_options
+        self,
+        input_gcs_path: str,
+        output_gcs_path: str,
+        processing_query: str,
+        **parquet_options,
     ):
         """
         ULTIMATE PERFORMANCE: Process GCS file to GCS file with ZERO DataFrame conversions.
@@ -502,7 +512,12 @@ class GCSDataAccess:
         self.export_table_to_gcs_direct(table_name, gcs_path, **parquet_options)
         return False
 
-    def query_multiple_direct(self, gcs_pattern: str, table_name: str = "combined_table", query: str = "SELECT *"):
+    def query_multiple_direct(
+        self,
+        gcs_pattern: str,
+        table_name: str = "combined_table",
+        query: str = "SELECT *",
+    ):
         """
         OPTIMAL: Query multiple parquet files directly into DuckDB table - no DataFrame conversion.
         """
@@ -634,7 +649,13 @@ class GCSDataAccess:
             # Check if it's a network-related error that should be retried
             if any(
                 error_type in str(type(e).__name__).lower() or error_type in str(e).lower()
-                for error_type in ["network", "connection", "timeout", "unreachable", "oauth2"]
+                for error_type in [
+                    "network",
+                    "connection",
+                    "timeout",
+                    "unreachable",
+                    "oauth2",
+                ]
             ):
                 self.log.warning(f"Network-related error detected, will retry: {e}")
             raise

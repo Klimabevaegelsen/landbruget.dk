@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { defineRegistry } from '@json-render/react';
-import { shadcnComponents } from '@json-render/shadcn';
-import { catalog } from './catalog';
-import { BarChartView } from '@/components/charts/BarChartView';
-import { LineChartView } from '@/components/charts/LineChartView';
-import { PieChartView } from '@/components/charts/PieChartView';
-import { KPICard } from '@/components/charts/KPICard';
-import { DataTableView } from '@/components/charts/DataTableView';
-import { MapView } from '@/components/charts/MapView';
+import { defineRegistry } from "@json-render/react";
+import { shadcnComponents } from "@json-render/shadcn";
+import { catalog } from "./catalog";
+import { BarChartView } from "@/components/charts/BarChartView";
+import { LineChartView } from "@/components/charts/LineChartView";
+import { PieChartView } from "@/components/charts/PieChartView";
+import { KPICard } from "@/components/charts/KPICard";
+import { DataTableView } from "@/components/charts/DataTableView";
+import { MapView } from "@/components/charts/MapView";
 
 export const { registry } = defineRegistry(catalog, {
   components: {

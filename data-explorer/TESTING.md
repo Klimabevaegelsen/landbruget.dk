@@ -13,16 +13,16 @@ The Data Explorer components should be tested at three levels:
 ### Test File: `src/lib/duckdb.test.ts`
 
 ```typescript
-import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, test, expect, beforeAll, afterAll } from "@jest/globals";
 import {
   initDuckDB,
   executeQuery,
   registerParquetTable,
   getTableSchema,
   closeDuckDB,
-} from './duckdb';
+} from "./duckdb";
 
-describe('DuckDB Utilities', () => {
+describe("DuckDB Utilities", () => {
   beforeAll(async () => {
     await initDuckDB();
   });
@@ -31,29 +31,29 @@ describe('DuckDB Utilities', () => {
     await closeDuckDB();
   });
 
-  test('should initialize DuckDB', async () => {
+  test("should initialize DuckDB", async () => {
     // Already initialized in beforeAll
     expect(true).toBe(true);
   });
 
-  test('should execute simple query', async () => {
-    const result = await executeQuery('SELECT 1 as num, \'test\' as str');
+  test("should execute simple query", async () => {
+    const result = await executeQuery("SELECT 1 as num, 'test' as str");
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({ num: 1, str: 'test' });
+    expect(result[0]).toEqual({ num: 1, str: "test" });
   });
 
-  test('should register and query Parquet table', async () => {
+  test("should register and query Parquet table", async () => {
     // Using a public test Parquet file
-    const testUrl = 'https://example.com/test.parquet';
-    await registerParquetTable('test_table', testUrl);
+    const testUrl = "https://example.com/test.parquet";
+    await registerParquetTable("test_table", testUrl);
 
-    const schema = await getTableSchema('test_table');
+    const schema = await getTableSchema("test_table");
     expect(schema).toBeTruthy();
     expect(Array.isArray(schema)).toBe(true);
   });
 
-  test('should handle query errors gracefully', async () => {
-    await expect(executeQuery('INVALID SQL')).rejects.toThrow();
+  test("should handle query errors gracefully", async () => {
+    await expect(executeQuery("INVALID SQL")).rejects.toThrow();
   });
 });
 ```
@@ -249,121 +249,121 @@ describe('DatasetBrowser', () => {
 ### Test File: `e2e/data-explorer.spec.ts`
 
 ```typescript
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
-test.describe('Data Explorer', () => {
+test.describe("Data Explorer", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/example');
+    await page.goto("/example");
   });
 
-  test('should load and display datasets', async ({ page }) => {
+  test("should load and display datasets", async ({ page }) => {
     // Wait for datasets to load
-    await expect(page.getByText('Available Datasets')).toBeVisible();
+    await expect(page.getByText("Available Datasets")).toBeVisible();
 
     // Should show at least one dataset
     await expect(page.locator('[data-testid="dataset-item"]').first()).toBeVisible();
   });
 
-  test('should expand dataset to show schema', async ({ page }) => {
+  test("should expand dataset to show schema", async ({ page }) => {
     // Click to expand first dataset
     await page.locator('[data-testid="dataset-item"]').first().click();
 
     // Should show schema
-    await expect(page.getByText('Schema')).toBeVisible();
+    await expect(page.getByText("Schema")).toBeVisible();
   });
 
-  test('should select dataset and populate query', async ({ page }) => {
+  test("should select dataset and populate query", async ({ page }) => {
     // Expand and select first dataset
     await page.locator('[data-testid="dataset-item"]').first().click();
-    await page.getByRole('button', { name: /Query This Dataset/i }).click();
+    await page.getByRole("button", { name: /Query This Dataset/i }).click();
 
     // Should populate SQL editor
-    const editor = page.locator('.cm-content');
-    await expect(editor).toContainText('SELECT');
+    const editor = page.locator(".cm-content");
+    await expect(editor).toContainText("SELECT");
   });
 
-  test('should execute query and display results', async ({ page }) => {
+  test("should execute query and display results", async ({ page }) => {
     // Select dataset
     await page.locator('[data-testid="dataset-item"]').first().click();
-    await page.getByRole('button', { name: /Query This Dataset/i }).click();
+    await page.getByRole("button", { name: /Query This Dataset/i }).click();
 
     // Execute query
-    await page.getByRole('button', { name: /Run Query/i }).click();
+    await page.getByRole("button", { name: /Run Query/i }).click();
 
     // Wait for results
-    await expect(page.getByText('Query Results')).toBeVisible();
-    await expect(page.locator('table')).toBeVisible();
+    await expect(page.getByText("Query Results")).toBeVisible();
+    await expect(page.locator("table")).toBeVisible();
   });
 
-  test('should export results to CSV', async ({ page }) => {
+  test("should export results to CSV", async ({ page }) => {
     // Execute a query first
     await page.locator('[data-testid="dataset-item"]').first().click();
-    await page.getByRole('button', { name: /Query This Dataset/i }).click();
-    await page.getByRole('button', { name: /Run Query/i }).click();
+    await page.getByRole("button", { name: /Query This Dataset/i }).click();
+    await page.getByRole("button", { name: /Run Query/i }).click();
 
     // Wait for results
-    await expect(page.getByText('Query Results')).toBeVisible();
+    await expect(page.getByText("Query Results")).toBeVisible();
 
     // Set up download listener
-    const downloadPromise = page.waitForEvent('download');
+    const downloadPromise = page.waitForEvent("download");
 
     // Click export
-    await page.getByRole('button', { name: /Export CSV/i }).click();
+    await page.getByRole("button", { name: /Export CSV/i }).click();
 
     // Verify download
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/\.csv$/);
   });
 
-  test('should handle query errors', async ({ page }) => {
+  test("should handle query errors", async ({ page }) => {
     // Select dataset
     await page.locator('[data-testid="dataset-item"]').first().click();
 
     // Enter invalid SQL
-    const editor = page.locator('.cm-content');
+    const editor = page.locator(".cm-content");
     await editor.click();
-    await page.keyboard.type('INVALID SQL QUERY');
+    await page.keyboard.type("INVALID SQL QUERY");
 
     // Execute
-    await page.getByRole('button', { name: /Run Query/i }).click();
+    await page.getByRole("button", { name: /Run Query/i }).click();
 
     // Should show error
     await expect(page.getByText(/Query Error/i)).toBeVisible();
   });
 
-  test('should paginate large result sets', async ({ page }) => {
+  test("should paginate large result sets", async ({ page }) => {
     // Execute query with many results
     await page.locator('[data-testid="dataset-item"]').first().click();
-    const editor = page.locator('.cm-content');
+    const editor = page.locator(".cm-content");
     await editor.click();
-    await page.keyboard.press('Meta+A'); // Select all
-    await page.keyboard.type('SELECT * FROM dataset LIMIT 200');
-    await page.getByRole('button', { name: /Run Query/i }).click();
+    await page.keyboard.press("Meta+A"); // Select all
+    await page.keyboard.type("SELECT * FROM dataset LIMIT 200");
+    await page.getByRole("button", { name: /Run Query/i }).click();
 
     // Wait for results
-    await expect(page.getByText('Query Results')).toBeVisible();
+    await expect(page.getByText("Query Results")).toBeVisible();
 
     // Should show pagination controls
-    await expect(page.getByLabel('Next page')).toBeVisible();
+    await expect(page.getByLabel("Next page")).toBeVisible();
 
     // Click next page
-    await page.getByLabel('Next page').click();
+    await page.getByLabel("Next page").click();
 
     // Should show page 2
     await expect(page.getByText(/Page 2/i)).toBeVisible();
   });
 
-  test('should sort columns', async ({ page }) => {
+  test("should sort columns", async ({ page }) => {
     // Execute query
     await page.locator('[data-testid="dataset-item"]').first().click();
-    await page.getByRole('button', { name: /Query This Dataset/i }).click();
-    await page.getByRole('button', { name: /Run Query/i }).click();
+    await page.getByRole("button", { name: /Query This Dataset/i }).click();
+    await page.getByRole("button", { name: /Run Query/i }).click();
 
     // Wait for results
-    await expect(page.getByText('Query Results')).toBeVisible();
+    await expect(page.getByText("Query Results")).toBeVisible();
 
     // Click column header to sort
-    const firstColumnHeader = page.locator('th').first();
+    const firstColumnHeader = page.locator("th").first();
     await firstColumnHeader.click();
 
     // Should show sort indicator
@@ -375,6 +375,7 @@ test.describe('Data Explorer', () => {
 ## Manual Testing Checklist
 
 ### Basic Functionality
+
 - [ ] Dataset browser loads and displays datasets from manifest
 - [ ] Clicking a dataset expands to show schema
 - [ ] Selecting a dataset populates SQL editor with default query
@@ -383,6 +384,7 @@ test.describe('Data Explorer', () => {
 - [ ] Export CSV downloads file with correct data
 
 ### Error Handling
+
 - [ ] Invalid manifest URL shows error message
 - [ ] Malformed manifest JSON shows error message
 - [ ] Invalid SQL query shows error message
@@ -390,6 +392,7 @@ test.describe('Data Explorer', () => {
 - [ ] Large result sets don't crash browser
 
 ### Performance
+
 - [ ] DuckDB initializes in <3 seconds
 - [ ] Simple queries execute in <1 second
 - [ ] Complex queries with aggregation execute in <5 seconds
@@ -397,6 +400,7 @@ test.describe('Data Explorer', () => {
 - [ ] Pagination works smoothly
 
 ### UI/UX
+
 - [ ] Loading states are clear and responsive
 - [ ] Error messages are helpful and actionable
 - [ ] Keyboard shortcuts work (Cmd+Enter to execute)
@@ -405,6 +409,7 @@ test.describe('Data Explorer', () => {
 - [ ] Dark theme is applied correctly (CodeMirror)
 
 ### Browser Compatibility
+
 - [ ] Works in Chrome (latest)
 - [ ] Works in Firefox (latest)
 - [ ] Works in Safari (latest)

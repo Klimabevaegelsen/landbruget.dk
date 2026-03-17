@@ -46,7 +46,8 @@ def setup_pipeline_logger(
     # Create formatter
     if include_timestamp:
         formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
         )
     else:
         formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
@@ -116,7 +117,12 @@ def log_pipeline_start(logger: logging.Logger, pipeline_name: str, version: str 
     logger.info("=" * 60)
 
 
-def log_pipeline_end(logger: logging.Logger, pipeline_name: str, start_time: datetime, success: bool = True) -> None:
+def log_pipeline_end(
+    logger: logging.Logger,
+    pipeline_name: str,
+    start_time: datetime,
+    success: bool = True,
+) -> None:
     """Log standardized pipeline completion message."""
     end_time = datetime.now()
     duration = end_time - start_time
@@ -161,7 +167,12 @@ class PipelineLogger:
     with automatic start/end messages and duration tracking.
     """
 
-    def __init__(self, pipeline_name: str, version: str = "1.0.0", logger: logging.Logger | None = None) -> None:
+    def __init__(
+        self,
+        pipeline_name: str,
+        version: str = "1.0.0",
+        logger: logging.Logger | None = None,
+    ) -> None:
         self.pipeline_name = pipeline_name
         self.version = version
         self.logger = logger or get_pipeline_logger(pipeline_name)

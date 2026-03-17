@@ -234,7 +234,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    required = ["GCS_BUCKET", "R2_BUCKET", "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]
+    required = [
+        "GCS_BUCKET",
+        "R2_BUCKET",
+        "R2_ACCOUNT_ID",
+        "R2_ACCESS_KEY_ID",
+        "R2_SECRET_ACCESS_KEY",
+    ]
     missing = [v for v in required if not os.getenv(v)]
     if missing:
         logger.error(f"Missing env vars: {', '.join(missing)}")

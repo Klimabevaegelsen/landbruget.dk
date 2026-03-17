@@ -143,7 +143,12 @@ def get_parquet_stats(url: str) -> dict:
         stats: dict[str, dict] = {}
         for col, mn, mx, nulls, distinct in rows:
             if col not in stats:
-                stats[col] = {"min": mn, "max": mx, "null_count": int(nulls or 0), "distinct_count": distinct}
+                stats[col] = {
+                    "min": mn,
+                    "max": mx,
+                    "null_count": int(nulls or 0),
+                    "distinct_count": distinct,
+                }
         con.close()
         return stats
     except Exception as e:
@@ -403,7 +408,9 @@ def _update_manifest(manifest: dict, catalog_entries: list):
 
 def _upload_to_r2(local_path: Path, r2_dest: str):
     result = subprocess.run(
-        ["rclone", "copyto", str(local_path), r2_dest, "--s3-no-check-bucket"], capture_output=True, text=True
+        ["rclone", "copyto", str(local_path), r2_dest, "--s3-no-check-bucket"],
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         log.error(f"Upload failed for {local_path}: {result.stderr}")

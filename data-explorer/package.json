@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "oxlint .",
+    "lint:eslint": "next lint",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",
@@ -38,6 +41,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "oxfmt": "^0.40.0",
+    "oxlint": "^1.56.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

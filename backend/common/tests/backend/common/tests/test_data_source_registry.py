@@ -142,7 +142,11 @@ class TestDataSourceRegistryQuality:
         placeholders = ["TODO", "FIXME", "TBD", "PLACEHOLDER", "XXX"]
 
         for source_name, info in DATA_SOURCE_REGISTRY.items():
-            for field_name in ["data_description", "display_description", "source_authority"]:
+            for field_name in [
+                "data_description",
+                "display_description",
+                "source_authority",
+            ]:
                 value = getattr(info, field_name, "")
                 if value:
                     for placeholder in placeholders:

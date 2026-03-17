@@ -208,7 +208,9 @@ def test_bfe_format_invalid_pattern() -> None:
 # =============================================================================
 
 
-def test_batch_cvr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_batch_cvr_validation_dataframe(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test batch CVR validation on DataFrame."""
     pd.DataFrame(
         {
@@ -236,7 +238,9 @@ def test_batch_cvr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyC
     assert not result.loc[4, "is_valid"]  # Too short
 
 
-def test_batch_chr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_batch_chr_validation_dataframe(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test batch CHR validation on DataFrame."""
     pd.DataFrame(
         {
@@ -264,14 +268,21 @@ def test_batch_chr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyC
     assert not result.loc[4, "is_valid"]  # Non-numeric
 
 
-def test_identifier_normalization_pipeline(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_identifier_normalization_pipeline(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test full identifier normalization pipeline (Bronze -> Silver)."""
     # Bronze: Raw data with inconsistent formatting
     pd.DataFrame(
         {
             "cvr": [31373077, 113115, "12345678", "00000123"],
             "chr": [123456, 123, "654321", "000001"],
-            "bfe": ["0101-123456-12a", "0851-234567-1", "0461-100000-abc", "0101-000001-1a"],
+            "bfe": [
+                "0101-123456-12a",
+                "0851-234567-1",
+                "0461-100000-abc",
+                "0101-000001-1a",
+            ],
         }
     )
 

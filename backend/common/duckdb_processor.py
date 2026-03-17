@@ -144,7 +144,10 @@ class SharedDuckDBProcessor:
         return self.conn.execute(query).fetchall()
 
     def create_spatial_index(
-        self, table_name: str, geometry_column: str = "geometry", index_name: str | None = None
+        self,
+        table_name: str,
+        geometry_column: str = "geometry",
+        index_name: str | None = None,
     ) -> bool:
         """
         Create an R-tree spatial index on a geometry column.

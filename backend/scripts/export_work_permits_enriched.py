@@ -60,9 +60,15 @@ def main():
     # 1. Find latest files for each dataset
     log.info("Finding latest data files...")
 
-    work_permits_path = find_latest(gcs, f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet")
+    work_permits_path = find_latest(
+        gcs,
+        f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet",
+    )
     if not work_permits_path:
-        work_permits_path = find_latest(gcs, f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet")
+        work_permits_path = find_latest(
+            gcs,
+            f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet",
+        )
     if not work_permits_path:
         log.error("No work permits files found")
         return

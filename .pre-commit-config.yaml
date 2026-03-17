@@ -92,6 +92,14 @@ repos:
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
 
+      - id: oxfmt-data-explorer
+        name: oxfmt (Data Explorer)
+        entry: bash
+        args: [-c, "cd data-explorer && npm ci --prefer-offline && npm run format:check"]
+        language: system
+        files: '^data-explorer/.*\.(ts|tsx|js|jsx|json|md|css)$'
+        pass_filenames: false
+
       # Frontend linting with dependency check
       - id: oxlint
         name: Oxlint (Frontend)
@@ -107,6 +115,14 @@ repos:
         args: [-c, "cd frontend-pesticide && npm ci --prefer-offline && npm run lint"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
+      - id: oxlint-data-explorer
+        name: Oxlint (Data Explorer)
+        entry: bash
+        args: [-c, "cd data-explorer && npm ci --prefer-offline && npm run lint"]
+        language: system
+        files: '^data-explorer/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
       # Playwright smoke tests (optimized for speed)
@@ -130,7 +146,7 @@ repos:
       - id: check-debug-code
         name: Check for debug code
         entry: bash
-        args: [-c, 'files=$(git diff --cached --name-only | grep -v -E "(tests?/|__tests__/|\.test\.|\.spec\.|\.yaml$|\.yml$)"); if [ -n "$files" ]; then if git diff --cached -- $files | grep -E "^\+.*(console\.log|debugger|pdb\.set_trace|breakpoint\(\))"; then echo "⚠️ Debug code found in non-test files"; exit 1; fi; fi']
+        args: [-c, 'files=$(git diff --cached --name-only | grep -v -E "(tests?/|__tests__/|\.test\.|\.spec\.|\.yaml$|\.yml$|\.md$|\.json$)"); if [ -n "$files" ]; then if git diff --cached -- $files | grep -E "^\+.*(console\.log|debugger|pdb\.set_trace|breakpoint\(\))"; then echo "⚠️ Debug code found in non-test files"; exit 1; fi; fi']
         language: system
         pass_filenames: false
         always_run: true

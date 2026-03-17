@@ -21,6 +21,7 @@ wrangler login
 ```
 
 Get API keys:
+
 - Google Gemini API: https://aistudio.google.com/app/apikey
 
 ---
@@ -123,6 +124,7 @@ vercel --prod
 ```
 
 **Example output**:
+
 ```
 ✔ Production: https://data.landbruget.dk [copied to clipboard]
 ```
@@ -139,6 +141,7 @@ vercel --prod
 **Expected**: All tests should pass ✓
 
 Manual verification:
+
 1. Visit https://data.landbruget.dk
 2. Navigate to `/explore`
 3. Try a natural language query: "Show me the first 10 rows"
@@ -158,6 +161,7 @@ Your data explorer is now live at: **https://data.landbruget.dk**
    - Set up error alerts
 
 2. **Setup CI/CD**:
+
    ```bash
    # Add GitHub secrets for automated deployments
    # See: .github/workflows/deploy.yml
@@ -236,6 +240,7 @@ vercel promote [previous-deployment-url] --prod
 ```
 
 Or via dashboard:
+
 1. Go to https://vercel.com/dashboard
 2. Select project → Deployments
 3. Find last known good deployment
@@ -245,12 +250,12 @@ Or via dashboard:
 
 ## Cost Estimate
 
-| Service | Monthly Cost |
-|---------|--------------|
-| Vercel Pro | $20 |
-| Cloudflare R2 | ~$1 |
+| Service       | Monthly Cost   |
+| ------------- | -------------- |
+| Vercel Pro    | $20            |
+| Cloudflare R2 | ~$1            |
 | Google Gemini | $0 (free tier) |
-| **Total** | **~$21/month** |
+| **Total**     | **~$21/month** |
 
 ---
 

@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { DatasetBrowser } from '@/components/DatasetBrowser';
-import { SQLEditor } from '@/components/SQLEditor';
-import { ResultsTable } from '@/components/ResultsTable';
-import { AskInput } from '@/components/AskInput';
-import { executeQuery, registerParquetTable } from '@/lib/duckdb';
-import { getR2BaseUrl } from '@/lib/r2';
-import type { DatasetMetadata } from '@/types';
+import { useState } from "react";
+import { DatasetBrowser } from "@/components/DatasetBrowser";
+import { SQLEditor } from "@/components/SQLEditor";
+import { ResultsTable } from "@/components/ResultsTable";
+import { AskInput } from "@/components/AskInput";
+import { executeQuery, registerParquetTable } from "@/lib/duckdb";
+import { getR2BaseUrl } from "@/lib/r2";
+import type { DatasetMetadata } from "@/types";
 
 export default function ExamplePage() {
   const [selectedDataset, setSelectedDataset] = useState<DatasetMetadata | null>(null);
   const [queryResults, setQueryResults] = useState<Record<string, unknown>[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentQuery, setCurrentQuery] = useState<string>('');
+  const [currentQuery, setCurrentQuery] = useState<string>("");
 
   const R2_BASE_URL = getR2BaseUrl();
 
@@ -26,7 +26,7 @@ export default function ExamplePage() {
     try {
       await registerParquetTable(dataset.name, dataset.url);
     } catch (err) {
-      console.error('Error registering table:', err);
+      console.error("Error registering table:", err);
     }
 
     // Update query when dataset is selected
@@ -48,8 +48,8 @@ export default function ExamplePage() {
       const results = await executeQuery(query);
       setQueryResults(results);
     } catch (err) {
-      console.error('Query execution failed:', err);
-      setError(err instanceof Error ? err.message : 'Query execution failed');
+      console.error("Query execution failed:", err);
+      setError(err instanceof Error ? err.message : "Query execution failed");
     } finally {
       setIsExecuting(false);
     }
@@ -68,18 +68,12 @@ export default function ExamplePage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left sidebar - Dataset browser */}
           <div className="lg:col-span-1">
-            <DatasetBrowser
-              r2BaseUrl={R2_BASE_URL}
-              onTableSelect={handleTableSelect}
-            />
+            <DatasetBrowser r2BaseUrl={R2_BASE_URL} onTableSelect={handleTableSelect} />
           </div>
 
           {/* Main content - AI input, SQL editor and results */}
           <div className="lg:col-span-2 space-y-6">
-            <AskInput
-              onSqlGenerated={handleSqlGenerated}
-              disabled={!selectedDataset}
-            />
+            <AskInput onSqlGenerated={handleSqlGenerated} disabled={!selectedDataset} />
 
             <SQLEditor
               initialQuery={currentQuery}
@@ -88,11 +82,7 @@ export default function ExamplePage() {
               disabled={!selectedDataset}
             />
 
-            <ResultsTable
-              data={queryResults}
-              loading={isExecuting}
-              error={error}
-            />
+            <ResultsTable data={queryResults} loading={isExecuting} error={error} />
           </div>
         </div>
       </div>

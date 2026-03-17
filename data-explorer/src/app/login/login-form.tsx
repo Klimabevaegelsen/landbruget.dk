@@ -1,18 +1,18 @@
-'use client';
+"use client";
 
-import { useState, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { cn } from '@/lib/utils';
+import { useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 const DISPLAY_FONT = 'var(--font-fraunces), Georgia, "Times New Roman", serif';
-const EASE = 'var(--ease-out-quint)';
+const EASE = "var(--ease-out-quint)";
 
 // Deterministic — no Math.random() to avoid hydration mismatch
 function makeGridCells(count: number) {
   return Array.from({ length: count }, (_, i) => {
     const v = (i * 7919 + 3571) % 9999;
     const opacity = 0.02 + ((i * 17 + 3) % 60) / 3500;
-    return { value: String(v).padStart(4, '0'), opacity };
+    return { value: String(v).padStart(4, "0"), opacity };
   });
 }
 
@@ -20,41 +20,41 @@ const GRID_CELLS = makeGridCells(560); // 14 cols × 40 rows
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
-  const from = searchParams.get('from') || '/';
+  const from = searchParams.get("from") || "/";
 
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ password }),
       });
 
       if (res.ok) {
-        const safeFrom = from.startsWith('/') ? from : '/';
+        const safeFrom = from.startsWith("/") ? from : "/";
         window.location.assign(safeFrom);
       } else {
         const data = await res.json().catch(() => null);
         setError(
-          data?.error === 'Server misconfigured'
-            ? 'Serveren er ikke konfigureret korrekt.'
-            : 'Forkert adgangskode'
+          data?.error === "Server misconfigured"
+            ? "Serveren er ikke konfigureret korrekt."
+            : "Forkert adgangskode",
         );
-        setPassword('');
+        setPassword("");
         inputRef.current?.focus();
       }
     } catch {
-      setError('Noget gik galt. Prøv igen.');
+      setError("Noget gik galt. Prøv igen.");
     } finally {
       setLoading(false);
     }
@@ -67,9 +67,7 @@ export default function LoginForm() {
         className="motion-animate flex items-center gap-2.5 px-6 pt-8 sm:px-10 lg:px-16"
         style={{ animation: `fadeUp 0.5s ${EASE} 0s both` }}
       >
-        <span className="text-foreground text-sm font-semibold tracking-tight">
-          Landbruget.dk
-        </span>
+        <span className="text-foreground text-sm font-semibold tracking-tight">Landbruget.dk</span>
         <span className="text-border">·</span>
         <span className="text-muted-foreground text-sm">Data Explorer</span>
       </nav>
@@ -120,19 +118,16 @@ export default function LoginForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className={cn(
-                    'w-full rounded-sm border bg-background px-4 py-3 text-sm',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                    'transition-colors duration-150',
+                    "w-full rounded-sm border bg-background px-4 py-3 text-sm",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    "transition-colors duration-150",
                     error
-                      ? 'border-destructive focus-visible:ring-destructive'
-                      : 'border-border hover:border-foreground/30'
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : "border-border hover:border-foreground/30",
                   )}
                 />
                 {error && (
-                  <p
-                    className="text-destructive text-xs font-medium"
-                    role="alert"
-                  >
+                  <p className="text-destructive text-xs font-medium" role="alert">
                     {error}
                   </p>
                 )}
@@ -142,12 +137,12 @@ export default function LoginForm() {
                 type="submit"
                 disabled={loading || !password}
                 className={cn(
-                  'w-full rounded-sm px-4 py-3 text-sm font-semibold',
-                  'bg-primary text-primary-foreground',
-                  'hover:bg-primary/90 transition-colors duration-150',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
-                  'disabled:opacity-40 disabled:cursor-not-allowed',
-                  'active:scale-[0.98]'
+                  "w-full rounded-sm px-4 py-3 text-sm font-semibold",
+                  "bg-primary text-primary-foreground",
+                  "hover:bg-primary/90 transition-colors duration-150",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                  "disabled:opacity-40 disabled:cursor-not-allowed",
+                  "active:scale-[0.98]",
                 )}
               >
                 {loading ? (
@@ -159,7 +154,7 @@ export default function LoginForm() {
                     Logger ind…
                   </span>
                 ) : (
-                  'Log ind'
+                  "Log ind"
                 )}
               </button>
             </form>
@@ -168,7 +163,7 @@ export default function LoginForm() {
               className="motion-animate text-muted-foreground mt-10 text-xs"
               style={{ animation: `fadeUp 0.5s ${EASE} 0.65s both` }}
             >
-              Del af{' '}
+              Del af{" "}
               <a
                 href="https://landbruget.dk"
                 target="_blank"
@@ -176,7 +171,7 @@ export default function LoginForm() {
                 className="text-foreground hover:text-primary font-semibold transition-colors"
               >
                 Landbruget.dk
-              </a>{' '}
+              </a>{" "}
               — åben dansk landbrugsdata
             </p>
           </div>
@@ -190,7 +185,7 @@ export default function LoginForm() {
         >
           <div
             className="grid gap-x-3 gap-y-1.5 p-12 select-none"
-            style={{ gridTemplateColumns: 'repeat(14, 1fr)' }}
+            style={{ gridTemplateColumns: "repeat(14, 1fr)" }}
           >
             {GRID_CELLS.map((cell, i) => (
               <span

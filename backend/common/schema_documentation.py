@@ -163,7 +163,14 @@ class SchemaDocumentationManager:
         ]
 
         if "error" in schema_info:
-            lines.extend(["## Error", "", f"Could not generate schema documentation: {schema_info['error']}", ""])
+            lines.extend(
+                [
+                    "## Error",
+                    "",
+                    f"Could not generate schema documentation: {schema_info['error']}",
+                    "",
+                ]
+            )
         else:
             # Table overview
             lines.extend(
@@ -399,7 +406,12 @@ class SchemaDocumentationManager:
         try:
             # Configure git identity if not already set
             try:
-                result = subprocess.run(["git", "config", "user.name"], check=True, capture_output=True, text=True)
+                result = subprocess.run(
+                    ["git", "config", "user.name"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
                 user_name = result.stdout.strip()
                 if not user_name:
                     raise subprocess.CalledProcessError(1, "git config user.name")
@@ -409,16 +421,28 @@ class SchemaDocumentationManager:
 
                 if os.getenv("GITHUB_ACTIONS"):
                     # Running in GitHub Actions
-                    subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
                     subprocess.run(
-                        ["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True
+                        ["git", "config", "user.name", "github-actions[bot]"],
+                        check=True,
+                    )
+                    subprocess.run(
+                        [
+                            "git",
+                            "config",
+                            "user.email",
+                            "github-actions[bot]@users.noreply.github.com",
+                        ],
+                        check=True,
                     )
                     if self.logger:
                         self.logger.info("Configured git identity for GitHub Actions")
                 else:
                     # Running locally or elsewhere, use a generic identity
                     subprocess.run(["git", "config", "user.name", "Pipeline Bot"], check=True)
-                    subprocess.run(["git", "config", "user.email", "pipeline-bot@landbruget.dk"], check=True)
+                    subprocess.run(
+                        ["git", "config", "user.email", "pipeline-bot@landbruget.dk"],
+                        check=True,
+                    )
                     if self.logger:
                         self.logger.info("Configured generic git identity for pipeline")
 
@@ -446,7 +470,10 @@ class SchemaDocumentationMixin:
     """Mixin to add schema documentation to any pipeline class."""
 
     def init_schema_documentation(
-        self, pipeline_name: str, pipeline_start_time: datetime | None = None, enable_auto_commit: bool = False
+        self,
+        pipeline_name: str,
+        pipeline_start_time: datetime | None = None,
+        enable_auto_commit: bool = False,
     ) -> None:
         """
         Initialize schema documentation for this pipeline.

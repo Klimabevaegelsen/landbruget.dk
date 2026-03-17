@@ -35,7 +35,7 @@ export interface ColumnSchema {
   /** DuckDB type (VARCHAR, INTEGER, DOUBLE, etc.) */
   column_type: string;
   /** Whether the column allows NULL values */
-  null: 'YES' | 'NO';
+  null: "YES" | "NO";
 }
 
 /**
@@ -71,13 +71,13 @@ export interface QueryError {
   /** SQL query that failed */
   query: string;
   /** Error type (syntax, execution, connection) */
-  type: 'syntax' | 'execution' | 'connection';
+  type: "syntax" | "execution" | "connection";
 }
 
 /**
  * DuckDB connection state
  */
-export type ConnectionState = 'disconnected' | 'initializing' | 'ready' | 'error';
+export type ConnectionState = "disconnected" | "initializing" | "ready" | "error";
 
 /**
  * Supported data types in results

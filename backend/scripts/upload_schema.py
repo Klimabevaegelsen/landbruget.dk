@@ -40,7 +40,10 @@ try:
     from common.logging_utils import setup_pipeline_logger
 except ImportError:
     # Fallback if common module not available
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     setup_pipeline_logger = None
 
 # Import Google GenAI SDK
@@ -399,7 +402,9 @@ def main() -> int:
 
     parser.add_argument("--create-store", action="store_true", help="Create a new File Search Store")
     parser.add_argument(
-        "--store-id", type=str, help="Existing store ID to upload to (or from GEMINI_FILE_SEARCH_STORE_ID env var)"
+        "--store-id",
+        type=str,
+        help="Existing store ID to upload to (or from GEMINI_FILE_SEARCH_STORE_ID env var)",
     )
     parser.add_argument(
         "--store-name",
@@ -408,10 +413,21 @@ def main() -> int:
         help="Display name for new store (default: 'Landbruget.dk Schema Documentation')",
     )
     parser.add_argument(
-        "--schema-dir", type=str, default="schema", help="Directory containing schema markdown files (default: schema)"
+        "--schema-dir",
+        type=str,
+        default="schema",
+        help="Directory containing schema markdown files (default: schema)",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Show what would be uploaded without uploading")
-    parser.add_argument("--no-clean", action="store_true", help="Don't delete old files before uploading")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be uploaded without uploading",
+    )
+    parser.add_argument(
+        "--no-clean",
+        action="store_true",
+        help="Don't delete old files before uploading",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed progress")
 
     args = parser.parse_args()
@@ -419,7 +435,9 @@ def main() -> int:
     # Setup logging
     if setup_pipeline_logger:
         logger = setup_pipeline_logger(
-            name="schema_upload", level="DEBUG" if args.verbose else "INFO", console_output=True
+            name="schema_upload",
+            level="DEBUG" if args.verbose else "INFO",
+            console_output=True,
         )
     else:
         logger = logging.getLogger("schema_upload")

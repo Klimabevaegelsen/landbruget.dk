@@ -20,7 +20,7 @@ export function injectData(spec: Spec, data: Record<string, unknown>[]): Spec {
   for (const element of Object.values(injected.elements)) {
     if (element.props) {
       for (const [key, value] of Object.entries(element.props)) {
-        if (value === '$DATA') {
+        if (value === "$DATA") {
           element.props[key] = data;
         }
       }
@@ -35,7 +35,7 @@ export function injectData(spec: Spec, data: Record<string, unknown>[]): Spec {
  */
 export function summarizeResults(
   data: Record<string, unknown>[],
-  maxSampleRows = 10
+  maxSampleRows = 10,
 ): {
   rowCount: number;
   columns: { name: string; type: string; sample: unknown }[];
@@ -60,15 +60,14 @@ export function summarizeResults(
 }
 
 function inferType(value: unknown): string {
-  if (value === null || value === undefined) return 'null';
-  if (typeof value === 'number')
-    return Number.isInteger(value) ? 'integer' : 'float';
-  if (typeof value === 'boolean') return 'boolean';
-  if (typeof value === 'string') {
-    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return 'date';
-    if (/^-?\d+\.?\d*$/.test(value)) return 'numeric_string';
-    return 'string';
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "number") return Number.isInteger(value) ? "integer" : "float";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "string") {
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return "date";
+    if (/^-?\d+\.?\d*$/.test(value)) return "numeric_string";
+    return "string";
   }
-  if (typeof value === 'object') return 'object';
-  return 'unknown';
+  if (typeof value === "object") return "object";
+  return "unknown";
 }

@@ -624,7 +624,11 @@ def test_storage_round_trip_json_local(temp_dir):
     # Original data with Danish characters and various types
     original_data = {
         "cvr_numbers": ["31373077", "10150817", "00113115"],
-        "company_names": ["Ølgod Mejeri", "Dansk Landbrugsrådgivning", "Sønderjysk Fødevarer"],
+        "company_names": [
+            "Ølgod Mejeri",
+            "Dansk Landbrugsrådgivning",
+            "Sønderjysk Fødevarer",
+        ],
         "locations": {
             "hovedkontor": "København",
             "afdeling_1": "Århus",
