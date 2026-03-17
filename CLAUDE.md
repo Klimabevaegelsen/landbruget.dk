@@ -4,12 +4,12 @@ Public transparency project: organize Danish agricultural data and make it unive
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS 4, MapLibre GL
+- **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS 4, MapLibre GL
 - **Backend**: Python 3.11+, DuckDB, Pandas, GeoPandas
 - **Database**: Supabase (PostgreSQL 15 + PostGIS)
 - **Linting**: oxlint (frontend), ruff (backend)
 - **Testing**: Playwright E2E (frontend), Pytest (backend)
-- **Infra**: GCS (data), Vercel (deploy), GitHub Actions (CI/CD)
+- **Infra**: GCS/R2 (data), Vercel (deploy), GitHub Actions (CI/CD)
 
 ## Quick Start
 
@@ -43,31 +43,10 @@ cd frontend && npm test && npm run lint
 cd backend && python -m pytest
 ```
 
-## Critical Rules
-
-1. **Never commit `.env` files** — use `.env.example` only
-2. **Never modify database directly** — always use migrations
-3. **Always run tests** before marking work complete
-4. **Always validate data transformations twice** — public transparency project
-5. **Use absolute paths** in Conductor workspaces
-6. **Data joinability**: all data must join on CVR, CHR, BFE, or geospatial coordinates
-7. **Medallion architecture**: Bronze (raw) → Silver (cleaned) → Gold (analysis-ready)
-8. **CRS**: Process in EPSG:25832, transform to EPSG:4326 only at Supabase upload
-
-## Task Management
-
-- **Beads** (`bd`): Cross-session persistent tasks
-- **TodoWrite**: Within-session step tracking
-- Never use markdown TODO lists
-
-## SDD Workflow
-
-`/specify` → `/plan` → `/tasks` → `/implement` — see `.claude/specs/README.md`
-
 ## Reference
 
-- **Rules**: `.claude/rules/` (testing, security, data-quality, architecture, pipelines, environment, git-workflow)
-- **Skills**: `.claude/skills/` (data-pipeline, playwright-testing, supabase-migration, code-review, gcs-data-catalog)
-- **Commands**: `.claude/commands/` (run-tests, run-pipeline, db-migrate, fix-lint, validate-data, create-pr, new-component)
+- **Rules**: `.claude/rules/` — architecture, data-quality, environment, git-workflow, pipelines, security, testing
+- **Skills**: `.claude/skills/` — data-pipeline, playwright-testing, supabase-migration, code-review, gcs-data-catalog
+- **Commands**: `.claude/commands/` — run-tests, run-pipeline, db-migrate, fix-lint, validate-data, create-pr, new-component
 - **Pipeline docs**: `docs/PIPELINE_INDEX.md`
 - **Troubleshooting**: `docs/troubleshooting/`
