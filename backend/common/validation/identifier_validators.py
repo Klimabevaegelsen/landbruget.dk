@@ -183,7 +183,11 @@ class CVRValidator:
             invalid_samples = invalid_values.head(10).tolist()
 
         # Determine if validation passes
-        is_valid = invalid_count == 0 and duplicate_count == 0 and (null_count == 0 or allow_nulls)
+        is_valid = (
+            invalid_count == 0
+            and duplicate_count == 0
+            and (null_count == 0 or allow_nulls)
+        )
 
         return IdentifierValidationResult(
             identifier_type="CVR",
@@ -194,7 +198,9 @@ class CVRValidator:
             duplicate_count=duplicate_count,
             is_valid=is_valid,
             invalid_samples=invalid_samples,
-            validation_message=self._build_message("CVR", is_valid, invalid_count, duplicate_count, null_count),
+            validation_message=self._build_message(
+                "CVR", is_valid, invalid_count, duplicate_count, null_count
+            ),
         )
 
     def validate_table(
@@ -246,7 +252,11 @@ class CVRValidator:
             """).fetchall()
             invalid_samples = [s[0] for s in samples]
 
-        is_valid = invalid_count == 0 and duplicate_count == 0 and (null_count == 0 or allow_nulls)
+        is_valid = (
+            invalid_count == 0
+            and duplicate_count == 0
+            and (null_count == 0 or allow_nulls)
+        )
 
         return IdentifierValidationResult(
             identifier_type="CVR",
@@ -257,7 +267,9 @@ class CVRValidator:
             duplicate_count=duplicate_count,
             is_valid=is_valid,
             invalid_samples=invalid_samples,
-            validation_message=self._build_message("CVR", is_valid, invalid_count, duplicate_count, null_count),
+            validation_message=self._build_message(
+                "CVR", is_valid, invalid_count, duplicate_count, null_count
+            ),
         )
 
     def _build_message(
@@ -341,7 +353,11 @@ class CHRValidator:
             invalid_values = str_values[~valid_mask]
             invalid_samples = invalid_values.head(10).tolist()
 
-        is_valid = invalid_count == 0 and duplicate_count == 0 and (null_count == 0 or allow_nulls)
+        is_valid = (
+            invalid_count == 0
+            and duplicate_count == 0
+            and (null_count == 0 or allow_nulls)
+        )
 
         return IdentifierValidationResult(
             identifier_type="CHR",
@@ -352,7 +368,9 @@ class CHRValidator:
             duplicate_count=duplicate_count,
             is_valid=is_valid,
             invalid_samples=invalid_samples,
-            validation_message=self._build_message("CHR", is_valid, invalid_count, duplicate_count, null_count),
+            validation_message=self._build_message(
+                "CHR", is_valid, invalid_count, duplicate_count, null_count
+            ),
         )
 
     def validate_table(
@@ -404,7 +422,11 @@ class CHRValidator:
             """).fetchall()
             invalid_samples = [s[0] for s in samples]
 
-        is_valid = invalid_count == 0 and duplicate_count == 0 and (null_count == 0 or allow_nulls)
+        is_valid = (
+            invalid_count == 0
+            and duplicate_count == 0
+            and (null_count == 0 or allow_nulls)
+        )
 
         return IdentifierValidationResult(
             identifier_type="CHR",
@@ -415,7 +437,9 @@ class CHRValidator:
             duplicate_count=duplicate_count,
             is_valid=is_valid,
             invalid_samples=invalid_samples,
-            validation_message=self._build_message("CHR", is_valid, invalid_count, duplicate_count, null_count),
+            validation_message=self._build_message(
+                "CHR", is_valid, invalid_count, duplicate_count, null_count
+            ),
         )
 
     def _build_message(

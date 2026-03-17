@@ -35,9 +35,8 @@ class TestCVRAPIClient:
 
     def test_client_initialization_without_credentials(self):
         """Test client initialization without credentials raises error."""
-        with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(ValueError):
-                CVRAPIClient()
+        with patch.dict("os.environ", {}, clear=True), pytest.raises(ValueError):
+            CVRAPIClient()
 
     @patch("unified_pipeline.util.cvr_api_client.HTTPBasicAuth")
     def test_http_basic_auth_setup(self, mock_auth):

@@ -32,4 +32,7 @@ def test_storage_path_uses_default_bucket_when_env_missing(monkeypatch):
     monkeypatch.delenv("GCS_BUCKET", raising=False)
 
     paths = StoragePath()
-    assert paths.raw("gold", "example.parquet") == f"gs://{DEFAULT_BUCKET}/gold/example.parquet"
+    assert (
+        paths.raw("gold", "example.parquet")
+        == f"gs://{DEFAULT_BUCKET}/gold/example.parquet"
+    )

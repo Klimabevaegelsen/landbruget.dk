@@ -17,7 +17,6 @@ Reference: .claude/rules/data-quality.md
 
 import duckdb
 import pandas as pd
-
 from backend.common.crs_utils import DANISH_UTM, DENMARK_BOUNDS_WGS84, WGS84
 
 # =============================================================================
@@ -38,7 +37,9 @@ def test_cvr_preservation_through_pipeline(
         }
     )
 
-    mock_duckdb_connection.execute("CREATE TABLE bronze_companies AS SELECT * FROM bronze_df")
+    mock_duckdb_connection.execute(
+        "CREATE TABLE bronze_companies AS SELECT * FROM bronze_df"
+    )
 
     # Silver: Normalize CVR format
     mock_duckdb_connection.execute(
@@ -65,7 +66,9 @@ def test_cvr_preservation_through_pipeline(
     )
 
     # Verify CVR preservation
-    result = mock_duckdb_connection.execute("SELECT * FROM gold_company_summary").fetchdf()
+    result = mock_duckdb_connection.execute(
+        "SELECT * FROM gold_company_summary"
+    ).fetchdf()
 
     # All CVRs should be 8 digits
     assert all(result["cvr_length"] == 8), "All CVRs should be exactly 8 digits"
@@ -93,7 +96,9 @@ def test_chr_preservation_through_pipeline(
         }
     )
 
-    mock_duckdb_connection.execute("CREATE TABLE bronze_herds AS SELECT * FROM bronze_df")
+    mock_duckdb_connection.execute(
+        "CREATE TABLE bronze_herds AS SELECT * FROM bronze_df"
+    )
 
     # Silver: Normalize CHR format
     mock_duckdb_connection.execute(
@@ -130,7 +135,9 @@ def test_chr_preservation_through_pipeline(
     assert "000001" in result["chr"].values
 
 
-def test_bfe_preservation_through_pipeline(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_bfe_preservation_through_pipeline(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that BFE numbers are preserved through full pipeline."""
     # Bronze: Raw BFE data
     pd.DataFrame(
@@ -141,7 +148,9 @@ def test_bfe_preservation_through_pipeline(mock_duckdb_connection: duckdb.DuckDB
         }
     )
 
-    mock_duckdb_connection.execute("CREATE TABLE bronze_parcels AS SELECT * FROM bronze_df")
+    mock_duckdb_connection.execute(
+        "CREATE TABLE bronze_parcels AS SELECT * FROM bronze_df"
+    )
 
     # Silver: Pass through BFE (no transformation needed for string format)
     mock_duckdb_connection.execute(
@@ -166,7 +175,9 @@ def test_bfe_preservation_through_pipeline(mock_duckdb_connection: duckdb.DuckDB
     ).fetchdf()
 
     # All BFEs should be valid format
-    assert all(result["bfe_valid"]), "All BFEs should match kommune-ejerlav-matr pattern"
+    assert all(result["bfe_valid"]), (
+        "All BFEs should match kommune-ejerlav-matr pattern"
+    )
 
     # Check specific values preserved
     assert "0101-123456-12a" in result["bfe"].values
@@ -230,10 +241,14 @@ def test_geospatial_crs_maintained_wgs84(
             (7.5 <= lon <= 15.5 and 54.5 <= lat <= 58.0)  # standard order
             or (7.5 <= lat <= 15.5 and 54.5 <= lon <= 58.0)  # swapped order
         )
-        assert in_bounds, f"Coordinates ({lon}, {lat}) should be in Denmark bounds (either order)"
+        assert in_bounds, (
+            f"Coordinates ({lon}, {lat}) should be in Denmark bounds (either order)"
+        )
 
 
-def test_geometry_validation_bounds_check(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_geometry_validation_bounds_check(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that geometries outside Denmark bounds are flagged."""
     # Create test data with some points outside Denmark
     pd.DataFrame(
@@ -266,7 +281,9 @@ def test_geometry_validation_bounds_check(mock_duckdb_connection: duckdb.DuckDBP
 
     # Verify non-Denmark points are outside
     foreign_points = result[result["location"].isin(["Paris", "Berlin"])]
-    assert not any(foreign_points["is_in_denmark"]), "Foreign points should be outside bounds"
+    assert not any(foreign_points["is_in_denmark"]), (
+        "Foreign points should be outside bounds"
+    )
 
 
 # =============================================================================
@@ -274,10 +291,17 @@ def test_geometry_validation_bounds_check(mock_duckdb_connection: duckdb.DuckDBP
 # =============================================================================
 
 
-def test_data_joinability_on_cvr(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_data_joinability_on_cvr(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that data can be joined on CVR identifier."""
     # Create two tables with CVR as join key
-    pd.DataFrame({"cvr": ["31373077", "10150817", "12345678"], "company_name": ["Arla", "Crown", "Test"]})
+    pd.DataFrame(
+        {
+            "cvr": ["31373077", "10150817", "12345678"],
+            "company_name": ["Arla", "Crown", "Test"],
+        }
+    )
 
     pd.DataFrame(
         {
@@ -287,7 +311,9 @@ def test_data_joinability_on_cvr(mock_duckdb_connection: duckdb.DuckDBPyConnecti
         }
     )
 
-    mock_duckdb_connection.execute("CREATE TABLE companies AS SELECT * FROM companies_df")
+    mock_duckdb_connection.execute(
+        "CREATE TABLE companies AS SELECT * FROM companies_df"
+    )
     mock_duckdb_connection.execute("CREATE TABLE fields AS SELECT * FROM fields_df")
 
     # Join on CVR
@@ -313,10 +339,17 @@ def test_data_joinability_on_cvr(mock_duckdb_connection: duckdb.DuckDBPyConnecti
     assert arla["total_area"].iloc[0] == 30.8, "Arla total area should be 30.8 ha"
 
 
-def test_data_joinability_on_chr(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_data_joinability_on_chr(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that data can be joined on CHR identifier."""
     # Create two tables with CHR as join key
-    pd.DataFrame({"chr": ["123456", "654321", "111111"], "herd_type": ["Cattle", "Pig", "Cattle"]})
+    pd.DataFrame(
+        {
+            "chr": ["123456", "654321", "111111"],
+            "herd_type": ["Cattle", "Pig", "Cattle"],
+        }
+    )
 
     pd.DataFrame(
         {
@@ -327,7 +360,9 @@ def test_data_joinability_on_chr(mock_duckdb_connection: duckdb.DuckDBPyConnecti
     )
 
     mock_duckdb_connection.execute("CREATE TABLE herds AS SELECT * FROM herds_df")
-    mock_duckdb_connection.execute("CREATE TABLE movements AS SELECT * FROM movements_df")
+    mock_duckdb_connection.execute(
+        "CREATE TABLE movements AS SELECT * FROM movements_df"
+    )
 
     # Join on CHR
     result = mock_duckdb_connection.execute(
@@ -348,8 +383,12 @@ def test_data_joinability_on_chr(mock_duckdb_connection: duckdb.DuckDBPyConnecti
 
     # Check CHR 123456 has 2 movements
     herd_123456 = result[result["chr"] == "123456"]
-    assert herd_123456["num_movements"].iloc[0] == 2, "CHR 123456 should have 2 movements"
-    assert herd_123456["total_animals"].iloc[0] == 15, "CHR 123456 should have 15 total animals"
+    assert herd_123456["num_movements"].iloc[0] == 2, (
+        "CHR 123456 should have 2 movements"
+    )
+    assert herd_123456["total_animals"].iloc[0] == 15, (
+        "CHR 123456 should have 15 total animals"
+    )
 
 
 def test_data_joinability_on_geometry(
@@ -399,7 +438,9 @@ def test_data_joinability_on_geometry(
 # =============================================================================
 
 
-def test_null_identifier_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_null_identifier_handling(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that NULL identifiers are handled correctly."""
     # Create data with NULL values
     pd.DataFrame(
@@ -430,7 +471,9 @@ def test_null_identifier_handling(mock_duckdb_connection: duckdb.DuckDBPyConnect
     assert result["cvr"].notna().sum() > 0 or result["chr"].notna().sum() > 0
 
 
-def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_null_geometry_handling(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that NULL geometries are handled correctly."""
     pd.DataFrame(
         {
@@ -465,7 +508,9 @@ def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnectio
 # =============================================================================
 
 
-def test_duplicate_detection_by_cvr(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_duplicate_detection_by_cvr(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that duplicate CVR records are detected."""
     # Create data with duplicates
     pd.DataFrame(
@@ -497,7 +542,9 @@ def test_duplicate_detection_by_cvr(mock_duckdb_connection: duckdb.DuckDBPyConne
     assert result.loc[0, "duplicate_count"] == 2
 
 
-def test_duplicate_prevention_with_upsert(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_duplicate_prevention_with_upsert(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that duplicates are prevented using upsert pattern."""
     # Initial data
     pd.DataFrame(
@@ -520,7 +567,9 @@ def test_duplicate_prevention_with_upsert(mock_duckdb_connection: duckdb.DuckDBP
     )
 
     # Simulate upsert: Delete existing, insert all
-    mock_duckdb_connection.execute("DELETE FROM companies WHERE cvr IN (SELECT cvr FROM df2)")
+    mock_duckdb_connection.execute(
+        "DELETE FROM companies WHERE cvr IN (SELECT cvr FROM df2)"
+    )
 
     mock_duckdb_connection.execute("INSERT INTO companies SELECT * FROM df2")
 
@@ -543,7 +592,9 @@ def test_duplicate_prevention_with_upsert(mock_duckdb_connection: duckdb.DuckDBP
 # =============================================================================
 
 
-def test_data_type_consistency_identifiers(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_data_type_consistency_identifiers(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that identifiers maintain string data type."""
     # Create data with proper types
     pd.DataFrame(
@@ -573,7 +624,9 @@ def test_data_type_consistency_identifiers(mock_duckdb_connection: duckdb.DuckDB
     assert chr_type == "VARCHAR", f"CHR should be VARCHAR, got {chr_type}"
 
 
-def test_data_type_consistency_numeric(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_data_type_consistency_numeric(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that numeric fields maintain proper data types."""
     # Create data with numeric fields
     pd.DataFrame(
@@ -604,7 +657,9 @@ def test_data_type_consistency_numeric(mock_duckdb_connection: duckdb.DuckDBPyCo
     assert year_type == "BIGINT", f"year should be BIGINT, got {year_type}"
 
 
-def test_data_type_consistency_dates(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_data_type_consistency_dates(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that date fields maintain proper data types."""
     # Create data with dates
     pd.DataFrame(
@@ -628,7 +683,9 @@ def test_data_type_consistency_dates(mock_duckdb_connection: duckdb.DuckDBPyConn
     date_type = result[0]
 
     # Should be TIMESTAMP, TIMESTAMP_NS, or DATE (depending on DuckDB/pandas version)
-    assert date_type in ["TIMESTAMP", "TIMESTAMP_NS", "DATE"], f"record_date should be timestamp-like, got {date_type}"
+    assert date_type in ["TIMESTAMP", "TIMESTAMP_NS", "DATE"], (
+        f"record_date should be timestamp-like, got {date_type}"
+    )
 
 
 # =============================================================================
@@ -655,7 +712,9 @@ def test_full_pipeline_quality_check(
         }
     )
 
-    mock_duckdb_connection.execute("CREATE TABLE bronze_companies AS SELECT * FROM bronze_df")
+    mock_duckdb_connection.execute(
+        "CREATE TABLE bronze_companies AS SELECT * FROM bronze_df"
+    )
 
     # Silver: Normalize and validate
     mock_duckdb_connection.execute(

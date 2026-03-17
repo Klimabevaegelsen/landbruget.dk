@@ -45,10 +45,16 @@ class ResourceMonitor:
 
             # Alert if approaching limits (adjusted for development environment)
             if memory_used_gb > 20:  # 20 GB threshold for development
-                warnings.warn(f"{operation_name}: High memory usage {memory_used_gb:.1f} GB", stacklevel=2)
+                warnings.warn(
+                    f"{operation_name}: High memory usage {memory_used_gb:.1f} GB",
+                    stacklevel=2,
+                )
 
             if disk_used_gb > 400:  # 400 GB threshold for development
-                warnings.warn(f"{operation_name}: High disk usage {disk_used_gb:.1f} GB", stacklevel=2)
+                warnings.warn(
+                    f"{operation_name}: High disk usage {disk_used_gb:.1f} GB",
+                    stacklevel=2,
+                )
 
             return {
                 "memory_gb": memory_used_gb,

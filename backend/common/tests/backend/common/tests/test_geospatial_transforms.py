@@ -16,7 +16,6 @@ Reference: .claude/rules/data-quality.md
 import duckdb
 import pandas as pd
 import pytest
-
 from backend.common.crs_utils import (
     DANISH_UTM,
     DENMARK_BOUNDS_WGS84,
@@ -78,7 +77,9 @@ def test_transform_utm_to_wgs84_accuracy(
     # This accounts for different PROJ versions and axis ordering
     lon_close = abs(x - expected_lon) < 0.05 or abs(y - expected_lon) < 0.05
     lat_close = abs(x - expected_lat) < 0.05 or abs(y - expected_lat) < 0.05
-    assert lon_close and lat_close, f"Coordinates ({x}, {y}) should be close to Copenhagen location"
+    assert lon_close and lat_close, (
+        f"Coordinates ({x}, {y}) should be close to Copenhagen location"
+    )
 
 
 def test_transform_wgs84_to_utm_accuracy(
@@ -116,7 +117,9 @@ def test_transform_wgs84_to_utm_accuracy(
 
     # Verify coordinates changed from input (transformation occurred)
     # WGS84 coordinates are much smaller than UTM coordinates
-    assert x != 10.2039 and y != 56.1629, "Coordinates should have changed from WGS84 values"
+    assert x != 10.2039 and y != 56.1629, (
+        "Coordinates should have changed from WGS84 values"
+    )
 
 
 def test_transform_roundtrip_preserves_coordinates(
@@ -153,8 +156,12 @@ def test_transform_roundtrip_preserves_coordinates(
     x_orig, y_orig, x_round, y_round = result
 
     # Allow 1cm tolerance for roundtrip error
-    assert abs(x_orig - x_round) < 0.01, f"X coordinate should be preserved (diff: {abs(x_orig - x_round)}m)"
-    assert abs(y_orig - y_round) < 0.01, f"Y coordinate should be preserved (diff: {abs(y_orig - y_round)}m)"
+    assert abs(x_orig - x_round) < 0.01, (
+        f"X coordinate should be preserved (diff: {abs(x_orig - x_round)}m)"
+    )
+    assert abs(y_orig - y_round) < 0.01, (
+        f"Y coordinate should be preserved (diff: {abs(y_orig - y_round)}m)"
+    )
 
 
 # =============================================================================
@@ -162,7 +169,9 @@ def test_transform_roundtrip_preserves_coordinates(
 # =============================================================================
 
 
-def test_denmark_bounds_wgs84_validation(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_denmark_bounds_wgs84_validation(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that coordinates are within Denmark bounds (WGS84)."""
     test_cases = [
         (12.5683, 55.6761, True, "Copenhagen (inside)"),
@@ -177,10 +186,14 @@ def test_denmark_bounds_wgs84_validation(mock_duckdb_connection: duckdb.DuckDBPy
 
     for lon, lat, expected_inside, description in test_cases:
         result = is_wgs84_coordinate_range(lon, lat)
-        assert result == expected_inside, f"Point {description} at ({lon}, {lat}) validation failed"
+        assert result == expected_inside, (
+            f"Point {description} at ({lon}, {lat}) validation failed"
+        )
 
 
-def test_denmark_bounds_utm_validation(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_denmark_bounds_utm_validation(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that coordinates are within Denmark bounds (UTM)."""
     test_cases = [
         (723626, 6176067, True, "Copenhagen (inside)"),
@@ -195,10 +208,14 @@ def test_denmark_bounds_utm_validation(mock_duckdb_connection: duckdb.DuckDBPyCo
 
     for easting, northing, expected_inside, description in test_cases:
         result = is_utm_coordinate_range(easting, northing)
-        assert result == expected_inside, f"Point {description} at ({easting}, {northing}) validation failed"
+        assert result == expected_inside, (
+            f"Point {description} at ({easting}, {northing}) validation failed"
+        )
 
 
-def test_sql_bounds_check_wgs84(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_sql_bounds_check_wgs84(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test SQL-based bounds checking for WGS84 coordinates."""
     # Create test points (some inside, some outside Denmark)
     pd.DataFrame(
@@ -289,7 +306,9 @@ def test_geometry_type_preserved_polygon(
     assert type_after == "POLYGON", "Transformed should still be Polygon"
 
 
-def test_geometry_type_preserved_linestring(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_geometry_type_preserved_linestring(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that LineString geometry type is preserved during transformation."""
     # Create a simple linestring in UTM coordinates
     linestring_utm = "LINESTRING(723000 6176000, 724000 6177000)"
@@ -352,8 +371,12 @@ def test_coordinate_precision_preserved(
     lon_str = f"{lon:.10f}"
     lat_str = f"{lat:.10f}"
 
-    assert len(lon_str.split(".")[1]) >= 4, "Longitude should have at least 4 decimal places"
-    assert len(lat_str.split(".")[1]) >= 4, "Latitude should have at least 4 decimal places"
+    assert len(lon_str.split(".")[1]) >= 4, (
+        "Longitude should have at least 4 decimal places"
+    )
+    assert len(lat_str.split(".")[1]) >= 4, (
+        "Latitude should have at least 4 decimal places"
+    )
 
 
 # =============================================================================
@@ -361,9 +384,13 @@ def test_coordinate_precision_preserved(
 # =============================================================================
 
 
-def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_null_geometry_handling(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that NULL geometries are handled correctly."""
-    pd.DataFrame({"id": [1, 2, 3], "geom_wkt": ["POINT(12.5 55.6)", None, "POINT(10.2 56.1)"]})
+    pd.DataFrame(
+        {"id": [1, 2, 3], "geom_wkt": ["POINT(12.5 55.6)", None, "POINT(10.2 56.1)"]}
+    )
 
     mock_duckdb_connection.execute("CREATE TABLE test_geoms AS SELECT * FROM df")
 
@@ -384,7 +411,9 @@ def test_null_geometry_handling(mock_duckdb_connection: duckdb.DuckDBPyConnectio
     assert result.loc[2, "geom"] is not None
 
 
-def test_invalid_wkt_handling(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_invalid_wkt_handling(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test that invalid WKT strings are rejected."""
     invalid_wkt = "POINT(invalid)"
 
@@ -422,7 +451,9 @@ def test_detect_crs_from_bounds_utm() -> None:
     detected_crs, order = detect_crs_from_bounds(min_x, max_x, min_y, max_y)
 
     assert detected_crs == DANISH_UTM, f"Should detect Danish UTM, got {detected_crs}"
-    assert order == "easting_northing", f"Should detect easting_northing order, got {order}"
+    assert order == "easting_northing", (
+        f"Should detect easting_northing order, got {order}"
+    )
 
 
 def test_detect_crs_from_bounds_unknown() -> None:
@@ -451,7 +482,9 @@ def test_validate_crs_before_transform_success(
     )
 
     # Should not raise error for correct CRS
-    detected_crs, order = validate_crs_before_transform(mock_duckdb_connection, "test_table", "geom", WGS84)
+    detected_crs, order = validate_crs_before_transform(
+        mock_duckdb_connection, "test_table", "geom", WGS84
+    )
 
     assert detected_crs == WGS84
     assert order == "lon_lat"
@@ -473,7 +506,9 @@ def test_validate_crs_before_transform_mismatch(
 
     # Should raise ValueError for CRS mismatch
     with pytest.raises(ValueError, match="CRS mismatch"):
-        validate_crs_before_transform(mock_duckdb_connection, "test_table", "geom", DANISH_UTM)
+        validate_crs_before_transform(
+            mock_duckdb_connection, "test_table", "geom", DANISH_UTM
+        )
 
 
 # =============================================================================

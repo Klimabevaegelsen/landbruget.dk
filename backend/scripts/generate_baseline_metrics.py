@@ -22,7 +22,9 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "common"))
-sys.path.insert(0, str(Path(__file__).parent.parent / "pipelines" / "unified_pipeline" / "src"))
+sys.path.insert(
+    0, str(Path(__file__).parent.parent / "pipelines" / "unified_pipeline" / "src")
+)
 
 import duckdb
 
@@ -312,7 +314,11 @@ def generate_metrics_for_dataset(
             """).fetchone()
 
             # WKT string - need to cast to geometry if VARCHAR, else native geometry type
-            geom_expr = f"ST_GeomFromText({geom_col})" if col_type and col_type[0] == "VARCHAR" else geom_col
+            geom_expr = (
+                f"ST_GeomFromText({geom_col})"
+                if col_type and col_type[0] == "VARCHAR"
+                else geom_col
+            )
 
             result = conn.execute(f"""
                 SELECT
@@ -335,10 +341,14 @@ def generate_metrics_for_dataset(
                 # Detect CRS
                 from common.crs_utils import detect_crs_from_bounds
 
-                detected_crs, _ = detect_crs_from_bounds(result[0], result[1], result[2], result[3])
+                detected_crs, _ = detect_crs_from_bounds(
+                    result[0], result[1], result[2], result[3]
+                )
                 metrics["detected_crs"] = detected_crs
                 logger.info(f"  CRS: {detected_crs}")
-                logger.info(f"  Bounds: X=[{result[0]:.2f}, {result[1]:.2f}], Y=[{result[2]:.2f}, {result[3]:.2f}]")
+                logger.info(
+                    f"  Bounds: X=[{result[0]:.2f}, {result[1]:.2f}], Y=[{result[2]:.2f}, {result[3]:.2f}]"
+                )
         except Exception as e:
             logger.warning(f"  Could not extract geometry bounds: {e}")
 
@@ -389,7 +399,9 @@ def save_metrics(metrics: dict, output_path: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate baseline metrics for data validation")
+    parser = argparse.ArgumentParser(
+        description="Generate baseline metrics for data validation"
+    )
     parser.add_argument(
         "--datasets",
         type=str,
@@ -417,7 +429,11 @@ def main():
     args = parser.parse_args()
 
     # Determine which datasets to process
-    datasets = list(DATASET_CONFIGS.keys()) if args.datasets == "all" else [d.strip() for d in args.datasets.split(",")]
+    datasets = (
+        list(DATASET_CONFIGS.keys())
+        if args.datasets == "all"
+        else [d.strip() for d in args.datasets.split(",")]
+    )
 
     # Validate datasets
     for ds in datasets:
@@ -443,7 +459,9 @@ def main():
     results = {}
     for dataset_name in datasets:
         config = DATASET_CONFIGS[dataset_name]
-        metrics = generate_metrics_for_dataset(dataset_name, config, args.gcs_bucket, conn)
+        metrics = generate_metrics_for_dataset(
+            dataset_name, config, args.gcs_bucket, conn
+        )
 
         if metrics:
             # Add commit SHA if provided

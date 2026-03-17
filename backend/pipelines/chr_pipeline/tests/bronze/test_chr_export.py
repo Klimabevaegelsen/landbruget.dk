@@ -398,9 +398,8 @@ class TestFinalizeExport:
         MockBronzeExport.USE_GCS = False
         save_raw_data({"chr_number": "123456"}, "chr_herds", "test")
 
-        with patch("builtins.open", mock_open()) as mock_file:
-            with patch("pathlib.Path.mkdir"):
-                finalize_export()
+        with patch("builtins.open", mock_open()) as mock_file, patch("pathlib.Path.mkdir"):
+            finalize_export()
 
         # Verify file was written
         mock_file.assert_called()
@@ -428,9 +427,8 @@ class TestFinalizeExport:
         MockBronzeExport.USE_GCS = False
         save_raw_data({"chr_number": "123456"}, "chr_herds", "test")
 
-        with patch("builtins.open", mock_open()):
-            with patch("pathlib.Path.mkdir"):
-                finalize_export(clear_buffer=True)
+        with patch("builtins.open", mock_open()), patch("pathlib.Path.mkdir"):
+            finalize_export(clear_buffer=True)
 
         buffer = get_data_buffer()
         assert len(buffer) == 0
@@ -442,9 +440,8 @@ class TestFinalizeExport:
         MockBronzeExport.USE_GCS = False
         save_raw_data({"chr_number": "123456"}, "chr_herds", "test")
 
-        with patch("builtins.open", mock_open()):
-            with patch("pathlib.Path.mkdir"):
-                finalize_export(clear_buffer=False)
+        with patch("builtins.open", mock_open()), patch("pathlib.Path.mkdir"):
+            finalize_export(clear_buffer=False)
 
         buffer = get_data_buffer()
         assert len(buffer) > 0

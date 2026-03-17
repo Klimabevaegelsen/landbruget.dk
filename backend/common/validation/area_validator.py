@@ -111,7 +111,11 @@ class FieldAreaValidator:
         diff_pct = (
             0.0
             if before_area == 0 and after_area == 0
-            else (100.0 if before_area == 0 else ((after_area - before_area) / before_area) * 100)
+            else (
+                100.0
+                if before_area == 0
+                else ((after_area - before_area) / before_area) * 100
+            )
         )
 
         area_diff = after_area - before_area

@@ -22,26 +22,40 @@ class DataSourceInfo(BaseModel):
     """Manual configuration for data source business context"""
 
     # Business Context (YOU MUST FILL THESE IN)
-    source_authority: str = Field(..., description="Who provided the data (e.g., 'Miljøstyrelsen', 'SEGES')")
-    source_contact: str | None = Field(None, description="Contact person/email at the authority")
-    data_acquisition_date: datetime | None = Field(None, description="When we obtained this data (manual entry)")
+    source_authority: str = Field(
+        ..., description="Who provided the data (e.g., 'Miljøstyrelsen', 'SEGES')"
+    )
+    source_contact: str | None = Field(
+        None, description="Contact person/email at the authority"
+    )
+    data_acquisition_date: datetime | None = Field(
+        None, description="When we obtained this data (manual entry)"
+    )
     data_acquisition_method: str = Field(
         ..., description="How we got it: 'API', 'Manual Upload', 'SFTP', 'Email', etc."
     )
 
     # Documentation (OPTIONAL - made documentation_url optional as requested)
-    documentation_url: str | None = Field(None, description="Link to README/docs explaining this pipeline")
+    documentation_url: str | None = Field(
+        None, description="Link to README/docs explaining this pipeline"
+    )
     data_description: str = Field(..., description="What this data represents")
-    update_frequency: str | None = Field(None, description="How often this data is updated")
+    update_frequency: str | None = Field(
+        None, description="How often this data is updated"
+    )
 
     # Technical Context
     pipeline_name: str = Field(..., description="Pipeline that processes this data")
-    data_format: str = Field(..., description="Original format: 'Excel', 'JSON', 'XML', 'GeoJSON', etc.")
+    data_format: str = Field(
+        ..., description="Original format: 'Excel', 'JSON', 'XML', 'GeoJSON', etc."
+    )
     data_source_type: DataSourceType = Field(..., description="Type of data source")
 
     # Frontend Display (YOU MUST PROVIDE THESE)
     display_name: str = Field(..., description="User-friendly name for frontend")
-    display_description: str = Field(..., description="User-friendly description for frontend")
+    display_description: str = Field(
+        ..., description="User-friendly description for frontend"
+    )
 
     # Custom metadata per source
     custom_fields: dict[str, Any] = Field(default_factory=dict)
@@ -66,7 +80,10 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         data_source_type=DataSourceType.WFS,
         display_name="Matrikelgrænser",
         display_description="Officielle grænser for alle danske ejendomme og jordlodder",
-        custom_fields={"wfs_endpoint": "https://wfs.dataforsyning.dk/", "layer_name": "cadastral_parcels"},
+        custom_fields={
+            "wfs_endpoint": "https://wfs.dataforsyning.dk/",
+            "layer_name": "cadastral_parcels",
+        },
     ),
     "agricultural_fields": DataSourceInfo(
         source_authority="Vejdirektoratet",
@@ -310,7 +327,10 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         data_source_type=DataSourceType.API_REST,
         display_name="Dyreflytninger",
         display_description="Realtidssporing af husdyrflytninger mellem bedrifter",
-        custom_fields={"api_endpoint": "https://chr.fvst.dk/api/", "requires_authentication": True},
+        custom_fields={
+            "api_endpoint": "https://chr.fvst.dk/api/",
+            "requires_authentication": True,
+        },
     ),
     "chr_properties": DataSourceInfo(
         source_authority="Fødevarestyrelsen",
@@ -399,7 +419,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_animal_international_movements": DataSourceInfo(
         source_authority="International Livestock Authorities",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="movements@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="International animal movement tracking data",
         update_frequency="Monthly",  # 🚨 YOU FILL: How often do they upload?
@@ -412,7 +434,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_animal_mortality": DataSourceInfo(
         source_authority="Veterinary Authorities",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="mortality@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Animal mortality reporting data",
         update_frequency="Monthly",  # 🚨 YOU FILL: How often do they upload?
@@ -425,7 +449,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_animal_welfare": DataSourceInfo(
         source_authority="Animal Welfare Inspectors",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="welfare@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Animal welfare inspection reports and compliance data",
         update_frequency="Monthly",  # 🚨 YOU FILL: How often do they upload?
@@ -438,7 +464,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_fertiliser": DataSourceInfo(
         source_authority="Fertilizer Companies/Consultants",  # 🚨 YOU FILL: Who uploads fertilizer data?
         source_contact="fertilizer@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Fertilizer usage and composition data",
         update_frequency="Quarterly",  # 🚨 YOU FILL: How often do they upload?
@@ -451,7 +479,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_pesticides": DataSourceInfo(
         source_authority="SEGES Innovation/Agricultural Consultants",  # 🚨 YOU FILL: Verify authority
         source_contact="pesticides@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Pesticide usage reports and application data",
         update_frequency="Monthly",  # 🚨 YOU FILL: How often do they upload?
@@ -464,7 +494,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_pig_tail_cutting": DataSourceInfo(
         source_authority="Pig Farmers/Veterinary Services",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="pigtail@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Pig tail cutting procedure reports and compliance data",
         update_frequency="Monthly",  # 🚨 YOU FILL: How often do they upload?
@@ -477,7 +509,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_slurry_leaks": DataSourceInfo(
         source_authority="Environmental Authorities/Farmers",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="slurry@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Slurry leak incident reports and environmental impact data",
         update_frequency="As needed",  # 🚨 YOU FILL: How often do they upload?
@@ -490,7 +524,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_stable_fires": DataSourceInfo(
         source_authority="Fire Departments/Insurance Companies",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="fires@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Stable fire incident reports and safety compliance data",
         update_frequency="As needed",  # 🚨 YOU FILL: How often do they upload?
@@ -503,7 +539,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_subsidies": DataSourceInfo(
         source_authority="Danish Agricultural Agency",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="subsidies@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Agricultural subsidy applications and payment data",
         update_frequency="Quarterly",  # 🚨 YOU FILL: How often do they upload?
@@ -516,7 +554,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_transportation_accidents": DataSourceInfo(
         source_authority="Transportation Authorities/Police",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="transport@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Livestock transportation accident reports and safety data",
         update_frequency="As needed",  # 🚨 YOU FILL: How often do they upload?
@@ -529,7 +569,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_work_permits": DataSourceInfo(
         source_authority="Danish Immigration Service/Employers",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="permits@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Agricultural worker permit applications and approvals",
         update_frequency="Monthly",  # 🚨 YOU FILL: How often do they upload?
@@ -542,7 +584,9 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
     "drive_worker_safety": DataSourceInfo(
         source_authority="Arbejdstilsynet/Safety Inspectors",  # 🚨 YOU FILL: Who uploads this data?
         source_contact="safety@example.dk",  # 🚨 YOU FILL: Contact email
-        data_acquisition_date=datetime(2023, 1, 1),  # 🚨 YOU FILL: When did you start getting this?
+        data_acquisition_date=datetime(
+            2023, 1, 1
+        ),  # 🚨 YOU FILL: When did you start getting this?
         data_acquisition_method="Manual Upload to Google Drive",
         data_description="Agricultural worker safety inspection reports and compliance data",
         update_frequency="Monthly",  # 🚨 YOU FILL: How often do they upload?
@@ -656,7 +700,10 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         data_source_type=DataSourceType.API_SOAP,
         display_name="Svineflytninger",
         display_description="Realtidssporing af svineflytninger mellem bedrifter",
-        custom_fields={"soap_service": "SvineflytningWS", "requires_fvm_credentials": True},
+        custom_fields={
+            "soap_service": "SvineflytningWS",
+            "requires_fvm_credentials": True,
+        },
     ),
     # ========================================
     # PROPERTY OWNERS SFTP PIPELINE
