@@ -32,7 +32,6 @@ dependencies = [
     "certifi~=2025.6.15",
     "pyOpenSSL~=25.0.0",
     # Data Pipeline and Validation
-    "apache-beam[gcp]==2.66.0",
     "backoff~=2.2.1",
     # PDF Processing
     "pdfplumber~=0.11.5",
