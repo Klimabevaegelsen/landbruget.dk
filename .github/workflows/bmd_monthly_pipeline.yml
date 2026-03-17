@@ -54,13 +54,13 @@ jobs:
       - name: Authenticate to Google Cloud (Production only)
         id: auth
         if: env.ENVIRONMENT == 'production'
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK (Production only)
         if: env.ENVIRONMENT == 'production'
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Create data directories
         run: |
@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload artifacts (Development only)
         if: env.ENVIRONMENT == 'development'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bmd-data
           path: |
