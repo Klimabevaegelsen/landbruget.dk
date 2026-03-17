@@ -1,0 +1,31 @@
+repos:
+  # Backend: Python linting and formatting via ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # Frontend: JS/TS linting via oxlint
+  - repo: local
+    hooks:
+      - id: oxlint
+        name: oxlint
+        language: node
+        entry: ./frontend/node_modules/.bin/oxlint
+        args: [--deny-warnings]
+        files: ^frontend/src/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+        additional_dependencies: []
+
+      - id: oxfmt
+        name: oxfmt
+        language: node
+        entry: ./frontend/node_modules/.bin/oxfmt
+        args: [--write, frontend/src/]
+        files: ^frontend/src/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+        additional_dependencies: []
