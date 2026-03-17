@@ -5,11 +5,11 @@
  * from R2 storage and execute SQL queries in the browser.
  */
 
-import * as duckdb from '@duckdb/duckdb-wasm';
+import * as duckdb from "@duckdb/duckdb-wasm";
 
 /** Sanitize a SQL identifier by removing characters that aren't alphanumeric or underscores */
 function sanitizeIdentifier(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, '');
+  return name.replace(/[^a-zA-Z0-9_]/g, "");
 }
 
 // DuckDB connection singleton
@@ -28,7 +28,7 @@ export async function initDuckDB(): Promise<void> {
   // Prevent multiple concurrent initializations
   if (isInitializing) {
     while (isInitializing) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return;
   }
@@ -45,8 +45,8 @@ export async function initDuckDB(): Promise<void> {
     // Create worker
     const worker_url = URL.createObjectURL(
       new Blob([`importScripts("${bundle.mainWorker}");`], {
-        type: 'text/javascript',
-      })
+        type: "text/javascript",
+      }),
     );
     const worker = new Worker(worker_url);
 
@@ -66,9 +66,9 @@ export async function initDuckDB(): Promise<void> {
     try {
       await conn.query(`INSTALL spatial;`);
       await conn.query(`LOAD spatial;`);
-      console.log('Spatial extension loaded');
+      console.info("Spatial extension loaded");
     } catch (e) {
-      console.warn('Spatial extension not available in this DuckDB-WASM build:', e);
+      console.warn("Spatial extension not available in this DuckDB-WASM build:", e);
     }
 
     // Configure S3 settings for public R2 bucket (no authentication required)
@@ -78,10 +78,12 @@ export async function initDuckDB(): Promise<void> {
       SET s3_use_ssl=true;
     `);
 
-    console.log('DuckDB initialized successfully');
+    console.info("DuckDB initialized successfully");
   } catch (error) {
-    console.error('Failed to initialize DuckDB:', error);
-    throw new Error(`DuckDB initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Failed to initialize DuckDB:", error);
+    throw new Error(
+      `DuckDB initialization failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   } finally {
     isInitializing = false;
   }
@@ -95,16 +97,14 @@ export async function initDuckDB(): Promise<void> {
  * @returns Array of result rows as objects
  * @throws Error if query execution fails
  */
-export async function executeQuery<T = Record<string, unknown>>(
-  query: string
-): Promise<T[]> {
+export async function executeQuery<T = Record<string, unknown>>(query: string): Promise<T[]> {
   // Initialize if needed
   if (!conn) {
     await initDuckDB();
   }
 
   if (!conn) {
-    throw new Error('DuckDB connection not available');
+    throw new Error("DuckDB connection not available");
   }
 
   try {
@@ -122,7 +122,7 @@ export async function executeQuery<T = Record<string, unknown>>(
 
     return rows;
   } catch (error) {
-    console.error('Query execution failed:', error);
+    console.error("Query execution failed:", error);
     throw new Error(`Query failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -135,16 +135,13 @@ export async function executeQuery<T = Record<string, unknown>>(
  * @param parquetUrl - Full HTTPS URL to the Parquet file on R2
  * @throws Error if registration fails
  */
-export async function registerParquetTable(
-  tableName: string,
-  parquetUrl: string
-): Promise<void> {
+export async function registerParquetTable(tableName: string, parquetUrl: string): Promise<void> {
   if (!conn) {
     await initDuckDB();
   }
 
   if (!conn) {
-    throw new Error('DuckDB connection not available');
+    throw new Error("DuckDB connection not available");
   }
 
   try {
@@ -159,10 +156,12 @@ export async function registerParquetTable(
       SELECT * FROM read_parquet('${safeUrl}');
     `);
 
-    console.log(`Registered table '${tableName}' from ${parquetUrl}`);
+    console.info(`Registered table '${tableName}' from ${parquetUrl}`);
   } catch (error) {
     console.error(`Failed to register table '${tableName}':`, error);
-    throw new Error(`Table registration failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Table registration failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -173,12 +172,14 @@ export async function registerParquetTable(
  * @returns Array of column information (name, type, nullable)
  */
 export async function getTableSchema(
-  tableName: string
+  tableName: string,
 ): Promise<Array<{ column_name: string; column_type: string; null: string }>> {
   const safeName = sanitizeIdentifier(tableName);
-  return executeQuery<{ column_name: string; column_type: string; null: string }>(
-    `DESCRIBE "${safeName}";`
-  );
+  return executeQuery<{
+    column_name: string;
+    column_type: string;
+    null: string;
+  }>(`DESCRIBE "${safeName}";`);
 }
 
 /**
@@ -190,7 +191,7 @@ export async function getTableSchema(
  */
 export async function getTablePreview<T = Record<string, unknown>>(
   tableName: string,
-  limit: number = 10
+  limit: number = 10,
 ): Promise<T[]> {
   const safeName = sanitizeIdentifier(tableName);
   return executeQuery<T>(`SELECT * FROM "${safeName}" LIMIT ${Math.max(0, Math.floor(limit))};`);
@@ -205,7 +206,7 @@ export async function getTablePreview<T = Record<string, unknown>>(
 export async function getTableRowCount(tableName: string): Promise<number> {
   const safeName = sanitizeIdentifier(tableName);
   const result = await executeQuery<{ count: number }>(
-    `SELECT COUNT(*) as count FROM "${safeName}";`
+    `SELECT COUNT(*) as count FROM "${safeName}";`,
   );
   return result[0]?.count ?? 0;
 }
@@ -224,9 +225,9 @@ export async function closeDuckDB(): Promise<void> {
       await db.terminate();
       db = null;
     }
-    console.log('DuckDB connection closed');
+    console.info("DuckDB connection closed");
   } catch (error) {
-    console.error('Error closing DuckDB:', error);
+    console.error("Error closing DuckDB:", error);
   }
 }
 
@@ -245,7 +246,7 @@ export function isDuckDBReady(): boolean {
  */
 export function exportToCSV(data: Record<string, unknown>[], filename: string): void {
   if (data.length === 0) {
-    console.warn('No data to export');
+    console.warn("No data to export");
     return;
   }
 
@@ -254,27 +255,29 @@ export function exportToCSV(data: Record<string, unknown>[], filename: string): 
 
   // Create CSV content
   const csvRows = [
-    headers.join(','), // Header row
-    ...data.map(row =>
-      headers.map(header => {
-        const value = row[header];
-        // Handle strings with commas or quotes
-        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return value ?? '';
-      }).join(',')
-    )
+    headers.join(","), // Header row
+    ...data.map((row) =>
+      headers
+        .map((header) => {
+          const value = row[header];
+          // Handle strings with commas or quotes
+          if (typeof value === "string" && (value.includes(",") || value.includes('"'))) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value ?? "";
+        })
+        .join(","),
+    ),
   ];
 
-  const csvContent = csvRows.join('\n');
+  const csvContent = csvRows.join("\n");
 
   // Create blob and download
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.href = url;
-  link.download = filename.endsWith('.csv') ? filename : `${filename}.csv`;
+  link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }

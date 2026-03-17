@@ -38,14 +38,14 @@ User → Cloudflare CDN → Vercel Edge → Next.js 15 App
 
 ### Key Components
 
-| Component | Purpose | Provider |
-|-----------|---------|----------|
-| **Frontend** | Next.js 15 application | Vercel |
-| **Data Storage** | Parquet files (Bronze/Silver/Gold) | Cloudflare R2 |
-| **Data Engine** | In-browser SQL queries | DuckDB WASM |
-| **AI** | Natural language to SQL | Google Gemini API |
-| **CDN** | Global content delivery | Cloudflare |
-| **Domain** | data.landbruget.dk | Cloudflare DNS |
+| Component        | Purpose                            | Provider          |
+| ---------------- | ---------------------------------- | ----------------- |
+| **Frontend**     | Next.js 15 application             | Vercel            |
+| **Data Storage** | Parquet files (Bronze/Silver/Gold) | Cloudflare R2     |
+| **Data Engine**  | In-browser SQL queries             | DuckDB WASM       |
+| **AI**           | Natural language to SQL            | Google Gemini API |
+| **CDN**          | Global content delivery            | Cloudflare        |
+| **Domain**       | data.landbruget.dk                 | Cloudflare DNS    |
 
 ### Deployment Targets
 
@@ -117,12 +117,7 @@ Create `r2-cors-config.json`:
         "http://localhost:3000"
       ],
       "AllowedMethods": ["GET", "HEAD"],
-      "AllowedHeaders": [
-        "Content-Type",
-        "Range",
-        "If-Modified-Since",
-        "If-None-Match"
-      ],
+      "AllowedHeaders": ["Content-Type", "Range", "If-Modified-Since", "If-None-Match"],
       "ExposeHeaders": [
         "Content-Range",
         "Accept-Ranges",
@@ -158,6 +153,7 @@ dig r2.landbruget.dk
 ```
 
 **Expected DNS Record**:
+
 ```
 r2.landbruget.dk. 300 IN CNAME landbruget-data-explorer.r2.cloudflarestorage.com.
 ```
@@ -231,6 +227,7 @@ echo "Upload complete!"
 ```
 
 Usage:
+
 ```bash
 chmod +x scripts/upload-to-r2.sh
 ./scripts/upload-to-r2.sh ./backend/data
@@ -389,13 +386,13 @@ vercel env add GOOGLE_API_KEY development
 
 ### Environment Variable Reference
 
-| Variable | Description | Example | Required |
-|----------|-------------|---------|----------|
-| `NEXT_PUBLIC_R2_URL` | Cloudflare R2 bucket URL | `https://r2.landbruget.dk` | **Yes** |
-| `GOOGLE_API_KEY` | Google Gemini API key | `AIzaSy...` | **Yes** |
-| `NODE_ENV` | Node environment | `production` | Auto-set |
-| `NEXT_PUBLIC_VERCEL_ENV` | Deployment environment | `production` | Auto-set |
-| `VERCEL_URL` | Deployment URL | `*.vercel.app` | Auto-set |
+| Variable                 | Description              | Example                    | Required |
+| ------------------------ | ------------------------ | -------------------------- | -------- |
+| `NEXT_PUBLIC_R2_URL`     | Cloudflare R2 bucket URL | `https://r2.landbruget.dk` | **Yes**  |
+| `GOOGLE_API_KEY`         | Google Gemini API key    | `AIzaSy...`                | **Yes**  |
+| `NODE_ENV`               | Node environment         | `production`               | Auto-set |
+| `NEXT_PUBLIC_VERCEL_ENV` | Deployment environment   | `production`               | Auto-set |
+| `VERCEL_URL`             | Deployment URL           | `*.vercel.app`             | Auto-set |
 
 ### Obtaining API Keys
 
@@ -414,6 +411,7 @@ vercel env add GOOGLE_API_KEY development
    - Set quota limits under **Quotas & System Limits**
 
 **Security Best Practices**:
+
 - Use separate API keys for production/staging/development
 - Rotate keys every 90 days
 - Monitor usage in Google Cloud Console
@@ -445,11 +443,13 @@ vercel ls
 ### Subsequent Deployments
 
 **Automatic (Recommended)**:
+
 - Push to `main` branch triggers automatic production deployment
 - Push to other branches creates preview deployments
 - Pull requests get unique preview URLs automatically
 
 **Manual**:
+
 ```bash
 # Deploy to production
 vercel --prod
@@ -472,10 +472,10 @@ on:
   push:
     branches: [main, staging]
     paths:
-      - 'data-explorer/**'
+      - "data-explorer/**"
   pull_request:
     paths:
-      - 'data-explorer/**'
+      - "data-explorer/**"
 
 jobs:
   deploy:
@@ -486,8 +486,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: data-explorer/package-lock.json
 
       - name: Install dependencies
@@ -515,6 +515,7 @@ jobs:
 ```
 
 **Required GitHub Secrets**:
+
 - `VERCEL_TOKEN`: Vercel authentication token
 - `VERCEL_ORG_ID`: Your Vercel organization ID
 - `VERCEL_PROJECT_ID`: Project ID from Vercel
@@ -630,6 +631,7 @@ echo "All tests passed! ✓"
 ```
 
 Usage:
+
 ```bash
 chmod +x scripts/test-deployment.sh
 ./scripts/test-deployment.sh https://data.landbruget.dk
@@ -642,6 +644,7 @@ chmod +x scripts/test-deployment.sh
 ### Vercel Monitoring
 
 **Built-in Metrics**:
+
 - **Deployment Status**: Real-time build/deploy tracking
 - **Performance**: Core Web Vitals (LCP, FID, CLS)
 - **Function Logs**: Serverless function execution logs
@@ -660,6 +663,7 @@ Access via: [Vercel Dashboard](https://vercel.com/dashboard) → Your Project �
 ### Cloudflare Analytics
 
 **R2 Bucket Metrics**:
+
 - Storage used (GB)
 - Class A operations (writes)
 - Class B operations (reads)
@@ -668,6 +672,7 @@ Access via: [Vercel Dashboard](https://vercel.com/dashboard) → Your Project �
 Access via: Cloudflare Dashboard → R2 → landbruget-data-explorer → Metrics
 
 **CDN Metrics**:
+
 - Requests per second
 - Bandwidth usage
 - Cache hit ratio
@@ -678,6 +683,7 @@ Access via: Cloudflare Dashboard → Analytics & Logs
 ### Google Gemini API Monitoring
 
 **Usage Tracking**:
+
 ```bash
 # Install Google Cloud SDK
 gcloud init
@@ -692,6 +698,7 @@ gcloud monitoring time-series list \
 ```
 
 **Key Metrics**:
+
 - Requests per day (free tier: 1,500/day)
 - Requests per minute (free tier: 15/min)
 - Average response time
@@ -700,6 +707,7 @@ gcloud monitoring time-series list \
 ### Error Tracking
 
 **Vercel Error Logs**:
+
 ```bash
 # View real-time logs
 vercel logs landbruget-data-explorer --follow
@@ -714,11 +722,13 @@ vercel logs [deployment-url]
 **Client-Side Error Tracking** (Optional - Sentry Integration):
 
 1. Install Sentry:
+
 ```bash
 npm install @sentry/nextjs
 ```
 
 2. Configure `sentry.client.config.ts`:
+
 ```typescript
 import * as Sentry from "@sentry/nextjs";
 
@@ -730,6 +740,7 @@ Sentry.init({
 ```
 
 3. Add to `next.config.ts`:
+
 ```typescript
 const { withSentryConfig } = require("@sentry/nextjs");
 
@@ -743,6 +754,7 @@ module.exports = withSentryConfig(nextConfig, {
 **External Monitoring** (Recommended):
 
 Use services like:
+
 - **UptimeRobot**: Free tier (5-minute intervals)
 - **Better Uptime**: Advanced alerting
 - **Pingdom**: Comprehensive monitoring
@@ -750,17 +762,18 @@ Use services like:
 **Simple Health Check Endpoint**:
 
 Create `src/app/api/health/route.ts`:
+
 ```typescript
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
 export async function GET() {
   const health = {
-    status: 'healthy',
+    status: "healthy",
     timestamp: new Date().toISOString(),
     checks: {
-      r2: process.env.NEXT_PUBLIC_R2_URL ? 'ok' : 'missing',
-      gemini: process.env.GOOGLE_API_KEY ? 'ok' : 'missing',
-    }
+      r2: process.env.NEXT_PUBLIC_R2_URL ? "ok" : "missing",
+      gemini: process.env.GOOGLE_API_KEY ? "ok" : "missing",
+    },
   };
 
   return NextResponse.json(health);
@@ -772,22 +785,26 @@ Monitor: `https://data.landbruget.dk/api/health`
 ### Maintenance Schedule
 
 **Daily**:
+
 - [ ] Check Vercel deployment status
 - [ ] Review error logs
 - [ ] Monitor API usage (Gemini quota)
 
 **Weekly**:
+
 - [ ] Review performance metrics
 - [ ] Check R2 storage usage
 - [ ] Update dependencies (security patches)
 
 **Monthly**:
+
 - [ ] Review and optimize costs
 - [ ] Update data files in R2
 - [ ] Review and rotate API keys
 - [ ] Performance optimization review
 
 **Quarterly**:
+
 - [ ] Major dependency updates
 - [ ] Security audit
 - [ ] Load testing
@@ -801,35 +818,36 @@ Monitor: `https://data.landbruget.dk/api/health`
 
 #### Vercel (Pro Plan)
 
-| Resource | Included | Overage Cost | Estimated Use | Monthly Cost |
-|----------|----------|--------------|---------------|--------------|
-| **Bandwidth** | 1 TB | $40/TB | 500 GB | $0 |
-| **Function Executions** | 1M | $40/1M | 500K | $0 |
-| **Function Duration** | 100 GB-hours | $60/100 GB-hours | 50 GB-hours | $0 |
-| **Build Minutes** | 6,000 | - | 200 | $0 |
-| **Pro Plan** | - | - | - | **$20** |
+| Resource                | Included     | Overage Cost     | Estimated Use | Monthly Cost |
+| ----------------------- | ------------ | ---------------- | ------------- | ------------ |
+| **Bandwidth**           | 1 TB         | $40/TB           | 500 GB        | $0           |
+| **Function Executions** | 1M           | $40/1M           | 500K          | $0           |
+| **Function Duration**   | 100 GB-hours | $60/100 GB-hours | 50 GB-hours   | $0           |
+| **Build Minutes**       | 6,000        | -                | 200           | $0           |
+| **Pro Plan**            | -            | -                | -             | **$20**      |
 
 **Total Vercel**: ~$20/month (within Pro plan limits)
 
 #### Cloudflare R2
 
-| Resource | Pricing | Estimated Use | Monthly Cost |
-|----------|---------|---------------|--------------|
-| **Storage** | $0.015/GB | 50 GB | $0.75 |
-| **Class A Operations** | $4.50/million | 10K | $0.05 |
-| **Class B Operations** | $0.36/million | 1M | $0.36 |
-| **Egress** | Free (zero egress fees!) | Unlimited | $0 |
+| Resource               | Pricing                  | Estimated Use | Monthly Cost |
+| ---------------------- | ------------------------ | ------------- | ------------ |
+| **Storage**            | $0.015/GB                | 50 GB         | $0.75        |
+| **Class A Operations** | $4.50/million            | 10K           | $0.05        |
+| **Class B Operations** | $0.36/million            | 1M            | $0.36        |
+| **Egress**             | Free (zero egress fees!) | Unlimited     | $0           |
 
 **Total R2**: ~$1.16/month
 
 #### Google Gemini API
 
-| Tier | Requests/Day | Requests/Month | Cost |
-|------|--------------|----------------|------|
-| **Free** | 1,500 | 45,000 | $0 |
-| **Pay-as-you-go** | Unlimited | - | $0.001/request |
+| Tier              | Requests/Day | Requests/Month | Cost           |
+| ----------------- | ------------ | -------------- | -------------- |
+| **Free**          | 1,500        | 45,000         | $0             |
+| **Pay-as-you-go** | Unlimited    | -              | $0.001/request |
 
 Estimated usage for 1,000 active users:
+
 - Average: 10 queries/user/month = 10,000 queries
 - Within free tier: **$0**
 
@@ -837,11 +855,11 @@ Estimated usage for 1,000 active users:
 
 #### Cloudflare (DNS + CDN)
 
-| Service | Cost |
-|---------|------|
-| **DNS** | Free |
-| **CDN** | Free (no usage limits) |
-| **SSL/TLS** | Free |
+| Service     | Cost                   |
+| ----------- | ---------------------- |
+| **DNS**     | Free                   |
+| **CDN**     | Free (no usage limits) |
+| **SSL/TLS** | Free                   |
 
 **Total Cloudflare**: $0/month
 
@@ -1030,7 +1048,7 @@ async function retryWithBackoff(fn, maxRetries = 3) {
     } catch (error) {
       if (error.status === 429 && i < maxRetries - 1) {
         const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw error;
@@ -1046,16 +1064,16 @@ const rateLimiter = {
 
   async throttle() {
     const now = Date.now();
-    this.requests = this.requests.filter(t => now - t < this.windowMs);
+    this.requests = this.requests.filter((t) => now - t < this.windowMs);
 
     if (this.requests.length >= this.maxRequests) {
       const oldestRequest = this.requests[0];
       const waitTime = this.windowMs - (now - oldestRequest);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
 
     this.requests.push(now);
-  }
+  },
 };
 
 // 3. Cache frequent queries
@@ -1134,23 +1152,24 @@ Enable verbose logging:
 
 ```typescript
 // src/lib/debug.ts
-export const DEBUG = process.env.NODE_ENV === 'development' ||
-                     process.env.NEXT_PUBLIC_DEBUG === 'true';
+export const DEBUG =
+  process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_DEBUG === "true";
 
 export function debugLog(...args: any[]) {
   if (DEBUG) {
-    console.log('[DEBUG]', new Date().toISOString(), ...args);
+    console.log("[DEBUG]", new Date().toISOString(), ...args);
   }
 }
 
 // Usage in components:
-import { debugLog } from '@/lib/debug';
+import { debugLog } from "@/lib/debug";
 
-debugLog('Loading parquet file:', fileUrl);
-debugLog('Query executed in:', executionTime, 'ms');
+debugLog("Loading parquet file:", fileUrl);
+debugLog("Query executed in:", executionTime, "ms");
 ```
 
 Set in Vercel:
+
 ```bash
 vercel env add NEXT_PUBLIC_DEBUG development
 # Value: true
@@ -1209,14 +1228,14 @@ git push --force origin main  # ⚠️ Use with caution!
 Create `src/middleware.ts`:
 
 ```typescript
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const maintenanceMode = process.env.MAINTENANCE_MODE === 'true';
+  const maintenanceMode = process.env.MAINTENANCE_MODE === "true";
 
-  if (maintenanceMode && !request.nextUrl.pathname.startsWith('/maintenance')) {
-    return NextResponse.redirect(new URL('/maintenance', request.url));
+  if (maintenanceMode && !request.nextUrl.pathname.startsWith("/maintenance")) {
+    return NextResponse.redirect(new URL("/maintenance", request.url));
   }
 
   return NextResponse.next();
@@ -1241,6 +1260,7 @@ export default function MaintenancePage() {
 ```
 
 Enable maintenance mode:
+
 ```bash
 vercel env add MAINTENANCE_MODE production
 # Value: true
@@ -1250,6 +1270,7 @@ vercel --prod
 ```
 
 Disable:
+
 ```bash
 vercel env rm MAINTENANCE_MODE production
 vercel --prod
@@ -1300,23 +1321,27 @@ Before going live:
 ## Support & Resources
 
 ### Documentation
+
 - [Next.js Deployment](https://nextjs.org/docs/deployment)
 - [Vercel Documentation](https://vercel.com/docs)
 - [Cloudflare R2 Documentation](https://developers.cloudflare.com/r2/)
 - [DuckDB WASM Documentation](https://duckdb.org/docs/api/wasm/)
 
 ### Dashboards
+
 - **Vercel**: https://vercel.com/dashboard
 - **Cloudflare**: https://dash.cloudflare.com
 - **Google Cloud Console**: https://console.cloud.google.com
 - **GitHub Actions**: https://github.com/[org]/[repo]/actions
 
 ### Community
+
 - [Next.js Discord](https://discord.gg/nextjs)
 - [Vercel Community](https://github.com/vercel/vercel/discussions)
 - [DuckDB Discord](https://discord.duckdb.org)
 
 ### Emergency Contacts
+
 - DevOps Team: devops@landbruget.dk
 - Platform Issues: platform-alerts@landbruget.dk
 - Security Issues: security@landbruget.dk

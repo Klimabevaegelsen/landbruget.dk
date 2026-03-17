@@ -84,14 +84,17 @@ curl -I https://r2.landbruget.dk/bronze/test.parquet \
 Configure in Vercel Dashboard → Settings → Environment Variables:
 
 #### Production
+
 - [ ] `NEXT_PUBLIC_R2_URL` = `https://r2.landbruget.dk`
 - [ ] `GOOGLE_API_KEY` = `[Your production API key]`
 
 #### Preview
+
 - [ ] `NEXT_PUBLIC_R2_URL` = `https://r2.landbruget.dk`
 - [ ] `GOOGLE_API_KEY` = `[Your preview API key]`
 
 #### Development (Optional)
+
 - [ ] `NEXT_PUBLIC_R2_URL` = `https://r2.landbruget.dk`
 - [ ] `GOOGLE_API_KEY` = `[Your development API key]`
 
@@ -175,12 +178,14 @@ chmod +x scripts/test-deployment.sh
 ### Manual Tests
 
 #### Basic Functionality
+
 - [ ] Homepage loads (`/`)
 - [ ] No console errors
 - [ ] All assets load (CSS, JS, fonts, images)
 - [ ] Responsive design works (mobile, tablet, desktop)
 
 #### Data Explorer
+
 - [ ] Explorer page loads (`/explore`)
 - [ ] Dataset list appears
 - [ ] SQL editor renders correctly
@@ -188,6 +193,7 @@ chmod +x scripts/test-deployment.sh
 - [ ] Results display in table
 
 #### Natural Language Queries
+
 - [ ] NL input field accepts text
 - [ ] Simple query works: "Show me the first 10 rows"
 - [ ] Response time < 3 seconds
@@ -195,6 +201,7 @@ chmod +x scripts/test-deployment.sh
 - [ ] Error handling works for invalid queries
 
 #### Data Loading
+
 - [ ] Parquet files load from R2
 - [ ] No CORS errors in console
 - [ ] File download progress shown
@@ -202,6 +209,7 @@ chmod +x scripts/test-deployment.sh
 - [ ] Query results display correctly
 
 #### Performance
+
 - [ ] First contentful paint < 2s
 - [ ] Time to interactive < 3s
 - [ ] Query execution < 5s for typical queries
@@ -271,6 +279,7 @@ vercel logs landbruget-data-explorer --level=error
 ## Security Checklist
 
 ### HTTPS & SSL
+
 - [ ] HTTPS enforced (no HTTP access)
 - [ ] Valid SSL certificate
 - [ ] Certificate auto-renewal enabled
@@ -278,6 +287,7 @@ vercel logs landbruget-data-explorer --level=error
 - [ ] TLS 1.2+ required
 
 ### Headers
+
 - [ ] `X-Content-Type-Options: nosniff`
 - [ ] `X-Frame-Options: DENY`
 - [ ] `X-XSS-Protection: 1; mode=block`
@@ -285,12 +295,14 @@ vercel logs landbruget-data-explorer --level=error
 - [ ] Content Security Policy configured (optional)
 
 ### API Security
+
 - [ ] API keys not exposed in client code
 - [ ] Rate limiting configured
 - [ ] CORS properly configured
 - [ ] No sensitive data in error messages
 
 ### Data Security
+
 - [ ] No PII in logs
 - [ ] No credentials in code/config
 - [ ] Environment variables properly scoped
@@ -301,24 +313,28 @@ vercel logs landbruget-data-explorer --level=error
 ## Performance Optimization
 
 ### CDN & Caching
+
 - [ ] Cloudflare proxy enabled (orange cloud)
 - [ ] Static assets cached (1 year)
 - [ ] API routes not cached
 - [ ] Browser caching configured
 
 ### Bundle Optimization
+
 - [ ] Code splitting enabled
 - [ ] Lazy loading implemented
 - [ ] Tree shaking working
 - [ ] Dynamic imports for large components
 
 ### Image Optimization
+
 - [ ] Next.js Image component used
 - [ ] Images compressed
 - [ ] WebP format used where supported
 - [ ] Lazy loading for below-fold images
 
 ### Database/Storage
+
 - [ ] Parquet files optimized
 - [ ] File sizes reasonable (< 100MB recommended)
 - [ ] Partitioning strategy for large datasets
@@ -340,6 +356,7 @@ vercel logs landbruget-data-explorer --level=error
 ## Rollback Plan
 
 ### Preparation
+
 - [ ] Last known good deployment URL documented
 - [ ] Rollback procedure tested
 - [ ] Team trained on rollback process
@@ -363,12 +380,14 @@ vercel promote [good-deployment-url] --prod
 ## Communication
 
 ### Stakeholders
+
 - [ ] Deployment scheduled and communicated
 - [ ] Status page updated (if applicable)
 - [ ] Team notified of deployment window
 - [ ] Users informed of any expected downtime
 
 ### Post-Deployment
+
 - [ ] Deployment announcement sent
 - [ ] Known issues documented
 - [ ] Support team briefed
@@ -379,12 +398,14 @@ vercel promote [good-deployment-url] --prod
 ## Cost Monitoring
 
 ### Initial Setup
+
 - [ ] Budget alerts configured in Google Cloud
 - [ ] Vercel usage alerts enabled
 - [ ] Cloudflare usage tracked
 - [ ] Monthly cost review scheduled
 
 ### Expected Costs
+
 - Vercel Pro: $20/month
 - Cloudflare R2: ~$1/month (50GB)
 - Google Gemini: $0 (free tier)
@@ -395,18 +416,21 @@ vercel promote [good-deployment-url] --prod
 ## Maintenance Schedule
 
 ### Daily
+
 - [ ] Check Vercel deployment status
 - [ ] Review error logs
 - [ ] Monitor API usage (Gemini quota)
 - [ ] Verify uptime monitoring
 
 ### Weekly
+
 - [ ] Review performance metrics
 - [ ] Check R2 storage usage
 - [ ] Update dependencies (security patches)
 - [ ] Review and respond to user feedback
 
 ### Monthly
+
 - [ ] Review and optimize costs
 - [ ] Update data files in R2
 - [ ] Review and rotate API keys (every 90 days)
@@ -414,6 +438,7 @@ vercel promote [good-deployment-url] --prod
 - [ ] Security audit
 
 ### Quarterly
+
 - [ ] Major dependency updates
 - [ ] Full security audit
 - [ ] Load testing
@@ -427,51 +452,52 @@ vercel promote [good-deployment-url] --prod
 ### Deployment Team
 
 - [ ] **Developer**: Code reviewed and tested
-  - Name: ________________
-  - Date: ________________
+  - Name: **\*\***\_\_\_\_**\*\***
+  - Date: **\*\***\_\_\_\_**\*\***
 
 - [ ] **DevOps**: Infrastructure configured and verified
-  - Name: ________________
-  - Date: ________________
+  - Name: **\*\***\_\_\_\_**\*\***
+  - Date: **\*\***\_\_\_\_**\*\***
 
 - [ ] **QA**: Testing complete and passing
-  - Name: ________________
-  - Date: ________________
+  - Name: **\*\***\_\_\_\_**\*\***
+  - Date: **\*\***\_\_\_\_**\*\***
 
 - [ ] **Product Owner**: Approved for production
-  - Name: ________________
-  - Date: ________________
+  - Name: **\*\***\_\_\_\_**\*\***
+  - Date: **\*\***\_\_\_\_**\*\***
 
 ---
 
 ## Post-Deployment Notes
 
-**Deployment Date**: ________________
+**Deployment Date**: **\*\***\_\_\_\_**\*\***
 
-**Deployment URL**: ________________
+**Deployment URL**: **\*\***\_\_\_\_**\*\***
 
 **Issues Encountered**:
 
-_____________________________________
+---
 
-_____________________________________
+---
 
 **Resolutions Applied**:
 
-_____________________________________
+---
 
-_____________________________________
+---
 
 **Performance Metrics**:
-- First load time: ______ seconds
-- API response time: ______ seconds
-- Build time: ______ seconds
+
+- First load time: **\_\_** seconds
+- API response time: **\_\_** seconds
+- Build time: **\_\_** seconds
 
 **Next Steps**:
 
-_____________________________________
+---
 
-_____________________________________
+---
 
 ---
 

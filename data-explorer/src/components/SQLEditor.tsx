@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
-import { sql } from '@codemirror/lang-sql';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useState, useEffect, useRef } from "react";
+import { EditorView, basicSetup } from "codemirror";
+import { EditorState } from "@codemirror/state";
+import { sql } from "@codemirror/lang-sql";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SQLEditorProps {
   initialQuery?: string;
@@ -17,7 +17,7 @@ interface SQLEditorProps {
 }
 
 export function SQLEditor({
-  initialQuery = '',
+  initialQuery = "",
   onExecute,
   isExecuting = false,
   disabled = false,
@@ -42,18 +42,18 @@ export function SQLEditor({
           }
         }),
         EditorView.theme({
-          '&': {
-            height: '100%',
-            fontSize: '13px',
+          "&": {
+            height: "100%",
+            fontSize: "13px",
           },
-          '.cm-scroller': {
+          ".cm-scroller": {
             fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
           },
-          '.cm-content': {
-            minHeight: '160px',
+          ".cm-content": {
+            minHeight: "160px",
           },
-          '.cm-gutters': {
-            borderRight: '1px solid rgba(255,255,255,0.06)',
+          ".cm-gutters": {
+            borderRight: "1px solid rgba(255,255,255,0.06)",
           },
         }),
         EditorView.lineWrapping,
@@ -92,29 +92,29 @@ export function SQLEditor({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       handleExecute();
     }
   }
 
-  const lineCount = query ? query.split('\n').length : 0;
+  const lineCount = query ? query.split("\n").length : 0;
 
   return (
-    <div className={cn('', className)}>
+    <div className={cn("", className)}>
       {/* Section label row */}
       <div className="mb-3 flex items-center justify-between">
         <span
           className="text-[10px] font-semibold tracking-[0.2em] uppercase"
-          style={{ color: 'var(--muted-foreground)' }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           SQL
         </span>
         <span
           className="text-[10px]"
           style={{
-            fontFamily: 'var(--font-geist-mono)',
-            color: 'var(--muted-foreground)',
+            fontFamily: "var(--font-geist-mono)",
+            color: "var(--muted-foreground)",
           }}
         >
           ⌘↵ to run
@@ -124,10 +124,10 @@ export function SQLEditor({
       {/* Editor wrapper */}
       <div
         className={cn(
-          'overflow-hidden border transition-all',
-          disabled && 'pointer-events-none opacity-40'
+          "overflow-hidden border transition-all",
+          disabled && "pointer-events-none opacity-40",
         )}
-        style={{ borderColor: 'var(--border)' }}
+        style={{ borderColor: "var(--border)" }}
         onKeyDown={handleKeyDown}
       >
         <div ref={editorRef} />
@@ -140,13 +140,13 @@ export function SQLEditor({
           onClick={handleExecute}
           disabled={!query.trim() || isExecuting || disabled}
           className={cn(
-            'flex items-center gap-2 px-5 py-2',
-            'text-[11px] font-semibold uppercase tracking-wider',
-            'transition-all disabled:opacity-40 disabled:cursor-not-allowed'
+            "flex items-center gap-2 px-5 py-2",
+            "text-[11px] font-semibold uppercase tracking-wider",
+            "transition-all disabled:opacity-40 disabled:cursor-not-allowed",
           )}
           style={{
-            background: 'var(--primary)',
-            color: 'var(--primary-foreground)',
+            background: "var(--primary)",
+            color: "var(--primary-foreground)",
           }}
         >
           {isExecuting ? (
@@ -166,12 +166,11 @@ export function SQLEditor({
           <span
             className="text-[10px] tabular-nums"
             style={{
-              fontFamily: 'var(--font-geist-mono)',
-              color: 'var(--muted-foreground)',
+              fontFamily: "var(--font-geist-mono)",
+              color: "var(--muted-foreground)",
             }}
           >
-            {lineCount} {lineCount === 1 ? 'line' : 'lines'} · {query.length}{' '}
-            chars
+            {lineCount} {lineCount === 1 ? "line" : "lines"} · {query.length} chars
           </span>
         )}
       </div>

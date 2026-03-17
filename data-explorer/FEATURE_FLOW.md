@@ -110,7 +110,7 @@
 
 ```typescript
 // Page-level state
-const [currentQuery, setCurrentQuery] = useState('');
+const [currentQuery, setCurrentQuery] = useState("");
 const [queryResults, setQueryResults] = useState([]);
 const [selectedDataset, setSelectedDataset] = useState(null);
 

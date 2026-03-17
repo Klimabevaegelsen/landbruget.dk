@@ -8,7 +8,9 @@ using DuckDB-WASM (browser-side SQL) + Google Gemini (NL-to-SQL). Zero backend â
 ```bash
 npm run dev     # Dev server (Turbopack enabled in next.config.ts)
 npm run build   # Production build (uses --webpack internally for DuckDB-WASM compat)
-npm run lint    # ESLint (this app uses ESLint, NOT oxlint)
+npm run lint    # Oxlint
+npm run format  # Oxfmt (auto-format)
+npm run format:check  # Oxfmt (check only)
 npm start       # Start production server
 ```
 
@@ -47,7 +49,7 @@ NEXT_PUBLIC_R2_URL             # R2 public bucket URL for Parquet files
 
 ## Key Differences from Main Frontend
 
-- Uses **ESLint** (NOT oxlint/oxfmt)
+- Uses **oxlint/oxfmt** (same as other frontends), ESLint available via `npm run lint:eslint`
 - Uses **Next.js 16** with Turbopack dev + webpack build
 - No Playwright tests configured
 - No Supabase â€” all data via DuckDB-WASM + R2 Parquet

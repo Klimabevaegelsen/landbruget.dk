@@ -5,6 +5,7 @@ A Next.js application that enables users to explore and query Parquet files stor
 ## Architecture
 
 This data explorer allows users to:
+
 1. Browse available datasets from a manifest
 2. Write and execute SQL queries using DuckDB SQL dialect
 3. View results with sorting and pagination
@@ -19,19 +20,20 @@ All data processing happens **in the browser** using DuckDB-WASM. The Parquet fi
 Manages the DuckDB-WASM connection lifecycle:
 
 ```typescript
-import { initDuckDB, executeQuery, registerParquetTable } from '@/lib/duckdb';
+import { initDuckDB, executeQuery, registerParquetTable } from "@/lib/duckdb";
 
 // Initialize (happens automatically on first use)
 await initDuckDB();
 
 // Register a Parquet file as a queryable table
-await registerParquetTable('my_table', 'https://r2-bucket.dev/data.parquet');
+await registerParquetTable("my_table", "https://r2-bucket.dev/data.parquet");
 
 // Execute SQL queries
-const results = await executeQuery('SELECT * FROM my_table LIMIT 100');
+const results = await executeQuery("SELECT * FROM my_table LIMIT 100");
 ```
 
 **Key Features**:
+
 - Singleton connection pattern (prevents multiple initializations)
 - Automatic httpfs extension loading for remote file access
 - Connection pooling and error handling
@@ -50,12 +52,14 @@ Displays available datasets from a manifest file:
 ```
 
 **Features**:
+
 - Loads dataset list from `manifest.json` on R2
 - Shows metadata (row count, columns, size)
 - Expandable schema preview
 - One-click table selection for querying
 
 **Expected Manifest Format**:
+
 ```json
 {
   "version": "1.0",
@@ -89,6 +93,7 @@ CodeMirror-based SQL editor with syntax highlighting:
 ```
 
 **Features**:
+
 - SQL syntax highlighting (DuckDB dialect)
 - Line numbers and code folding
 - Cmd/Ctrl+Enter keyboard shortcut to execute
@@ -108,6 +113,7 @@ Data table with sorting, pagination, and export:
 ```
 
 **Features**:
+
 - Column sorting (click headers)
 - Pagination (50 rows per page)
 - Type-aware rendering (numbers, booleans, null)
@@ -191,11 +197,13 @@ See [DuckDB SQL Documentation](https://duckdb.org/docs/sql/introduction) for ful
 ## Performance Considerations
 
 ### Browser Limitations
+
 - **Memory**: DuckDB-WASM runs in browser memory. Large result sets (>100k rows) may cause performance issues.
 - **Loading**: First query may be slower while DuckDB initializes (~2-3 seconds).
 - **Streaming**: Parquet files are streamed on-demand, so queries only download necessary columns/rows.
 
 ### Best Practices
+
 1. **Use LIMIT**: Always limit results in development (`LIMIT 1000`)
 2. **Select Specific Columns**: `SELECT col1, col2` instead of `SELECT *`
 3. **Filter Early**: Use WHERE clauses to reduce data scanned
@@ -308,12 +316,12 @@ export default {
     const key = url.pathname.slice(1);
 
     const object = await env.MY_BUCKET.get(key);
-    if (!object) return new Response('Not Found', { status: 404 });
+    if (!object) return new Response("Not Found", { status: 404 });
 
     return new Response(object.body, {
       headers: {
-        'Content-Type': 'application/octet-stream',
-        'Access-Control-Allow-Origin': '*',
+        "Content-Type": "application/octet-stream",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   },
@@ -323,6 +331,7 @@ export default {
 ## Future Enhancements
 
 Potential improvements:
+
 - [ ] Query history and saved queries
 - [ ] Query builder UI (visual query construction)
 - [ ] Chart visualization for query results
@@ -334,16 +343,19 @@ Potential improvements:
 ## Troubleshooting
 
 ### "Failed to initialize DuckDB"
+
 - Check browser console for detailed error
 - Ensure browser supports WebAssembly
 - Try disabling browser extensions
 
 ### "Query failed: HTTP error"
+
 - Verify R2 URL is accessible (test in browser)
 - Check CORS configuration on R2 bucket
 - Ensure Parquet file is valid
 
 ### "Out of memory"
+
 - Reduce result set size with LIMIT
 - Select fewer columns
 - Close other browser tabs

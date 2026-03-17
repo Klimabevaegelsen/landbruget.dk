@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -9,7 +9,7 @@ import {
   flexRender,
   type SortingState,
   type ColumnDef,
-} from '@tanstack/react-table';
+} from "@tanstack/react-table";
 
 interface DataTableViewProps {
   data: Record<string, unknown>[];
@@ -17,11 +17,7 @@ interface DataTableViewProps {
   pageSize?: number | null;
 }
 
-export function DataTableView({
-  data,
-  columns: columnFilter,
-  pageSize = 25,
-}: DataTableViewProps) {
+export function DataTableView({ data, columns: columnFilter, pageSize = 25 }: DataTableViewProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
@@ -35,15 +31,11 @@ export function DataTableView({
         if (val === null || val === undefined) {
           return <span className="text-muted-foreground italic">null</span>;
         }
-        if (typeof val === 'number') {
-          return new Intl.NumberFormat('da-DK').format(val);
+        if (typeof val === "number") {
+          return new Intl.NumberFormat("da-DK").format(val);
         }
-        if (typeof val === 'boolean') {
-          return (
-            <span className={val ? 'text-green-600' : 'text-red-500'}>
-              {String(val)}
-            </span>
-          );
+        if (typeof val === "boolean") {
+          return <span className={val ? "text-green-600" : "text-red-500"}>{String(val)}</span>;
         }
         return String(val);
       },
@@ -62,25 +54,20 @@ export function DataTableView({
   });
 
   if (data.length === 0) {
-    return (
-      <p className="text-muted-foreground p-4 text-sm">No data to display.</p>
-    );
+    return <p className="text-muted-foreground p-4 text-sm">No data to display.</p>;
   }
 
   return (
     <div>
-      <div
-        className="overflow-x-auto border"
-        style={{ borderColor: 'var(--border)' }}
-      >
+      <div className="overflow-x-auto border" style={{ borderColor: "var(--border)" }}>
         <table className="w-full border-collapse">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr
                 key={headerGroup.id}
                 style={{
-                  background: 'var(--muted)',
-                  borderBottom: '1px solid var(--border)',
+                  background: "var(--muted)",
+                  borderBottom: "1px solid var(--border)",
                 }}
               >
                 {headerGroup.headers.map((header) => (
@@ -91,14 +78,11 @@ export function DataTableView({
                   >
                     <span
                       className="text-[10px] font-semibold tracking-[0.12em] uppercase"
-                      style={{ color: 'var(--muted-foreground)' }}
+                      style={{ color: "var(--muted-foreground)" }}
                     >
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
-                      {header.column.getIsSorted() === 'asc' && ' ↑'}
-                      {header.column.getIsSorted() === 'desc' && ' ↓'}
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      {header.column.getIsSorted() === "asc" && " ↑"}
+                      {header.column.getIsSorted() === "desc" && " ↓"}
                     </span>
                   </th>
                 ))}
@@ -112,16 +96,16 @@ export function DataTableView({
                 style={{
                   background:
                     idx % 2 === 0
-                      ? 'var(--background)'
-                      : 'color-mix(in oklch, var(--muted) 30%, var(--background))',
-                  borderBottom: '1px solid var(--border)',
+                      ? "var(--background)"
+                      : "color-mix(in oklch, var(--muted) 30%, var(--background))",
+                  borderBottom: "1px solid var(--border)",
                 }}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
                     className="px-3 py-2 text-[12px] whitespace-nowrap"
-                    style={{ color: 'var(--foreground)' }}
+                    style={{ color: "var(--foreground)" }}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
@@ -137,12 +121,12 @@ export function DataTableView({
           <span
             className="text-[10px] tabular-nums"
             style={{
-              fontFamily: 'var(--font-geist-mono)',
-              color: 'var(--muted-foreground)',
+              fontFamily: "var(--font-geist-mono)",
+              color: "var(--muted-foreground)",
             }}
           >
-            {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}{' '}
-            ({data.length.toLocaleString('da-DK')} rows)
+            {table.getState().pagination.pageIndex + 1} / {table.getPageCount()} (
+            {data.length.toLocaleString("da-DK")} rows)
           </span>
           <div className="flex items-center gap-4">
             <button
@@ -150,7 +134,7 @@ export function DataTableView({
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
               className="text-[11px] transition-colors disabled:opacity-30"
-              style={{ color: 'var(--muted-foreground)' }}
+              style={{ color: "var(--muted-foreground)" }}
             >
               ←
             </button>
@@ -159,7 +143,7 @@ export function DataTableView({
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
               className="text-[11px] transition-colors disabled:opacity-30"
-              style={{ color: 'var(--muted-foreground)' }}
+              style={{ color: "var(--muted-foreground)" }}
             >
               →
             </button>

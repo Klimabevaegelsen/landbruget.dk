@@ -41,11 +41,11 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 The `AskInput` component is designed to work alongside the `SQLEditor`:
 
 ```tsx
-import { AskInput } from '@/components/AskInput';
-import { SQLEditor } from '@/components/SQLEditor';
+import { AskInput } from "@/components/AskInput";
+import { SQLEditor } from "@/components/SQLEditor";
 
 function DataExplorer() {
-  const [currentQuery, setCurrentQuery] = useState('');
+  const [currentQuery, setCurrentQuery] = useState("");
 
   return (
     <>
@@ -138,8 +138,8 @@ Enable detailed logging:
 
 ```typescript
 // In route.ts
-console.log('Gemini response:', text);
-console.log('Parsed response:', parsedResponse);
+console.log("Gemini response:", text);
+console.log("Parsed response:", parsedResponse);
 ```
 
 ## Limitations

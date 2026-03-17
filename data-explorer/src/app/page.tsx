@@ -1,33 +1,33 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
-import { ArrowUpRight } from 'lucide-react';
-import { getR2BaseUrl } from '@/lib/r2';
-import type { ManifestData } from '@/types';
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { getR2BaseUrl } from "@/lib/r2";
+import type { ManifestData } from "@/types";
 
 const DISPLAY_FONT = 'var(--font-fraunces), Georgia, "Times New Roman", serif';
-const EASE = 'var(--ease-out-quint)';
+const EASE = "var(--ease-out-quint)";
 
 const DATASET_NAMES = [
-  'Markblok',
-  'CHR Register',
-  'Husdyrhold',
-  'Afgrødekort',
-  'Pesticidkontrol',
-  'Jordstykker',
-  'CVR Landbrug',
-  'Gødningsregnskab',
-  'Vandmiljøplan',
-  'Naturarealer',
-  'Skovregistret',
-  'Ejendomsvurdering',
-  'Svineflytninger',
-  'Kvægtælling',
-  'Sprøjtejournaler',
-  'Markplan',
-  'Nitratklasser',
-  'Dyrevelfærd',
+  "Markblok",
+  "CHR Register",
+  "Husdyrhold",
+  "Afgrødekort",
+  "Pesticidkontrol",
+  "Jordstykker",
+  "CVR Landbrug",
+  "Gødningsregnskab",
+  "Vandmiljøplan",
+  "Naturarealer",
+  "Skovregistret",
+  "Ejendomsvurdering",
+  "Svineflytninger",
+  "Kvægtælling",
+  "Sprøjtejournaler",
+  "Markplan",
+  "Nitratklasser",
+  "Dyrevelfærd",
 ];
 
 // Deterministic grid — no Math.random() to avoid hydration mismatch
@@ -35,7 +35,7 @@ function makeGridCells(count: number) {
   return Array.from({ length: count }, (_, i) => {
     const v = (i * 7919 + 3571) % 9999;
     const opacity = 0.035 + ((i * 17 + 3) % 60) / 2000;
-    return { value: String(v).padStart(4, '0'), opacity };
+    return { value: String(v).padStart(4, "0"), opacity };
   });
 }
 
@@ -52,7 +52,7 @@ function useInView(threshold = 0.15) {
       ([entry]) => {
         if (entry.isIntersecting) setVisible(true);
       },
-      { threshold }
+      { threshold },
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -98,8 +98,7 @@ export default function HomePage() {
   }
 
   function fmtSize(bytes: number) {
-    if (bytes >= 1_073_741_824)
-      return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+    if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
     if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)} MB`;
     return `${bytes} B`;
   }
@@ -156,8 +155,8 @@ export default function HomePage() {
               className="motion-animate text-muted-foreground mb-10 max-w-[420px] text-base leading-relaxed"
               style={{ animation: `fadeUp 0.6s ${EASE} 0.55s both` }}
             >
-              Query, analyze, and download data from 18+ Danish agricultural
-              registries — directly in your browser. No account required.
+              Query, analyze, and download data from 18+ Danish agricultural registries — directly
+              in your browser. No account required.
             </p>
 
             <div
@@ -200,8 +199,8 @@ export default function HomePage() {
         <div
           className="text-muted-foreground flex py-3 text-[10px] font-semibold tracking-[0.15em] whitespace-nowrap uppercase"
           style={{
-            animation: 'marquee 45s linear infinite',
-            willChange: 'transform',
+            animation: "marquee 45s linear infinite",
+            willChange: "transform",
           }}
           aria-hidden="true"
         >
@@ -219,8 +218,8 @@ export default function HomePage() {
       <section ref={statsRef} className="px-6 py-16 sm:px-10 lg:px-16">
         <div className="flex max-w-2xl flex-col gap-10 sm:flex-row sm:items-start sm:gap-0">
           <StatItem
-            value={stats ? `${stats.datasets}` : '—'}
-            suffix={stats ? '+' : ''}
+            value={stats ? `${stats.datasets}` : "—"}
+            suffix={stats ? "+" : ""}
             label="Datasets available"
             visible={statsVisible}
             delay={0}
@@ -228,7 +227,7 @@ export default function HomePage() {
           <div className="border-border hidden self-stretch border-r sm:mx-10 sm:block lg:mx-14" />
           <div className="bg-border h-px sm:hidden" />
           <StatItem
-            value={stats ? fmtRows(stats.totalRows) : '—'}
+            value={stats ? fmtRows(stats.totalRows) : "—"}
             label="Total rows of data"
             visible={statsVisible}
             delay={150}
@@ -236,7 +235,7 @@ export default function HomePage() {
           <div className="border-border hidden self-stretch border-r sm:mx-10 sm:block lg:mx-14" />
           <div className="bg-border h-px sm:hidden" />
           <StatItem
-            value={stats ? fmtSize(stats.totalSize) : '—'}
+            value={stats ? fmtSize(stats.totalSize) : "—"}
             label="Compressed Parquet"
             visible={statsVisible}
             delay={300}
@@ -253,11 +252,7 @@ export default function HomePage() {
       <section ref={featuresRef} className="px-6 py-16 sm:px-10 lg:px-16">
         <div
           className="motion-animate mb-12"
-          style={
-            featuresVisible
-              ? { animation: `fadeUp 0.6s ${EASE} 0ms both` }
-              : { opacity: 0 }
-          }
+          style={featuresVisible ? { animation: `fadeUp 0.6s ${EASE} 0ms both` } : { opacity: 0 }}
         >
           <h2
             className="text-foreground text-[clamp(1.5rem,3vw,2.25rem)] leading-tight font-bold"
@@ -300,17 +295,10 @@ export default function HomePage() {
       </section>
 
       {/* ── CTA ────────────────────────────────────────────────────── */}
-      <section
-        ref={ctaRef}
-        className="border-border border-t px-6 py-16 sm:px-10 lg:px-16"
-      >
+      <section ref={ctaRef} className="border-border border-t px-6 py-16 sm:px-10 lg:px-16">
         <div
           className="motion-animate flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between"
-          style={
-            ctaVisible
-              ? { animation: `fadeUp 0.7s ${EASE} 0ms both` }
-              : { opacity: 0 }
-          }
+          style={ctaVisible ? { animation: `fadeUp 0.7s ${EASE} 0ms both` } : { opacity: 0 }}
         >
           <div>
             <h2
@@ -340,7 +328,7 @@ export default function HomePage() {
       <footer className="border-border border-t px-6 py-8 sm:px-10 lg:px-16">
         <div className="text-muted-foreground flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
           <span>
-            Part of{' '}
+            Part of{" "}
             <a
               href="https://landbruget.dk"
               target="_blank"
@@ -348,7 +336,7 @@ export default function HomePage() {
               className="text-foreground hover:text-primary font-semibold transition-colors"
             >
               Landbruget.dk
-            </a>{' '}
+            </a>{" "}
             — Organizing Danish agricultural information
           </span>
           <span>DuckDB-WASM · Gemini AI · Open Data</span>
@@ -364,7 +352,7 @@ function DataFieldVisual() {
       {/* Faint grid of data numbers — the "field" texture */}
       <div
         className="grid gap-x-2 gap-y-1 select-none"
-        style={{ gridTemplateColumns: 'repeat(10, 1fr)' }}
+        style={{ gridTemplateColumns: "repeat(10, 1fr)" }}
       >
         {GRID_CELLS.map((cell, i) => (
           <span
@@ -384,7 +372,7 @@ function DataFieldVisual() {
           style={{
             fontFamily: DISPLAY_FONT,
             opacity: 0.1,
-            animation: 'breathe 7s ease-in-out infinite',
+            animation: "breathe 7s ease-in-out infinite",
           }}
         >
           18+
@@ -397,7 +385,7 @@ function DataFieldVisual() {
 function StatItem({
   value,
   label,
-  suffix = '',
+  suffix = "",
   visible = true,
   delay = 0,
 }: {
@@ -460,9 +448,7 @@ function FeatureItem({
       </span>
       <div>
         <h3 className="text-foreground mb-2 text-sm font-semibold">{title}</h3>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          {description}
-        </p>
+        <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
       </div>
     </div>
   );

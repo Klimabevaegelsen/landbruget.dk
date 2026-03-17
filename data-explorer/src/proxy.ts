@@ -1,25 +1,25 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getAuthConfig } from '@/lib/auth';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getAuthConfig } from "@/lib/auth";
 
-const LOGIN_PATH = '/login';
+const LOGIN_PATH = "/login";
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const { authCookieName, cookieValue } = getAuthConfig();
 
   // Allow login page and auth API through unconditionally
-  if (pathname === LOGIN_PATH || pathname.startsWith('/api/auth')) {
+  if (pathname === LOGIN_PATH || pathname.startsWith("/api/auth")) {
     return NextResponse.next();
   }
 
   // Allow health check through
-  if (pathname === '/api/health' || pathname === '/healthz') {
+  if (pathname === "/api/health" || pathname === "/healthz") {
     return NextResponse.next();
   }
 
   // Allow Next.js internals
-  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) {
+  if (pathname.startsWith("/_next") || pathname.startsWith("/favicon")) {
     return NextResponse.next();
   }
 
@@ -31,10 +31,10 @@ export function proxy(request: NextRequest) {
 
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = LOGIN_PATH;
-  loginUrl.searchParams.set('from', pathname);
+  loginUrl.searchParams.set("from", pathname);
   return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
