@@ -17,8 +17,7 @@ dependencies = [
     "fiona~=1.10.1",
     # Cloud Services
     "s3fs>=2024.1.0",
-    "google-cloud-bigquery~=3.29.0",
-    "google-cloud-secret-manager~=2.24.0",
+    # google-cloud-secret-manager only needed by property_owners_sftp (kept there)
     "fsspec~=2025.5.1",
     # Web Framework
     "fastapi~=0.115.7",
@@ -31,8 +30,6 @@ dependencies = [
     "paramiko~=3.5.0",
     "certifi~=2025.6.15",
     "pyOpenSSL~=25.0.0",
-    # Data Pipeline and Validation
-    "backoff~=2.2.1",
     # PDF Processing
     "pdfplumber~=0.11.5",
     # Utilities
