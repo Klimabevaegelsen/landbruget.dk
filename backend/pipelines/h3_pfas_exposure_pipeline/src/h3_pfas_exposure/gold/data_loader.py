@@ -82,6 +82,18 @@ class H3DataLoader:
         files = self.gcs_access.list_files(pattern)
 
         if not files:
+            # Try agricultural year format: dataset_year_year+1/timestamp/dataset_year_year+1.parquet
+            # This is the format used by the pesticide disaggregation pipeline
+            ag_pattern = f"gs://{self.config.bucket}/gold/{dataset}_{year}_{year + 1}/*/{dataset}_{year}_{year + 1}.parquet"
+            files = self.gcs_access.list_files(ag_pattern)
+
+            if files:
+                self.log.info(
+                    f"Found agricultural year format files for {dataset} {year}: {len(files)} files"
+                )
+                return sorted(files)[-1]  # Latest by timestamp
+
+        if not files:
             # Try the actual unified pipeline format: dataset_year/timestamp/dataset_year.parquet
             self.log.warning(
                 f"No new format files found for {dataset} {year}, trying unified pipeline format"
@@ -126,7 +138,9 @@ class H3DataLoader:
     def _check_year_data_availability(self, year: int) -> bool:
         """Check if required data is available for a given year."""
         # Check pesticide disaggregation data for year Y
-        pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
+        pesticide_path = (
+            f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
+        )
         pesticide_available = self._check_gcs_path_exists(pesticide_path)
 
         # Check FVM marker data for year Y+1 (Y+1 pattern)

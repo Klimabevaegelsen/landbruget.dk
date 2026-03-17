@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 
 # Import the new refactored modules
-from h3_pfas_exposure.gold import (
+from h3_pfas_exposure.gold import (  # noqa: E402
     run_combined_analysis,
     run_cumulative_analysis,
     run_cumulative_analysis_from_artifacts,
@@ -91,7 +91,7 @@ async def run_pipeline(
     Returns:
         True if successful, False otherwise
     """
-    pipeline_start_time = datetime.now()
+    datetime.now()
     logger.info(f"🚀 Starting H3 PFAS exposure analysis pipeline in {mode} mode")
 
     try:
@@ -142,7 +142,13 @@ async def run_pipeline(
             else:
                 # Detect if running in GitHub Actions and check for artifacts
                 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
-                artifacts_dir = "downloaded-artifacts"
+                # artifacts_dir is relative to GITHUB_WORKSPACE (repo root), not the pipeline working dir
+                github_workspace = os.getenv("GITHUB_WORKSPACE", "")
+                artifacts_dir = (
+                    os.path.join(github_workspace, "downloaded-artifacts")
+                    if github_workspace
+                    else "downloaded-artifacts"
+                )
 
                 if is_github_actions and os.path.exists(artifacts_dir):
                     logger.info(
