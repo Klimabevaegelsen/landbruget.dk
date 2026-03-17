@@ -459,20 +459,20 @@ class TestGetVetstatCredentials:
         """Test credential retrieval fails with missing username."""
         from bronze.load_vetstat import get_vetstat_credentials
 
-        with patch.dict(
-            os.environ,
-            {
-                "FVM_USERNAME": "",
-                "FVM_PASSWORD": "test_password",
-                "VETSTAT_CERTIFICATE": "cert",
-                "VETSTAT_CERTIFICATE_PASSWORD": "cert_pass",
-            },
-            clear=True,
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FVM_USERNAME": "",
+                    "FVM_PASSWORD": "test_password",
+                    "VETSTAT_CERTIFICATE": "cert",
+                    "VETSTAT_CERTIFICATE_PASSWORD": "cert_pass",
+                },
+                clear=True,
+            ),
+            pytest.raises(ValueError, match="Missing required environment variables.*FVM_USERNAME"),
         ):
-            with pytest.raises(
-                ValueError, match="Missing required environment variables.*FVM_USERNAME"
-            ):
-                get_vetstat_credentials()
+            get_vetstat_credentials()
 
 
 class TestLoadVetstatAntibiotics:

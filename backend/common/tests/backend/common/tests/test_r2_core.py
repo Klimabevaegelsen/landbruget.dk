@@ -94,7 +94,10 @@ class TestPathNormalization:
     def test_list_files_strips_and_re_adds_prefix(self):
         """list_files should strip prefix for glob, re-add for results."""
         mock_fs = MagicMock()
-        mock_fs.glob.return_value = ["my-bucket/silver/file1.parquet", "my-bucket/silver/file2.parquet"]
+        mock_fs.glob.return_value = [
+            "my-bucket/silver/file1.parquet",
+            "my-bucket/silver/file2.parquet",
+        ]
         gcs = self._make_gcs_access(mock_fs)
 
         # With gs:// prefix (legacy)

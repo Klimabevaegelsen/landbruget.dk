@@ -22,7 +22,9 @@ import pytest
 # =============================================================================
 
 
-def test_cvr_format_validation_valid(cvr_validator: callable, valid_cvr_numbers: list[str]) -> None:
+def test_cvr_format_validation_valid(
+    cvr_validator: callable, valid_cvr_numbers: list[str]
+) -> None:
     """Test that valid CVR numbers pass validation."""
     for cvr in valid_cvr_numbers:
         assert cvr_validator(cvr), f"Valid CVR {cvr} should pass validation"
@@ -68,7 +70,9 @@ def test_cvr_format_validation_wrong_type(cvr_validator: callable) -> None:
         [],  # list
     ]
     for value in invalid_types:
-        assert not cvr_validator(value), f"CVR {value} of type {type(value)} should fail"
+        assert not cvr_validator(value), (
+            f"CVR {value} of type {type(value)} should fail"
+        )
 
 
 def test_cvr_formatting_preserves_leading_zeros(cvr_formatter: callable) -> None:
@@ -81,7 +85,9 @@ def test_cvr_formatting_preserves_leading_zeros(cvr_formatter: callable) -> None
     ]
     for input_val, expected in test_cases:
         result = cvr_formatter(input_val)
-        assert result == expected, f"CVR {input_val} should format to {expected}, got {result}"
+        assert result == expected, (
+            f"CVR {input_val} should format to {expected}, got {result}"
+        )
 
 
 def test_cvr_formatting_integer_input(cvr_formatter: callable) -> None:
@@ -107,7 +113,9 @@ def test_cvr_formatting_invalid_raises_error(cvr_formatter: callable) -> None:
 # =============================================================================
 
 
-def test_chr_format_validation_valid(chr_validator: callable, valid_chr_numbers: list[str]) -> None:
+def test_chr_format_validation_valid(
+    chr_validator: callable, valid_chr_numbers: list[str]
+) -> None:
     """Test that valid CHR numbers pass validation."""
     for chr_num in valid_chr_numbers:
         assert chr_validator(chr_num), f"Valid CHR {chr_num} should pass validation"
@@ -122,7 +130,9 @@ def test_chr_format_validation_invalid_length(chr_validator: callable) -> None:
         "",  # empty
     ]
     for chr_num in invalid_chrs:
-        assert not chr_validator(chr_num), f"CHR {chr_num} with invalid length should fail"
+        assert not chr_validator(chr_num), (
+            f"CHR {chr_num} with invalid length should fail"
+        )
 
 
 def test_chr_format_validation_non_numeric(chr_validator: callable) -> None:
@@ -133,7 +143,9 @@ def test_chr_format_validation_non_numeric(chr_validator: callable) -> None:
         "12 3456",  # contains space
     ]
     for chr_num in invalid_chrs:
-        assert not chr_validator(chr_num), f"CHR {chr_num} with non-numeric chars should fail"
+        assert not chr_validator(chr_num), (
+            f"CHR {chr_num} with non-numeric chars should fail"
+        )
 
 
 def test_chr_formatting_preserves_leading_zeros(chr_formatter: callable) -> None:
@@ -146,7 +158,9 @@ def test_chr_formatting_preserves_leading_zeros(chr_formatter: callable) -> None
     ]
     for input_val, expected in test_cases:
         result = chr_formatter(input_val)
-        assert result == expected, f"CHR {input_val} should format to {expected}, got {result}"
+        assert result == expected, (
+            f"CHR {input_val} should format to {expected}, got {result}"
+        )
 
 
 def test_chr_formatting_integer_input(chr_formatter: callable) -> None:
@@ -208,7 +222,9 @@ def test_bfe_format_invalid_pattern() -> None:
 # =============================================================================
 
 
-def test_batch_cvr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_batch_cvr_validation_dataframe(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test batch CVR validation on DataFrame."""
     pd.DataFrame(
         {
@@ -236,7 +252,9 @@ def test_batch_cvr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyC
     assert not result.loc[4, "is_valid"]  # Too short
 
 
-def test_batch_chr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_batch_chr_validation_dataframe(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test batch CHR validation on DataFrame."""
     pd.DataFrame(
         {
@@ -264,14 +282,21 @@ def test_batch_chr_validation_dataframe(mock_duckdb_connection: duckdb.DuckDBPyC
     assert not result.loc[4, "is_valid"]  # Non-numeric
 
 
-def test_identifier_normalization_pipeline(mock_duckdb_connection: duckdb.DuckDBPyConnection) -> None:
+def test_identifier_normalization_pipeline(
+    mock_duckdb_connection: duckdb.DuckDBPyConnection,
+) -> None:
     """Test full identifier normalization pipeline (Bronze -> Silver)."""
     # Bronze: Raw data with inconsistent formatting
     pd.DataFrame(
         {
             "cvr": [31373077, 113115, "12345678", "00000123"],
             "chr": [123456, 123, "654321", "000001"],
-            "bfe": ["0101-123456-12a", "0851-234567-1", "0461-100000-abc", "0101-000001-1a"],
+            "bfe": [
+                "0101-123456-12a",
+                "0851-234567-1",
+                "0461-100000-abc",
+                "0101-000001-1a",
+            ],
         }
     )
 
@@ -291,8 +316,12 @@ def test_identifier_normalization_pipeline(mock_duckdb_connection: duckdb.DuckDB
     # Verify normalization
     assert all(result["cvr_normalized"].str.len() == 8), "All CVRs should be 8 digits"
     assert all(result["chr_normalized"].str.len() == 6), "All CHRs should be 6 digits"
-    assert all(result["cvr_normalized"].str.match(r"^\d{8}$")), "All CVRs should be numeric"
-    assert all(result["chr_normalized"].str.match(r"^\d{6}$")), "All CHRs should be numeric"
+    assert all(result["cvr_normalized"].str.match(r"^\d{8}$")), (
+        "All CVRs should be numeric"
+    )
+    assert all(result["chr_normalized"].str.match(r"^\d{6}$")), (
+        "All CHRs should be numeric"
+    )
 
     # Check specific values
     assert result.loc[0, "cvr_normalized"] == "31373077"

@@ -67,7 +67,7 @@ class OptimizedGCSStorage:
             self._fallback_fs = get_r2_filesystem()
             self._fallback_bucket = bucket_name
             logger.info(f"BMD Silver: Using s3fs/R2 fallback for bucket: {bucket_name}")
-        except (ImportError, EnvironmentError) as e:
+        except (OSError, ImportError) as e:
             raise RuntimeError(f"Cloud storage not available: {e}") from e
 
     def upload_file(self, local_path: Path, gcs_path: str | None = None) -> bool:

@@ -242,7 +242,7 @@ class GCSStorage:
             from common.gcs.filesystem import get_r2_filesystem  # noqa: F401
 
             return True
-        except (ImportError, EnvironmentError):
+        except (OSError, ImportError):
             logging.warning("Cloud storage not available. Using local storage only.")
             return False
 

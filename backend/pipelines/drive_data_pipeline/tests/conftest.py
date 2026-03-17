@@ -22,7 +22,7 @@ sys.path.insert(0, str(_backend_root))  # For common package and other backend m
 sys.path.insert(0, str(_pipelines_dir))  # For drive_data_pipeline package
 
 # Import common modules so they're available as top-level imports (as expected by code)
-import common.pipeline_metadata  # noqa: F401
+import common.pipeline_metadata
 
 sys.modules["pipeline_metadata"] = common.pipeline_metadata
 

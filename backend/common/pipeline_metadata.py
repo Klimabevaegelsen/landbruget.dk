@@ -39,7 +39,9 @@ class DatasetMetadata(BaseModel):
     processing: ProcessingMetadata
 
     # For combined datasets (MANUAL SPECIFICATION)
-    source_datasets: list[str] | None = Field(None, description="If this combines other datasets")
+    source_datasets: list[str] | None = Field(
+        None, description="If this combines other datasets"
+    )
 
     def to_frontend_display(self) -> dict[str, Any]:
         """Format for frontend consumption"""
@@ -74,12 +76,19 @@ class MetadataManager:
         """Get current git context (AUTOMATIC)"""
         try:
             commit_hash = (
-                subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+                subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+                )
+                .decode()
+                .strip()
             )
 
             try:
                 branch = (
-                    subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL)
+                    subprocess.check_output(
+                        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                        stderr=subprocess.DEVNULL,
+                    )
                     .decode()
                     .strip()
                 )
@@ -89,7 +98,8 @@ class MetadataManager:
             try:
                 tag = (
                     subprocess.check_output(
-                        ["git", "describe", "--exact-match", "--tags", "HEAD"], stderr=subprocess.DEVNULL
+                        ["git", "describe", "--exact-match", "--tags", "HEAD"],
+                        stderr=subprocess.DEVNULL,
                     )
                     .decode()
                     .strip()
@@ -134,7 +144,11 @@ class MetadataManager:
             runner="github-actions" if os.getenv("GITHUB_ACTIONS") else "local",
         )
 
-        return DatasetMetadata(source_info=source_info, processing=processing, source_datasets=source_datasets)
+        return DatasetMetadata(
+            source_info=source_info,
+            processing=processing,
+            source_datasets=source_datasets,
+        )
 
     def save_metadata(self, metadata: DatasetMetadata, data_file_path: Path) -> Path:
         """Save metadata alongside data file"""

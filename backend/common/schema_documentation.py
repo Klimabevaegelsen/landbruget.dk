@@ -85,14 +85,18 @@ class SchemaDocumentationManager:
 
             # Row count
             try:
-                count_result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+                count_result = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {table_name}"
+                ).fetchone()
                 schema_info["row_count"] = count_result[0] if count_result else 0
             except Exception:
                 schema_info["row_count"] = None
 
             # Table size (if available)
             try:
-                size_query = f"SELECT pg_size_pretty(pg_total_relation_size('{table_name}'))"
+                size_query = (
+                    f"SELECT pg_size_pretty(pg_total_relation_size('{table_name}'))"
+                )
                 size_result = self.conn.execute(size_query).fetchone()
                 schema_info["table_size"] = size_result[0] if size_result else None
             except Exception:
@@ -124,7 +128,9 @@ class SchemaDocumentationManager:
                     schema_info["column_statistics"] = column_stats
                 except Exception as e:
                     if self.logger:
-                        self.logger.warning(f"Could not generate statistics for {table_name}: {e}")
+                        self.logger.warning(
+                            f"Could not generate statistics for {table_name}: {e}"
+                        )
                     schema_info["column_statistics"] = None
 
             return schema_info
@@ -139,7 +145,9 @@ class SchemaDocumentationManager:
                 "error": str(e),
             }
 
-    def generate_table_documentation(self, table_name: str, stage: str = "processed") -> str:
+    def generate_table_documentation(
+        self, table_name: str, stage: str = "processed"
+    ) -> str:
         """
         Generate markdown documentation for a single table.
 
@@ -163,7 +171,14 @@ class SchemaDocumentationManager:
         ]
 
         if "error" in schema_info:
-            lines.extend(["## Error", "", f"Could not generate schema documentation: {schema_info['error']}", ""])
+            lines.extend(
+                [
+                    "## Error",
+                    "",
+                    f"Could not generate schema documentation: {schema_info['error']}",
+                    "",
+                ]
+            )
         else:
             # Table overview
             lines.extend(
@@ -196,7 +211,9 @@ class SchemaDocumentationManager:
                 nullable = "✓" if col["nullable"] else "✗"
                 key = col["key"] or ""
                 default = col["default"] or ""
-                lines.append(f"| {col['name']} | {col['type']} | {nullable} | {key} | {default} |")
+                lines.append(
+                    f"| {col['name']} | {col['type']} | {nullable} | {key} | {default} |"
+                )
 
             lines.append("")
 
@@ -214,23 +231,39 @@ class SchemaDocumentationManager:
                 for col_name, stats in schema_info["column_statistics"].items():
                     min_val = stats["min"] if stats["min"] is not None else ""
                     max_val = stats["max"] if stats["max"] is not None else ""
-                    unique = stats["approx_unique"] if stats["approx_unique"] is not None else ""
+                    unique = (
+                        stats["approx_unique"]
+                        if stats["approx_unique"] is not None
+                        else ""
+                    )
 
                     # Handle avg formatting safely
                     try:
-                        avg = f"{float(stats['avg']):.2f}" if stats["avg"] is not None else ""
+                        avg = (
+                            f"{float(stats['avg']):.2f}"
+                            if stats["avg"] is not None
+                            else ""
+                        )
                     except (ValueError, TypeError):
                         avg = str(stats["avg"]) if stats["avg"] is not None else ""
 
                     # Handle null percentage formatting safely
                     try:
                         null_pct = (
-                            f"{float(stats['null_percentage']):.1f}%" if stats["null_percentage"] is not None else ""
+                            f"{float(stats['null_percentage']):.1f}%"
+                            if stats["null_percentage"] is not None
+                            else ""
                         )
                     except (ValueError, TypeError):
-                        null_pct = str(stats["null_percentage"]) if stats["null_percentage"] is not None else ""
+                        null_pct = (
+                            str(stats["null_percentage"])
+                            if stats["null_percentage"] is not None
+                            else ""
+                        )
 
-                    lines.append(f"| {col_name} | {min_val} | {max_val} | {unique} | {avg} | {null_pct} |")
+                    lines.append(
+                        f"| {col_name} | {min_val} | {max_val} | {unique} | {avg} | {null_pct} |"
+                    )
 
                 lines.append("")
 
@@ -248,7 +281,9 @@ class SchemaDocumentationManager:
 
         return str(doc_file)
 
-    def generate_overview_documentation(self, tables: list[str], stage: str = "processed") -> str:
+    def generate_overview_documentation(
+        self, tables: list[str], stage: str = "processed"
+    ) -> str:
         """
         Generate overview documentation with all table schemas.
 
@@ -308,7 +343,9 @@ class SchemaDocumentationManager:
                 key_str = f" ({col['key']})" if col["key"] else ""
                 default_str = f" DEFAULT {col['default']}" if col["default"] else ""
 
-                lines.append(f"--   {col['name']}: {col['type']} {nullable_str}{key_str}{default_str}")
+                lines.append(
+                    f"--   {col['name']}: {col['type']} {nullable_str}{key_str}{default_str}"
+                )
 
             lines.extend(["```", ""])
 
@@ -326,7 +363,9 @@ class SchemaDocumentationManager:
 
         return str(overview_file)
 
-    def generate_all_documentation(self, tables: list[str], stage: str = "processed") -> list[str]:
+    def generate_all_documentation(
+        self, tables: list[str], stage: str = "processed"
+    ) -> list[str]:
         """
         Generate documentation for all tables and create overview.
 
@@ -378,7 +417,9 @@ class SchemaDocumentationManager:
         generated_files.append(str(metadata_file))
 
         if self.logger:
-            self.logger.info(f"Generated {len(generated_files)} documentation files for {self.pipeline_name}")
+            self.logger.info(
+                f"Generated {len(generated_files)} documentation files for {self.pipeline_name}"
+            )
 
         return generated_files
 
@@ -394,12 +435,19 @@ class SchemaDocumentationManager:
         """
         if not commit_message:
             timestamp = self.pipeline_start_time.strftime("%Y-%m-%d %H:%M:%S")
-            commit_message = f"Update schema documentation for {self.pipeline_name} ({timestamp})"
+            commit_message = (
+                f"Update schema documentation for {self.pipeline_name} ({timestamp})"
+            )
 
         try:
             # Configure git identity if not already set
             try:
-                result = subprocess.run(["git", "config", "user.name"], check=True, capture_output=True, text=True)
+                result = subprocess.run(
+                    ["git", "config", "user.name"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
                 user_name = result.stdout.strip()
                 if not user_name:
                     raise subprocess.CalledProcessError(1, "git config user.name")
@@ -409,16 +457,30 @@ class SchemaDocumentationManager:
 
                 if os.getenv("GITHUB_ACTIONS"):
                     # Running in GitHub Actions
-                    subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
                     subprocess.run(
-                        ["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], check=True
+                        ["git", "config", "user.name", "github-actions[bot]"],
+                        check=True,
+                    )
+                    subprocess.run(
+                        [
+                            "git",
+                            "config",
+                            "user.email",
+                            "github-actions[bot]@users.noreply.github.com",
+                        ],
+                        check=True,
                     )
                     if self.logger:
                         self.logger.info("Configured git identity for GitHub Actions")
                 else:
                     # Running locally or elsewhere, use a generic identity
-                    subprocess.run(["git", "config", "user.name", "Pipeline Bot"], check=True)
-                    subprocess.run(["git", "config", "user.email", "pipeline-bot@landbruget.dk"], check=True)
+                    subprocess.run(
+                        ["git", "config", "user.name", "Pipeline Bot"], check=True
+                    )
+                    subprocess.run(
+                        ["git", "config", "user.email", "pipeline-bot@landbruget.dk"],
+                        check=True,
+                    )
                     if self.logger:
                         self.logger.info("Configured generic git identity for pipeline")
 
@@ -432,7 +494,9 @@ class SchemaDocumentationManager:
             subprocess.run(["git", "push"], check=True)
 
             if self.logger:
-                self.logger.info(f"Schema documentation committed to GitHub: {commit_message}")
+                self.logger.info(
+                    f"Schema documentation committed to GitHub: {commit_message}"
+                )
 
             return True
 
@@ -446,7 +510,10 @@ class SchemaDocumentationMixin:
     """Mixin to add schema documentation to any pipeline class."""
 
     def init_schema_documentation(
-        self, pipeline_name: str, pipeline_start_time: datetime | None = None, enable_auto_commit: bool = False
+        self,
+        pipeline_name: str,
+        pipeline_start_time: datetime | None = None,
+        enable_auto_commit: bool = False,
     ) -> None:
         """
         Initialize schema documentation for this pipeline.
@@ -467,14 +534,20 @@ class SchemaDocumentationMixin:
     def document_table_schema(self, table_name: str, stage: str = "processed") -> str:
         """Generate documentation for a single table."""
         if not hasattr(self, "_schema_doc_manager"):
-            raise RuntimeError("Schema documentation not initialized. Call init_schema_documentation() first.")
+            raise RuntimeError(
+                "Schema documentation not initialized. Call init_schema_documentation() first."
+            )
 
         return self._schema_doc_manager.generate_table_documentation(table_name, stage)
 
-    def document_all_schemas(self, tables: list[str], stage: str = "processed") -> list[str]:
+    def document_all_schemas(
+        self, tables: list[str], stage: str = "processed"
+    ) -> list[str]:
         """Generate documentation for all tables."""
         if not hasattr(self, "_schema_doc_manager"):
-            raise RuntimeError("Schema documentation not initialized. Call init_schema_documentation() first.")
+            raise RuntimeError(
+                "Schema documentation not initialized. Call init_schema_documentation() first."
+            )
 
         files = self._schema_doc_manager.generate_all_documentation(tables, stage)
 
