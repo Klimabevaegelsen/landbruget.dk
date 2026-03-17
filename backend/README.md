@@ -1,139 +1,174 @@
-# Pipelines
-This backend infrastructure powers our open-source data processing platform, designed to transform raw data into clean, harmonized, and analysis-ready datasets. We follow a structured medallion architecture to ensure data quality, maintainability, and ease of contribution. This documentation outlines our technical stack, coding standards, and pipeline architecture to help contributors understand our approach and contribute effectively.
+# Backend — Data Pipelines
 
-Programming language used in the backend is Python. SQL may be used to execute transform operations - in that case please ensure the python equivalent is logged (we recommend using [sql_to_ibis](https://github.com/zbrookle/sql_to_ibis) for that)
+Python-based data processing platform that transforms raw Danish government data into clean, analysis-ready datasets following a medallion architecture.
+
+## Directory Structure
+
+```
+backend/
+├── pipelines/                  # Individual data pipelines
+│   ├── unified_pipeline/       # 18+ government data sources (Click CLI)
+│   ├── chr_pipeline/           # Livestock registry + veterinary data
+│   ├── svineflytning_pipeline/ # Pig movement tracking
+│   ├── climate/                # Farm-level CO2e emissions
+│   ├── bmd_scraper/            # Pesticide database scraper
+│   ├── dma_scraper/            # Environmental company registry
+│   ├── drive_data_pipeline/    # Google Drive regulatory docs
+│   ├── bbr_buildings/          # Building registry
+│   ├── arbejdstilsynet_inspections/ # Workplace safety inspections
+│   ├── h3_pfas_exposure_pipeline/   # PFAS exposure mapping
+│   ├── property_owners_sftp/   # Property ownership data
+│   └── base/                   # Base classes for pipeline patterns
+├── common/                     # Shared utilities (landbruget-common package)
+├── api/                        # FastAPI endpoints (when needed)
+├── scripts/                    # Backend utility scripts
+├── migrations/                 # Data migration scripts
+├── notebooks/                  # Jupyter notebooks for analysis
+└── baselines/                  # Test baselines
+```
+
+## Quick Start
+
+```bash
+cd backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Run a pipeline
+cd pipelines/chr_pipeline && python main.py --step bronze
+```
 
 ## Stack
 
-Pipelines run through will be mostly run on Github workflows and actions.
+- **Python 3.11+** (< 3.13)
+- **DuckDB** (>= 1.5.0) — primary processing engine, not Pandas
+- **ibis-framework** — SQL abstraction
+- **Pydantic** — data validation
+- **Cloudflare R2** — cloud storage (S3-compatible, accessed via gcsfs)
+- **GitHub Actions** — pipeline orchestration
 
-We use a [medallion architecture](https://www.databricks.com/glossary/medallion-architecture) for our data storage and pipeline infrastructure.
+## Medallion Architecture
 
-Bronze and Silver layer processes may run in the same pipeline. Gold layer processes will run in separate pipelines.
-
-## Local Testing with `act`
-
-Before pushing code changes that involve GitHub Actions workflows, you can test them locally using [`act`](https://github.com/nektos/act):
-
-### Installation
-```bash
-# macOS
-brew install act
-
-# Linux/WSL
-curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+```
+Bronze (raw, immutable) → Silver (cleaned, validated) → Gold (analysis-ready)
 ```
 
-### Testing Workflows Locally
+- **Bronze**: Preserve data exactly as received. Add `_fetch_timestamp`, `_source`, `_source_crs` metadata. Never transform or clean. Store in R2.
+- **Silver**: Type coercion, format validation, deduplication. Keep EPSG:25832. Silver data should not depend on other data sources. Store in R2 as Parquet/GeoParquet.
+- **Gold**: Join across datasets on CVR/CHR/BFE. Derive metrics (area, distance, buffers). Transform to EPSG:4326 only at final Supabase upload.
+
+Bronze and Silver may run in the same pipeline. Gold runs in separate pipelines.
+
+## Shared Utilities (`common/`)
+
+All pipelines depend on `common/` as an editable package (`pip install -e`).
+
+| Module | Purpose |
+|--------|---------|
+| `duckdb_processor.py` | `SharedDuckDBProcessor` base class with spatial extension |
+| `crs_utils.py` | CRS constants (`DANISH_UTM`, `WGS84`), transform helpers |
+| `gcs/core.py` | `GCSDataAccess` class — R2 storage (read/write Parquet, CSV) |
+| `gcs/filesystem.py` | gcsfs setup + DuckDB fsspec registration |
+| `storage_interface.py` | `StoragePath` class (supports `gs://` and `r2://`) |
+| `logging_utils.py` | `setup_pipeline_logger()` |
+| `retry_utils.py` | Retry logic for transient failures |
+| `schema_documentation.py` | Auto-generate schema docs from Parquet |
+| `data_source_registry.py` | Data source metadata registry |
+| `validation/` | Data validation utilities |
+
+## Pipeline Patterns
+
+Two patterns exist — follow whichever the pipeline already uses:
+
+### Class-based (`unified_pipeline`)
+
 ```bash
-# List available workflows
-act -l
-
-# Test a specific pipeline workflow (dry run)
-act workflow_dispatch -W .github/workflows/drive_pipeline.yml -n
-
-# Test with secrets (create .secrets file first)
-echo "GOOGLE_SERVICE_ACCOUNT_KEY=test_key" > .secrets
-act workflow_dispatch -W .github/workflows/drive_pipeline.yml --secret-file .secrets
-
-# Test specific job
-act workflow_dispatch -W .github/workflows/drive_pipeline.yml -j deploy -n
+python -m unified_pipeline bronze --source cadastral
 ```
 
-### Configuration
-Create `.actrc` in your project root for consistent settings:
+Each source = one class inheriting from `BronzeBase`, `SilverBase`, or `GoldBase`. Config via Pydantic models.
+
+### File-based (`chr_pipeline`, others)
+
 ```bash
---container-architecture linux/amd64
---artifact-server-path /tmp/artifacts
+python main.py --step bronze --processing-mode incremental
 ```
 
-**Security Note**: Only test workflows locally with your own test credentials. Never commit real production secrets to `.secrets` files.
+Separate modules per data source in `bronze/`, `silver/`, `gold/` directories.
 
-## Overall
-- Consider whether we should fetch and store the data or whether we can provide a link in the frontend or fetch the data at runtime.
-- Do not share identifiers and credentials in commits.
-- If you're concerned whether your data contains PII data, reach out to the maintainers before committing data.
-- Data should in the dev environment be saved and processed locally, ideally using DuckDB and Ibis.
-- Data should in the prod environment be saved on GCS for Bronze layer, GCS for Silver and Supabase for Gold layer, ideally using DuckDB and Ibis.
-- CRS conversions of geospatial data should be avoided (as it may changes the data).
-- Utilise optimal Github actions  ensuring separation of responsibility for modules.
-- Do add comments in the code and do add logs for steps within each module.
-- Each step module should have its own tests.
+## Creating a New Pipeline
 
+1. Create a directory under `pipelines/` with `main.py` entry point
+2. Add `bronze/`, `silver/`, `gold/` subdirectories as needed
+3. Add `tests/` directory with `conftest.py`
+4. Add `.env.example` with required environment variables
+5. Add `README.md` following the [pipeline template](../docs/templates/PIPELINE_README_TEMPLATE.md)
+6. Add `requirements.txt` or use shared deps
+7. Create a GitHub Actions workflow in `.github/workflows/`
 
-## LLMs
-- If LLMs are used in your pipeline, your code should use [OpenRouter](https://openrouter.ai/) instead of querying the LLM APIs directly.
-- Please test output consistency.
-- Be mindful of costs and test different models to check if the cheapest models can be sufficient.
-- Be mindful of sending PII to LLM APIs. If you do, be mindful of which provider you use.
+## CRS Strategy
 
-## Lint and Types
-We expect (soon) to use [Pydantic](https://docs.pydantic.dev/latest/) and [Ruff](https://github.com/astral-sh/ruff) to keep things nice and clean.
+**Process in EPSG:25832 (meters). Transform to EPSG:4326 once at Supabase upload.**
 
-## Bronze layer
-- The Bronze layer's purpose is to fetch and store the raw data.
-- Data should be captured raw and stored immediately - **crucially, NO transformation or cleaning should occur at this stage**. The goal is to preserve the data exactly as it arrived from the source.
-- If source allows different output formats, Parquet/GeoParquet should be preferred, followed by JSON/GeoJSON. If the data is geospatial, the preferred CRS should be EPSG:4326 and then EPSG:25832.
-- Each Bronze layer dataset should be stored under its own folder in the Raw folder with a folder name in English that clearly reflects the data content, and a date for the data fetch.
-- Each Bronze layer dataset should be stored in GCS in prod, include some metadata about the data source, incl. provenance, whether it requires a recurrent request for access, etc.
+```python
+from common.crs_utils import DANISH_UTM, WGS84
+# Buffer/distance work directly in meters — no transform needed
+conn.execute("SELECT ST_Buffer(geometry, 1000) FROM fields")  # 1000m buffer
+# Transform only at final upload
+conn.execute(f"SELECT ST_Transform(geometry, '{DANISH_UTM}', '{WGS84}') FROM fields")
+```
 
-## Silver layer
-- The Silver layer process' purpose is to clean and harmonise the raw data.
-- Silver layer data should not depend on other existing data sources (that happens in the Gold layer stage).
+## DuckDB Notes
 
-### Processing
-[DuckDB](https://duckdb.org/docs/stable/) and [Ibis](https://ibis-project.org/) should be preferred to process the data, instead of shapely, pandas and geopandas (where possible).
+DuckDB is the primary processor. Key DuckDB 1.5 considerations:
 
-### Storage
-- In prod environment, Silver layer data should be kept in prod in GCS.
-- In dev environment, it should be stored locally in Parquet/Geoparquet.
-- Nested data should be kept in separate tables.
-- Each Silver layer dataset should be stored under its own folder in the Processed folder with a folder name in English that clearly reflects the data content, and a date for the processing.
-- In the future, a slice of the data (most probably a single municipality) should be saved separately, so contributers can help out on the Gold layer pipelines without having to have access to the raw data source or download the entire dataset.
+- Use `delim` parameter, not `DELIMITER` (breaking change)
+- Wrap geometry operations with `TRY()` for error handling
+- Spatial extension loads automatically via `SharedDuckDBProcessor`
 
-### Naming conventions
-- In English
-- File names: lowercase and underscore, max 5 words.
-- Feature names: lowercase and underscore, max 5 words.
-- Geospatial field names should start with "geo_".
-- Common feature names:
-- CVR Number: cvr_number
-- Geometry fields: geometry
-- CHR Number: chr_number
-- Herd Number: herd_number
-- Kommune: municipality
-- Dyrearttekst: species_name
-- År: year
-- Marknummber: field_id
-- Markbloknummer: field_block_id
+## Testing
 
-### Data values
-- Null values should be ... null.
-- Consider enums instead of text (where relevant).
+```bash
+source venv/bin/activate
+python -m pytest                      # All tests
+python -m pytest -v -k test_name      # Specific test
+```
 
-### Geospatial data
-- Geospatial data should be stored with EPSG:4326.
-- Geometries should be validated. Common validations can be found [here](https://github.com/chrieke/geojson-invalid-geometry) and should be available in most libraries.
-- Grid cell geometries should be dissolved when relevant.
-- If separate but similar datasets are unlikely to be used individually and where there is a high chance of geographic overlap (water projects for example), feel free save a dissolved version(s) of the datasets as well.
-- Index the data (here's a guide to do it with [DuckDB](https://cloudnativegeo.org/blog/2025/01/using-duckdbs-hilbert-function-with-geoparquet/))
+- Each pipeline has its own `tests/` and `conftest.py`
+- Common fixtures in `common/tests/conftest.py`: `mock_duckdb_connection`, `mock_gcs_filesystem`, `sample_danish_geometries`
+- Markers: `pre_merge` (blocking), `gcs_required` (needs credentials)
 
-### Types
-- Ensure types are casted as they should be (for example column containing only numbers should be stored as numbers, not text).
-- Dates should be stored as date and represent a calendar date (year, month and day) without any time-of-day information.
-- Timestamps should be stored as datetime and represent a specific moment in time, including both the date and the time, including the year, month, day, hour, minute, second and microsecond.
-- Ensure æ,ø,å and other funky characters etc are stored properly.
-- Booleans should be stored as 1s and 0s.
-- Lat/lon coordinates (and all geospatial data) should be stored as a geometry features, not text.
+## Linting
 
-### PII
-- Silver layer data should be expected to be publicly accessible.
-- Some datasets include PII (beginning of CPR numbers or unique personal ids for parcel owners). These should be changed to unique UUIDv4 - or removed.
-- Marketing protection notices should be kept.
+```bash
+ruff check . && ruff format .
+```
 
-## (WIP) Gold layer
-- If a process uncovers the identity of anonymised individuals or companies through the cross-matching of datasets, reach out to the maintainers before committing data.
-- Data should be fetched from GCS.
+Per-pipeline ruff config in each `pyproject.toml`. Line length: 100, target: py311.
 
-# (WIP) APIs
-- We use Supabase
+## Naming Conventions
+
+- File names: lowercase with underscores, max 5 words
+- Feature/column names: lowercase with underscores
+- Geospatial fields: prefix with `geo_`
+- Standard names: `cvr_number`, `chr_number`, `herd_number`, `municipality`, `species_name`, `year`, `field_id`, `field_block_id`
+
+## Environment
+
+Each pipeline loads its own env vars — no global config:
+
+```python
+from dotenv import load_dotenv
+load_dotenv()
+# StoragePath checks R2_BUCKET first, then GCS_BUCKET as fallback
+bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata")
+```
+
+## Guidelines
+
+- Use DuckDB SQL for data processing, not Pandas (for large files)
+- Data should be processed locally in dev, stored on R2 in prod
+- Do not share identifiers or credentials in commits
+- If using LLMs in pipelines, use [OpenRouter](https://openrouter.ai/) and test output consistency
+- Silver layer data should be expected to be publicly accessible — anonymize PII
+- If cross-matching datasets uncovers anonymized identities, contact maintainers before committing

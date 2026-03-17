@@ -1,5 +1,30 @@
 # Svineflytning Pipeline
 
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: Tracing Pig Movements for Disease Control
+
+Denmark is one of the world's largest pork exporters. When a disease outbreak occurs, authorities need to quickly trace which farms have sent or received pigs — and which transport vehicles carried them. The Danish government operates a SOAP-based tracking service (SvineflytningWS) that records every pig movement, but the data is difficult to access at scale.
+
+### What This Pipeline Does
+
+This pipeline automatically:
+
+1. **Connects to the SvineflytningWS service**: Fetches pig movement records from Fødevarestyrelsen (FVM)
+2. **Preserves raw data**: Stores movement records exactly as received (Bronze layer)
+3. **Creates structured datasets**: Produces three clean tables — movements, farm properties, and transport vehicles (Silver layer)
+
+### Why This Data Matters
+
+The results help:
+- **Veterinary authorities** trace disease transmission chains between farms
+- **Food safety agencies** monitor the pig supply chain for compliance
+- **Epidemiologists** model disease spread patterns
+- **Journalists** investigate transport conditions and farm connections
+- **Farmers** understand movement patterns affecting their operations
+
+---
+
 This pipeline fetches pig movement data from the SvineflytningWS SOAP service and processes it into a standardized format following the Medallion architecture (Bronze → Silver).
 
 ## Features
@@ -102,14 +127,14 @@ The pipeline outputs data to the following locations:
 
 ### Bronze Layer
 - **Local**: `/data/raw/svineflytning/{timestamp}/svineflytning.json`
-- **GCS**: `gs://landbruget-data/bronze/svineflytning/{timestamp}/svineflytning.json`
+- **R2**: `landbruget-data/bronze/svineflytning/{timestamp}/svineflytning.json`
 
 ### Silver Layer
 - **Local**: `/data/silver/svineflytning/{timestamp}/`
   - `movements.parquet` - Main pig movement records
   - `properties.parquet` - Property/farm information
   - `vehicles.parquet` - Transport vehicle data
-- **GCS**: `gs://landbruget-data/silver/svineflytning/{timestamp}/`
+- **R2**: `landbruget-data/silver/svineflytning/{timestamp}/`
 
 ### Data Schema
 

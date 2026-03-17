@@ -1,150 +1,152 @@
 # Unified Pipeline
 
-This repository contains the Unified Pipeline for various Danish data sources within the Landbruget.dk project. It orchestrates bronze and silver ETL layers and stores outputs in Google Cloud Storage.
+## What is this pipeline? (For non-technical readers)
 
-## Supported Sources
+### The Problem: Fragmented Government Data
 
-- **cadastral**: Danish cadastral parcels via WFS
-- **agricultural_fields**: Agricultural field boundaries
-- **bnbo**: BNBO status data
-- **spf_su**: SPF SU herd health and salmonella data via WFS
-- **soil_types**: Danish soil types data from Environmental Portal
-- **dmi**: Danish Meteorological Institute climate data (precipitation, evaporation)
-- **nles5_nitrogen_estimation**: NLES5 nitrogen washout estimation (Gold layer)
+Danish agricultural and environmental data is spread across dozens of government agencies, each with their own systems, formats, and access methods. This fragmentation makes it difficult for anyone — journalist, researcher, or citizen — to get a comprehensive picture of Danish agriculture.
+
+### What This Pipeline Does
+
+The Unified Pipeline is the backbone of Landbruget.dk's data collection. It automatically:
+
+1. **Connects to 15+ government data sources**: From cadastral land data to weather stations, from field boundaries to pesticide registrations
+2. **Downloads and preserves raw data**: Stores original data exactly as received (Bronze layer)
+3. **Cleans and standardizes**: Normalizes formats, validates geometries, and ensures data quality (Silver layer)
+4. **Creates analytical products**: Joins datasets, calculates derived metrics, and produces analysis-ready outputs (Gold layer)
+
+### Why This Data Matters
+
+The results help:
+- **Journalists** cross-reference land ownership, crop data, and environmental compliance
+- **Researchers** analyze agricultural patterns, environmental impact, and policy effectiveness
+- **Policymakers** make evidence-based decisions about land use and agricultural regulation
+- **Citizens** understand how Danish farmland is used and regulated
+
+---
+
+## Technical Overview
+
+A unified data pipeline for fetching and processing various Danish agricultural and environmental datasets. Uses a class-based architecture with Click CLI.
+
+## Bronze Layer Sources
+
+Each source is a class inheriting from `BronzeBase`:
+
+| Source | Description | Data Type | Agency |
+|--------|-------------|-----------|--------|
+| `cadastral` | Cadastral land parcels | WFS | Datafordeleren |
+| `agricultural_fields` | Field boundaries and crop data | ArcGIS REST API | Landbrugsstyrelsen |
+| `bnbo_status` | Well protection areas (Boringsnære beskyttelsesområder) | XML/SOAP API | Miljøstyrelsen |
+| `spf_su` | Herd health and salmonella data | WFS | SPF-SU |
+| `soil_types` | Soil type polygons | WFS | Miljøportalen |
+| `dmi` | Precipitation and evaporation data | GovCloud API | DMI |
+| `dagi` | Administrative boundaries | WFS | Datafordeleren |
+| `dst` | Agricultural statistics | API | Danmarks Statistik |
+| `fvm_wfs` | Agricultural authority data | WFS | FVM |
+| `geus_dataverse_pesticides` | Borehole pesticide data | Dataverse API | GEUS |
+| `grukos` | Agricultural classification | API | Landbrugsstyrelsen |
+| `jordbrugsanalyser` | Agricultural analysis data | API | Landbrugsstyrelsen |
+| `water_projects` | Water management projects | WFS | Miljøstyrelsen |
+| `water_typology` | Water type classifications | WFS | Miljøstyrelsen |
+| `wetlands` | Wetland areas | WFS | Miljøstyrelsen |
+| `cvr_bronze` | Company registration data | API | CVR |
+
+## Silver Layer
+
+Each bronze source has a corresponding silver processor that:
+- Validates and fixes geometries
+- Standardizes column names to snake_case
+- Cleans and validates data types
+- Performs data completeness analysis
+- Outputs GeoParquet format
+
+## Gold Layer
+
+Analysis-ready products that join multiple datasets:
+
+| Gold Module | Description |
+|-------------|-------------|
+| `field_area_analysis` | Field area calculations with soil/water/property intersections |
+| `field_production` | Crop production analysis |
+| `pesticide_compliance` | Regulatory compliance analysis |
+| `pesticide_disaggregation` | Pesticide distribution by field |
+| `pesticide_proximity` | Proximity-based pesticide exposure |
+| `pesticide_unit_sanitization` | Pesticide unit standardization |
+| `cvr_enrichment` | Multi-step CVR company enrichment (geocoding, financial docs, P-numbers) |
+| `nles5_nitrogen_estimation` | NLES5 nitrogen washout estimation |
+| `arbejdstilsynet_inspections` | Labor authority inspections (gold processing) |
+| `dst_field_crop_mapping` | DST to field crop type mapping |
+| `property_cadastral_merge` | Property and cadastral data merge |
+| `worker_safety` | Worker safety analysis |
+| `work_permits` | Work permit data |
+| `cvr_geometry_datasets` | CVR geometry dataset generation |
+
+## Usage
+
+Run a specific source and stage:
+
+```bash
+python -m unified_pipeline -s <source> -j <job>
+```
+
+- `<source>`: any source name from the tables above
+- `<job>`: `bronze`, `silver`, or `all`
+
+Examples:
+```bash
+# Bronze stage for cadastral data
+python -m unified_pipeline -s cadastral -j bronze
+
+# Silver stage for soil types
+python -m unified_pipeline -s soil_types -j silver
+
+# Both stages for agricultural fields
+python -m unified_pipeline -s agricultural_fields -j all
+```
 
 ## Prerequisites
 
-1. Python 3.9+
-2. Google Cloud service account key JSON
+1. Python 3.11+
+2. R2 credentials (or GCS service account key for legacy setups)
 3. Create a `.env` file based on `.env.example`:
    ```
-   GCS_BUCKET=<your-gcs-bucket>
-   MAX_CONCURRENT=20            # for bronze HTTP requests
-   SAVE_LOCAL=False            # save locally under /tmp
+   R2_BUCKET=<your-r2-bucket>
+   MAX_CONCURRENT=20
+   SAVE_LOCAL=False
    ```
 4. Install dependencies:
    ```bash
    uv pip install -e .
    ```
 
-## Usage
+## Configuration
 
-Run a specific source and job stage:
-
-```bash
-python -m unified_pipeline -s <source> -j <job>
-```
-
-- `<source>`: one of `cadastral`, `agricultural_fields`, `bnbo`, `spf_su`, `soil_types`, `dmi`, `nles5_nitrogen_estimation`
-- `<source>`: one of `cadastral`, `agricultural_fields`, `bnbo`
-- `<job>`: `bronze`, `silver`, or `all`
-
-
-
-A unified data pipeline for fetching and processing various Danish agricultural and environmental datasets.
-
-## Data Sources
-
-The pipeline currently supports the following data sources:
-
-### 1. BNBO Status (`bnbo`)
-- **Description**: Boringsnære beskyttelsesområder (Well Protection Areas) data
-- **Type**: XML/SOAP API
-- **Frequency**: As needed
-- **Stages**: Bronze, Silver
-
-### 2. Agricultural Fields (`agricultural_fields`)
-- **Description**: Danish agricultural field and block data
-- **Type**: ArcGIS REST API
-- **Frequency**: Weekly
-- **Stages**: Bronze, Silver
-
-### 3. Cadastral (`cadastral`)
-- **Description**: Danish cadastral parcels data
-- **Type**: WFS (Web Feature Service)
-- **Frequency**: Weekly
-- **Stages**: Bronze, Silver
-
-### 4. Soil Types (`soil_types`)
-- **Description**: Danish soil types data from Environmental Portal
-- **Type**: WFS (Web Feature Service)
-- **Source**: Danish Environmental Portal (Miljøportalen)
-- **Endpoint**: https://arld-extgeo.miljoeportal.dk/geoserver/wfs
-- **Layer**: `landbrugsdrift:DJF_FGJOR` (Jordbundstyper)
-- **Frequency**: Monthly
-- **Stages**: Bronze, Silver
-- **Features**: ~13,520 soil type polygons covering Denmark
-- **Attributes**:
-  - `soil_height`: Soil height measurement
-  - `soil_description`: Textual description of soil type
-  - `theme_name`: Theme classification
-  - `soil_code`: Unique soil type code
-  - `geometry`: Polygon geometry
-
-## Usage
-
-Run the pipeline using the CLI:
-
-```bash
-# Run bronze stage only
-python -m unified_pipeline -s soil_types -j bronze
-
-# Run silver stage only
-python -m unified_pipeline -s soil_types -j silver
-
-# Run both bronze and silver stages
-python -m unified_pipeline -s soil_types -j all
-```
-
-### Available Sources
-- `bnbo`
-- `agricultural_fields`
-- `cadastral`
-- `soil_types`
-
-### Available Stages
-- `bronze`: Raw data ingestion
-- `silver`: Cleaned and processed data
-- `all`: Both bronze and silver stages
+Environment variables:
+- `R2_BUCKET`: Cloudflare R2 bucket for data storage (falls back to `GCS_BUCKET`)
+- `MAX_CONCURRENT`: Number of concurrent HTTP requests for bronze fetching (default: 20)
+- `SAVE_LOCAL`: Set to `true` to save data locally under `/tmp` instead of R2
 
 ## Architecture
 
-The pipeline follows a medallion architecture:
+```
+src/unified_pipeline/
+├── app.py                    # Click CLI entry point
+├── base/                     # Base classes
+│   ├── bronze_base.py        # BronzeBase class
+│   ├── silver_base.py        # SilverBase class
+│   └── gold_base.py          # GoldBase class
+├── bronze/                   # Bronze source modules (15+)
+├── silver/                   # Silver processing modules
+├── gold/                     # Gold analytical modules (14+)
+├── common/                   # Shared utilities (geometry_validator, schema_manager)
+├── model/                    # Pydantic config models
+├── util/                     # Utilities (CVR API, geocoding, DAWA, logging)
+└── core/                     # Core features (incremental processing)
+```
 
-- **Bronze Layer**: Raw data ingestion with minimal processing
-- **Silver Layer**: Cleaned, validated, and standardized data
+## Schedule
 
-## Configuration
-
-The pipeline uses environment variables for configuration:
-
-- `GCS_BUCKET`: Google Cloud Storage bucket for data storage
-- `SAVE_LOCAL`: Set to "true" to save data locally instead of uploading to GCS
-
-## Data Processing
-
-### Soil Types Processing
-
-**Bronze Layer:**
-- Fetches data from WFS endpoint using geopandas
-- Validates WFS response and geometry data
-- Adds metadata columns (source, timestamps)
-- Saves raw data as GeoParquet format
-
-**Silver Layer:**
-- Validates and fixes geometries using common validator
-- Standardizes column names to snake_case
-- Cleans and validates data types
-- Validates and standardizes geometries and attributes
-- Performs quality checks and data completeness analysis
-- Saves processed data as GeoParquet format
-
-## Requirements
-
-- Python 3.12+
-- geopandas
-- pandas
-- google-cloud-storage
-- pydantic
-- click
-- Other dependencies listed in pyproject.toml
+- **Weekly**: Monday at 2 AM UTC (GitHub Actions)
+- **Manual**: Can be triggered via `workflow_dispatch`
+- Various gold layer modules run on separate schedules

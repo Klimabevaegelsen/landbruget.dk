@@ -1,5 +1,30 @@
 # BMD Scraper Pipeline
 
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: Understanding Pesticide Approvals in Denmark
+
+Denmark maintains an official pesticide database called **BMD** (Bekæmpelsesmiddeldatabasen), operated by **Miljøstyrelsen** (the Danish Environmental Protection Agency) at [bmd.mst.dk](https://bmd.mst.dk). This database contains every pesticide and biocide product approved for use in Denmark, including their active substances, authorization status, and regulatory history.
+
+### What This Pipeline Does
+
+This pipeline automatically:
+
+1. **Connects to the BMD portal**: Navigates the official website and requests a full database export
+2. **Downloads the raw data**: Saves the complete Excel export exactly as provided (Bronze layer)
+3. **Cleans and structures the data**: Standardizes column names, casts data types, and converts to efficient Parquet format (Silver layer)
+
+### Why This Data Matters
+
+The results help:
+- **Environmental researchers** track which pesticides contain harmful substances (including PFAS)
+- **Food safety advocates** monitor which chemicals are approved for use on Danish crops
+- **Farmers** understand the regulatory status of the products they use
+- **Policymakers** make informed decisions about pesticide regulation
+- **Citizens** learn about chemical usage in their food production
+
+---
+
 A data pipeline for extracting, transforming, and loading data from the Danish Bekæmpelsesmiddel Database (BMD).
 
 ## Overview
@@ -17,10 +42,10 @@ bronze/bmd/<timestamp>/
   └── metadata.json       # Metadata about the download (timestamp, source URL, etc.)
 ```
 
-For production environments, files are also uploaded to Google Cloud Storage with the same structure:
+For production environments, files are also uploaded to Cloudflare R2 with the same structure:
 ```
-gs://<bucket-name>/bronze/bmd/<timestamp>/bmd_raw.xlsx
-gs://<bucket-name>/bronze/bmd/<timestamp>/metadata.json
+r2://<bucket-name>/bronze/bmd/<timestamp>/bmd_raw.xlsx
+r2://<bucket-name>/bronze/bmd/<timestamp>/metadata.json
 ```
 
 ### Silver Stage
@@ -38,10 +63,10 @@ The transformation process includes:
 - Standardizing status fields
 - Validating data and reporting issues
 
-For production environments, files are also uploaded to Google Cloud Storage with the same structure:
+For production environments, files are also uploaded to Cloudflare R2 with the same structure:
 ```
-gs://<bucket-name>/silver/bmd/<timestamp>/bmd_data_<timestamp>.parquet
-gs://<bucket-name>/silver/bmd/<timestamp>/metadata.json
+r2://<bucket-name>/silver/bmd/<timestamp>/bmd_data_<timestamp>.parquet
+r2://<bucket-name>/silver/bmd/<timestamp>/metadata.json
 ```
 
 ## Setup
@@ -61,7 +86,7 @@ gs://<bucket-name>/silver/bmd/<timestamp>/metadata.json
 
 ### Production Setup
 
-For production environments with Google Cloud Storage:
+For production environments with Cloudflare R2:
 
 1. Install with production dependencies:
    ```bash
@@ -69,10 +94,10 @@ For production environments with Google Cloud Storage:
    uv pip install -e ".[production]"
    ```
 
-2. Update the .env file with your GCS configuration:
+2. Update the .env file with your R2 configuration:
    ```
    ENVIRONMENT=production
-   GCS_BUCKET_NAME=your-gcs-bucket-name
+   R2_BUCKET_NAME=your-gcs-bucket-name
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
    ```
 
@@ -98,17 +123,17 @@ The automation is configured in `.github/workflows/bmd_monthly.yml` with the fol
 - **Schedule**: Monthly runs on the 1st at 2 AM UTC (`cron: '0 2 1 * *'`)
 - **Manual Triggering**: Can be triggered manually with environment selection
 - **Environment Support**:
-  - In production mode, uploads data to GCS and installs production dependencies
+  - In production mode, uploads data to R2 and installs production dependencies
   - In development mode, saves artifacts in GitHub Actions
-- **GCP Authentication**: Automatically handles authentication for GCS in production mode
+- **R2 Authentication**: Automatically handles authentication for R2 in production mode
 - **Notifications**: Can be configured to notify via Slack, email, etc. on success/failure
 
 ### Required Secrets for Production Runs
 
-For production runs with GCS integration, the following GitHub secrets must be configured:
+For production runs with R2 integration, the following GitHub secrets must be configured:
 
-- `GCP_SA_KEY`: Google Cloud service account key (JSON) with GCS write permissions
-- `GCS_BUCKET_NAME`: Name of the GCS bucket for storing data
+- `R2_SA_KEY`: Google Cloud service account key (JSON) with R2 write permissions
+- `R2_BUCKET_NAME`: Name of the R2 bucket for storing data
 
 ## Directory Structure
 

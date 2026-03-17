@@ -1,5 +1,31 @@
 # CHR Pipeline
 
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: Tracking Livestock Health and Movement
+
+Denmark's Central Herd Register (CHR) is the national system for tracking all livestock — cattle, pigs, poultry, and other animals — across every farm in the country. This data is critical for food safety, disease surveillance, and animal welfare, but it's locked in government SOAP services that are difficult to access and analyze.
+
+### What This Pipeline Does
+
+This pipeline automatically:
+
+1. **Connects to 6 government services**: Fetches herd registrations, animal movements, veterinary events, antibiotic usage, and health certifications from Fødevarestyrelsen (FVM)
+2. **Preserves raw data**: Stores original API responses (Bronze layer)
+3. **Cleans and structures**: Standardizes herd, movement, and veterinary data (Silver layer)
+4. **Creates a veterinary timeline**: Combines all events per farm into a chronological timeline for analysis (Gold layer)
+
+### Why This Data Matters
+
+The results help:
+- **Food safety agencies** trace disease outbreaks through animal movement chains
+- **Veterinarians** monitor antibiotic usage patterns and resistance risks
+- **Animal welfare organizations** track welfare interventions and compliance
+- **Journalists** investigate farming practices and regulatory enforcement
+- **Consumers** understand the safety and welfare standards behind their food
+
+---
+
 This directory contains the bronze, silver, and gold layer processing scripts for the CHR data pipeline.
 
 ## Features
@@ -151,7 +177,7 @@ The gold layer produces:
 - `veterinary_timeline.parquet` - Complete timeline of veterinary events per CHR
 - `timeline_summary.parquet` - Summary statistics by data source
 
-Data is exported to both local storage and GCS at `gs://landbruget-data/gold/chr/{timestamp}/`
+Data is exported to both local storage and R2 at `landbruget-data/gold/chr/{timestamp}/`
 
 ## GitHub Actions
 
@@ -160,7 +186,7 @@ The pipeline runs automatically via GitHub Actions:
 - Can be triggered manually via workflow_dispatch
 - Now includes gold layer processing after silver completion
 - Individual steps can be run: `all`, `bronze_foundation`, `silver_processing`, `gold_processing`
-- Data is stored in Google Cloud Storage in production
+- Data is stored in Cloudflare R2 in production
 
 ## Error Handling
 
