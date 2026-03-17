@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-
 from common.gcs.filesystem import setup_duckdb_cloud_auth
 
 
@@ -55,9 +54,7 @@ class SharedDuckDBProcessor:
         except Exception:
             return False
 
-    def create_table_from_parquet(
-        self, parquet_path: str | Path, table_name: str | None = None
-    ) -> str:
+    def create_table_from_parquet(self, parquet_path: str | Path, table_name: str | None = None) -> str:
         """Create a table from parquet file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_{int(time.time())}"
@@ -68,9 +65,7 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def create_table_from_csv(
-        self, csv_path: str | Path, table_name: str | None = None
-    ) -> str:
+    def create_table_from_csv(self, csv_path: str | Path, table_name: str | None = None) -> str:
         """Create a table from CSV file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_{int(time.time())}"
@@ -81,9 +76,7 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def create_spatial_table(
-        self, geospatial_path: str | Path, table_name: str | None = None
-    ) -> str:
+    def create_spatial_table(self, geospatial_path: str | Path, table_name: str | None = None) -> str:
         """Create a table from geospatial file."""
         if table_name is None:
             table_name = f"{self.dataset_name}_geo_{int(time.time())}"
@@ -106,9 +99,7 @@ class SharedDuckDBProcessor:
             COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)
         """)
 
-    def create_table_from_gcs_parquet(
-        self, gcs_path: str, table_name: str | None = None
-    ) -> str:
+    def create_table_from_gcs_parquet(self, gcs_path: str, table_name: str | None = None) -> str:
         """Create a table directly from GCS parquet file using native DuckDB access."""
         if table_name is None:
             table_name = f"{self.dataset_name}_gcs_{int(time.time())}"
@@ -119,9 +110,7 @@ class SharedDuckDBProcessor:
         """)
         return table_name
 
-    def save_table_to_gcs_parquet(
-        self, table_name: str, gcs_path: str, compression: str = "zstd", **options
-    ) -> None:
+    def save_table_to_gcs_parquet(self, table_name: str, gcs_path: str, compression: str = "zstd", **options) -> None:
         """Save table directly to GCS parquet file using native DuckDB access."""
         copy_options = ["FORMAT PARQUET", f"COMPRESSION {compression}"]
 
@@ -177,14 +166,10 @@ class SharedDuckDBProcessor:
         if index_name is None:
             index_name = f"idx_{table_name}_{geometry_column}_rtree"
         try:
-            self.conn.execute(
-                f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} USING RTREE({geometry_column})"
-            )
+            self.conn.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} USING RTREE({geometry_column})")
             return True
         except Exception as e:
-            print(
-                f"Warning: Could not create spatial index on {table_name}.{geometry_column}: {e}"
-            )
+            print(f"Warning: Could not create spatial index on {table_name}.{geometry_column}: {e}")
             return False
 
     def drop_table_if_exists(self, table_name: str) -> None:
@@ -271,9 +256,7 @@ class PipelineProcessor(SharedDuckDBProcessor):
             self.log_error(f"❌ {description} failed: {e!s}")
             return None
 
-    def process_with_memory_monitoring(
-        self, operation_func, description: str = "Operation"
-    ) -> Any:
+    def process_with_memory_monitoring(self, operation_func, description: str = "Operation") -> Any:
         """
         Execute an operation with memory monitoring.
 
@@ -294,9 +277,7 @@ class PipelineProcessor(SharedDuckDBProcessor):
             memory_after = process.memory_info().rss / 1024 / 1024  # MB
             memory_diff = memory_after - memory_before
 
-            self.log_info(
-                f"✅ {description} completed (Memory: {memory_after:.1f}MB, Change: {memory_diff:+.1f}MB)"
-            )
+            self.log_info(f"✅ {description} completed (Memory: {memory_after:.1f}MB, Change: {memory_diff:+.1f}MB)")
 
             return result
 

@@ -21,9 +21,7 @@ from pathlib import Path
 import duckdb
 import google.generativeai as genai
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 log = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -163,11 +161,7 @@ def get_sample_values(url: str, columns: list[str], n: int = 5) -> dict[str, lis
     samples: dict[str, list] = {}
     # Only sample non-geometry, non-binary columns
     sample_cols = [
-        c
-        for c in columns
-        if not any(
-            k in c.lower() for k in ("geom", "geometry", "wkt", "wkb", "_json", "uuid")
-        )
+        c for c in columns if not any(k in c.lower() for k in ("geom", "geometry", "wkt", "wkb", "_json", "uuid"))
     ][:20]  # cap at 20 cols to keep it fast
     if not sample_cols:
         return {}
@@ -267,9 +261,7 @@ def _is_empty_column(stats: dict, sample_values: list) -> bool:
     """Return True if a column appears to contain no real data (all null/zero/nan)."""
     if stats.get("min") is None and stats.get("max") is None:
         # No stats — check sample values
-        non_empty = [
-            v for v in sample_values if v not in ("nan", "0", "0.0", "None", "")
-        ]
+        non_empty = [v for v in sample_values if v not in ("nan", "0", "0.0", "None", "")]
         return len(non_empty) == 0
     # Stats present but both min and max are null/nan/zero
     mn = str(stats.get("min") or "")
@@ -310,9 +302,7 @@ def process_dataset(ds: dict, model) -> dict:
             col: {
                 "min": str(st.get("min", "")) if st.get("min") is not None else None,
                 "max": str(st.get("max", "")) if st.get("max") is not None else None,
-                "nullPct": round(
-                    100 * st.get("null_count", 0) / max(ds.get("rowCount", 1), 1), 2
-                ),
+                "nullPct": round(100 * st.get("null_count", 0) / max(ds.get("rowCount", 1), 1), 2),
                 "distinctCount": st.get("distinct_count"),
                 "sampleValues": samples.get(col, []),
                 "isEmpty": _is_empty_column(st, samples.get(col, [])),
@@ -383,9 +373,7 @@ def main():
         time.sleep(1.2)
 
     _save_catalog(catalog_entries, CATALOG_PATH)
-    log.info(
-        f"\nCatalog complete: {len(catalog_entries)} entries, {len(failed)} failed"
-    )
+    log.info(f"\nCatalog complete: {len(catalog_entries)} entries, {len(failed)} failed")
     if failed:
         log.warning(f"Failed: {failed}")
 

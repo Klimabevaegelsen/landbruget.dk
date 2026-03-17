@@ -39,9 +39,7 @@ class DatasetMetadata(BaseModel):
     processing: ProcessingMetadata
 
     # For combined datasets (MANUAL SPECIFICATION)
-    source_datasets: list[str] | None = Field(
-        None, description="If this combines other datasets"
-    )
+    source_datasets: list[str] | None = Field(None, description="If this combines other datasets")
 
     def to_frontend_display(self) -> dict[str, Any]:
         """Format for frontend consumption"""
@@ -76,11 +74,7 @@ class MetadataManager:
         """Get current git context (AUTOMATIC)"""
         try:
             commit_hash = (
-                subprocess.check_output(
-                    ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
-                )
-                .decode()
-                .strip()
+                subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
             )
 
             try:

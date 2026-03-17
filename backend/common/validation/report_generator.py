@@ -25,9 +25,7 @@ class ValidationReport:
     generated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     overall_passed: bool = True
     baseline_comparisons: list[ComparisonResult] = field(default_factory=list)
-    identifier_validations: list[IdentifierValidationResult] = field(
-        default_factory=list
-    )
+    identifier_validations: list[IdentifierValidationResult] = field(default_factory=list)
     custom_checks: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     branch_name: str | None = None
@@ -118,9 +116,7 @@ class ValidationReportGenerator:
         lines.append("| Status | Passed | Failed |")
         lines.append("|--------|--------|--------|")
         status = "PASSED" if self.report.overall_passed else "**FAILED**"
-        lines.append(
-            f"| {status} | {self.report.passed_count} | {self.report.failed_count} |"
-        )
+        lines.append(f"| {status} | {self.report.passed_count} | {self.report.failed_count} |")
         lines.append("")
 
         # Metadata
@@ -155,9 +151,7 @@ class ValidationReportGenerator:
             lines.append("")
 
             # Detailed failures
-            failed_comparisons = [
-                c for c in self.report.baseline_comparisons if not c.is_valid
-            ]
+            failed_comparisons = [c for c in self.report.baseline_comparisons if not c.is_valid]
             if failed_comparisons:
                 lines.append("#### Failed Baseline Checks")
                 lines.append("")
@@ -168,9 +162,7 @@ class ValidationReportGenerator:
                     for check in comparison.failed_checks:
                         lines.append(f"- {check['message']}")
                         if "baseline" in check and "current" in check:
-                            lines.append(
-                                f"  - Baseline: `{check['baseline']:,}` → Current: `{check['current']:,}`"
-                            )
+                            lines.append(f"  - Baseline: `{check['baseline']:,}` → Current: `{check['current']:,}`")
                     lines.append("")
 
         # Identifier Validations
@@ -194,18 +186,14 @@ class ValidationReportGenerator:
             lines.append("")
 
             # Show invalid samples
-            failed_validations = [
-                v for v in self.report.identifier_validations if not v.is_valid
-            ]
+            failed_validations = [v for v in self.report.identifier_validations if not v.is_valid]
             if failed_validations:
                 lines.append("#### Invalid Identifier Samples")
                 lines.append("")
 
                 for validation in failed_validations:
                     if validation.invalid_samples:
-                        lines.append(
-                            f"**{validation.identifier_type}** invalid samples:"
-                        )
+                        lines.append(f"**{validation.identifier_type}** invalid samples:")
                         lines.append("```")
                         for sample in validation.invalid_samples[:5]:
                             lines.append(f"  {sample}")
@@ -237,13 +225,9 @@ class ValidationReportGenerator:
         lines.append("---")
         lines.append("")
         if self.report.overall_passed:
-            lines.append(
-                "✅ **All data quality checks passed.** This PR is safe to merge."
-            )
+            lines.append("✅ **All data quality checks passed.** This PR is safe to merge.")
         else:
-            lines.append(
-                "❌ **Data quality checks failed.** Please fix the issues before merging."
-            )
+            lines.append("❌ **Data quality checks failed.** Please fix the issues before merging.")
             lines.append("")
             lines.append("Run locally to debug:")
             lines.append("```bash")

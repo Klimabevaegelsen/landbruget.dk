@@ -109,9 +109,7 @@ def get_pipeline_logger(pipeline_name: str) -> logging.Logger:
     return logger
 
 
-def log_pipeline_start(
-    logger: logging.Logger, pipeline_name: str, version: str = "1.0.0"
-) -> None:
+def log_pipeline_start(logger: logging.Logger, pipeline_name: str, version: str = "1.0.0") -> None:
     """Log standardized pipeline start message."""
     logger.info("=" * 60)
     logger.info(f"🚀 Starting {pipeline_name} Pipeline (v{version})")
@@ -230,9 +228,7 @@ def example_usage() -> None:
         with StageLogger("bronze", logger) as bronze_stage:
             bronze_stage.log_progress("Fetching data from web portal")
             # ... bronze processing ...
-            bronze_stage.log_progress(
-                "Data fetched successfully", records_processed=1500
-            )
+            bronze_stage.log_progress("Data fetched successfully", records_processed=1500)
 
         with StageLogger("silver", logger) as silver_stage:
             silver_stage.log_progress("Transforming data")

@@ -83,7 +83,7 @@ jobs:
         working-directory: ${{ matrix.project }}
         run: |
           echo "## oxfmt Formatting Check for ${{ matrix.project }}" >> $GITHUB_STEP_SUMMARY
-          if npm run fmt:check; then
+          if npm run format:check; then
             echo "✅ **All files are properly formatted**" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **Formatting issues detected**" >> $GITHUB_STEP_SUMMARY

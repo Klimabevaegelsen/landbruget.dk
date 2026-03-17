@@ -101,9 +101,7 @@ def degrees_to_meters(degrees: float) -> float:
 # =============================================================================
 
 
-def detect_crs_from_bounds(
-    min_x: float, max_x: float, min_y: float, max_y: float
-) -> tuple[str | None, str]:
+def detect_crs_from_bounds(min_x: float, max_x: float, min_y: float, max_y: float) -> tuple[str | None, str]:
     """
     Detect CRS from coordinate bounds.
 
@@ -256,16 +254,12 @@ def validate_crs_before_transform(
             f"(bounds: X=[{min_x:.2f}, {max_x:.2f}], Y=[{min_y:.2f}, {max_y:.2f}])"
         )
 
-    logger.info(
-        f"CRS validation passed for {table_name}.{geometry_col}: {detected_crs} ({order})"
-    )
+    logger.info(f"CRS validation passed for {table_name}.{geometry_col}: {detected_crs} ({order})")
 
     return detected_crs, order
 
 
-def log_geometry_bounds(
-    conn, table_name: str, geometry_col: str, sample_size: int = 100
-) -> dict:
+def log_geometry_bounds(conn, table_name: str, geometry_col: str, sample_size: int = 100) -> dict:
     """
     Log geometry bounds for debugging CRS issues.
 
@@ -358,9 +352,7 @@ def sql_transform_to_wgs84(geometry_expr: str, source_crs: str = DANISH_UTM) -> 
     return f"ST_Transform({geometry_expr}, '{source_crs}', '{WGS84}')"
 
 
-def sql_buffer_meters(
-    geometry_expr: str, meters: float, source_crs: str = WGS84
-) -> str:
+def sql_buffer_meters(geometry_expr: str, meters: float, source_crs: str = WGS84) -> str:
     """
     Generate SQL for buffer operation in meters.
 
@@ -389,9 +381,7 @@ def sql_buffer_meters(
     )
 
 
-def sql_intersects_with_buffer_meters(
-    geom1_expr: str, geom2_expr: str, meters: float, source_crs: str = WGS84
-) -> str:
+def sql_intersects_with_buffer_meters(geom1_expr: str, geom2_expr: str, meters: float, source_crs: str = WGS84) -> str:
     """
     Generate SQL for ST_Intersects with a metric buffer.
 

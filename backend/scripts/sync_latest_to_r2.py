@@ -29,9 +29,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("latest_sync")
 
 LAYERS = ["silver", "gold"]
@@ -40,9 +38,7 @@ EXCLUDE_DATASETS = {"property_owners"}
 
 def rclone_lsd(path: str) -> list[str]:
     """List subdirectories of a remote path."""
-    result = subprocess.run(
-        ["rclone", "lsd", path], capture_output=True, text=True, check=True
-    )
+    result = subprocess.run(["rclone", "lsd", path], capture_output=True, text=True, check=True)
     dirs = []
     for line in result.stdout.splitlines():
         parts = line.strip().split()
@@ -234,9 +230,7 @@ def main() -> int:
     parser.add_argument("--manifest", default="manifest.json")
     parser.add_argument(
         "--r2-base-url",
-        default=os.getenv(
-            "R2_BASE_URL", "https://pub-b8c2f72ba51b4fe6804e9bb92280567c.r2.dev"
-        ),
+        default=os.getenv("R2_BASE_URL", "https://pub-b8c2f72ba51b4fe6804e9bb92280567c.r2.dev"),
     )
     args = parser.parse_args()
 

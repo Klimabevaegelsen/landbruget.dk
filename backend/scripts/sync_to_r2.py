@@ -81,9 +81,7 @@ class GCSToR2Syncer:
         if logger:
             self.logger = logger
         elif setup_pipeline_logger:
-            self.logger = setup_pipeline_logger(
-                name="r2_sync", level="INFO", console_output=True
-            )
+            self.logger = setup_pipeline_logger(name="r2_sync", level="INFO", console_output=True)
         else:
             self.logger = logging.getLogger("r2_sync")
 
@@ -92,9 +90,7 @@ class GCSToR2Syncer:
     def verify_rclone_installed(self) -> None:
         """Verify that rclone is installed and available."""
         try:
-            result = subprocess.run(
-                ["rclone", "version"], capture_output=True, text=True, check=True
-            )
+            result = subprocess.run(["rclone", "version"], capture_output=True, text=True, check=True)
             version = result.stdout.split("\n")[0]
             self.logger.info(f"Found {version}")
         except FileNotFoundError:
@@ -122,9 +118,7 @@ class GCSToR2Syncer:
         # Add GCS authentication (uses application default credentials)
         gcs_env = os.environ.copy()
         if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-            gcs_env["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
-                "GOOGLE_APPLICATION_CREDENTIALS"
-            )
+            gcs_env["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
         try:
             subprocess.run(
@@ -163,9 +157,7 @@ class GCSToR2Syncer:
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"R2 remote configuration: {e.stderr.decode()}")
 
-    def sync_directory(
-        self, directory: str, dry_run: bool = False, verbose: bool = False
-    ) -> Dict[str, Any]:
+    def sync_directory(self, directory: str, dry_run: bool = False, verbose: bool = False) -> Dict[str, Any]:
         """
         Sync a specific directory from GCS to R2.
 
@@ -177,9 +169,7 @@ class GCSToR2Syncer:
         Returns:
             Dictionary with sync statistics
         """
-        self.logger.info(
-            f"{'[DRY RUN] ' if dry_run else ''}Syncing {directory}/ directory..."
-        )
+        self.logger.info(f"{'[DRY RUN] ' if dry_run else ''}Syncing {directory}/ directory...")
 
         source = f"gcs:{self.gcs_bucket}/{directory}"
         destination = f"r2:{self.r2_bucket}/{directory}"
@@ -267,12 +257,8 @@ class GCSToR2Syncer:
             "destination_bucket": f"r2://{self.r2_bucket}",
             "sync_stats": self.sync_stats,
             "directories_synced": list(self.sync_stats.keys()),
-            "total_duration_seconds": sum(
-                stats.get("duration_seconds", 0) for stats in self.sync_stats.values()
-            ),
-            "all_successful": all(
-                stats.get("success", False) for stats in self.sync_stats.values()
-            ),
+            "total_duration_seconds": sum(stats.get("duration_seconds", 0) for stats in self.sync_stats.values()),
+            "all_successful": all(stats.get("success", False) for stats in self.sync_stats.values()),
         }
 
         # Try to get additional metadata from R2
@@ -315,9 +301,7 @@ class GCSToR2Syncer:
                 datasets[directory] = {
                     "total_files": size_info.get("count", 0),
                     "total_bytes": size_info.get("bytes", 0),
-                    "total_size_mb": round(
-                        size_info.get("bytes", 0) / (1024 * 1024), 2
-                    ),
+                    "total_size_mb": round(size_info.get("bytes", 0) / (1024 * 1024), 2),
                 }
 
             except Exception as e:
@@ -349,29 +333,21 @@ class GCSToR2Syncer:
         directories = ["silver", "gold"]
 
         for directory in directories:
-            stats = self.sync_directory(
-                directory=directory, dry_run=dry_run, verbose=verbose
-            )
+            stats = self.sync_directory(directory=directory, dry_run=dry_run, verbose=verbose)
             self.sync_stats[directory] = stats
 
         overall_duration = (datetime.now() - overall_start).total_seconds()
 
         # Generate and display summary
-        successful = sum(
-            1 for stats in self.sync_stats.values() if stats.get("success")
-        )
+        successful = sum(1 for stats in self.sync_stats.values() if stats.get("success"))
         total = len(self.sync_stats)
 
         self.logger.info("=" * 60)
-        self.logger.info(
-            f"Sync {'[DRY RUN] ' if dry_run else ''}completed in {overall_duration:.1f} seconds"
-        )
+        self.logger.info(f"Sync {'[DRY RUN] ' if dry_run else ''}completed in {overall_duration:.1f} seconds")
         self.logger.info(f"Successful: {successful}/{total} directories")
 
         if successful < total:
-            self.logger.warning(
-                "Some directories failed to sync. Check logs above for details."
-            )
+            self.logger.warning("Some directories failed to sync. Check logs above for details.")
 
         self.logger.info("=" * 60)
 
@@ -427,9 +403,7 @@ def main() -> int:
         action="store_true",
         help="Show what would be synced without actually syncing",
     )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Show detailed progress"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed progress")
     parser.add_argument(
         "--manifest",
         type=str,

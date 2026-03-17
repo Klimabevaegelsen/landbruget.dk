@@ -128,10 +128,7 @@ def is_retryable_error(exception: BaseException) -> bool:
 
     # Requests library errors
     if isinstance(exception, requests.exceptions.RequestException):
-        if (
-            isinstance(exception, requests.exceptions.HTTPError)
-            and exception.response is not None
-        ):
+        if isinstance(exception, requests.exceptions.HTTPError) and exception.response is not None:
             return is_retryable_status_code(exception.response.status_code)
         # Connection errors, timeouts, etc.
         return True

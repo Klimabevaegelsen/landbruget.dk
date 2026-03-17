@@ -50,9 +50,7 @@ except ImportError:
 try:
     from google import genai
 except ImportError:
-    print(
-        "ERROR: google-genai package not installed.\nInstall with: pip install google-genai"
-    )
+    print("ERROR: google-genai package not installed.\nInstall with: pip install google-genai")
     sys.exit(1)
 
 
@@ -99,9 +97,7 @@ class GeminiSchemaUploader:
         if logger:
             self.logger = logger
         elif setup_pipeline_logger:
-            self.logger = setup_pipeline_logger(
-                name="schema_upload", level="INFO", console_output=True
-            )
+            self.logger = setup_pipeline_logger(name="schema_upload", level="INFO", console_output=True)
         else:
             self.logger = logging.getLogger("schema_upload")
 
@@ -209,9 +205,7 @@ class GeminiSchemaUploader:
                 display_name = file.get("display_name", "unknown")
 
                 if dry_run:
-                    self.logger.info(
-                        f"[DRY RUN] Would delete: {display_name} ({file_name})"
-                    )
+                    self.logger.info(f"[DRY RUN] Would delete: {display_name} ({file_name})")
                 else:
                     self.logger.info(f"Deleting: {display_name} ({file_name})")
                     try:
@@ -231,9 +225,7 @@ class GeminiSchemaUploader:
         except Exception as e:
             raise SchemaUploadError(f"Failed to delete old files: {e}")
 
-    def upload_file(
-        self, file_path: Path, display_name: Optional[str] = None, dry_run: bool = False
-    ) -> Optional[str]:
+    def upload_file(self, file_path: Path, display_name: Optional[str] = None, dry_run: bool = False) -> Optional[str]:
         """
         Upload a single file to the store.
 
@@ -263,9 +255,7 @@ class GeminiSchemaUploader:
             file_size_kb = file_size / 1024
 
             if dry_run:
-                self.logger.info(
-                    f"[DRY RUN] Would upload: {display_name} ({file_size_kb:.1f} KB)"
-                )
+                self.logger.info(f"[DRY RUN] Would upload: {display_name} ({file_size_kb:.1f} KB)")
                 return None
 
             self.logger.info(f"Uploading: {display_name} ({file_size_kb:.1f} KB)")
@@ -282,9 +272,7 @@ class GeminiSchemaUploader:
             )
 
             # Create chunk with content
-            self.client.corpora.create_chunk(
-                document=document.name, data={"string_value": content}
-            )
+            self.client.corpora.create_chunk(document=document.name, data={"string_value": content})
 
             self.upload_stats["uploaded"] += 1
             self.logger.info(f"✅ Uploaded: {display_name}")
@@ -325,9 +313,7 @@ class GeminiSchemaUploader:
 
         return sorted(found_files)
 
-    def upload_all_schema_files(
-        self, dry_run: bool = False, clean_first: bool = True
-    ) -> Dict[str, Any]:
+    def upload_all_schema_files(self, dry_run: bool = False, clean_first: bool = True) -> Dict[str, Any]:
         """
         Upload all schema files to the store.
 
@@ -342,9 +328,7 @@ class GeminiSchemaUploader:
             SchemaUploadError: If upload fails
         """
         self.logger.info("=" * 60)
-        self.logger.info(
-            f"{'[DRY RUN] ' if dry_run else ''}Uploading schema documentation"
-        )
+        self.logger.info(f"{'[DRY RUN] ' if dry_run else ''}Uploading schema documentation")
         self.logger.info(f"Store ID: {self.store_id}")
         self.logger.info(f"Schema directory: {self.schema_dir}")
         self.logger.info("=" * 60)
@@ -375,9 +359,7 @@ class GeminiSchemaUploader:
 
         # Generate summary
         self.logger.info("=" * 60)
-        self.logger.info(
-            f"{'[DRY RUN] ' if dry_run else ''}Upload completed in {duration:.1f} seconds"
-        )
+        self.logger.info(f"{'[DRY RUN] ' if dry_run else ''}Upload completed in {duration:.1f} seconds")
         self.logger.info(f"Files uploaded: {self.upload_stats['uploaded']}")
         self.logger.info(f"Files deleted: {self.upload_stats['deleted']}")
         self.logger.info(f"Files skipped: {self.upload_stats['skipped']}")
@@ -418,9 +400,7 @@ def main() -> int:
         epilog=__doc__,
     )
 
-    parser.add_argument(
-        "--create-store", action="store_true", help="Create a new File Search Store"
-    )
+    parser.add_argument("--create-store", action="store_true", help="Create a new File Search Store")
     parser.add_argument(
         "--store-id",
         type=str,
@@ -448,9 +428,7 @@ def main() -> int:
         action="store_true",
         help="Don't delete old files before uploading",
     )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Show detailed progress"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed progress")
 
     args = parser.parse_args()
 
@@ -512,9 +490,7 @@ def main() -> int:
             )
 
         # Upload files
-        results = uploader.upload_all_schema_files(
-            dry_run=args.dry_run, clean_first=not args.no_clean
-        )
+        results = uploader.upload_all_schema_files(dry_run=args.dry_run, clean_first=not args.no_clean)
 
         # Return appropriate exit code
         if results["errors"] > 0:

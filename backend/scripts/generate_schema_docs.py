@@ -202,9 +202,7 @@ class SchemaDocumentationGenerator:
                 # Try to get metadata if available
                 if field.metadata:
                     col_info["metadata"] = {
-                        k.decode() if isinstance(k, bytes) else k: v.decode()
-                        if isinstance(v, bytes)
-                        else v
+                        k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
                         for k, v in field.metadata.items()
                     }
 
@@ -215,9 +213,7 @@ class SchemaDocumentationGenerator:
             # File metadata
             if parquet_file.metadata.metadata:
                 schema_info["file_metadata"] = {
-                    k.decode() if isinstance(k, bytes) else k: v.decode()
-                    if isinstance(v, bytes)
-                    else v
+                    k.decode() if isinstance(k, bytes) else k: v.decode() if isinstance(v, bytes) else v
                     for k, v in parquet_file.metadata.metadata.items()
                 }
 
@@ -244,9 +240,7 @@ class SchemaDocumentationGenerator:
                             "max": str(row[3]) if row[3] is not None else None,
                             "approx_unique": row[4],
                             "avg": str(row[5]) if row[5] is not None else None,
-                            "null_percentage": f"{row[11]:.1f}%"
-                            if row[11] is not None
-                            else None,
+                            "null_percentage": f"{row[11]:.1f}%" if row[11] is not None else None,
                         }
 
                     schema_info["column_statistics"] = column_stats
@@ -306,16 +300,12 @@ class SchemaDocumentationGenerator:
         )
 
         for table_name, info in table_info:
-            row_count = (
-                f"{info.get('row_count', 0):,}" if "row_count" in info else "N/A"
-            )
+            row_count = f"{info.get('row_count', 0):,}" if "row_count" in info else "N/A"
             num_columns = info.get("num_columns", 0)
             # Try to extract date from file path
             last_updated = self._extract_date_from_path(info.get("file_path", ""))
 
-            lines.append(
-                f"| [{table_name}](#{table_name}) | {row_count} | {num_columns} | {last_updated} |"
-            )
+            lines.append(f"| [{table_name}](#{table_name}) | {row_count} | {num_columns} | {last_updated} |")
 
         lines.append("")
         lines.append("## Table Details")
@@ -443,9 +433,7 @@ class SchemaDocumentationGenerator:
                 if "metadata" in col and col["metadata"]:
                     description = col["metadata"].get("description", "")
 
-                lines.append(
-                    f"| {col['name']} | {col['type']} | {nullable} | {description} |"
-                )
+                lines.append(f"| {col['name']} | {col['type']} | {nullable} | {description} |")
 
             lines.append("")
 
@@ -467,9 +455,7 @@ class SchemaDocumentationGenerator:
                     avg = stats.get("avg", "")
                     null_pct = stats.get("null_percentage", "")
 
-                    lines.append(
-                        f"| {col_name} | {min_val} | {max_val} | {unique} | {avg} | {null_pct} |"
-                    )
+                    lines.append(f"| {col_name} | {min_val} | {max_val} | {unique} | {avg} | {null_pct} |")
 
                 lines.append("")
 
@@ -517,9 +503,7 @@ class SchemaDocumentationGenerator:
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Generate schema documentation from Parquet files"
-    )
+    parser = argparse.ArgumentParser(description="Generate schema documentation from Parquet files")
     parser.add_argument(
         "--local-cache",
         help="Local cache directory with Parquet files",

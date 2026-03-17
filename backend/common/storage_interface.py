@@ -38,12 +38,7 @@ class StoragePath:
     """
 
     def __init__(self, bucket: str | None = None) -> None:
-        self.bucket = (
-            bucket
-            or os.getenv("R2_BUCKET")
-            or os.getenv("GCS_BUCKET")
-            or DEFAULT_BUCKET
-        )
+        self.bucket = bucket or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or DEFAULT_BUCKET
 
     def _build(self, *parts: str) -> str:
         """Build a gs:// path from parts, stripping extra slashes."""
@@ -166,9 +161,7 @@ class CloudStorage(StorageInterface):
                 self.bucket = self.client.bucket(bucket_name)
                 self.optimized = False
             else:
-                raise ImportError(
-                    "Neither GCSDataAccess nor google.cloud.storage is available"
-                )
+                raise ImportError("Neither GCSDataAccess nor google.cloud.storage is available")
 
     def save_json(self, data: Any, dst_path: str) -> None:
         """Save JSON data using optimized streaming approach."""
@@ -252,9 +245,7 @@ class CloudStorage(StorageInterface):
                     conn.register("temp_data", data)
 
                 # Same limitation as above
-                raise ValueError(
-                    "Non-optimized GCS storage requires optimized GCS access layer for DuckDB operations"
-                )
+                raise ValueError("Non-optimized GCS storage requires optimized GCS access layer for DuckDB operations")
             raise ValueError(
                 f"Unsupported data type for parquet export: {type(data)}. "
                 f"Only DuckDB tables, dicts, and lists are supported."

@@ -79,9 +79,7 @@ def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
                 conn.register_filesystem(fs)
                 logger.info("DuckDB configured with s3fs integration for R2")
             else:
-                logger.warning(
-                    "R2 credentials not found, DuckDB has no cloud storage access"
-                )
+                logger.warning("R2 credentials not found, DuckDB has no cloud storage access")
         except Exception as e:
             logger.warning(f"Failed to register s3fs with DuckDB: {e}")
 

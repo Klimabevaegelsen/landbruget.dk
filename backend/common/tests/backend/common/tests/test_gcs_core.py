@@ -51,9 +51,7 @@ class MockGCSDataAccess:
         with self.fs.open(path, "r") as f:
             return json.loads(f.read())
 
-    def upload_from_duckdb_table(
-        self, table_name, path, compression="zstd", row_group_size=100000
-    ):
+    def upload_from_duckdb_table(self, table_name, path, compression="zstd", row_group_size=100000):
         """Mock upload from DuckDB table."""
         self.fs.open(path, "wb")
         self.fs.invalidate_cache()
@@ -323,9 +321,7 @@ def test_upload_json_fails_after_max_retries(gcs_data_access):
 # =============================================================================
 
 
-def test_stream_upload_parquet_from_duckdb_table(
-    gcs_data_access, valid_cvr_numbers, mock_duckdb_connection
-):
+def test_stream_upload_parquet_from_duckdb_table(gcs_data_access, valid_cvr_numbers, mock_duckdb_connection):
     """Test streaming upload of Parquet from DuckDB table."""
     # Create test data in DuckDB
     mock_duckdb_connection.execute("""
@@ -352,9 +348,7 @@ def test_stream_upload_parquet_from_duckdb_table(
     assert gcs_data_access.fs.open.called
 
 
-def test_upload_parquet_with_compression_options(
-    gcs_data_access, mock_duckdb_connection
-):
+def test_upload_parquet_with_compression_options(gcs_data_access, mock_duckdb_connection):
     """Test Parquet upload with custom compression settings."""
     # Create test table
     mock_duckdb_connection.execute("""
@@ -370,9 +364,7 @@ def test_upload_parquet_with_compression_options(
         gcs_data_access.fs.size.return_value = 512
 
         # Upload with custom compression
-        gcs_data_access.upload_from_duckdb_table(
-            "test_data", gcs_path, compression="gzip", row_group_size=50000
-        )
+        gcs_data_access.upload_from_duckdb_table("test_data", gcs_path, compression="gzip", row_group_size=50000)
 
     # Verify upload completed without errors
     assert gcs_data_access.fs.open.called
@@ -427,9 +419,7 @@ def test_download_json_preserves_danish_characters(gcs_data_access):
     }
 
     gcs_path = "gs://test-bucket/danish.json"
-    gcs_data_access.fs._file_contents[gcs_path] = json.dumps(
-        test_data, ensure_ascii=False
-    )
+    gcs_data_access.fs._file_contents[gcs_path] = json.dumps(test_data, ensure_ascii=False)
 
     result = gcs_data_access.download_json(gcs_path)
 
@@ -462,9 +452,7 @@ def test_download_json_nonexistent_file(gcs_data_access):
 # =============================================================================
 
 
-def test_stream_download_parquet_creates_duckdb_table(
-    gcs_data_access, mock_duckdb_connection
-):
+def test_stream_download_parquet_creates_duckdb_table(gcs_data_access, mock_duckdb_connection):
     """Test downloading Parquet creates DuckDB table.
 
     Note: Since we're using a mock GCSDataAccess, this test verifies that
@@ -523,21 +511,12 @@ def test_upload_download_integrity_json(gcs_data_access, sample_danish_data):
 
     # Verify special characters preserved
     assert result["description"] == sample_danish_data["description"]
-    assert all(
-        c["name"] == orig["name"]
-        for c, orig in zip(result["companies"], sample_danish_data["companies"])
-    )
+    assert all(c["name"] == orig["name"] for c, orig in zip(result["companies"], sample_danish_data["companies"]))
 
 
-def test_upload_download_integrity_json_with_cvr_numbers(
-    gcs_data_access, valid_cvr_numbers
-):
+def test_upload_download_integrity_json_with_cvr_numbers(gcs_data_access, valid_cvr_numbers):
     """Test JSON round-trip preserves CVR number formatting (leading zeros)."""
-    test_data = {
-        "companies": [
-            {"cvr": cvr, "index": i} for i, cvr in enumerate(valid_cvr_numbers)
-        ]
-    }
+    test_data = {"companies": [{"cvr": cvr, "index": i} for i, cvr in enumerate(valid_cvr_numbers)]}
 
     gcs_path = "gs://test-bucket/cvr-test.json"
 
@@ -553,9 +532,7 @@ def test_upload_download_integrity_json_with_cvr_numbers(
         assert len(downloaded["cvr"]) == 8
 
 
-def test_upload_download_integrity_parquet_roundtrip(
-    gcs_data_access, mock_duckdb_connection, valid_cvr_numbers
-):
+def test_upload_download_integrity_parquet_roundtrip(gcs_data_access, mock_duckdb_connection, valid_cvr_numbers):
     """Test Parquet round-trip: upload then download, verify data integrity."""
     # Create source table
     mock_duckdb_connection.execute("""
@@ -568,9 +545,7 @@ def test_upload_download_integrity_parquet_roundtrip(
     """)
 
     # Get original data for comparison
-    original_data = mock_duckdb_connection.execute(
-        "SELECT * FROM source_data ORDER BY cvr_number"
-    ).fetchall()
+    original_data = mock_duckdb_connection.execute("SELECT * FROM source_data ORDER BY cvr_number").fetchall()
 
     gcs_path = "gs://test-bucket/roundtrip.parquet"
 
@@ -580,9 +555,7 @@ def test_upload_download_integrity_parquet_roundtrip(
 
     try:
         # Execute COPY to create actual parquet file
-        mock_duckdb_connection.execute(
-            f"COPY source_data TO '{temp_upload_path}' (FORMAT PARQUET, COMPRESSION zstd)"
-        )
+        mock_duckdb_connection.execute(f"COPY source_data TO '{temp_upload_path}' (FORMAT PARQUET, COMPRESSION zstd)")
 
         # Simulate upload to GCS
         with open(temp_upload_path, "rb") as f:
@@ -595,9 +568,7 @@ def test_upload_download_integrity_parquet_roundtrip(
             gcs_data_access.fs.size.return_value = len(file_content)
 
         # Download - create new table from parquet
-        with tempfile.NamedTemporaryFile(
-            suffix=".parquet", delete=False
-        ) as temp_download:
+        with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_download:
             temp_download_path = temp_download.name
 
             # Write mock GCS content to temp file
@@ -610,9 +581,7 @@ def test_upload_download_integrity_parquet_roundtrip(
         )
 
         # Compare data
-        downloaded_data = mock_duckdb_connection.execute(
-            "SELECT * FROM downloaded_data ORDER BY cvr_number"
-        ).fetchall()
+        downloaded_data = mock_duckdb_connection.execute("SELECT * FROM downloaded_data ORDER BY cvr_number").fetchall()
 
         assert original_data == downloaded_data
 
@@ -648,9 +617,7 @@ def test_concurrent_json_uploads(gcs_data_access):
         assert result == data
 
 
-def test_concurrent_operations_different_formats(
-    gcs_data_access, mock_duckdb_connection
-):
+def test_concurrent_operations_different_formats(gcs_data_access, mock_duckdb_connection):
     """Test concurrent operations with different file formats (JSON and Parquet)."""
     # JSON upload
     json_data = {"type": "json", "value": 123}
@@ -697,9 +664,7 @@ def test_authentication_failure_handling(mock_gcs_filesystem, mock_duckdb_connec
         pass
 
     # Mock authentication failure
-    mock_gcs_filesystem.open.side_effect = MockDefaultCredentialsError(
-        "Authentication failed"
-    )
+    mock_gcs_filesystem.open.side_effect = MockDefaultCredentialsError("Authentication failed")
 
     gcs = GCSDataAccess(connection=mock_duckdb_connection)
     gcs.fs = mock_gcs_filesystem
@@ -782,12 +747,7 @@ def test_invalid_gcs_path_handling(gcs_data_access):
 def test_large_json_streaming(gcs_data_access):
     """Test streaming of large JSON data (simulated)."""
     # Create large-ish JSON data (1000 companies)
-    large_data = {
-        "companies": [
-            {"cvr": f"{i:08d}", "name": f"Company {i}", "area": i * 10.5}
-            for i in range(1000)
-        ]
-    }
+    large_data = {"companies": [{"cvr": f"{i:08d}", "name": f"Company {i}", "area": i * 10.5} for i in range(1000)]}
 
     gcs_path = "gs://test-bucket/large-data.json"
 
@@ -817,9 +777,7 @@ def test_parquet_chunked_processing_simulation(gcs_data_access, mock_duckdb_conn
     """)
 
     # Verify table was created with expected rows
-    total_rows = mock_duckdb_connection.execute(
-        "SELECT COUNT(*) FROM large_table"
-    ).fetchone()[0]
+    total_rows = mock_duckdb_connection.execute("SELECT COUNT(*) FROM large_table").fetchone()[0]
     assert total_rows == 10000
 
     # Verify we can query chunks

@@ -17,6 +17,7 @@ Reference: .claude/rules/data-quality.md
 
 import duckdb
 import pandas as pd
+
 from backend.common.crs_utils import DANISH_UTM, DENMARK_BOUNDS_WGS84, WGS84
 
 # =============================================================================
@@ -37,9 +38,7 @@ def test_cvr_preservation_through_pipeline(
         }
     )
 
-    mock_duckdb_connection.execute(
-        "CREATE TABLE bronze_companies AS SELECT * FROM bronze_df"
-    )
+    mock_duckdb_connection.execute("CREATE TABLE bronze_companies AS SELECT * FROM bronze_df")
 
     # Silver: Normalize CVR format
     mock_duckdb_connection.execute(
@@ -66,9 +65,7 @@ def test_cvr_preservation_through_pipeline(
     )
 
     # Verify CVR preservation
-    result = mock_duckdb_connection.execute(
-        "SELECT * FROM gold_company_summary"
-    ).fetchdf()
+    result = mock_duckdb_connection.execute("SELECT * FROM gold_company_summary").fetchdf()
 
     # All CVRs should be 8 digits
     assert all(result["cvr_length"] == 8), "All CVRs should be exactly 8 digits"
@@ -96,9 +93,7 @@ def test_chr_preservation_through_pipeline(
         }
     )
 
-    mock_duckdb_connection.execute(
-        "CREATE TABLE bronze_herds AS SELECT * FROM bronze_df"
-    )
+    mock_duckdb_connection.execute("CREATE TABLE bronze_herds AS SELECT * FROM bronze_df")
 
     # Silver: Normalize CHR format
     mock_duckdb_connection.execute(
@@ -148,9 +143,7 @@ def test_bfe_preservation_through_pipeline(
         }
     )
 
-    mock_duckdb_connection.execute(
-        "CREATE TABLE bronze_parcels AS SELECT * FROM bronze_df"
-    )
+    mock_duckdb_connection.execute("CREATE TABLE bronze_parcels AS SELECT * FROM bronze_df")
 
     # Silver: Pass through BFE (no transformation needed for string format)
     mock_duckdb_connection.execute(
@@ -175,9 +168,7 @@ def test_bfe_preservation_through_pipeline(
     ).fetchdf()
 
     # All BFEs should be valid format
-    assert all(result["bfe_valid"]), (
-        "All BFEs should match kommune-ejerlav-matr pattern"
-    )
+    assert all(result["bfe_valid"]), "All BFEs should match kommune-ejerlav-matr pattern"
 
     # Check specific values preserved
     assert "0101-123456-12a" in result["bfe"].values
@@ -241,9 +232,7 @@ def test_geospatial_crs_maintained_wgs84(
             (7.5 <= lon <= 15.5 and 54.5 <= lat <= 58.0)  # standard order
             or (7.5 <= lat <= 15.5 and 54.5 <= lon <= 58.0)  # swapped order
         )
-        assert in_bounds, (
-            f"Coordinates ({lon}, {lat}) should be in Denmark bounds (either order)"
-        )
+        assert in_bounds, f"Coordinates ({lon}, {lat}) should be in Denmark bounds (either order)"
 
 
 def test_geometry_validation_bounds_check(
@@ -281,9 +270,7 @@ def test_geometry_validation_bounds_check(
 
     # Verify non-Denmark points are outside
     foreign_points = result[result["location"].isin(["Paris", "Berlin"])]
-    assert not any(foreign_points["is_in_denmark"]), (
-        "Foreign points should be outside bounds"
-    )
+    assert not any(foreign_points["is_in_denmark"]), "Foreign points should be outside bounds"
 
 
 # =============================================================================
@@ -311,9 +298,7 @@ def test_data_joinability_on_cvr(
         }
     )
 
-    mock_duckdb_connection.execute(
-        "CREATE TABLE companies AS SELECT * FROM companies_df"
-    )
+    mock_duckdb_connection.execute("CREATE TABLE companies AS SELECT * FROM companies_df")
     mock_duckdb_connection.execute("CREATE TABLE fields AS SELECT * FROM fields_df")
 
     # Join on CVR
@@ -360,9 +345,7 @@ def test_data_joinability_on_chr(
     )
 
     mock_duckdb_connection.execute("CREATE TABLE herds AS SELECT * FROM herds_df")
-    mock_duckdb_connection.execute(
-        "CREATE TABLE movements AS SELECT * FROM movements_df"
-    )
+    mock_duckdb_connection.execute("CREATE TABLE movements AS SELECT * FROM movements_df")
 
     # Join on CHR
     result = mock_duckdb_connection.execute(
@@ -383,12 +366,8 @@ def test_data_joinability_on_chr(
 
     # Check CHR 123456 has 2 movements
     herd_123456 = result[result["chr"] == "123456"]
-    assert herd_123456["num_movements"].iloc[0] == 2, (
-        "CHR 123456 should have 2 movements"
-    )
-    assert herd_123456["total_animals"].iloc[0] == 15, (
-        "CHR 123456 should have 15 total animals"
-    )
+    assert herd_123456["num_movements"].iloc[0] == 2, "CHR 123456 should have 2 movements"
+    assert herd_123456["total_animals"].iloc[0] == 15, "CHR 123456 should have 15 total animals"
 
 
 def test_data_joinability_on_geometry(
@@ -567,9 +546,7 @@ def test_duplicate_prevention_with_upsert(
     )
 
     # Simulate upsert: Delete existing, insert all
-    mock_duckdb_connection.execute(
-        "DELETE FROM companies WHERE cvr IN (SELECT cvr FROM df2)"
-    )
+    mock_duckdb_connection.execute("DELETE FROM companies WHERE cvr IN (SELECT cvr FROM df2)")
 
     mock_duckdb_connection.execute("INSERT INTO companies SELECT * FROM df2")
 
@@ -683,9 +660,7 @@ def test_data_type_consistency_dates(
     date_type = result[0]
 
     # Should be TIMESTAMP, TIMESTAMP_NS, or DATE (depending on DuckDB/pandas version)
-    assert date_type in ["TIMESTAMP", "TIMESTAMP_NS", "DATE"], (
-        f"record_date should be timestamp-like, got {date_type}"
-    )
+    assert date_type in ["TIMESTAMP", "TIMESTAMP_NS", "DATE"], f"record_date should be timestamp-like, got {date_type}"
 
 
 # =============================================================================
@@ -712,9 +687,7 @@ def test_full_pipeline_quality_check(
         }
     )
 
-    mock_duckdb_connection.execute(
-        "CREATE TABLE bronze_companies AS SELECT * FROM bronze_df"
-    )
+    mock_duckdb_connection.execute("CREATE TABLE bronze_companies AS SELECT * FROM bronze_df")
 
     # Silver: Normalize and validate
     mock_duckdb_connection.execute(

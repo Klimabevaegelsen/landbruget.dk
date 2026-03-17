@@ -5,7 +5,6 @@ Covers constants, detection functions, validation utilities, and SQL generation 
 """
 
 import pytest
-
 from common.crs_utils import (
     # Constants
     DANISH_UTM,
@@ -391,9 +390,7 @@ class TestValidateCRSBeforeTransform:
             SELECT ST_Point(577030, 6224098) as geom
         """)
 
-        crs, order = validate_crs_before_transform(
-            conn, "test_geom", "geom", DANISH_UTM
-        )
+        crs, order = validate_crs_before_transform(conn, "test_geom", "geom", DANISH_UTM)
         assert crs == DANISH_UTM
         assert order == "easting_northing"
 
@@ -571,9 +568,7 @@ class TestIntegration:
         """)
 
         # For UTM data, use the simpler SQL
-        simple_intersect = sql_intersects_with_buffer_meters(
-            "a.geom", "b.geom", 200, DANISH_UTM
-        )
+        simple_intersect = sql_intersects_with_buffer_meters("a.geom", "b.geom", 200, DANISH_UTM)
 
         # Execute spatial query with UTM data (no transforms needed)
         result = conn.execute(f"""
