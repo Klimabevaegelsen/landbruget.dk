@@ -1,5 +1,31 @@
 # BBR Buildings Pipeline
 
+## What is this pipeline? (For non-technical readers)
+
+### The Problem: Understanding What's Near Agricultural Land
+
+Denmark's Building and Housing Register (BBR) contains records for every building in the country. Knowing where agricultural buildings, homes, schools, and daycare centers are located is essential for assessing risks — for example, how close are children's facilities to fields treated with pesticides?
+
+### What This Pipeline Does
+
+This pipeline automatically:
+
+1. **Downloads the national building registry**: Fetches the complete BBR dataset from SDFE (Styrelsen for Dataforsyning og Infrastruktur)
+2. **Cross-references with GeoDanmark**: Uses the GeoDanmark WFS service for enhanced building classification
+3. **Filters and categorizes**: Identifies agricultural buildings, residential properties, and child-occupied facilities (schools, daycare centers)
+4. **Outputs analysis-ready data**: Produces clean GeoParquet files with standardized building information
+
+### Why This Data Matters
+
+The results help:
+- **Public health agencies** assess pesticide exposure risks near schools and daycare centers
+- **Environmental researchers** analyze the relationship between farm infrastructure and environmental impact
+- **Urban planners** understand the distribution of agricultural vs. residential buildings
+- **Journalists** investigate proximity of sensitive facilities to agricultural operations
+- **Citizens** learn about building usage in their area
+
+---
+
 This pipeline fetches and processes Danish building data from Bygnings- og Boligregistret (BBR) to support agricultural and public health analyses. The pipeline identifies buildings related to agricultural practices and locations where children are present (schools, daycare centers) for pesticide exposure risk assessments.
 
 ## Data Sources
@@ -77,7 +103,7 @@ This pipeline fetches and processes Danish building data from Bygnings- og Bolig
    - Maintain BBRUUID mapping data
 
 **Storage**:
-- **Production**: Google Cloud Storage
+- **Production**: Cloudflare R2
 - **Development**: Local Parquet/GeoParquet files
 - **Structure**: `bronze/YYYYMMDD_HHMMSS/`
 
@@ -272,12 +298,12 @@ act workflow_dispatch -W .github/workflows/bbr_buildings.yml -n
 - **Trigger**: Monthly schedule + manual dispatch
 - **Runner**: Ubuntu latest with 16GB RAM
 - **Duration**: ~2-3 hours for complete pipeline
-- **Artifacts**: Processed building data in GCS
+- **Artifacts**: Processed building data in R2
 
 ### Monitoring
 - Pipeline execution logs via GitHub Actions
 - Data quality metrics in pipeline output
-- Storage usage monitoring in GCS
+- Storage usage monitoring in R2
 - Error alerting via workflow notifications
 
 ## Known Issues and Solutions

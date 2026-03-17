@@ -1,6 +1,6 @@
 # Landbruget.dk Data Explorer
 
-A modern, browser-based data exploration tool for Danish agricultural data. Built with Next.js 15, DuckDB WASM, and AI-powered natural language queries.
+A modern, browser-based data exploration tool for Danish agricultural data. Built with Next.js 16, DuckDB WASM, and AI-powered natural language queries.
 
 ## Features
 
@@ -81,7 +81,7 @@ data-explorer/
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Framework** | Next.js 15 | React framework with App Router |
+| **Framework** | Next.js 16 | React framework with App Router |
 | **Language** | TypeScript | Type-safe development |
 | **Styling** | Tailwind CSS v4 | Utility-first CSS |
 | **Build Tool** | Turbopack | Fast bundler (dev mode) |
@@ -95,12 +95,12 @@ data-explorer/
 ```json
 {
   "dependencies": {
-    "next": "16.1.1",
-    "react": "19.2.3",
-    "@duckdb/duckdb-wasm": "^1.33.1",
-    "@google/generative-ai": "^0.24.1",
-    "@tanstack/react-table": "^8.21.3",
-    "codemirror": "^6.0.2"
+    "next": "16.x",
+    "react": "19.x",
+    "@duckdb/duckdb-wasm": "^1.33",
+    "@google/generative-ai": "^0.24",
+    "@tanstack/react-table": "^8.21",
+    "codemirror": "^6.0"
   }
 }
 ```
