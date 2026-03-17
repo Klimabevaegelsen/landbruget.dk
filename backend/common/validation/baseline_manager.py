@@ -90,7 +90,11 @@ class BaselineManager:
             tolerance_pct: Default tolerance for numerical comparisons
             gcs_client: Optional GCS client for cloud storage operations
         """
-        self.baseline_path = Path(baseline_path) if not str(baseline_path).startswith("gs://") else baseline_path
+        self.baseline_path = (
+            Path(baseline_path)
+            if not str(baseline_path).startswith("gs://")
+            else baseline_path
+        )
         self.tolerance_pct = tolerance_pct
         self.gcs_client = gcs_client
         self._is_gcs = str(baseline_path).startswith("gs://")
@@ -116,7 +120,9 @@ class BaselineManager:
         Returns:
             BaselineMetrics with computed statistics
         """
-        logger.info(f"Generating baseline metrics for {dataset_name} from {parquet_path}")
+        logger.info(
+            f"Generating baseline metrics for {dataset_name} from {parquet_path}"
+        )
 
         # Read parquet file
         table = pq.read_table(parquet_path)
@@ -145,7 +151,9 @@ class BaselineManager:
         detected_crs = None
         if geometry_column and geometry_column in df.columns:
             try:
-                geometry_bounds, detected_crs = self._extract_geometry_bounds(df, geometry_column)
+                geometry_bounds, detected_crs = self._extract_geometry_bounds(
+                    df, geometry_column
+                )
             except Exception as e:
                 logger.warning(f"Could not extract geometry bounds: {e}")
 
@@ -186,7 +194,9 @@ class BaselineManager:
         Returns:
             BaselineMetrics with computed statistics
         """
-        logger.info(f"Generating baseline metrics for {dataset_name} from DuckDB table {table_name}")
+        logger.info(
+            f"Generating baseline metrics for {dataset_name} from DuckDB table {table_name}"
+        )
 
         # Record count
         record_count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -234,7 +244,9 @@ class BaselineManager:
                     # Import CRS detection
                     from common.crs_utils import detect_crs_from_bounds
 
-                    detected_crs, _ = detect_crs_from_bounds(result[0], result[1], result[2], result[3])
+                    detected_crs, _ = detect_crs_from_bounds(
+                        result[0], result[1], result[2], result[3]
+                    )
             except Exception as e:
                 logger.warning(f"Could not extract geometry bounds: {e}")
 
@@ -420,7 +432,9 @@ class BaselineManager:
             detect_crs_from_bounds,
         )
 
-        crs, _ = detect_crs_from_bounds(bounds["min_x"], bounds["max_x"], bounds["min_y"], bounds["max_y"])
+        crs, _ = detect_crs_from_bounds(
+            bounds["min_x"], bounds["max_x"], bounds["min_y"], bounds["max_y"]
+        )
 
         if crs == "EPSG:4326":
             expected = DENMARK_BOUNDS_WGS84
@@ -458,7 +472,9 @@ class BaselineManager:
         data_bytes = df.to_csv(index=False).encode("utf-8")
         return hashlib.md5(data_bytes).hexdigest()
 
-    def _extract_geometry_bounds(self, df: Any, geometry_column: str) -> tuple[dict[str, float], str | None]:
+    def _extract_geometry_bounds(
+        self, df: Any, geometry_column: str
+    ) -> tuple[dict[str, float], str | None]:
         """Extract geometry bounds from a dataframe with WKB geometry."""
         # This is a simplified implementation - full version would use shapely
         # For now, return None and let DuckDB version handle it

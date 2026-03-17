@@ -7,6 +7,7 @@ This ensures documentation and data lineage tracking stays up to date.
 from pathlib import Path
 
 import pytest
+
 from common.data_source_registry import DATA_SOURCE_REGISTRY
 
 
@@ -44,12 +45,16 @@ class TestDataSourceRegistryCompleteness:
         """All registry entries should have required fields populated."""
         for source_name, info in DATA_SOURCE_REGISTRY.items():
             assert info.source_authority, f"{source_name}: missing source_authority"
-            assert info.data_acquisition_method, f"{source_name}: missing data_acquisition_method"
+            assert info.data_acquisition_method, (
+                f"{source_name}: missing data_acquisition_method"
+            )
             assert info.data_description, f"{source_name}: missing data_description"
             assert info.pipeline_name, f"{source_name}: missing pipeline_name"
             assert info.data_format, f"{source_name}: missing data_format"
             assert info.display_name, f"{source_name}: missing display_name"
-            assert info.display_description, f"{source_name}: missing display_description"
+            assert info.display_description, (
+                f"{source_name}: missing display_description"
+            )
 
     def test_display_names_are_unique(self):
         """Display names should be unique across all sources."""
@@ -142,7 +147,11 @@ class TestDataSourceRegistryQuality:
         placeholders = ["TODO", "FIXME", "TBD", "PLACEHOLDER", "XXX"]
 
         for source_name, info in DATA_SOURCE_REGISTRY.items():
-            for field_name in ["data_description", "display_description", "source_authority"]:
+            for field_name in [
+                "data_description",
+                "display_description",
+                "source_authority",
+            ]:
                 value = getattr(info, field_name, "")
                 if value:
                     for placeholder in placeholders:

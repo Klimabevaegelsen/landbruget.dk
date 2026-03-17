@@ -37,7 +37,7 @@ try:
     _r2_fs = get_r2_filesystem()
     USE_GCS = True
     logger.debug("Initialized R2/S3 filesystem for cloud storage")
-except (ImportError, EnvironmentError) as e:
+except (OSError, ImportError) as e:
     logger.warning(f"Cloud storage not available: {e}")
     logger.warning("Falling back to local storage")
 

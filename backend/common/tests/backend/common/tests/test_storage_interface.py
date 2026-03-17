@@ -66,7 +66,9 @@ class LocalStorage(StorageInterface):
             for i in range(0, len(data), batch_size):
                 batch = data[i : i + batch_size]
                 for row in batch:
-                    values = ", ".join([f"'{str(row.get(col, ''))}'" for col in columns])
+                    values = ", ".join(
+                        [f"'{str(row.get(col, ''))}'" for col in columns]
+                    )
                     conn.execute(f"INSERT INTO temp_data VALUES ({values})")
 
             conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
@@ -117,9 +119,13 @@ class GCSStorage(StorageInterface):
                     self.client = storage_module.Client()
                     self.bucket = self.client.bucket(bucket_name)
                 else:
-                    raise ImportError("Neither GCSDataAccess nor google.cloud.storage available")
+                    raise ImportError(
+                        "Neither GCSDataAccess nor google.cloud.storage available"
+                    )
             except Exception as e:
-                raise ImportError(f"Neither GCSDataAccess nor google.cloud.storage available: {e}")
+                raise ImportError(
+                    f"Neither GCSDataAccess nor google.cloud.storage available: {e}"
+                )
 
     def _get_gcs_path(self, dst_path: str) -> str:
         return f"gs://{self.bucket_name}/{dst_path}"
@@ -148,7 +154,9 @@ class GCSStorage(StorageInterface):
                 conn.execute(f"CREATE OR REPLACE TABLE temp_parquet_data ({col_defs})")
 
                 for row in data:
-                    values = ", ".join([f"'{str(row.get(col, ''))}'" for col in columns])
+                    values = ", ".join(
+                        [f"'{str(row.get(col, ''))}'" for col in columns]
+                    )
                     conn.execute(f"INSERT INTO temp_parquet_data VALUES ({values})")
 
                 self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
@@ -381,7 +389,9 @@ def test_local_storage_file_creation(temp_dir):
     assert full_path.parent.exists()
 
     # Verify parent directories were created
-    assert (temp_dir / "bronze" / "year" / "2024" / "month" / "01" / "day" / "15").exists()
+    assert (
+        temp_dir / "bronze" / "year" / "2024" / "month" / "01" / "day" / "15"
+    ).exists()
 
 
 def test_local_storage_unsupported_type_parquet(temp_dir):
@@ -450,7 +460,9 @@ def test_gcs_storage_save_parquet_streaming(mock_gcs_data_access_class):
 
     # Verify upload_from_duckdb_table was called
     expected_gcs_path = "gs://test-bucket/silver/companies/data.parquet"
-    mock_gcs_access.upload_from_duckdb_table.assert_called_once_with("temp_parquet_data", expected_gcs_path)
+    mock_gcs_access.upload_from_duckdb_table.assert_called_once_with(
+        "temp_parquet_data", expected_gcs_path
+    )
 
 
 @patch("storage_interface.GCSDataAccess")
@@ -495,7 +507,9 @@ def test_gcs_storage_save_parquet_duckdb_table(mock_gcs_data_access_class):
 
     # Verify upload was called with table name
     expected_gcs_path = "gs://test-bucket/gold/analysis/result.parquet"
-    mock_gcs_access.upload_from_duckdb_table.assert_called_once_with(table_name, expected_gcs_path)
+    mock_gcs_access.upload_from_duckdb_table.assert_called_once_with(
+        table_name, expected_gcs_path
+    )
 
 
 @patch("storage_interface.GCSDataAccess")
@@ -564,7 +578,9 @@ def test_gcs_storage_fallback_read_json(mock_storage_module):
     mock_blob = MagicMock()
 
     expected_data = {"cvr": "31373077", "name": "Arla"}
-    mock_blob.download_as_string.return_value = json.dumps(expected_data).encode("utf-8")
+    mock_blob.download_as_string.return_value = json.dumps(expected_data).encode(
+        "utf-8"
+    )
 
     mock_storage_module.Client.return_value = mock_client
     mock_client.bucket.return_value = mock_bucket
@@ -608,7 +624,9 @@ def test_gcs_storage_fallback_parquet_error(mock_storage_module):
 @patch("storage_interface.storage", None)
 def test_gcs_storage_no_backend_error():
     """Test that GCSStorage raises error when no backend available."""
-    with pytest.raises(ImportError, match="Neither GCSDataAccess nor google.cloud.storage"):
+    with pytest.raises(
+        ImportError, match="Neither GCSDataAccess nor google.cloud.storage"
+    ):
         GCSStorage("test-bucket")
 
 
@@ -624,7 +642,11 @@ def test_storage_round_trip_json_local(temp_dir):
     # Original data with Danish characters and various types
     original_data = {
         "cvr_numbers": ["31373077", "10150817", "00113115"],
-        "company_names": ["Ølgod Mejeri", "Dansk Landbrugsrådgivning", "Sønderjysk Fødevarer"],
+        "company_names": [
+            "Ølgod Mejeri",
+            "Dansk Landbrugsrådgivning",
+            "Sønderjysk Fødevarer",
+        ],
         "locations": {
             "hovedkontor": "København",
             "afdeling_1": "Århus",

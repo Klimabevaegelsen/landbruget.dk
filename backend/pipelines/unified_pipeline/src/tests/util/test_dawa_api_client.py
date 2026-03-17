@@ -352,21 +352,20 @@ class TestDatavaskGeocoding:
                     ]
                 }
                 return response
-            else:
-                # Regular DAWA response
-                response = Mock()
-                response.status_code = 200
-                response.json.return_value = {
-                    "id": "test-id",
-                    "adgangsadresse": {
-                        "adgangspunkt": {"koordinater": [12.5, 55.6]},
-                        "vejstykke": {"navn": "Testvej"},
-                        "husnr": "1",
-                        "postnummer": {"nr": "2400", "navn": "København NV"},
-                        "kommune": {"kode": "0101", "navn": "København"},
-                    },
-                }
-                return response
+            # Regular DAWA response
+            response = Mock()
+            response.status_code = 200
+            response.json.return_value = {
+                "id": "test-id",
+                "adgangsadresse": {
+                    "adgangspunkt": {"koordinater": [12.5, 55.6]},
+                    "vejstykke": {"navn": "Testvej"},
+                    "husnr": "1",
+                    "postnummer": {"nr": "2400", "navn": "København NV"},
+                    "kommune": {"kode": "0101", "navn": "København"},
+                },
+            }
+            return response
 
         mock_get.side_effect = side_effect
 

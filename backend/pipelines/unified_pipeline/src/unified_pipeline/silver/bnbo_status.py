@@ -588,13 +588,13 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             )
             if raw_data is None:
                 self.log.error("Failed to read raw data")
-                return
+                return None
             self.log.info("Read raw data successfully")
 
             table_name = self._process_xml_data(raw_data)
             if table_name is None:
                 self.log.error("Failed to process raw data")
-                return
+                return None
             self.log.info("Processed raw data successfully")
 
             dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)

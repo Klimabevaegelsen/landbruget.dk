@@ -37,12 +37,16 @@ def find_latest(gcs: GCSDataAccess, pattern: str) -> str | None:
     return files[-1]
 
 
-def load_table(gcs: GCSDataAccess, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) -> bool:
+def load_table(
+    gcs: GCSDataAccess, conn: duckdb.DuckDBPyConnection, table_name: str, path: str
+) -> bool:
     """Download a parquet file and load into DuckDB table."""
     log.info(f"Loading {table_name} from .../{'/'.join(path.split('/')[-3:])}")
     try:
         with gcs._temp_download(path) as tmp:
-            conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{tmp}')")
+            conn.execute(
+                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{tmp}')"
+            )
         count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         log.info(f"  -> {count:,} rows")
         return True
@@ -60,17 +64,31 @@ def main():
     # 1. Find latest files for each dataset
     log.info("Finding latest data files...")
 
-    work_permits_path = find_latest(gcs, f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet")
+    work_permits_path = find_latest(
+        gcs,
+        f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet",
+    )
     if not work_permits_path:
-        work_permits_path = find_latest(gcs, f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet")
+        work_permits_path = find_latest(
+            gcs,
+            f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet",
+        )
     if not work_permits_path:
         log.error("No work permits files found")
         return
 
-    cvr_companies_path = find_latest(gcs, f"gs://{BUCKET}/silver/cvr_companies/*/data.parquet")
-    cvr_persons_path = find_latest(gcs, f"gs://{BUCKET}/silver/cvr_persons/*/data.parquet")
-    chr_properties_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/properties.parquet")
-    chr_property_owners_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/property_owners.parquet")
+    cvr_companies_path = find_latest(
+        gcs, f"gs://{BUCKET}/silver/cvr_companies/*/data.parquet"
+    )
+    cvr_persons_path = find_latest(
+        gcs, f"gs://{BUCKET}/silver/cvr_persons/*/data.parquet"
+    )
+    chr_properties_path = find_latest(
+        gcs, f"gs://{BUCKET}/silver/chr/*/properties.parquet"
+    )
+    chr_property_owners_path = find_latest(
+        gcs, f"gs://{BUCKET}/silver/chr/*/property_owners.parquet"
+    )
     chr_herds_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/herds.parquet")
 
     # 2. Load all datasets
@@ -79,9 +97,15 @@ def main():
     if not load_table(gcs, conn, "work_permits", work_permits_path):
         return
 
-    has_companies = cvr_companies_path and load_table(gcs, conn, "cvr_companies", cvr_companies_path)
-    has_persons = cvr_persons_path and load_table(gcs, conn, "cvr_persons", cvr_persons_path)
-    has_properties = chr_properties_path and load_table(gcs, conn, "chr_properties", chr_properties_path)
+    has_companies = cvr_companies_path and load_table(
+        gcs, conn, "cvr_companies", cvr_companies_path
+    )
+    has_persons = cvr_persons_path and load_table(
+        gcs, conn, "cvr_persons", cvr_persons_path
+    )
+    has_properties = chr_properties_path and load_table(
+        gcs, conn, "chr_properties", chr_properties_path
+    )
     has_property_owners = chr_property_owners_path and load_table(
         gcs, conn, "chr_property_owners", chr_property_owners_path
     )
@@ -182,11 +206,15 @@ def main():
                 "c.is_agricultural_company",
             ]
         )
-        join_parts.append("LEFT JOIN cvr_companies c ON wp.company_id = LPAD(CAST(c.cvr_number AS VARCHAR), 8, '0')")
+        join_parts.append(
+            "LEFT JOIN cvr_companies c ON wp.company_id = LPAD(CAST(c.cvr_number AS VARCHAR), 8, '0')"
+        )
 
     if has_persons:
         select_parts.append("oa.cvr_owners")
-        join_parts.append("LEFT JOIN cvr_owners_agg oa ON wp.company_id = LPAD(CAST(oa.cvr_number AS VARCHAR), 8, '0')")
+        join_parts.append(
+            "LEFT JOIN cvr_owners_agg oa ON wp.company_id = LPAD(CAST(oa.cvr_number AS VARCHAR), 8, '0')"
+        )
 
     if has_property_owners and has_properties:
         select_parts.extend(["sa.chr_numbers", "sa.chr_addresses"])
@@ -194,7 +222,9 @@ def main():
 
     if has_property_owners and has_herds:
         select_parts.extend(["aa.animal_production", "aa.organic_production"])
-        join_parts.append("LEFT JOIN chr_animals_agg aa ON wp.company_id = aa.cvr_number")
+        join_parts.append(
+            "LEFT JOIN chr_animals_agg aa ON wp.company_id = aa.cvr_number"
+        )
 
     query = f"""
         CREATE OR REPLACE TABLE enriched_export AS
@@ -233,7 +263,9 @@ def main():
                 COUNT(CASE WHEN company_name IS NULL THEN 1 END) AS unmatched
             FROM enriched_export
         """).fetchone()
-        log.info(f"CVR match rate: {match_stats[0]:,} matched, {match_stats[1]:,} unmatched")
+        log.info(
+            f"CVR match rate: {match_stats[0]:,} matched, {match_stats[1]:,} unmatched"
+        )
 
     if has_property_owners:
         chr_stats = conn.execute("""
@@ -249,10 +281,14 @@ def main():
     parquet_path = OUTPUT_DIR / "work_permits_enriched.parquet"
 
     conn.execute(f"COPY enriched_export TO '{csv_path}' (FORMAT CSV, HEADER TRUE)")
-    conn.execute(f"COPY enriched_export TO '{parquet_path}' (FORMAT PARQUET, COMPRESSION ZSTD)")
+    conn.execute(
+        f"COPY enriched_export TO '{parquet_path}' (FORMAT PARQUET, COMPRESSION ZSTD)"
+    )
 
     log.info(f"Exported CSV: {csv_path} ({csv_path.stat().st_size / 1024:.0f} KB)")
-    log.info(f"Exported Parquet: {parquet_path} ({parquet_path.stat().st_size / 1024:.0f} KB)")
+    log.info(
+        f"Exported Parquet: {parquet_path} ({parquet_path.stat().st_size / 1024:.0f} KB)"
+    )
 
     # Show sample
     log.info("Sample rows:")
