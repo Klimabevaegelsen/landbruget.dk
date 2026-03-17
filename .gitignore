@@ -220,6 +220,7 @@ devenv.local.nix
 data_samples/
 
 # Root level files that shouldn't be committed
+/.beads/
 /claude_desktop_config.json
 /manifest.json
 /conftest.py
