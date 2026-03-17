@@ -3,17 +3,17 @@ name = "unified-pipeline"
 version = "0.1.0"
 description = "Unified pipeline for fetching and processing data."
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     {name = "Rahul Sahoo", email = "rahulsahoo66@gmail.com"},
 ]
 dependencies = [
     "aiohttp>=3.10.0",
-    "certifi>=2024.0.0",
     "click>=8.1.8",
     "cryptography>=44.0.3",
-    "s3fs>=2024.1.0",
+    "gcsfs>=2025.3.2",
+    "google-cloud-storage>=3.1.0",
     "ibis-framework[duckdb,geospatial]>=10.5.0",
     "loguru>=0.7.3",
     "lxml>=5.4.0",
@@ -27,13 +27,10 @@ dependencies = [
     "tqdm>=4.66.2",
     "xmltodict>=0.13.0",
     "zeep>=4.3.1",
-    "duckdb>=1.5.0",
-    "pyreadr>=0.5.0",
+    "duckdb>=1.2.2",
     "beautifulsoup4>=4.13.4",
-    "scikit-learn>=1.3.0",
-    "scipy>=1.11.0",
-    "tabulate>=0.9.0",
-    "landbruget-common",
+    "google-cloud-secret-manager>=2.26.0",
+    "requests>=2.32.5",
 ]
 
 [build-system]
@@ -49,10 +46,6 @@ only-packages = true
 artifacts = ["*.py"]
 
 [tool.uv]
-managed = true
-
-[tool.uv.sources]
-landbruget-common = { path = "../../common", editable = true }
 
 [dependency-groups]
 dev = [
@@ -91,46 +84,7 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = [
-    "E",      # pycodestyle errors
-    "F",      # pyflakes
-    "I",      # isort
-    "N",      # pep8-naming
-    "W",      # pycodestyle warnings
-    "UP",     # pyupgrade
-    "B",      # flake8-bugbear
-    "RUF",    # Ruff-specific rules
-    "PERF",   # performance
-    "RET",    # return statements
-    "SIM",    # simplify
-    "C4",     # flake8-comprehensions
-]
-ignore = [
-    "E501",   # line too long (formatter handles)
-    "RUF001", # ambiguous unicode (Danish characters)
-    "RUF002", # ambiguous unicode in docstrings
-    "RUF003", # ambiguous unicode in comments
-    "B008",   # function calls in argument defaults
-    "SIM108", # ternary operator (less readable)
-]
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
-"tests/*" = ["S101"]
-"src/tests/*" = ["S101"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
+select = ["E", "F", "I", "N"]
+ignore = []
 
 [tool.ruff.lint.isort]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-pythonpath = ["src", "../.."]
-testpaths = ["src/tests"]
-addopts = "--import-mode=importlib"
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests requiring external resources",
-]
