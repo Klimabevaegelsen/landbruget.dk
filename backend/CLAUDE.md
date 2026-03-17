@@ -1,6 +1,6 @@
 # Backend — Landbruget.dk
 
-Python 3.11+ (<3.13), DuckDB >=1.5.0, ibis-framework, Pydantic, GCS via gcsfs.
+Python 3.11+ (<3.13), DuckDB >=1.5.0, ibis-framework, Pydantic, s3fs/gcsfs. Package manager: **uv** (not pip).
 
 ## Commands
 
@@ -44,34 +44,15 @@ Two patterns exist — follow whichever the pipeline already uses:
 
 ## Shared Package: `landbruget-common`
 
-All pipelines depend on `common/` as editable package (`pip install -e`). Key modules:
+Installed as editable via `uv` (hatchling build system, `common/pyproject.toml`). Key modules:
 
-- `common/duckdb_processor.py` — `SharedDuckDBProcessor` base class
-- `common/crs_utils.py` — CRS constants (`DANISH_UTM`, `WGS84`), transform helpers
-- `common/gcs/core.py` — `GCSDataAccess` class (read/write parquet, CSV)
-- `common/gcs/filesystem.py` — gcsfs setup + DuckDB fsspec registration
-- `common/logging_utils.py` — `setup_pipeline_logger()` function
+- `common/duckdb_processor.py` — `SharedDuckDBProcessor` + `PipelineProcessor` base classes
+- `common/crs_utils.py` — CRS constants (`DANISH_UTM`, `WGS84`), SQL transform helpers
+- `common/gcs/core.py` — `GCSDataAccess` class (read/write parquet to cloud)
+- `common/gcs/filesystem.py` — s3fs/gcsfs setup + DuckDB fsspec registration via `setup_duckdb_cloud_auth()`
+- `common/logging_utils.py` — `setup_pipeline_logger()`, `PipelineLogger`, `StageLogger`
 - `common/storage_interface.py` — `StoragePath` class (supports `gs://` and `r2://`)
-
-## Medallion Architecture
-
-```
-Bronze (raw, immutable) → Silver (cleaned, validated) → Gold (analysis-ready)
-```
-
-- **Bronze**: Never modify raw data. Add `_fetch_timestamp`, `_source`, `_source_crs`. GCS path: `gs://bucket/bronze/source/...`
-- **Silver**: Type coercion, validation, dedup. Keep EPSG:25832.
-- **Gold**: Join on CVR/CHR/BFE, derive metrics. Transform to EPSG:4326 only at Supabase upload.
-
-## CRS Strategy
-
-**Process in EPSG:25832 (meters). Transform to EPSG:4326 once at Supabase upload.**
-
-```python
-from common.crs_utils import DANISH_UTM, WGS84
-conn.execute("SELECT ST_Buffer(geometry, 1000) FROM fields")  # 1000m buffer — works directly
-conn.execute(f"SELECT ST_Transform(geometry, '{DANISH_UTM}', '{WGS84}') FROM fields")  # Final upload only
-```
+- `common/validation/` — CVR/CHR/BFE validators, area validators, baseline manager
 
 ## Environment Variables
 
@@ -83,20 +64,15 @@ load_dotenv()
 bucket = os.getenv("GCS_BUCKET", "landbrugsdata")
 ```
 
-Storage path resolution: checks `R2_BUCKET` → `GCS_BUCKET` → default bucket.
+Cloud auth priority: `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_ACCOUNT_ID` → GCS HMAC → DuckDB native secrets.
+Storage path resolution: `R2_BUCKET` → `GCS_BUCKET` → `"landbruget-data"` default.
 
 ## Testing
 
 - Each pipeline has its own `tests/` and `conftest.py`
-- Common fixtures in `common/tests/conftest.py`: `mock_duckdb_connection` (`:memory:` + spatial), `mock_gcs_filesystem`, `sample_danish_geometries`
+- Common fixtures in `common/tests/conftest.py`: `mock_duckdb_connection` (`:memory:` + spatial), `mock_gcs_filesystem`, `sample_danish_geometries`, `valid_cvr_numbers`, `valid_chr_numbers`
 - Markers: `pre_merge` (blocking), `gcs_required` (needs credentials)
 - `backend/conftest.py` manages `sys.path` for module resolution
-
-## Ruff Configuration
-
-Each pipeline has its own ruff config in its `pyproject.toml`:
-- Line length: 100, Target: py311
-- Select: E, F, I, N, W, UP, B, RUF, PERF, RET, SIM, C4
 
 ## Common Mistakes to Avoid
 
@@ -107,3 +83,4 @@ Each pipeline has its own ruff config in its `pyproject.toml`:
 - Assuming global env loading — each pipeline manages its own `.env`
 - Using WGS84 for buffer/distance — always process in EPSG:25832
 - Referencing `common/gcs_utils.py` — actual path is `common/gcs/core.py` (`GCSDataAccess` class)
+- Using pip — this project uses **uv** for Python package management

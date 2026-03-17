@@ -6,7 +6,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // Webpack configuration for better bundling
+  // Enable Turbopack (Next.js 16 default)
+  turbopack: {},
+
+  // Webpack fallback configuration (used when building with --webpack flag)
   webpack: (config, { dev, isServer }) => {
     // Handle Node.js modules that shouldn't be bundled for the client
     if (!isServer) {
