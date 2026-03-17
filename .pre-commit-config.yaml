@@ -79,7 +79,7 @@ repos:
       - id: oxfmt-frontend
         name: oxfmt (Frontend)
         entry: bash
-        args: [-c, "cd frontend && npm ci --prefer-offline && npm run format:check"]
+        args: [-c, "cd frontend && npm ci --prefer-offline && npm run fmt:check"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
@@ -87,7 +87,7 @@ repos:
       - id: oxfmt-frontend-pesticide
         name: oxfmt (Frontend Pesticide)
         entry: bash
-        args: [-c, "cd frontend-pesticide && npm ci --prefer-offline && npm run format:check"]
+        args: [-c, "cd frontend-pesticide && npm ci --prefer-offline && npm run fmt:check"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
