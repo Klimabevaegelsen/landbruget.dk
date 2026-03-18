@@ -30,6 +30,7 @@ except ImportError:
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
+from bronze.bulk_geodanmark_graphql_fetcher import BulkGeoDanmarkGraphQLFetcher
 from config import Settings, get_settings
 from utils.logger import setup_logger
 
@@ -903,15 +904,23 @@ def run_bronze_layer_bulk(
     geodanmark_path = "data/geodanmark_buildings_complete.geoparquet"
     if not Path(geodanmark_path).exists():
         logger.info("📦 Step 1: GeoDanmark data not found, bulk downloading...")
-        if not settings.has_datafordeler_credentials:
-            raise ValueError(
-                "DATAFORDELER_USERNAME and DATAFORDELER_PASSWORD environment variables required"
-            )
 
-        bulk_fetcher = BulkGeoDanmarkFetcher(
-            settings.datafordeler_username, settings.datafordeler_password
-        )
-        bulk_fetcher.bulk_download_buildings(batch_size=30000)
+        # Prefer GraphQL API (WFS endpoint is broken)
+        if settings.has_graphql_credentials:
+            logger.info("Using GraphQL API for GeoDanmark download")
+            bulk_fetcher = BulkGeoDanmarkGraphQLFetcher(settings.datafordeler_graphql_api_key)
+            bulk_fetcher.bulk_download_buildings(batch_size=10)
+        elif settings.has_datafordeler_credentials:
+            logger.info("Falling back to WFS for GeoDanmark download")
+            bulk_fetcher = BulkGeoDanmarkFetcher(
+                settings.datafordeler_username, settings.datafordeler_password
+            )
+            bulk_fetcher.bulk_download_buildings(batch_size=30000)
+        else:
+            raise ValueError(
+                "DATAFORDELER_GRAPHQL_API_KEY or DATAFORDELER_USERNAME/"
+                "DATAFORDELER_PASSWORD environment variables required"
+            )
         logger.info("✅ Bulk GeoDanmark download completed!")
     else:
         logger.info("📦 Step 1: Using existing GeoDanmark data")
