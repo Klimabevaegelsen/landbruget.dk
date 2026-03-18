@@ -7,6 +7,7 @@ from datetime import datetime
 import duckdb
 
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
+from bronze.bulk_geodanmark_graphql_fetcher import BulkGeoDanmarkGraphQLFetcher
 
 # Storage upload functionality
 try:
@@ -38,16 +39,25 @@ def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str) -> bool | None
 
 
 def main() -> None:
+    api_key = os.getenv("DATAFORDELER_GRAPHQL_API_KEY")
     username = os.getenv("DATAFORDELER_USERNAME")
     password = os.getenv("DATAFORDELER_PASSWORD")
     gcs_bucket = os.getenv("GCS_BUCKET")
 
-    if not username or not password:
-        raise ValueError("Missing Datafordeleren credentials")
-
-    print("📦 Starting bulk GeoDanmark download...")
-    fetcher = BulkGeoDanmarkFetcher(username, password)
-    fetcher.bulk_download_buildings(batch_size=30000)
+    # Prefer GraphQL API (WFS endpoint is broken)
+    if api_key:
+        print("📦 Starting bulk GeoDanmark download via GraphQL API...")
+        fetcher = BulkGeoDanmarkGraphQLFetcher(api_key)
+        fetcher.bulk_download_buildings(batch_size=10)
+    elif username and password:
+        print("📦 Starting bulk GeoDanmark download via WFS (fallback)...")
+        fetcher = BulkGeoDanmarkFetcher(username, password)
+        fetcher.bulk_download_buildings(batch_size=30000)
+    else:
+        raise ValueError(
+            "Missing credentials: set DATAFORDELER_GRAPHQL_API_KEY "
+            "or DATAFORDELER_USERNAME/DATAFORDELER_PASSWORD"
+        )
 
     # Get final count
     conn = duckdb.connect()
