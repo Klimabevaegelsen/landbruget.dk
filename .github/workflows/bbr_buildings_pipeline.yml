@@ -117,12 +117,16 @@ jobs:
 
     - name: Set up environment variables
       env:
+        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
         DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
         DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
         R2_BUCKET: ${{ secrets.R2_BUCKET }}
       run: |
         cd backend/pipelines/bbr_buildings
         echo "ENVIRONMENT=production" >> .env
+        if [[ -n "$DATAFORDELER_GRAPHQL_API_KEY" ]]; then
+          echo "DATAFORDELER_GRAPHQL_API_KEY=$DATAFORDELER_GRAPHQL_API_KEY" >> .env
+        fi
         echo "DATAFORDELER_USERNAME=$DATAFORDELER_USERNAME" >> .env
         echo "DATAFORDELER_PASSWORD=$DATAFORDELER_PASSWORD" >> .env
         echo "R2_BUCKET=$R2_BUCKET" >> .env
@@ -132,6 +136,7 @@ jobs:
       id: fetch-geodanmark
       working-directory: backend/pipelines/bbr_buildings
       env:
+        DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
         DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
         DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
         R2_BUCKET: ${{ secrets.R2_BUCKET }}
