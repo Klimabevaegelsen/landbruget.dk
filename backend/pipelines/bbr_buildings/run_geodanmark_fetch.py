@@ -101,11 +101,14 @@ def main() -> None:
             f.write(f"buildings-count={total_count}\n")
             f.write(f"bronze-timestamp={timestamp}\n")
     except Exception as e:
-        print(f"❌ Error counting buildings: {e}")
-        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-            f.write("buildings-count=0\n")
+        print(f"❌ Error: no buildings data produced: {e}")
+        raise SystemExit(1)
     finally:
         conn.close()
+
+    if total_count == 0:
+        print("❌ Error: downloaded 0 buildings — API may be returning errors")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

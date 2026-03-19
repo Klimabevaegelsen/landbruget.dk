@@ -260,7 +260,7 @@ jobs:
   process-silver:
     runs-on: ubuntu-latest
     needs: [generate-timestamp, fetch-geodanmark, fetch-inspire-bbr]
-    if: ${{ always() && (inputs.layer == 'silver' || inputs.layer == 'both') && !cancelled() }}
+    if: ${{ !cancelled() && (inputs.layer == 'silver' || inputs.layer == 'both') && (needs.fetch-inspire-bbr.result == 'success' || needs.fetch-inspire-bbr.result == 'skipped') && (needs.fetch-geodanmark.result == 'success' || needs.fetch-geodanmark.result == 'skipped') }}
 
     permissions:
       contents: 'read'
