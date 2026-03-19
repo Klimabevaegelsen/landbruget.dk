@@ -750,10 +750,31 @@ class InspireBBRFetcher:
         """
         self.logger.info(f"Parsing FTP page: {self.settings.sdfe_ftp_base_url}")
 
-        try:
-            response = self.session.get(self.settings.sdfe_ftp_base_url, timeout=30)
-            response.raise_for_status()
+        max_retries = 3
+        retry_delays = [10, 30, 60]
+        last_error = None
 
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(self.settings.sdfe_ftp_base_url, timeout=60)
+                response.raise_for_status()
+                break
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    delay = retry_delays[attempt]
+                    self.logger.warning(
+                        f"FTP connection attempt {attempt + 1}/{max_retries} failed: {e}. "
+                        f"Retrying in {delay}s..."
+                    )
+                    time.sleep(delay)
+                else:
+                    self.logger.error(f"FTP connection failed after {max_retries} attempts: {e}")
+                    raise
+        else:
+            raise last_error  # type: ignore[misc]
+
+        try:
             soup = BeautifulSoup(response.content, "html.parser")
 
             # Look for download link
