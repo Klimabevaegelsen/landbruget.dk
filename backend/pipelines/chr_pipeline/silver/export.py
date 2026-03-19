@@ -138,7 +138,7 @@ def upload_silver_data_to_gcs(silver_dir: Path, export_timestamp: str) -> bool:
         logging.warning("GCS utilities not available - skipping silver data upload")
         return False
 
-    bucket_name = os.getenv("GCS_BUCKET")
+    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
     if not bucket_name:
         logging.warning("GCS_BUCKET not set - skipping silver data upload")
         return False

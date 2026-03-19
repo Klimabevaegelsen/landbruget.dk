@@ -218,7 +218,9 @@ PREFIX_SILVER_SAVE_PATH = os.environ.get("SILVER_OUTPUT_DIR", "silver/dma")
 # Initialize storage backend based on environment
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 if ENVIRONMENT.lower() in ("production", "container"):
-    storage_backend = OptimizedStorageBackend(os.environ.get("GCS_BUCKET", "landbruget-data"))
+    storage_backend = OptimizedStorageBackend(
+        os.environ.get("R2_BUCKET") or os.environ.get("GCS_BUCKET", "landbruget-data")
+    )
 else:
     storage_backend = LocalStorageBackend(os.environ.get("BRONZE_OUTPUT_DIR", "."))
 

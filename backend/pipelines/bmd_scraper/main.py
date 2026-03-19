@@ -74,7 +74,7 @@ def run_bronze_stage(bronze_dir: Path) -> Path | None:
 
         # If in production environment, upload to GCS
         if os.getenv("ENVIRONMENT") == "production":
-            bucket_name = os.getenv("GCS_BUCKET")
+            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
             if bucket_name:
                 logger.info(f"Uploading bronze data to GCS bucket {bucket_name}")
                 storage = GCSStorage(bucket_name=bucket_name)
@@ -171,7 +171,7 @@ def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Path | None:
 
         # If in production environment, upload to GCS
         if os.getenv("ENVIRONMENT") == "production":
-            bucket_name = os.getenv("GCS_BUCKET")
+            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
             if bucket_name:
                 logger.info(f"Uploading silver data to GCS bucket {bucket_name}")
                 success = upload_to_gcs(parquet_file, bucket_name)

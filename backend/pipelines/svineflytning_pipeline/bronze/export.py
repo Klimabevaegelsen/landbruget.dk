@@ -41,7 +41,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize storage paths and clients
-GCS_BUCKET = os.getenv("GCS_BUCKET")
+GCS_BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 
 # Use GCS if we have the required configuration
