@@ -42,7 +42,7 @@ def main() -> None:
     api_key = os.getenv("DATAFORDELER_GRAPHQL_API_KEY")
     username = os.getenv("DATAFORDELER_USERNAME")
     password = os.getenv("DATAFORDELER_PASSWORD")
-    gcs_bucket = os.getenv("GCS_BUCKET")
+    gcs_bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
 
     # Prefer GraphQL API (WFS endpoint is broken)
     if api_key:

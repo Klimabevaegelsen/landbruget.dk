@@ -402,7 +402,7 @@ def main() -> None:
         # Use WARNING level by default to reduce log output for GitHub Actions
         logger = setup_logger(level="WARNING")
         output_dir = Path("data/bronze")
-        gcs_bucket = os.getenv("GCS_BUCKET")
+        gcs_bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
 
         # Set sample size if specified
         sample_size = None
