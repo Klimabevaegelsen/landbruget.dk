@@ -49,7 +49,7 @@ class Settings:
         )
 
         # Google Cloud Storage
-        self.gcs_bucket = os.getenv("GCS_BUCKET", "landbruget-data")
+        self.gcs_bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
         self.gcs_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
         # Output directories

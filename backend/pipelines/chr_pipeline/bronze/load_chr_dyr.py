@@ -169,7 +169,7 @@ def finalize_consolidated_processing():
 
         from .export import EXPORT_TIMESTAMP
 
-        bucket_name = os.getenv("GCS_BUCKET", "landbruget-data")
+        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
         # Add month suffix if matrix job (environment variable set by GitHub Actions)
         month_suffix = os.getenv("BRONZE_MONTH_SUFFIX", "")

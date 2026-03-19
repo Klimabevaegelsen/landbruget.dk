@@ -77,7 +77,7 @@ if __name__ == "__main__":
     # Determine GCS bucket to use
     actual_gcs_bucket = args.gcs_bucket
     if not actual_gcs_bucket:
-        actual_gcs_bucket = os.getenv("GCS_BUCKET")
+        actual_gcs_bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
         if actual_gcs_bucket:
             logger.info(f"Using GCS_BUCKET from environment variable: {actual_gcs_bucket}")
         else:
