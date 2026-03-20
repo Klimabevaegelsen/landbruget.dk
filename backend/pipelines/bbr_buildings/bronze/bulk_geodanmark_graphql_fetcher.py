@@ -56,6 +56,31 @@ BUILDING_FIELDS = """
 # Max page size allowed by Datafordeleren GraphQL API
 MAX_PAGE_SIZE = 1000
 
+# Explicit column types for read_json — prevents type inference variability
+# across pages/batches (e.g. BBRaktion inferred as VARCHAR vs JSON, or
+# registreringTil as TIMESTAMP vs VARCHAR depending on first record seen).
+BUILDING_COLUMNS = {
+    "id_lokalId": "VARCHAR",
+    "BBRUUID": "VARCHAR",
+    "bygningstype": "VARCHAR",
+    "status": "VARCHAR",
+    "geometristatus": "VARCHAR",
+    "BBRaktion": "VARCHAR",
+    "maalestedBygning": "VARCHAR",
+    "metode3D": "VARCHAR",
+    "overlapBygning": "VARCHAR",
+    "synligBygning": "VARCHAR",
+    "underMinimumBygning": "VARCHAR",
+    "dataansvar": "VARCHAR",
+    "registreringFra": "VARCHAR",
+    "registreringTil": "VARCHAR",
+    "virkningFra": "VARCHAR",
+    "geometri_wkt": "VARCHAR",
+}
+
+# Column list for explicit SELECT during combine (cast everything to VARCHAR)
+_COMBINE_COLUMNS = [c for c in BUILDING_COLUMNS if c != "geometri_wkt"]
+
 
 class BulkGeoDanmarkGraphQLFetcher:
     def __init__(self, api_key: str) -> None:
@@ -161,12 +186,13 @@ class BulkGeoDanmarkGraphQLFetcher:
             for rec in records:
                 tmp.write(_json.dumps(rec) + "\n")
 
+        col_spec = ", ".join(f"'{k}': '{v}'" for k, v in BUILDING_COLUMNS.items())
         self.conn.execute(f"""
             CREATE TABLE {table_name} AS
             SELECT
                 * EXCLUDE (geometri_wkt),
                 TRY(ST_GeomFromText(geometri_wkt)) AS geometri
-            FROM read_json_auto('{tmp_path}')
+            FROM read_json('{tmp_path}', columns={{{col_spec}}})
         """)
 
         Path(tmp_path).unlink(missing_ok=True)
@@ -350,19 +376,35 @@ class BulkGeoDanmarkGraphQLFetcher:
 
         logger.info(f"Combining {len(valid_files)} valid intermediate files")
 
-        file_list = "', '".join(valid_files)
-
         try:
-            # Handle potential schema mismatches with union_by_name
+            # Read each file individually, casting all text columns to VARCHAR
+            # to resolve type conflicts (e.g. BBRaktion stored as JSON in some
+            # files and VARCHAR in others — DuckDB's read_parquet union_by_name
+            # cannot reconcile these).
+            union_parts = []
+            for i, f in enumerate(valid_files):
+                cols = self.conn.execute(
+                    f"SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM read_parquet('{f}'))"
+                ).fetchall()
+                select_parts = []
+                for col_name, col_type in cols:
+                    if col_name in _COMBINE_COLUMNS and col_type != "VARCHAR":
+                        select_parts.append(f'TRY_CAST("{col_name}" AS VARCHAR) AS "{col_name}"')
+                    else:
+                        select_parts.append(f'"{col_name}"')
+                select_clause = ", ".join(select_parts)
+                union_parts.append(f"SELECT {select_clause} FROM read_parquet('{f}')")
+
+            union_query = " UNION ALL ".join(union_parts)
+
             self.conn.execute(f"""
-                COPY (
-                    SELECT * FROM read_parquet(['{file_list}'], union_by_name=true)
-                ) TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet'
+                COPY ({union_query})
+                TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet'
                 (FORMAT PARQUET)
             """)
 
             count = self.conn.execute(
-                f"SELECT COUNT(*) FROM read_parquet(['{file_list}'], union_by_name=true)"
+                f"SELECT COUNT(*) FROM read_parquet('{self.output_dir}/geodanmark_buildings_complete.geoparquet')"
             ).fetchone()[0]
 
             logger.info(

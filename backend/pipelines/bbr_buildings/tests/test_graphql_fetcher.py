@@ -151,3 +151,94 @@ class TestSaveIntermediateResults:
 
         # Restore real conn so __del__ doesn't error
         fetcher.conn = original_conn
+
+
+class TestSchemaConsistency:
+    """Reproduce schema mismatch bugs that crash the pipeline after hours of fetching."""
+
+    def test_combine_with_varchar_vs_json_column(self, fetcher):
+        """BBRaktion as VARCHAR in one file and JSON in another should not crash."""
+        # Batch 0: BBRaktion is a plain string → VARCHAR
+        fetcher.conn.execute(f"""
+            COPY (
+                SELECT 1 AS id_lokalId, 'Mangler afklaring' AS BBRaktion
+            ) TO '{fetcher.output_dir}/geodanmark_buildings_batch_0000.geoparquet' (FORMAT PARQUET)
+        """)
+        # Batch 1: BBRaktion is JSON
+        fetcher.conn.execute(f"""
+            COPY (
+                SELECT 2 AS id_lokalId, '{{"aktion": "value"}}'::JSON AS BBRaktion
+            ) TO '{fetcher.output_dir}/geodanmark_buildings_batch_0001.geoparquet' (FORMAT PARQUET)
+        """)
+
+        fetcher._combine_intermediate_files()
+
+        result = fetcher.conn.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{fetcher.output_dir}/geodanmark_buildings_complete.geoparquet')"
+        ).fetchone()[0]
+        assert result == 2
+
+    def test_combine_with_timestamp_vs_varchar_column(self, fetcher):
+        """registreringTil as TIMESTAMP in one file and VARCHAR in another should not crash."""
+        # Batch 0: registreringTil is TIMESTAMP
+        fetcher.conn.execute(f"""
+            COPY (
+                SELECT 1 AS id_lokalId, TIMESTAMP '2026-03-20 13:15:15' AS registreringTil
+            ) TO '{fetcher.output_dir}/geodanmark_buildings_batch_0000.geoparquet' (FORMAT PARQUET)
+        """)
+        # Batch 1: registreringTil is VARCHAR
+        fetcher.conn.execute(f"""
+            COPY (
+                SELECT 2 AS id_lokalId, '2026-03-20T13:15:15.195000Z' AS registreringTil
+            ) TO '{fetcher.output_dir}/geodanmark_buildings_batch_0001.geoparquet' (FORMAT PARQUET)
+        """)
+
+        fetcher._combine_intermediate_files()
+
+        result = fetcher.conn.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{fetcher.output_dir}/geodanmark_buildings_complete.geoparquet')"
+        ).fetchone()[0]
+        assert result == 2
+
+    def test_nodes_to_duckdb_forces_varchar_types(self, fetcher):
+        """All columns from _nodes_to_duckdb_table should be VARCHAR (not auto-inferred)."""
+        nodes = [
+            {
+                "id_lokalId": "abc-123",
+                "BBRUUID": None,
+                "bygningstype": "Bygning",
+                "status": None,
+                "geometristatus": None,
+                "BBRaktion": "Mangler afklaring",
+                "maalestedBygning": None,
+                "metode3D": None,
+                "overlapBygning": None,
+                "synligBygning": None,
+                "underMinimumBygning": None,
+                "dataansvar": None,
+                "registreringFra": "2026-03-20T13:15:15.195000Z",
+                "registreringTil": None,
+                "virkningFra": "2026-03-20T13:15:15.195000Z",
+                "geometri": {
+                    "wkt": "POLYGON Z((550000 6200000 0, 550010 6200000 0, 550010 6200010 0, 550000 6200010 0, 550000 6200000 0))"
+                },
+            }
+        ]
+
+        fetcher._nodes_to_duckdb_table(nodes, "test_page")
+
+        # Check column types — all should be VARCHAR except geometri (GEOMETRY)
+        columns = fetcher.conn.execute(
+            "SELECT column_name, column_type FROM (DESCRIBE test_page)"
+        ).fetchall()
+        col_types = {name: dtype for name, dtype in columns}
+
+        for col in [
+            "id_lokalId",
+            "BBRUUID",
+            "BBRaktion",
+            "registreringFra",
+            "registreringTil",
+            "virkningFra",
+        ]:
+            assert col_types[col] == "VARCHAR", f"{col} should be VARCHAR, got {col_types[col]}"
