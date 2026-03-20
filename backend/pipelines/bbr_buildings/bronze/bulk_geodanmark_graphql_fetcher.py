@@ -225,7 +225,13 @@ class BulkGeoDanmarkGraphQLFetcher:
 
                 # Save intermediate results
                 if len(batch_tables) >= batch_size:
-                    self._save_intermediate_results(batch_tables, intermediate_batch_num)
+                    try:
+                        self._save_intermediate_results(batch_tables, intermediate_batch_num)
+                    except RuntimeError:
+                        logger.error(
+                            f"Batch {intermediate_batch_num} lost ({len(batch_tables)} pages). "
+                            "Continuing download."
+                        )
                     batch_tables = []
                     intermediate_batch_num += 1
 
@@ -244,7 +250,12 @@ class BulkGeoDanmarkGraphQLFetcher:
 
         # Save remaining
         if batch_tables:
-            self._save_intermediate_results(batch_tables, intermediate_batch_num)
+            try:
+                self._save_intermediate_results(batch_tables, intermediate_batch_num)
+            except RuntimeError:
+                logger.error(
+                    f"Final batch {intermediate_batch_num} lost ({len(batch_tables)} pages)."
+                )
 
         logger.info(f"Completed: {page_num + 1} pages, {total_buildings:,} buildings")
 
@@ -256,24 +267,46 @@ class BulkGeoDanmarkGraphQLFetcher:
         if not table_names:
             return
 
+        union_query = " UNION ALL ".join(f"SELECT * FROM {t}" for t in table_names)
+        output_file = self.output_dir / f"geodanmark_buildings_batch_{batch_num:04d}.geoparquet"
+
+        max_retries = 3
+        last_error = None
+
         try:
-            union_query = " UNION ALL ".join(f"SELECT * FROM {t}" for t in table_names)
-            output_file = self.output_dir / f"geodanmark_buildings_batch_{batch_num:04d}.geoparquet"
+            for attempt in range(max_retries):
+                try:
+                    self.conn.execute(f"""
+                        COPY ({union_query})
+                        TO '{output_file}' (FORMAT PARQUET)
+                    """)
 
-            self.conn.execute(f"""
-                COPY ({union_query})
-                TO '{output_file}' (FORMAT PARQUET)
-            """)
+                    count = self.conn.execute(f"SELECT COUNT(*) FROM ({union_query})").fetchone()[0]
+                    logger.info(f"Saved {count:,} buildings to {output_file}")
+                    last_error = None
+                    break
 
-            count = self.conn.execute(f"SELECT COUNT(*) FROM ({union_query})").fetchone()[0]
-            logger.info(f"Saved {count:,} buildings to {output_file}")
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        f"Save attempt {attempt + 1}/{max_retries} failed for batch {batch_num}: {e}"
+                    )
+                    # Remove potentially corrupted file
+                    if output_file.exists():
+                        output_file.unlink()
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
 
-            # Free memory
+            if last_error is not None:
+                raise RuntimeError(f"Failed to save batch {batch_num}") from last_error
+
+        finally:
+            # Always free memory regardless of save outcome
             for table_name in table_names:
-                self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-
-        except Exception as e:
-            logger.error(f"Error saving intermediate results: {e}")
+                try:
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                except Exception:
+                    pass
 
     def _combine_intermediate_files(self) -> None:
         """Combine all intermediate GeoParquet files into final output."""
@@ -283,10 +316,41 @@ class BulkGeoDanmarkGraphQLFetcher:
             logger.warning("No intermediate files found")
             return
 
-        logger.info(f"Combining {len(intermediate_files)} intermediate files")
+        logger.info(f"Validating {len(intermediate_files)} intermediate files")
 
-        file_paths = [str(f) for f in intermediate_files]
-        file_list = "', '".join(file_paths)
+        valid_files = []
+        skipped_files = []
+
+        for f in intermediate_files:
+            # Quick size check — Parquet header alone is ~100+ bytes
+            if f.stat().st_size < 100:
+                logger.warning(f"Skipping {f.name}: file too small ({f.stat().st_size} bytes)")
+                skipped_files.append(f)
+                continue
+
+            # Validate DuckDB can read it
+            try:
+                count = self.conn.execute(f"SELECT COUNT(*) FROM read_parquet('{f}')").fetchone()[0]
+                if count == 0:
+                    logger.warning(f"Skipping {f.name}: contains 0 rows")
+                    skipped_files.append(f)
+                    continue
+                valid_files.append(str(f))
+            except Exception as e:
+                logger.warning(f"Skipping corrupted file {f.name}: {e}")
+                skipped_files.append(f)
+
+        if skipped_files:
+            logger.warning(
+                f"Skipped {len(skipped_files)}/{len(intermediate_files)} corrupted/empty files"
+            )
+
+        if not valid_files:
+            raise RuntimeError("All intermediate files are corrupted — no data to combine")
+
+        logger.info(f"Combining {len(valid_files)} valid intermediate files")
+
+        file_list = "', '".join(valid_files)
 
         try:
             # Handle potential schema mismatches with union_by_name
@@ -305,7 +369,7 @@ class BulkGeoDanmarkGraphQLFetcher:
                 f"Combined {count:,} buildings into geodanmark_buildings_complete.geoparquet"
             )
 
-            # Clean up intermediate files
+            # Clean up all intermediate files (including skipped ones)
             for f in intermediate_files:
                 f.unlink()
             logger.info("Cleaned up intermediate files")
