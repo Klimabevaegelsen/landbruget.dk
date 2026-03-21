@@ -101,10 +101,7 @@ const MobileMenuItem = React.forwardRef<HTMLButtonElement, MobileMenuItemProps>(
     return (
       <button
         ref={ref}
-        data-testid={
-          props['data-testid'] ||
-          `mobile-menu-${label.toLowerCase().replace(/\s+/g, '-')}-button`
-        }
+        data-testid={`mobile-menu-${label.toLowerCase().replace(/\s+/g, '-')}-button`}
         className={cn(
           'touch-target flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left',
           'transition-colors duration-200',

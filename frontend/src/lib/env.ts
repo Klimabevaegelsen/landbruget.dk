@@ -4,5 +4,5 @@ export const env = {
 } as const;
 
 /** Convenience re-exports for common env vars */
-export const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
-export const SUPABASE_ANON_KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+export const SUPABASE_ANON_KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';

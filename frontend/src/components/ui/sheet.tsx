@@ -42,11 +42,14 @@ type SheetTriggerProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 const SheetTrigger = React.forwardRef<HTMLButtonElement, SheetTriggerProps>(
   ({ className, onClick, ...props }, ref) => {
     const { onOpenChange } = useSheet();
+    const testId =
+      (props as Record<string, unknown>)['data-testid'] ||
+      'sheet-trigger-button';
 
     return (
       <button
         ref={ref}
-        data-testid={props['data-testid'] || 'sheet-trigger-button'}
+        data-testid={testId}
         className={cn(
           'touch-target inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors',
           'focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
