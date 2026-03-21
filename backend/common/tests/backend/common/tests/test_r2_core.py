@@ -134,27 +134,26 @@ class TestUploadDownloadJSON:
                 buffer = io.StringIO()
 
                 class MockWriteContext:
-                    def __enter__(self_ctx):
+                    def __enter__(self):
                         return buffer
 
-                    def __exit__(self_ctx, *args):
+                    def __exit__(self, *args):
                         buffer.seek(0)
                         mock_fs._file_contents[path] = buffer.read()
                         return False
 
                 return MockWriteContext()
-            else:
-                content = mock_fs._file_contents.get(path, "")
-                buffer = io.StringIO(content)
+            content = mock_fs._file_contents.get(path, "")
+            buffer = io.StringIO(content)
 
-                class MockReadContext:
-                    def __enter__(self_ctx):
-                        return buffer
+            class MockReadContext:
+                def __enter__(self):
+                    return buffer
 
-                    def __exit__(self_ctx, *args):
-                        return False
+                def __exit__(self, *args):
+                    return False
 
-                return MockReadContext()
+            return MockReadContext()
 
         mock_fs.open.side_effect = mock_open_handler
 

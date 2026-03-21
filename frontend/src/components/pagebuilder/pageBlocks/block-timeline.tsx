@@ -179,26 +179,29 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
             {/* Filter buttons - only show if we have filterColumns */}
             {timeline.config?.filterColumns?.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {Object.entries(eventTypes).map(([type, color]) => (
-                  <Button
-                    size="sm"
-                    key={type}
-                    onClick={() => toggleEventType(type)}
-                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                      selectedTypes.has(type)
-                        ? 'text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-muted/50'
-                    }`}
-                    style={{
-                      backgroundColor: selectedTypes.has(type)
-                        ? color
-                        : 'transparent',
-                      border: `1px solid ${color}`,
-                    }}
-                  >
-                    {translateEventType(type)}
-                  </Button>
-                ))}
+                {Object.entries(eventTypes).map(([type, color]) => {
+                  const buttonStyle = {
+                    backgroundColor: selectedTypes.has(type)
+                      ? color
+                      : 'transparent',
+                    border: `1px solid ${color}`,
+                  };
+                  return (
+                    <Button
+                      size="sm"
+                      key={type}
+                      onClick={() => toggleEventType(type)}
+                      className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                        selectedTypes.has(type)
+                          ? 'text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-muted/50'
+                      }`}
+                      style={buttonStyle}
+                    >
+                      {translateEventType(type)}
+                    </Button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -278,6 +281,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                   {events.map((event, eventIndex) => {
                     const color =
                       eventTypes[event.event_type ?? ''] ?? VizColors[0];
+                    const colorStyle = { color };
                     const isLastEvent = eventIndex === events.length - 1;
                     return (
                       <div
@@ -286,7 +290,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                       >
                         <div
                           className="text-sm font-semibold"
-                          style={{ color }}
+                          style={colorStyle}
                         >
                           {translateEventType(event.event_type || '')}
                         </div>

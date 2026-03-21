@@ -416,8 +416,8 @@ test.describe('Visual Mobile UX Audit', () => {
     console.log('Performance metrics:', metrics);
 
     // LCP should be under 2.5s for good mobile experience
-    if ((metrics as any).lcp) {
-      expect((metrics as any).lcp).toBeLessThan(2500);
+    if ((metrics as Record<string, number>).lcp) {
+      expect((metrics as Record<string, number>).lcp).toBeLessThan(2500);
     }
 
     await context.close();

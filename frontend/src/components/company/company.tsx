@@ -3,8 +3,8 @@
 import { useEffect } from 'react';
 import { CompanyResponse } from '@/services/supabase/types';
 import { CompanyHero } from './company-hero';
-import { Container } from '../layout/container';
-import { PageBuilder } from '../pagebuilder/pagebuilder';
+import { Container } from '@/components/layout/container';
+import { PageBuilder } from '@/components/pagebuilder/pagebuilder';
 import { useToast } from '@/components/ui/toast';
 
 export function Company({ company }: { company: CompanyResponse }) {

@@ -1,5 +1,5 @@
 import { ClimateBreakdown } from '@/services/supabase/types';
-import { getClimateEmissions } from '@/services/supabase/climate';
+import { getClimateEmissions } from '@/lib/climate-data';
 import { CarbonAccountingBreakdown } from '@/components/climate';
 
 export async function BlockClimateBreakdown({

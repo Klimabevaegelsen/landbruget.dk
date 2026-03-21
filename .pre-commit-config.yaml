@@ -28,15 +28,14 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.5
     hooks:
-      # First: Fix import sorting (matches CI import-check job)
+      # First: Auto-fix safe issues (import sorting, modern syntax, etc.)
       - id: ruff
-        name: ruff (import sorting)
-        args: [--select, I, --fix]
+        name: ruff (auto-fix)
+        args: [--fix]
         types_or: [python, pyi]
-      # Second: Check for critical errors (matches CI lint job)
+      # Second: Check all rules — zero tolerance (matches CI)
       - id: ruff
-        name: ruff (critical lint)
-        args: [--select, "E9,F,E711,E712,E713,E714,W605"]
+        name: ruff (lint)
         types_or: [python, pyi]
       # Third: Format code (matches CI format-check job)
       - id: ruff-format
@@ -142,6 +141,14 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: npm-audit
+        name: Check npm vulnerabilities
+        entry: bash
+        args: [-c, 'cd frontend && npm audit --audit-level=high']
+        language: system
+        files: '^frontend/(package\.json|package-lock\.json)$'
+        pass_filenames: false
 
       - id: check-debug-code
         name: Check for debug code

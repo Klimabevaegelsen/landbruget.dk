@@ -60,12 +60,45 @@ build-backend = "hatchling.build"
 bypass-selection = true
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501", "N806", "N803"]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes (undefined names, unused imports, etc.)
+    "I",      # isort (import sorting)
+    "N",      # pep8-naming
+    "UP",     # pyupgrade (modern Python syntax)
+    "B",      # flake8-bugbear (common bugs)
+    "C4",     # flake8-comprehensions
+    "PIE",    # flake8-pie (misc improvements)
+    "RET",    # flake8-return (return statement improvements)
+    "SIM",    # flake8-simplify
+    "PTH",    # flake8-use-pathlib
+    "RUF",    # Ruff-specific rules
+    "FURB",   # refurb (modern Python idioms)
+    "T20",    # flake8-print (no print statements — use logging)
+    "LOG",    # flake8-logging (proper logging patterns)
+    "S",      # flake8-bandit (security checks)
+    "ERA",    # eradicate (commented-out code)
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "N806",   # variable in function should be lowercase
+    "N803",   # argument name should be lowercase
+    "S101",   # allow assert (used in tests and pipeline guards)
+    "S603",   # subprocess-without-shell-equals-true — pipeline scripts legitimately call subprocesses
+    "S607",   # start-process-with-partial-path — pipeline scripts use system tools
+    "S608",   # hardcoded-sql-expression — DuckDB queries are not injection vectors
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"test_*.py" = ["S101", "T20"]
+"*_test.py" = ["S101", "T20"]
+"conftest.py" = ["S101"]
 
 [tool.ruff.format]
 quote-style = "double"

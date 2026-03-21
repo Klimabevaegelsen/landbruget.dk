@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Input } from './ui/input';
 import { cn } from '@/lib/utils';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/solid';
@@ -8,7 +8,8 @@ import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from './ui/button';
-import { apiFetch } from '@/services/supabase/config';
+import { useSearch } from '@/hooks/useSearch';
+import type { SearchResult } from '@/hooks/useSearch';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
 
 export function GlobalSearch({
@@ -90,21 +91,6 @@ export function GlobalSearch({
   );
 }
 
-interface SearchResult {
-  name: string;
-  cvr: string;
-  address: string;
-  type: string;
-  id: string;
-}
-
-interface SearchResponse {
-  results: SearchResult[];
-  total: number;
-  query: string;
-  searchType?: string;
-}
-
 function SearchOverlay({
   search,
   setSearch,
@@ -119,73 +105,8 @@ function SearchOverlay({
   // Tabs for categories - restricted to CVR and company name only
   const tabs = ['Alle', 'CVR', 'Firmanavn'];
   const [activeTab, setActiveTab] = useState(0);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const { showLoadingToast, hideLoadingToast } = useLoadingToast();
-
-  // Debounced search function
-  const performSearch = useCallback(
-    async (query: string) => {
-      if (!query || query.trim().length < 2) {
-        setSearchResults([]);
-        hideLoadingToast();
-        return;
-      }
-
-      // Show loading toast for search
-      showLoadingToast('Søger', `Søger efter "${query.trim()}"...`);
-
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Map tab index to search type - restricted to CVR and company name only
-        const searchTypeMap: { [key: number]: string } = {
-          0: 'auto', // Alle
-          1: 'cvr', // CVR
-          2: 'company_name', // Firmanavn
-        };
-
-        const searchType = searchTypeMap[activeTab] || 'auto';
-        const response = await apiFetch(
-          `/functions/v1/search?q=${encodeURIComponent(query.trim())}&type=${searchType}&limit=20`
-        );
-
-        if (!response.ok) {
-          throw new Error('Search failed');
-        }
-
-        const data: SearchResponse = await response.json();
-        setSearchResults(data.results || []);
-      } catch (err) {
-        console.error('Search error:', err);
-        setError('Søgning fejlede. Prøv igen.');
-        setSearchResults([]);
-      } finally {
-        setIsLoading(false);
-        hideLoadingToast();
-      }
-    },
-    [activeTab, showLoadingToast, hideLoadingToast]
-  );
-
-  // Debounce search
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      performSearch(search);
-    }, 300); // 300ms debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [search, performSearch]);
-
-  // Re-search when tab changes
-  useEffect(() => {
-    if (search && search.trim().length >= 2) {
-      performSearch(search);
-    }
-  }, [activeTab, search, performSearch]);
+  const { searchResults, isLoading, error } = useSearch(search, activeTab);
 
   // Close on Escape
   React.useEffect(() => {

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { IteratedSection } from '@/services/supabase/types';
-import { PageBlock } from '../pagebuilder';
-import { NavigationItem } from '../../layout/sidenav';
+import { PageBlock } from '@/components/pagebuilder/pagebuilder';
+import { NavigationItem } from '@/components/layout/sidenav';
 import { BlockContainer } from './block-container';
 import { cn, slugify, scrollToElement } from '@/lib/utils';
 import { useHashStore } from '@/stores/hashStore';
@@ -45,6 +45,7 @@ export function IteratedSectionMenu({
             const offset = level === 0 ? 0 : 80;
             scrollToElement(iteratedSection._key, offset);
           }}
+          data-testid={`section-tab-${item.id ?? item.href}-button`}
           className={cn(
             'hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring flex-shrink-0 rounded-lg border px-4 py-2.5 text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
             item.current

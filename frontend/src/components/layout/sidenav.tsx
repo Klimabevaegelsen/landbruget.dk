@@ -129,6 +129,7 @@ function SidenavClient({
         <h2 className="text-xl font-bold md:text-2xl">{title}</h2>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
+          data-testid="toggle-sidebar-button"
           className="hover:bg-muted block rounded-md p-2 transition-colors md:hidden"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >

@@ -188,7 +188,11 @@ export function EnvironmentalComplianceOverview({
                     ? 'bg-bnbo'
                     : 'bg-conventional'
               }`}
-              style={{ width: `${Math.min(data.compliancePercentage, 100)}%` }}
+              style={
+                {
+                  width: `${Math.min(data.compliancePercentage, 100)}%`,
+                } as React.CSSProperties
+              }
             />
           </div>
         </div>
@@ -196,5 +200,3 @@ export function EnvironmentalComplianceOverview({
     </div>
   );
 }
-
-export default EnvironmentalComplianceOverview;

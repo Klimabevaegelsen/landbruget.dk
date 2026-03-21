@@ -7,7 +7,7 @@ import { LayerControlPanelEnhanced as LayerControlPanel } from './LayerControlPa
 import { FieldDetailsPanel } from './FieldDetailsPanel';
 import { LoadingState } from './LoadingState';
 import { YearSlider } from './YearSlider';
-import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
+import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
 import {
   FieldAnalysisData,
   LayerVisibility,
@@ -22,7 +22,7 @@ const FieldAnalysisMap = dynamic(() => import('./FieldAnalysisMap'), {
   loading: () => <LoadingState message="Indlæser kort..." />,
 });
 
-export default function FieldAnalysisVisualization() {
+export function FieldAnalysisVisualization() {
   const [isClient, setIsClient] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -87,10 +87,6 @@ export default function FieldAnalysisVisualization() {
   // Load PMTiles URLs with caching - parallel preloading
   useEffect(() => {
     const loadPMTilesUrls = async () => {
-      console.log(
-        `🗺️ Loading PMTiles URLs for year ${yearSelection.selectedYear}`
-      );
-
       try {
         const urls = await pmtilesCacheService.getFieldAnalysisUrls(
           yearSelection.selectedYear
@@ -103,16 +99,11 @@ export default function FieldAnalysisVisualization() {
             yearSelection.selectedYear,
             yearSelection.availableYears
           )
-          .then(() => {
-            console.log('✅ Adjacent years preloaded in background');
-          })
-          .catch((error) => {
-            console.warn('⚠️ Adjacent year preload failed:', error);
+          .catch(() => {
+            // Adjacent year preload failures are non-critical
           });
-
-        console.log('✅ PMTiles URLs loaded');
-      } catch (error) {
-        console.error('❌ Failed to load PMTiles URLs:', error);
+      } catch {
+        // PMTiles URL loading failure handled silently
       }
     };
 
@@ -134,7 +125,6 @@ export default function FieldAnalysisVisualization() {
 
     // Fallback timeout to prevent getting stuck in loading state
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
       loadingTimeoutRef.current = null;
     }, 5000); // 5 second fallback timeout
@@ -217,8 +207,6 @@ export default function FieldAnalysisVisualization() {
 
   // Handle map ready callback
   const handleMapReady = useCallback(() => {
-    console.log('Map ready - clearing loading state');
-
     // Clear the fallback timeout since map loaded successfully
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -275,12 +263,10 @@ export default function FieldAnalysisVisualization() {
   return (
     <div className="relative flex h-screen touch-pan-x touch-pan-y flex-col overflow-hidden lg:flex-row">
       {/* Mobile Control Panel Toggle */}
-      <div
-        className="pointer-events-auto absolute top-4 left-4 z-40 lg:hidden"
-        style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
-      >
+      <div className="pointer-events-auto absolute top-[max(1rem,env(safe-area-inset-top))] left-4 z-40 lg:hidden">
         <button
           onClick={() => setMobileControlsOpen(!mobileControlsOpen)}
+          data-testid="toggle-mobile-controls-button"
           className="bg-background hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg p-3 shadow-lg transition-colors"
           aria-label="Toggle controls"
         >
@@ -302,15 +288,7 @@ export default function FieldAnalysisVisualization() {
 
       {/* Left Control Panel - Desktop: sidebar, Mobile: overlay */}
       <div
-        className={` ${mobileControlsOpen ? 'block' : 'hidden'} bg-background fixed inset-0 z-50 h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
-        style={{
-          paddingTop: mobileControlsOpen
-            ? 'env(safe-area-inset-top)'
-            : undefined,
-          paddingBottom: mobileControlsOpen
-            ? 'env(safe-area-inset-bottom)'
-            : undefined,
-        }}
+        className={` ${mobileControlsOpen ? 'block pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]' : 'hidden'} bg-background fixed inset-0 z-50 h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:pt-0 lg:pb-0 lg:shadow-lg`}
       >
         {/* Mobile close button */}
         <div className="bg-background sticky top-0 z-10 flex items-center justify-between border-b p-4 lg:hidden">
@@ -322,6 +300,7 @@ export default function FieldAnalysisVisualization() {
           </div>
           <button
             onClick={() => setMobileControlsOpen(false)}
+            data-testid="close-mobile-controls-button"
             className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2"
             aria-label="Luk kontrolpanel"
           >
@@ -411,12 +390,7 @@ export default function FieldAnalysisVisualization() {
               className="fixed inset-0 z-40 bg-black/50"
               onClick={() => setSelectedField(null)}
             />
-            <div
-              className="bg-background fixed inset-x-0 bottom-0 z-[70] max-h-[85vh] overflow-y-auto rounded-t-xl shadow-2xl"
-              style={{
-                paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
-              }}
-            >
+            <div className="bg-background fixed inset-x-0 bottom-0 z-[70] max-h-[85vh] overflow-y-auto rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl">
               <FieldDetailsPanel
                 fieldData={selectedField}
                 onClose={() => setSelectedField(null)}
@@ -443,12 +417,7 @@ export default function FieldAnalysisVisualization() {
               className="fixed inset-0 z-40 bg-black/50"
               onClick={() => setClickedCoordinates(null)}
             />
-            <div
-              className="bg-background fixed inset-x-0 bottom-0 z-[70] max-h-[85vh] overflow-y-auto rounded-t-xl shadow-2xl"
-              style={{
-                paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
-              }}
-            >
+            <div className="bg-background fixed inset-x-0 bottom-0 z-[70] max-h-[85vh] overflow-y-auto rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl">
               <FieldDetailsPanel
                 coordinates={clickedCoordinates}
                 onClose={() => setClickedCoordinates(null)}

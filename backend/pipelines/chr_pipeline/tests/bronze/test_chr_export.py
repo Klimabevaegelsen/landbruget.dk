@@ -5,6 +5,7 @@ implementations since the actual bronze.export module may have dependencies
 on GCS and other external services.
 """
 
+import contextlib
 import gc
 import json
 import sys
@@ -551,10 +552,8 @@ class TestErrorRecovery:
         save_raw_data({"data": "test2"}, "type2", "id2")
 
         # Should not raise, but log error
-        try:
+        with contextlib.suppress(Exception):
             finalize_export()
-        except Exception:
-            pass  # Expected for first call
 
     def test_serialize_data_handles_invalid_objects(self):
         """Test that _serialize_data handles objects that can't be serialized."""

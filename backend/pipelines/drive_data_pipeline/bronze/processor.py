@@ -357,7 +357,7 @@ class BronzeProcessor:
                 return True
 
             # Download the file
-            file_content, metadata = self.drive_fetcher.download_file(file.id)
+            file_content, _metadata = self.drive_fetcher.download_file(file.id)
             logger.info(f"Downloaded {len(file_content)} bytes for file {file.name}")
 
             # Save the file using the full Google Drive path hierarchy

@@ -142,7 +142,7 @@ class TestCRSTransformation:
         """).fetchone()
 
         # Coordinates should remain essentially unchanged (within small tolerance)
-        for before, after in zip(bounds_before, bounds_after):
+        for before, after in zip(bounds_before, bounds_after, strict=False):
             assert abs(before - after) < 0.01, (
                 "Coordinates should not change significantly when already in WGS84"
             )
@@ -385,7 +385,7 @@ class TestCRSDetection:
             FROM test_utm
         """).fetchone()
 
-        min_x, max_x, min_y, max_y = bounds
+        min_x, _max_x, min_y, _max_y = bounds
 
         # Should detect as UTM (large coordinate values)
         is_utm = 400000 <= min_x <= 900000 and 6000000 <= min_y <= 7000000
@@ -860,7 +860,7 @@ class TestErrorHandling:
         """)
 
         # Should raise ValueError
-        with pytest.raises(ValueError, match="Geometry column.*not found"):
+        with pytest.raises(ValueError, match=r"Geometry column.*not found"):
             validate_and_transform_geometries_duckdb(
                 conn=duck_conn,
                 table_name="test_no_geom",

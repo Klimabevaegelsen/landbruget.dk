@@ -1,12 +1,12 @@
 """Schema models for Silver layer data standardization."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class DataType(str, Enum):
+class DataType(StrEnum):
     """Data types supported in Silver layer schemas."""
 
     STRING = "string"

@@ -456,7 +456,7 @@ class BaselineManager:
         """Compute MD5 checksum of dataframe for quick comparison."""
         # Convert to bytes and hash
         data_bytes = df.to_csv(index=False).encode("utf-8")
-        return hashlib.md5(data_bytes).hexdigest()
+        return hashlib.md5(data_bytes, usedforsecurity=False).hexdigest()
 
     def _extract_geometry_bounds(self, df: Any, geometry_column: str) -> tuple[dict[str, float], str | None]:
         """Extract geometry bounds from a dataframe with WKB geometry."""

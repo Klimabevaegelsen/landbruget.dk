@@ -37,7 +37,7 @@ Usage:
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import requests
 
@@ -49,7 +49,7 @@ if not API_KEY:
 GEODKV_URL = f"https://graphql.datafordeler.dk/GEODKV/v1?apiKey={API_KEY}"
 BBR_URL = f"https://graphql.datafordeler.dk/BBR/v1?apiKey={API_KEY}"
 
-NOW = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+NOW = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def section(title: str) -> None:

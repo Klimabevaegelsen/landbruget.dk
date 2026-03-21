@@ -1,5 +1,5 @@
 import { CheckBadgeIcon } from '@heroicons/react/24/outline';
-import { Container } from '../container';
+import { Container } from '@/components/layout/container';
 import Link from 'next/link';
 
 export function NavBanner() {

@@ -265,7 +265,7 @@ export function generateMockField(overrides?: Partial<MockField>): MockField {
 /**
  * Generate mock table data
  */
-export function generateMockTableData<T extends Record<string, any>>(
+export function generateMockTableData<T extends Record<string, unknown>>(
   count: number,
   generator: (index: number) => T
 ): T[] {
@@ -434,7 +434,7 @@ export async function setDesktopViewport(page: Page) {
 export async function mockApiResponse(
   page: Page,
   urlPattern: string | RegExp,
-  responseData: any,
+  responseData: unknown,
   statusCode: number = 200
 ) {
   await page.route(urlPattern, (route) => {

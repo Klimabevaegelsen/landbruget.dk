@@ -262,10 +262,9 @@ def main():
 
     # Show sample
     log.info("Sample rows:")
-    columns = [col[0] for col in conn.execute("DESCRIBE enriched_export").fetchall()]
-    print(" | ".join(columns))
-    for row in conn.execute("SELECT * FROM enriched_export LIMIT 5").fetchall():
-        print(" | ".join(str(v)[:50] if v is not None else "" for v in row))
+    [col[0] for col in conn.execute("DESCRIBE enriched_export").fetchall()]
+    for _row in conn.execute("SELECT * FROM enriched_export LIMIT 5").fetchall():
+        pass
 
     log.info("Done!")
 

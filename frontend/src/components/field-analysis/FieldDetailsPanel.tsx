@@ -314,6 +314,7 @@ export function FieldDetailsPanel({
         </h2>
         <button
           onClick={onClose}
+          data-testid="close-details-panel-button"
           className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
           aria-label="Luk panel"
         >
@@ -398,6 +399,7 @@ export function FieldDetailsPanel({
               </span>
               <button
                 onClick={handleCopyCoordinates}
+                data-testid="copy-coordinates-button"
                 className="bg-primary/20 text-primary hover:bg-primary/30 active:bg-primary/40 flex min-h-[32px] items-center rounded px-2 py-1 text-xs transition-colors"
                 title="Kopier koordinater"
               >
@@ -441,6 +443,7 @@ export function FieldDetailsPanel({
                   const googleMapsUrl = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
                   window.open(googleMapsUrl, '_blank');
                 }}
+                data-testid="open-google-maps-button"
                 className={`bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex min-h-[36px] items-center justify-center rounded px-3 py-2 text-center text-xs font-medium transition-colors ${
                   fieldData ? 'flex-1' : 'w-full'
                 }`}

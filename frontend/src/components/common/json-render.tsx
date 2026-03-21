@@ -44,6 +44,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
+          data-testid="toggle-json-array-button"
           className="hover:text-muted-foreground text-muted-foreground"
         >
           {isExpanded ? '▼' : '▶'} [
@@ -51,7 +52,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
         {isExpanded && (
           <>
             {value.map((item, index) => (
-              <div key={index} style={{ marginLeft: '1.5rem' }}>
+              <div key={index} className="ml-6">
                 {indent}
                 <JsonNode value={item} level={level + 1} />
                 {index < value.length - 1 && ','}
@@ -75,6 +76,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
+          data-testid="toggle-json-object-button"
           className="hover:text-muted-foreground text-muted-foreground"
         >
           {isExpanded ? '▼' : '▶'} {'{'}
@@ -82,7 +84,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
         {isExpanded && (
           <>
             {entries.map(([key, val], index) => (
-              <div key={key} style={{ marginLeft: '1.5rem' }}>
+              <div key={key} className="ml-6">
                 {indent}
                 <span className="text-purple-500">&quot;{key}&quot;</span>:{' '}
                 <JsonNode value={val} level={level + 1} />

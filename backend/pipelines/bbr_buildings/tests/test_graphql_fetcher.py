@@ -231,7 +231,7 @@ class TestSchemaConsistency:
         columns = fetcher.conn.execute(
             "SELECT column_name, column_type FROM (DESCRIBE test_page)"
         ).fetchall()
-        col_types = {name: dtype for name, dtype in columns}
+        col_types = dict(columns)
 
         for col in [
             "id_lokalId",

@@ -6,12 +6,12 @@ all CVR enrichment pipeline steps to ensure consistency and maintainability.
 """
 
 from datetime import UTC
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class CVREnrichmentStep(str, Enum):
+class CVREnrichmentStep(StrEnum):
     """Enumeration of CVR enrichment pipeline steps."""
 
     COLLECTION = "collection"

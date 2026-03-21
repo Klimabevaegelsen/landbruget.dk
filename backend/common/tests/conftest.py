@@ -4,6 +4,7 @@ This module provides common fixtures used across all backend pipeline tests,
 including mocks for GCS, DuckDB, and Danish data validation helpers.
 """
 
+import contextlib
 import tempfile
 from collections.abc import Generator
 from datetime import date
@@ -77,12 +78,9 @@ def mock_duckdb_connection() -> Generator[duckdb.DuckDBPyConnection, None, None]
     conn = duckdb.connect(":memory:")
 
     # Install and load spatial extension
-    try:
+    with contextlib.suppress(Exception):
         conn.execute("INSTALL spatial;")
         conn.execute("LOAD spatial;")
-    except Exception:
-        # Spatial extension might already be loaded or not available
-        pass
 
     yield conn
 

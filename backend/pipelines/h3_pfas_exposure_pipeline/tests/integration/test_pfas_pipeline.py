@@ -331,7 +331,7 @@ def test_pfas_intensity_calculations(duckdb_conn, spatial_joiner, full_test_data
     """).fetchall()
 
     for row in pfas_cells:
-        h3_cell, total_grams, area_ha, reported_intensity, calculated_intensity = row
+        h3_cell, _total_grams, area_ha, reported_intensity, calculated_intensity = row
 
         # Verify intensity calculation is correct
         if area_ha > 0:

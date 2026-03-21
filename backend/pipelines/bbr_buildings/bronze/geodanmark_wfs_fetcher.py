@@ -182,7 +182,7 @@ class GeoDanmarkWFSFetcher:
 
                 # Collect results as they complete
                 for future in as_completed(future_to_batch):
-                    batch_offset, batch_size = future_to_batch[future]
+                    batch_offset, _batch_size = future_to_batch[future]
                     batch_num = (
                         batch_offset // optimal_batch_size
                     ) + 2  # +2 because test batch is #1

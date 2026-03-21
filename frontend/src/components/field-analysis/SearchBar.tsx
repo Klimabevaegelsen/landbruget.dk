@@ -238,6 +238,7 @@ export function SearchBar({
           value={query}
           onChange={handleInputChange}
           placeholder={placeholder}
+          data-testid="address-search-input"
           className="border-border text-foreground placeholder:text-muted-foreground bg-background/95 block w-full rounded-lg border py-3 pr-10 pl-10 text-base shadow-lg backdrop-blur-sm transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
         />
 
@@ -245,6 +246,7 @@ export function SearchBar({
         {query && (
           <button
             onClick={clearSearch}
+            data-testid="clear-search-button"
             className="hover:text-muted-foreground text-muted-foreground absolute inset-y-0 right-0 flex items-center pr-3 transition-colors"
           >
             <X className="h-4 w-4" />
@@ -275,6 +277,7 @@ export function SearchBar({
               <button
                 key={`${result.tekst}-${index}`}
                 onClick={() => handleSelectResult(result)}
+                data-testid={`search-result-${index}-button`}
                 className={`hover:bg-muted w-full border-b border-gray-100 px-4 py-4 text-left transition-colors last:border-b-0 lg:py-3 ${
                   index === selectedIndex
                     ? 'bg-blue-50 text-blue-900'

@@ -1,11 +1,11 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class DataSourceType(str, Enum):
+class DataSourceType(StrEnum):
     """Types of data sources"""
 
     GOOGLE_DRIVE = "google_drive"

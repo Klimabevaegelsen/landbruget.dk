@@ -129,10 +129,10 @@ def demonstrate_spatial_join_operator() -> bool:
             (
                 building_id,
                 building_type,
-                building_area,
+                _building_area,
                 field_id,
                 field_type,
-                field_area,
+                _field_area,
                 intersection_area,
             ) = row
             print(

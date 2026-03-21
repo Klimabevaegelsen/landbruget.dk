@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import PesticideAnalysisVisualization from '@/components/pesticide-analysis/PesticideAnalysisVisualization';
+import { PesticideAnalysisVisualization } from '@/components/pesticide-analysis/PesticideAnalysisVisualization';
 
 export const metadata: Metadata = {
   title: 'Pesticidanalyse | Landbruget.dk',

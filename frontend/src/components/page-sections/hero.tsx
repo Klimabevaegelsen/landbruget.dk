@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { GlobalSearch } from '../global-search';
+import { GlobalSearch } from '@/components/global-search';
 import { useHomepageStatsCache } from '@/hooks/useHomepageStatsCache';
 import { useTheme } from '@/components/theme/theme-provider';
 import { BarChart3 } from 'lucide-react';
@@ -17,7 +17,7 @@ interface HomepageStatistics {
   fallback?: boolean;
 }
 
-export default function Hero() {
+export function Hero() {
   const [stats, setStats] = useState<HomepageStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [usingCache, setUsingCache] = useState(false);
@@ -159,8 +159,7 @@ export default function Hero() {
                 : '/images/hero/hero-mobile.jpg'
             }
             alt="Danish agricultural landscape"
-            className="h-full w-full max-w-full object-cover object-center"
-            style={{ aspectRatio: '16 / 9' }}
+            className="aspect-video h-full w-full max-w-full object-cover object-center"
             loading="eager"
             decoding="async"
           />

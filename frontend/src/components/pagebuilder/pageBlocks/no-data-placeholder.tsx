@@ -14,10 +14,7 @@ export function NoDataPlaceholder() {
   return (
     <div className="relative">
       {/* Placeholder chart area */}
-      <div
-        style={{ width: '100%', height: 250, minHeight: 250, minWidth: 100 }}
-        className="border-muted-foreground/25 bg-muted/50 mt-4 flex items-center justify-center rounded-lg border-2 border-dashed"
-      >
+      <div className="border-muted-foreground/25 bg-muted/50 mt-4 flex h-[250px] min-h-[250px] w-full min-w-[100px] items-center justify-center rounded-lg border-2 border-dashed">
         <ResponsiveContainer>
           <div className="flex h-full flex-col items-center justify-center p-6 text-center">
             <div className="bg-muted mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg">
@@ -56,6 +53,7 @@ export function NoDataPlaceholder() {
           </p>
           <button
             onClick={handleClick}
+            data-testid="contribute-datasources-button"
             className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer rounded-md px-6 py-3 font-medium transition-colors"
           >
             Bidrag med datakilder

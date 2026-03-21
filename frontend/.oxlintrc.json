@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc/refs/heads/json-schema-for-oxlint/.oxlintrc.schema.json",
+  "jsPlugins": ["./oxlint-plugin-landbruget/plugin.js"],
+  "rules": {
+    "landbruget/max-component-size": "warn",
+    "landbruget/no-service-import-in-components": "warn",
+    "landbruget/no-raw-process-env": "warn",
+    "landbruget/require-data-testid": "warn",
+    "landbruget/no-default-export": "warn",
+    "landbruget/enforce-absolute-imports": "warn",
+    "landbruget/no-inline-styles": "warn",
+    "landbruget/no-hardcoded-api-urls": "warn",
+    "typescript/no-explicit-any": "warn"
+  },
+  "ignorePatterns": [
+    "src/components/field-analysis/FieldAnalysisMap.tsx",
+    "src/app/markanalyse/components/shared/field-details-content.tsx"
+  ]
+}

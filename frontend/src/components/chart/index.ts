@@ -12,7 +12,7 @@ export {
 export { EnhancedTooltip, CompactTooltip } from './enhanced-tooltip';
 
 export { AnimatedNumber, StatusIndicator } from './animated-number';
-export { default as CustomLegend } from './custom-legend';
+export { CustomLegend } from './custom-legend';
 export { DocumentationAccordion } from './documentation-accordion';
 export { CSVDownloadButton } from './csv-download-button';
 export { MapCSVDownloadButton } from './map-csv-download-button';

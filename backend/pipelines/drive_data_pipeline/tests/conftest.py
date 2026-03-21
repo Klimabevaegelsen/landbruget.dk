@@ -22,12 +22,12 @@ sys.path.insert(0, str(_backend_root))  # For common package and other backend m
 sys.path.insert(0, str(_pipelines_dir))  # For drive_data_pipeline package
 
 # Import common modules so they're available as top-level imports (as expected by code)
-import common.pipeline_metadata
+import common.pipeline_metadata  # noqa: E402
 
 sys.modules["pipeline_metadata"] = common.pipeline_metadata
 
 # Now we can import using package-style imports
-from drive_data_pipeline.config.settings import Settings
+from drive_data_pipeline.config.settings import Settings  # noqa: E402
 
 
 @pytest.fixture

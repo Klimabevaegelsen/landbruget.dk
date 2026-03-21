@@ -21,9 +21,9 @@ backend_dir = test_file_path.parents[5]  # Go up 5 levels from test file to back
 if backend_dir.exists() and str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from common.gcs import GCSDataAccess
+from common.gcs import GCSDataAccess  # noqa: E402
 
-from unified_pipeline.common.base import BaseJobConfig, BaseSource
+from unified_pipeline.common.base import BaseJobConfig, BaseSource  # noqa: E402
 
 
 class MockJobConfig(BaseJobConfig):

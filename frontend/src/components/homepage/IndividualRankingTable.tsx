@@ -18,7 +18,7 @@ interface IndividualRankingTableProps {
   initialLimit?: number;
 }
 
-export default function IndividualRankingTable({
+export function IndividualRankingTable({
   rankingId,
   title,
   category,

@@ -220,7 +220,7 @@ class TestGetDuckDBWithR2:
         {
             "GCS_ACCESS_KEY_ID": "legacy-key",
             "GCS_SECRET_ACCESS_KEY": "legacy-secret",
-            "HOME": os.environ.get("HOME", "/tmp"),
+            "HOME": os.environ.get("HOME", "/tmp"),  # noqa: S108
         },
         clear=True,
     )

@@ -71,6 +71,22 @@ src/
 └── content/       # Static content
 ```
 
+## Lint-Enforced Rules (oxlint custom plugin)
+
+These rules are enforced by `npm run lint` via the custom plugin in `oxlint-plugin-landbruget/plugin.js`:
+
+- **Max 150 lines per file** — split large components into focused modules
+- **No service imports in components** — `src/components/` can't import from `@/services/` (type imports OK). Data flows through props or hooks.
+- **No raw `process.env`** — use `@/lib/env.ts` instead (except in `lib/env.ts` and `app/api/`)
+- **`data-testid` on interactives** — every `<button>`, `<input>`, `<select>`, `<textarea>` needs `data-testid`
+- **No `any` types** — use proper TypeScript types
+- **No default exports** — use named exports (`export function X`) except in Next.js page/layout/error files. Named exports are grep-able.
+- **Absolute imports only** — use `@/components/X` not `../../components/X`. Agents navigate absolute paths better.
+- **No inline styles** — use Tailwind classes instead of `style={{...}}`. `style={variable}` is allowed for computed values.
+- **No hardcoded API URLs** — no `supabase.co` or `localhost` strings. Use `@/lib/env.ts`.
+
+Config: `frontend/.oxlintrc.json` | Plugin: `frontend/oxlint-plugin-landbruget/plugin.js`
+
 ## Common Mistakes to Avoid
 
 - Using Supabase JS client — use `apiFetch()` instead

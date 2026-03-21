@@ -37,7 +37,7 @@ def get_r2_filesystem() -> s3fs.S3FileSystem:
     r2_account_id = os.getenv("R2_ACCOUNT_ID")
 
     if not (r2_access_key and r2_secret_key and r2_account_id):
-        raise EnvironmentError(
+        raise OSError(
             "R2 credentials not configured. Set R2_ACCESS_KEY_ID, "
             "R2_SECRET_ACCESS_KEY, and R2_ACCOUNT_ID environment variables."
         )

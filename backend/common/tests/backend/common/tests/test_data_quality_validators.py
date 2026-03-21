@@ -689,7 +689,7 @@ def test_full_pipeline_quality_check(
 
     mock_duckdb_connection.execute("CREATE TABLE bronze_companies AS SELECT * FROM bronze_df")
 
-    # Silver: Normalize and validate
+    # Apply silver-layer normalization and validation
     mock_duckdb_connection.execute(
         f"""
         CREATE TABLE silver_companies AS

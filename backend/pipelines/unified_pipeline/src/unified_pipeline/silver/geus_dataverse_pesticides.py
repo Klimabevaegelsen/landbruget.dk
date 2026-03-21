@@ -31,6 +31,7 @@ Key columns in PFAS output:
 - geometry: Point geometry
 """
 
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -106,14 +107,16 @@ class GEUSDataversePesticidesSilver(
         self.log.info(f"Downloading .rds file from {storage_path}")
 
         # Create temporary file
-        tmp_file = tempfile.NamedTemporaryFile(suffix=".rds", delete=False)
-        tmp_path = Path(tmp_file.name)
-        tmp_file.close()
+        tmp_fd, tmp_name = tempfile.mkstemp(suffix=".rds")
+        os.close(tmp_fd)
+        tmp_path = Path(tmp_name)
 
         # Download using s3fs (R2) directly (binary read)
-        with self.gcs_access.fs.open(storage_path, "rb") as gcs_file:
-            with open(tmp_path, "wb") as local_file:
-                local_file.write(gcs_file.read())
+        with (
+            self.gcs_access.fs.open(storage_path, "rb") as gcs_file,
+            tmp_path.open("wb") as local_file,
+        ):
+            local_file.write(gcs_file.read())
 
         self.log.info(f"Downloaded .rds to {tmp_path}")
         return tmp_path
@@ -141,7 +144,7 @@ class GEUSDataversePesticidesSilver(
         result = pyreadr.read_r(str(rds_path))
 
         # pyreadr returns a dict with None key for single objects
-        df = list(result.values())[0]
+        df = next(iter(result.values()))
 
         self.log.info(f"Loaded DataFrame with {len(df):,} rows and {len(df.columns)} columns")
         self.log.info(f"Columns: {list(df.columns)}")

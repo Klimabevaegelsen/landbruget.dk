@@ -9,6 +9,7 @@ import base64
 import os
 import sys
 from datetime import datetime, timedelta
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -74,7 +75,7 @@ def mock_certificate():
 @pytest.fixture
 def mock_p12_data(mock_certificate):
     """Create mock PKCS12 data for testing."""
-    cert, private_key = mock_certificate
+    _cert, _private_key = mock_certificate
     password = "test_password"
 
     # Return mock bytes for the P12 data
@@ -91,15 +92,13 @@ def mock_env_vars(mock_p12_data, tmp_path):
     cert_path = tmp_path / "test_cert.p12"
     cert_path.write_bytes(p12_data)
 
-    env_vars = {
+    return {
         "FVM_USERNAME": "test_user",
         "FVM_PASSWORD": "test_password",
         "VETSTAT_CERTIFICATE": base64.b64encode(p12_data).decode(),
         "VETSTAT_CERTIFICATE_PATH": str(cert_path),
         "VETSTAT_CERTIFICATE_PASSWORD": password,
     }
-
-    return env_vars
 
 
 # =============================================================================
@@ -111,7 +110,7 @@ def mock_env_vars(mock_p12_data, tmp_path):
 class MockBronzeAuth:
     """Mock implementation of bronze.auth module."""
 
-    ENDPOINTS = {
+    ENDPOINTS: ClassVar[dict[str, str]] = {
         "chr_dyr": "https://ws.fvst.dk/service/CHR_dyrWS?wsdl",
         "stamdata": "https://ws.fvst.dk/service/CHR_stamdataWS?wsdl",
         "diko": "https://ws.fvst.dk/service/CHR_dikoWS?wsdl",
@@ -256,7 +255,9 @@ class TestGetFvmCredentials:
 
         with (
             patch.dict(os.environ, env_vars, clear=True),
-            pytest.raises(ValueError, match="Missing required environment variables.*FVM_USERNAME"),
+            pytest.raises(
+                ValueError, match=r"Missing required environment variables.*FVM_USERNAME"
+            ),
         ):
             get_fvm_credentials()
 
@@ -269,7 +270,9 @@ class TestGetFvmCredentials:
 
         with (
             patch.dict(os.environ, env_vars, clear=True),
-            pytest.raises(ValueError, match="Missing required environment variables.*FVM_PASSWORD"),
+            pytest.raises(
+                ValueError, match=r"Missing required environment variables.*FVM_PASSWORD"
+            ),
         ):
             get_fvm_credentials()
 
@@ -284,7 +287,7 @@ class TestGetFvmCredentials:
         with (
             patch.dict(os.environ, env_vars, clear=True),
             pytest.raises(
-                ValueError, match="Missing required environment variables.*VETSTAT_CERTIFICATE"
+                ValueError, match=r"Missing required environment variables.*VETSTAT_CERTIFICATE"
             ),
         ):
             get_fvm_credentials()
@@ -300,7 +303,7 @@ class TestGetFvmCredentials:
             patch.dict(os.environ, env_vars, clear=True),
             pytest.raises(
                 ValueError,
-                match="Missing required environment variables.*VETSTAT_CERTIFICATE_PASSWORD",
+                match=r"Missing required environment variables.*VETSTAT_CERTIFICATE_PASSWORD",
             ),
         ):
             get_fvm_credentials()

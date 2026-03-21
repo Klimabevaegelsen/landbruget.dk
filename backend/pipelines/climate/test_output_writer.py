@@ -177,7 +177,7 @@ class TestClimateOutputWriter:
 
         records = writer._reports_to_records(reports)
         assert len(records) == 2
-        assert set(r["year"] for r in records) == {2023, 2024}
+        assert {r["year"] for r in records} == {2023, 2024}
 
         # Check metadata year range
         metadata = writer._build_metadata(reports, "20240101_120000")

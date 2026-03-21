@@ -1,6 +1,6 @@
 'use client';
 
-import { ClimateEmission } from '@/services/supabase/climate';
+import type { ClimateEmission } from '@/services/supabase/climate';
 import { HorizontalStackedBarChart } from '@/services/supabase/types';
 import { BlockBarChart } from '@/components/pagebuilder/pageBlocks/block-bar-chart';
 

@@ -50,7 +50,7 @@ def get_drive_service(credentials_path: Path | None = None, use_public_access: b
             logger.info(f"Using service account credentials from {credentials_path}")
         else:
             # Try Application Default Credentials
-            credentials, project = default(scopes=scopes)
+            credentials, _project = default(scopes=scopes)
             logger.info("Using Application Default Credentials")
 
         service = build("drive", "v3", credentials=credentials)

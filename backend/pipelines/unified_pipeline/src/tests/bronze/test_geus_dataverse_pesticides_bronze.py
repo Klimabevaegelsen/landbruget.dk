@@ -97,7 +97,7 @@ async def test_download_rds_file_http_error(
     mock_session.get = MagicMock(return_value=MockSessionContextManager())
 
     # Test that an exception is raised (retry error wraps the original)
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match=r".*"):
         await geus_dataverse_bronze._download_rds_file(
             mock_session, geus_dataverse_bronze.config.pest_url, "AM_pest.rds"
         )

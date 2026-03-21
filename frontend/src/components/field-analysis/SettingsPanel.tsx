@@ -41,6 +41,7 @@ export function SettingsPanel({ className = '' }: SettingsPanelProps) {
         <div className="border-border bg-card flex items-center rounded-lg border p-1">
           <button
             onClick={() => setTheme('light')}
+            data-testid="settings-theme-light-button"
             className={`flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               theme === 'light'
                 ? 'bg-background text-foreground shadow-sm'
@@ -52,6 +53,7 @@ export function SettingsPanel({ className = '' }: SettingsPanelProps) {
           </button>
           <button
             onClick={() => setTheme('dark')}
+            data-testid="settings-theme-dark-button"
             className={`flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               theme === 'dark'
                 ? 'bg-background text-foreground shadow-sm'
@@ -63,6 +65,7 @@ export function SettingsPanel({ className = '' }: SettingsPanelProps) {
           </button>
           <button
             onClick={() => setTheme('system')}
+            data-testid="settings-theme-system-button"
             className={`flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               theme === 'system'
                 ? 'bg-background text-foreground shadow-sm'
@@ -80,6 +83,7 @@ export function SettingsPanel({ className = '' }: SettingsPanelProps) {
         <h4 className="text-foreground text-sm font-medium">Kort</h4>
         <button
           onClick={handleToggleFullscreen}
+          data-testid="toggle-fullscreen-button"
           className="bg-background hover:bg-muted/50 border-border flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
         >
           <Eye className="h-4 w-4" />
@@ -99,6 +103,7 @@ export function SettingsPanel({ className = '' }: SettingsPanelProps) {
         <h4 className="text-foreground text-sm font-medium">Data</h4>
         <button
           onClick={handleExportData}
+          data-testid="export-data-button"
           className="bg-background hover:bg-muted/50 border-border flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
         >
           <Download className="h-4 w-4" />

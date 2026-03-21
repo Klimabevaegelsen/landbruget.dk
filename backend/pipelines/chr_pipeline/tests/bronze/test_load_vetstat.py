@@ -73,7 +73,7 @@ class MockEtree:
         return MockElement("root")
 
     @staticmethod
-    def Element(tag, attrib=None, nsmap=None):
+    def Element(tag, attrib=None, nsmap=None):  # noqa: N802  # mirrors lxml API
         """Create element."""
         elem = MockElement(tag, namespaces=nsmap)
         if attrib:
@@ -81,7 +81,7 @@ class MockEtree:
         return elem
 
     @staticmethod
-    def SubElement(parent, tag, attrib=None, nsmap=None):
+    def SubElement(parent, tag, attrib=None, nsmap=None):  # noqa: N802  # mirrors lxml API
         """Create sub-element."""
         elem = MockElement(tag, namespaces=nsmap)
         if attrib:
@@ -470,7 +470,9 @@ class TestGetVetstatCredentials:
                 },
                 clear=True,
             ),
-            pytest.raises(ValueError, match="Missing required environment variables.*FVM_USERNAME"),
+            pytest.raises(
+                ValueError, match=r"Missing required environment variables.*FVM_USERNAME"
+            ),
         ):
             get_vetstat_credentials()
 

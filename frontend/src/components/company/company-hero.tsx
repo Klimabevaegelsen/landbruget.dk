@@ -1,12 +1,12 @@
 'use client';
 
 import { CompanyResponse } from '@/services/supabase/types';
-import { BasicCompanyInfo } from '@/services/supabase/company-basic';
-import { Container } from '../layout/container';
-import { Button } from '../ui/button';
-import { Skeleton } from '../ui/skeleton';
+import type { BasicCompanyInfo } from '@/services/supabase/company-basic';
+import { Container } from '@/components/layout/container';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeftIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
-import { BlockMapChart } from '../pagebuilder/pageBlocks/block-map-chart';
+import { BlockMapChart } from '@/components/pagebuilder/pageBlocks/block-map-chart';
 import { useRouter } from 'next/navigation';
 
 interface CompanyHeroProps {

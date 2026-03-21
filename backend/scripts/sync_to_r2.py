@@ -27,7 +27,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 # Add parent directory to path to access common modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -46,8 +46,6 @@ except ImportError:
 class R2SyncError(Exception):
     """Custom exception for R2 sync errors."""
 
-    pass
-
 
 class GCSToR2Syncer:
     """Sync data from GCS to Cloudflare R2 using rclone."""
@@ -59,7 +57,7 @@ class GCSToR2Syncer:
         r2_account_id: str,
         r2_access_key_id: str,
         r2_secret_access_key: str,
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize syncer with credentials.
@@ -85,7 +83,7 @@ class GCSToR2Syncer:
         else:
             self.logger = logging.getLogger("r2_sync")
 
-        self.sync_stats: Dict[str, Any] = {}
+        self.sync_stats: dict[str, Any] = {}
 
     def verify_rclone_installed(self) -> None:
         """Verify that rclone is installed and available."""
@@ -93,13 +91,13 @@ class GCSToR2Syncer:
             result = subprocess.run(["rclone", "version"], capture_output=True, text=True, check=True)
             version = result.stdout.split("\n")[0]
             self.logger.info(f"Found {version}")
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             raise R2SyncError(
                 "rclone is not installed or not in PATH. "
                 "Install with: brew install rclone (macOS) or apt install rclone (Linux)"
-            )
+            ) from e
         except subprocess.CalledProcessError as e:
-            raise R2SyncError(f"Failed to verify rclone: {e}")
+            raise R2SyncError(f"Failed to verify rclone: {e}") from e
 
     def configure_rclone_remotes(self) -> None:
         """Configure rclone remotes for GCS and R2."""
@@ -157,7 +155,7 @@ class GCSToR2Syncer:
         except subprocess.CalledProcessError as e:
             self.logger.warning(f"R2 remote configuration: {e.stderr.decode()}")
 
-    def sync_directory(self, directory: str, dry_run: bool = False, verbose: bool = False) -> Dict[str, Any]:
+    def sync_directory(self, directory: str, dry_run: bool = False, verbose: bool = False) -> dict[str, Any]:
         """
         Sync a specific directory from GCS to R2.
 
@@ -225,7 +223,7 @@ class GCSToR2Syncer:
 
         except subprocess.CalledProcessError as e:
             duration = (datetime.now() - start_time).total_seconds()
-            error_msg = e.stderr if e.stderr else str(e)
+            error_msg = e.stderr or str(e)
 
             self.logger.error(f"Failed to sync {directory}/: {error_msg}")
 
@@ -239,7 +237,7 @@ class GCSToR2Syncer:
                 "error": error_msg,
             }
 
-    def generate_manifest(self, output_path: Optional[str] = None) -> Dict[str, Any]:
+    def generate_manifest(self, output_path: str | None = None) -> dict[str, Any]:
         """
         Generate manifest.json with metadata about synced datasets.
 
@@ -273,14 +271,14 @@ class GCSToR2Syncer:
             output_file = Path(output_path)
             output_file.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(output_file, "w", encoding="utf-8") as f:
+            with output_file.open("w", encoding="utf-8") as f:
                 json.dump(manifest, f, indent=2, ensure_ascii=False)
 
             self.logger.info(f"Manifest saved to {output_path}")
 
         return manifest
 
-    def _get_dataset_metadata(self) -> Dict[str, Any]:
+    def _get_dataset_metadata(self) -> dict[str, Any]:
         """
         Get metadata about datasets in R2.
 
@@ -310,7 +308,7 @@ class GCSToR2Syncer:
 
         return datasets
 
-    def sync_all(self, dry_run: bool = False, verbose: bool = False) -> Dict[str, Any]:
+    def sync_all(self, dry_run: bool = False, verbose: bool = False) -> dict[str, Any]:
         """
         Sync all required directories (silver and gold).
 
@@ -360,7 +358,7 @@ class GCSToR2Syncer:
         }
 
 
-def validate_environment() -> Dict[str, str]:
+def validate_environment() -> dict[str, str]:
     """
     Validate that all required environment variables are set.
 

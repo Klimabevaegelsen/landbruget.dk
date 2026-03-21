@@ -15,7 +15,7 @@ import pytest
 # =============================================================================
 
 
-class MockFault(Exception):
+class MockFaultError(Exception):
     """Mock zeep.exceptions.Fault for testing."""
 
     pass
@@ -23,12 +23,12 @@ class MockFault(Exception):
 
 mock_zeep = MagicMock()
 mock_zeep.exceptions = MagicMock()
-mock_zeep.exceptions.Fault = MockFault
+mock_zeep.exceptions.Fault = MockFaultError
 sys.modules["zeep"] = mock_zeep
 sys.modules["zeep.exceptions"] = mock_zeep.exceptions
 
 # Now we can "import" Fault from our mock
-Fault = MockFault
+Fault = MockFaultError
 
 
 # =============================================================================
@@ -158,7 +158,7 @@ def load_herd_details(client, username, herd_number, species_code):
 
         return response
 
-    except MockFault:
+    except MockFaultError:
         return None
     except Exception:
         return None
@@ -222,8 +222,7 @@ def mock_besaetning_client():
 
     # Add get_type method for factory creation
     def mock_get_type(type_name):
-        mock_factory = MagicMock()
-        return mock_factory
+        return MagicMock()
 
     client.get_type = mock_get_type
 
@@ -355,7 +354,7 @@ class TestLoadHerdList:
         username = "test_user"
         start_herd = 100000
 
-        herd_list, has_more, last_herd = load_herd_list(
+        _herd_list, _has_more, _last_herd = load_herd_list(
             mock_besaetning_client, username, species_code, usage_code, start_herd
         )
 
@@ -429,7 +428,7 @@ class TestLoadHerdList:
         usage_code = 11
         username = "test_user"
 
-        herd_list, has_more, last_herd = load_herd_list(
+        herd_list, _has_more, _last_herd = load_herd_list(
             mock_besaetning_client, username, species_code, usage_code
         )
 
@@ -603,7 +602,7 @@ class TestDateFiltering:
         usage_code = 11
         username = "test_user"
 
-        herd_list, has_more, last_herd = load_herd_list(
+        herd_list, _has_more, _last_herd = load_herd_list(
             mock_besaetning_client, username, species_code, usage_code
         )
 
@@ -628,7 +627,9 @@ class TestPaginationHandling:
 
         mock_besaetning_client.service.listBesaetningerMedBrugsart.return_value = response
 
-        herd_list, has_more, last_herd = load_herd_list(mock_besaetning_client, "test_user", 15, 11)
+        _herd_list, has_more, last_herd = load_herd_list(
+            mock_besaetning_client, "test_user", 15, 11
+        )
 
         assert has_more is True
         assert last_herd == 123457
@@ -646,7 +647,9 @@ class TestPaginationHandling:
 
         mock_besaetning_client.service.listBesaetningerMedBrugsart.return_value = response
 
-        herd_list, has_more, last_herd = load_herd_list(mock_besaetning_client, "test_user", 15, 11)
+        _herd_list, has_more, last_herd = load_herd_list(
+            mock_besaetning_client, "test_user", 15, 11
+        )
 
         assert has_more is True
         assert last_herd is None  # Should be None when TilBesNr is missing
@@ -666,7 +669,9 @@ class TestErrorHandling:
 
         mock_besaetning_client.service.listBesaetningerMedBrugsart.return_value = malformed_response
 
-        herd_list, has_more, last_herd = load_herd_list(mock_besaetning_client, "test_user", 15, 11)
+        herd_list, has_more, _last_herd = load_herd_list(
+            mock_besaetning_client, "test_user", 15, 11
+        )
 
         # Should handle gracefully and return empty list
         assert len(herd_list) == 0
@@ -680,7 +685,9 @@ class TestErrorHandling:
             "Request timeout"
         )
 
-        herd_list, has_more, last_herd = load_herd_list(mock_besaetning_client, "test_user", 15, 11)
+        herd_list, has_more, _last_herd = load_herd_list(
+            mock_besaetning_client, "test_user", 15, 11
+        )
 
         # Should return empty list on timeout
         assert len(herd_list) == 0

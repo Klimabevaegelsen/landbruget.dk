@@ -5,18 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Search, Filter, BarChart3 } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
-import CompanyFilterPanel from './CompanyFilterPanel';
-import CompanyListView from './CompanyListView';
-import CompanyDetailsPanel from './CompanyDetailsPanel';
+import { CompanyFilterPanel } from './CompanyFilterPanel';
+import { CompanyListView } from './CompanyListView';
+import { CompanyDetailsPanel } from './CompanyDetailsPanel';
 import {
   PesticideAnalysisFilters,
   CompanySummary,
   PesticideAnalysisResponse,
 } from './types';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+import { SUPABASE_URL } from '@/lib/env';
 
-export default function PesticideAnalysisVisualization() {
+export function PesticideAnalysisVisualization() {
   const [filters, setFilters] = useState<PesticideAnalysisFilters>({
     geography: 'country',
     years: [], // Empty array means 'all years'

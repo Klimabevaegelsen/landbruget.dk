@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Filter, RefreshCw, Clock, Database } from 'lucide-react';
-import RankingTable from './RankingTable';
+import { RankingTableEnhanced as RankingTable } from './RankingTable';
 import { useRankingsCache } from '@/hooks/useRankingsCache';
 import { useCompanyCache } from '@/hooks/useCompanyCache';
 
@@ -47,7 +47,7 @@ const CATEGORY_FILTERS = [
   { key: 'worker', label: 'Medarbejdere', count: 5 },
 ];
 
-export default function HomepageRankings() {
+export function HomepageRankings() {
   const [rankings, setRankings] = useState<RankingTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

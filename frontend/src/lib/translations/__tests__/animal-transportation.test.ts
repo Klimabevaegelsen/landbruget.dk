@@ -2,7 +2,7 @@ import {
   translateDestinationType,
   translateOriginType,
   getAllDestinationTypeTranslations,
-} from '../animal-transportation';
+} from '@/lib/translations/animal-transportation';
 
 describe('Animal Transportation Translations', () => {
   describe('translateDestinationType', () => {

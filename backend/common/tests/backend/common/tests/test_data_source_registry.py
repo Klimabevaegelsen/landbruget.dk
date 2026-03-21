@@ -61,7 +61,7 @@ class TestDataSourceRegistryCompleteness:
         """Source keys should be valid Python identifiers (snake_case)."""
         import re
 
-        for source_name in DATA_SOURCE_REGISTRY.keys():
+        for source_name in DATA_SOURCE_REGISTRY:
             assert re.match(r"^[a-z][a-z0-9_]*$", source_name), (
                 f"Invalid source key format: {source_name} (expected snake_case)"
             )

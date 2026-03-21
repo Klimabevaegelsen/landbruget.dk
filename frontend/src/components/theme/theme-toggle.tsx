@@ -10,6 +10,7 @@ export function ThemeToggle() {
     <div className="border-border bg-card flex items-center rounded-lg border p-1">
       <button
         onClick={() => setTheme('light')}
+        data-testid="theme-light-button"
         className={`flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
           theme === 'light'
             ? 'bg-background text-foreground shadow-sm'
@@ -21,6 +22,7 @@ export function ThemeToggle() {
       </button>
       <button
         onClick={() => setTheme('dark')}
+        data-testid="theme-dark-button"
         className={`flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
           theme === 'dark'
             ? 'bg-background text-foreground shadow-sm'
@@ -32,6 +34,7 @@ export function ThemeToggle() {
       </button>
       <button
         onClick={() => setTheme('system')}
+        data-testid="theme-system-button"
         className={`flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
           theme === 'system'
             ? 'bg-background text-foreground shadow-sm'
@@ -72,6 +75,7 @@ export function SimpleThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
+      data-testid="toggle-theme-button"
       className="text-muted-foreground hover:bg-muted hover:text-foreground flex items-center justify-center rounded-md p-2 transition-colors"
       aria-label="Toggle theme"
     >

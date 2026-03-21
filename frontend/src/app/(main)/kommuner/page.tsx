@@ -17,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import MunicipalityDetailsModal from '@/components/kommuner/MunicipalityDetailsModal';
+import { MunicipalityDetailsModal } from '@/components/kommuner/MunicipalityDetailsModal';
 
 interface MunicipalityRanking {
   municipality: string;

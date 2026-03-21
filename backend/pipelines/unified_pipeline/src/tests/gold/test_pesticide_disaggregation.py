@@ -96,7 +96,7 @@ def setup_test_duckdb(
     """)
 
     # Handle pesticide data - convert to DataFrame if it's a dict
-    if isinstance(pesticide_data, dict) or isinstance(pesticide_data, list):
+    if isinstance(pesticide_data, (dict, list)):
         pest_df = pd.DataFrame(pesticide_data)
     elif pesticide_data == () or (hasattr(pesticide_data, "__len__") and len(pesticide_data) == 0):
         # Empty pesticide data - create empty table with expected schema

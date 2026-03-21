@@ -354,7 +354,7 @@ def test_coordinate_precision_preserved(
     """
     ).fetchone()
 
-    x_orig, y_orig, lon, lat = result
+    _x_orig, _y_orig, lon, lat = result
 
     # Check that we have reasonable precision (at least 4 decimal places)
     lon_str = f"{lon:.10f}"
@@ -400,7 +400,7 @@ def test_invalid_wkt_handling(
     """Test that invalid WKT strings are rejected."""
     invalid_wkt = "POINT(invalid)"
 
-    with pytest.raises(Exception):  # DuckDB will raise an error for invalid WKT
+    with pytest.raises(Exception, match="Invalid Input"):  # DuckDB will raise an error for invalid WKT
         mock_duckdb_connection.execute(
             f"""
             SELECT ST_GeomFromText('{invalid_wkt}')

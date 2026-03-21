@@ -21,7 +21,7 @@ const MobileMenu = React.forwardRef<HTMLDivElement, MobileMenuProps>(
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger
             className={cn(
-              'touch-target fixed z-50',
+              'touch-target fixed z-50 top-[max(1rem,env(safe-area-inset-top))] left-[max(1rem,env(safe-area-inset-left))]',
               'inline-flex items-center justify-center',
               'border-border h-10 w-10 rounded-full border shadow-lg',
               'bg-background/95 backdrop-blur-xl',
@@ -30,10 +30,6 @@ const MobileMenu = React.forwardRef<HTMLDivElement, MobileMenuProps>(
               'transition-colors duration-200',
               triggerClassName
             )}
-            style={{
-              top: 'max(1rem, env(safe-area-inset-top))',
-              left: 'max(1rem, env(safe-area-inset-left))',
-            }}
             aria-label="Åbn menu"
           >
             <Menu size={20} />
@@ -105,6 +101,7 @@ const MobileMenuItem = React.forwardRef<HTMLButtonElement, MobileMenuItemProps>(
     return (
       <button
         ref={ref}
+        data-testid={`mobile-menu-${label.toLowerCase().replace(/\s+/g, '-')}-button`}
         className={cn(
           'touch-target flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left',
           'transition-colors duration-200',

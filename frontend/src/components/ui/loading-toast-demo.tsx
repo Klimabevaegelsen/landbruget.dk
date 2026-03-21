@@ -57,6 +57,7 @@ export function LoadingToastDemo() {
             step="500"
             value={simulateDelay}
             onChange={(e) => setSimulateDelay(Number(e.target.value))}
+            data-testid="delay-range-input"
             className="w-full"
           />
         </div>

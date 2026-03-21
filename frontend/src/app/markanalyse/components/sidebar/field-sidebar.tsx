@@ -168,6 +168,7 @@ function FieldSidebarExpandedContent({
                     type="checkbox"
                     checked={visible}
                     onChange={() => onLayerToggle(key as keyof LayerVisibility)}
+                    data-testid={`layer-${key}-checkbox`}
                     className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
                   />
                   <span className="font-medium">{layerNames[key] || key}</span>
@@ -189,6 +190,7 @@ function FieldSidebarExpandedContent({
                 onChange={(e) =>
                   onFilterChange({ organicOnly: e.target.checked })
                 }
+                data-testid="organic-only-checkbox"
                 className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
               />
               <span className="font-medium">Kun økologiske marker</span>
@@ -206,6 +208,7 @@ function FieldSidebarExpandedContent({
                       .value as FilterState['visualizationMode'],
                   })
                 }
+                data-testid="visualization-mode-select"
                 className="border-border bg-background hover:bg-accent/20 focus:ring-primary w-full rounded-lg border px-3 py-2.5 text-sm transition-colors focus:border-transparent focus:ring-2"
               >
                 <option value="total_pesticide_belastning">
@@ -229,6 +232,7 @@ function FieldSidebarExpandedContent({
                 onChange={(e) =>
                   onFilterChange({ useDecileColoring: e.target.checked })
                 }
+                data-testid="decile-coloring-checkbox"
                 className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
               />
               <span className="font-medium">Decile farvning</span>
@@ -252,6 +256,7 @@ function FieldSidebarExpandedContent({
                   value={year}
                   checked={yearSelection.selectedYear === year}
                   onChange={() => onYearChange(year)}
+                  data-testid={`year-${year}-radio`}
                   className="text-primary border-border focus:ring-primary mr-2 h-4 w-4 focus:ring-2"
                 />
                 <span className="inline-block min-w-[3rem] font-medium">
