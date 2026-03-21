@@ -87,6 +87,11 @@ uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson p
 log_with_timestamp "✅ Python packages installed"
 check_resources
 
+# Get GCS bucket name from instance metadata (passed from GitHub Actions secrets)
+GCS_BUCKET=$(curl -H "Metadata-Flavor: Google" -s "http://metadata.google.internal/computeMetadata/v1/instance/attributes/gcs-bucket")
+log_with_timestamp "Using GCS bucket: $GCS_BUCKET"
+export GCS_BUCKET
+
 # Create the enhanced transfer script with processing
 cat > /opt/transfer_script.py << 'EOF'
 #!/usr/bin/env python3
@@ -558,7 +563,7 @@ class PropertyDataProcessor:
 class SFTPToGCSTransferWithProcessing:
     def __init__(self):
         self.project_id = "landbrugsdata-1"
-        self.bucket_name = "landbruget-raw-data"
+        self.bucket_name = os.environ.get('GCS_BUCKET', 'landbrugsdata-raw-data')
         self.processor = PropertyDataProcessor()
 
         # Initialize GCP clients with explicit error handling
@@ -906,20 +911,20 @@ validate_success() {
     log_with_timestamp "=== VALIDATING PROCESSING SUCCESS ==="
 
     # Check if silver directory was created
-    if gsutil ls gs://landbruget-raw-data/silver/property_owners/ >/dev/null 2>&1; then
+    if gsutil ls gs://${GCS_BUCKET}/silver/property_owners/ >/dev/null 2>&1; then
         log_with_timestamp "✅ Silver directory exists"
 
         # Check if data.parquet file was created in timestamped directory (new format)
         # Look for directories created today and check for data.parquet files
         today=$(date +%Y%m%d)
-        recent_files=$(gsutil ls gs://landbruget-raw-data/silver/property_owners/${today}*/data.parquet 2>/dev/null | wc -l)
+        recent_files=$(gsutil ls gs://${GCS_BUCKET}/silver/property_owners/${today}*/data.parquet 2>/dev/null | wc -l)
         if [ "$recent_files" -gt 0 ]; then
             log_with_timestamp "✅ Recent data.parquet file found in timestamped directory (new format)"
             return 0
         else
             log_with_timestamp "❌ No recent data.parquet files found in timestamped directories"
             # Also check legacy format as fallback
-            legacy_files=$(gsutil ls -l gs://landbruget-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
+            legacy_files=$(gsutil ls -l gs://${GCS_BUCKET}/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
             if [ "$legacy_files" -gt 0 ]; then
                 log_with_timestamp "✅ Recent Parquet file found in legacy format"
                 return 0
@@ -954,9 +959,10 @@ fi
 log_with_timestamp "Smoke-testing Python GCP auth..."
 log_with_timestamp "mTLS certs present: $(ls -la /run/google-mds-mtls/ 2>/dev/null || echo 'no')"
 if python3 -c "
+import os
 from google.cloud import storage
 client = storage.Client(project='landbrugsdata-1')
-list(client.list_blobs('landbruget-raw-data', prefix='silver/property_owners/', max_results=1))
+list(client.list_blobs(os.environ.get('GCS_BUCKET', 'landbrugsdata-raw-data'), prefix='silver/property_owners/', max_results=1))
 print('GCP auth OK')
 "; then
     log_with_timestamp "✅ Python GCP auth smoke test passed"
