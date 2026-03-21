@@ -1,6 +1,7 @@
 """BBR Building processor for silver layer processing."""
 
 import logging
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -343,7 +344,8 @@ class BuildingProcessor:
             try:
                 gcs_access = OptimizedGCSDataAccess()
                 timestamp = Path(output_dir).name  # Extract timestamp from output directory
-                gcs_path = f"gs://landbruget-data/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
+                bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+                gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
 
                 # Use native GCS export with server-side compression
                 gcs_access.export_to_gcs_native(
