@@ -18,6 +18,8 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+import contextlib
+
 from bronze.export import BronzePipeline, GCSStorage
 
 
@@ -31,13 +33,12 @@ def mock_gcs_bucket():
 def bronze_pipeline(mock_gcs_bucket):
     """Create a BronzePipeline instance for testing."""
     with patch.dict("os.environ", {"SOURCE_CSV_URL": "https://test.com"}):
-        pipeline = BronzePipeline(
+        return BronzePipeline(
             pipeline_name="test_pipeline",
             source_url="https://test.com",
             gcs_bucket=mock_gcs_bucket,
             log_level="ERROR",
         )
-        return pipeline
 
 
 class TestPlaywrightAutomation:
@@ -71,12 +72,10 @@ class TestPlaywrightAutomation:
         mock_page.wait_for_selector = AsyncMock(side_effect=Exception("Stop test"))
 
         # Attempt to fetch data (will fail at selector, but browser should launch)
-        try:
+        with contextlib.suppress(Exception):
             await bronze_pipeline.fetch_data_with_playwright(
                 [{"name": "Test", "search_term": "Test"}]
             )
-        except Exception:
-            pass
 
         # Verify browser was launched
         mock_chromium.launch.assert_called_once()
@@ -117,12 +116,10 @@ class TestPlaywrightAutomation:
         mock_frame_locator.locator = Mock(return_value=mock_locator)
 
         # Test
-        try:
+        with contextlib.suppress(Exception):
             await bronze_pipeline.fetch_data_with_playwright(
                 [{"name": "Test", "search_term": "Test"}]
             )
-        except Exception:
-            pass
 
         # Verify iframe was detected
         mock_page.wait_for_selector.assert_called()

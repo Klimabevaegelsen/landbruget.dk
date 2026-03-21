@@ -110,6 +110,7 @@ export function MobileFieldMenu({
                   .value as FilterState['visualizationMode'],
               })
             }
+            data-testid="mobile-visualization-mode-select"
             className="touch-target border-border bg-background w-full rounded-lg border px-3 py-3 text-sm"
           >
             <option value="total_pesticide_belastning">
@@ -135,6 +136,7 @@ export function MobileFieldMenu({
                 colorUnit: e.target.value as FilterState['colorUnit'],
               })
             }
+            data-testid="mobile-color-unit-select"
             className="touch-target border-border bg-background w-full rounded-lg border px-3 py-3 text-sm"
           >
             <option value="total">Total mængde (kg/L)</option>
@@ -165,6 +167,7 @@ export function MobileFieldMenu({
                 useDecileColoring: true,
               })
             }
+            data-testid="reset-filters-button"
             className="bg-muted text-muted-foreground hover:bg-muted/80 w-full rounded-lg px-3 py-3 text-sm transition-colors"
           >
             Nulstil filtre

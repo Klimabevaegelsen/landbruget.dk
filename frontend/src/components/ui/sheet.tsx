@@ -46,6 +46,7 @@ const SheetTrigger = React.forwardRef<HTMLButtonElement, SheetTriggerProps>(
     return (
       <button
         ref={ref}
+        data-testid={props['data-testid'] || 'sheet-trigger-button'}
         className={cn(
           'touch-target inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors',
           'focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
@@ -192,6 +193,7 @@ const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
                   'disabled:pointer-events-none'
                 )}
                 onClick={() => onOpenChange(false)}
+                data-testid="close-sheet-button"
                 aria-label="Luk"
               >
                 <X className="h-4 w-4" />

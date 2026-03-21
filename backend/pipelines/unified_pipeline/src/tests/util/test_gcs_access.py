@@ -15,6 +15,7 @@ Note: These tests directly import from common.gcs which is available via sys.pat
       configuration in conftest.py.
 """
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -41,7 +42,12 @@ if not backend_dir.exists():
     raise RuntimeError(f"Backend directory not found at {backend_dir}")
 
 # Now import from common.gcs
-from common.gcs import GCSDataAccess, ResourceMonitor, get_duckdb_with_gcs, get_gcs_filesystem
+from common.gcs import (  # noqa: E402
+    GCSDataAccess,
+    ResourceMonitor,
+    get_duckdb_with_gcs,
+    get_gcs_filesystem,
+)
 
 # =============================================================================
 # GCS Filesystem Tests
@@ -185,11 +191,8 @@ def test_duckdb_spatial_extension_loaded(mock_setup_native):
 
     # Verify spatial extension is loaded by checking for ST functions
     # This will raise an error if spatial extension isn't loaded
-    try:
-        # Try to use a spatial function
+    with contextlib.suppress(duckdb.CatalogException):
         conn.execute("SELECT ST_Point(0, 0) as geom").fetchone()
-    except duckdb.CatalogException:
-        pass
 
     # Note: Spatial extension may not be available in all test environments
     # So we just verify the connection works

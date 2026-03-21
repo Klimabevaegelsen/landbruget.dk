@@ -7,6 +7,7 @@ Tests the full data pipeline from bronze layer to silver layer including:
 - Data quality validation
 """
 
+import contextlib
 import json
 from unittest.mock import patch
 
@@ -114,7 +115,7 @@ class TestBronzeToSilverFlow:
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
             mock_upload.return_value = True
 
-            try:
+            with contextlib.suppress(SystemExit):
                 process_chr_data(
                     silver_dir=silver_dir,
                     in_memory_data=None,
@@ -122,8 +123,6 @@ class TestBronzeToSilverFlow:
                     bronze_timestamp=None,
                     force_streaming=False,
                 )
-            except SystemExit:
-                pass
 
         # Verify silver output files
         assert silver_dir.exists()
@@ -203,7 +202,7 @@ class TestBronzeToSilverFlow:
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
             mock_upload.return_value = True
 
-            try:
+            with contextlib.suppress(SystemExit):
                 process_chr_data(
                     silver_dir=silver_dir,
                     in_memory_data=None,
@@ -211,8 +210,6 @@ class TestBronzeToSilverFlow:
                     bronze_timestamp=None,
                     force_streaming=False,
                 )
-            except SystemExit:
-                pass
 
         # Verify consistency
         if (silver_dir / "herds.parquet").exists():

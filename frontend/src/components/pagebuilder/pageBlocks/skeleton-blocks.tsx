@@ -65,13 +65,10 @@ export function SkeletonChart() {
       <CardContent>
         <div className="space-y-4">
           <div className="flex items-end justify-between space-x-2">
-            {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-              <Skeleton
-                key={i}
-                className="w-8"
-                style={{ height: `${Math.random() * 100 + 50}px` }}
-              />
-            ))}
+            {[1, 2, 3, 4, 5, 6, 7].map((i) => {
+              const barStyle = { height: `${50 + i * 15}px` };
+              return <Skeleton key={i} className="w-8" style={barStyle} />;
+            })}
           </div>
           <div className="flex justify-between">
             {[1, 2, 3, 4, 5, 6, 7].map((i) => (

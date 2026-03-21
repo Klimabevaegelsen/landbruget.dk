@@ -88,7 +88,7 @@ KNOWN_COLUMNS: dict[str, str] = {
     # Yield / production
     "yield_estimate_hkg_ha": "Estimated crop yield in hectokilograms per hectare (hkg/ha). 1 hkg = 100 kg. Source: DST (Danmarks Statistik) regional yield statistics.",
     "yield_estimation_method": "Method used to estimate yield: 'dst_region_match' = matched to DST region average, 'no_yield_data' = no DST data available for this crop/year.",
-    "production_estimate_hkg": "Total estimated production in hectokilograms (area_ha × yield_estimate_hkg_ha).",
+    "production_estimate_hkg": "Total estimated production in hectokilograms (area_ha x yield_estimate_hkg_ha).",
     "production_unit": "Unit for production estimate (typically 'hkg' = hectokilogram).",
     # Geographic / statistical zones
     "landsdel_code": "DAGI geographic sub-region code (landsdel). E.g. 'DK011' = Byen København, 'DK021' = Østjylland. Used for DST statistical reporting.",
@@ -172,7 +172,7 @@ def get_sample_values(url: str, columns: list[str], n: int = 5) -> dict[str, lis
         rows = con.execute(f"SELECT {col_list} FROM '{url}' LIMIT 500").fetchall()
         col_data: dict[str, list] = {c: [] for c in sample_cols}
         for row in rows:
-            for col, val in zip(sample_cols, row):
+            for col, val in zip(sample_cols, row, strict=False):
                 if val is not None:
                     col_data[col].append(str(val))
         for col in sample_cols:
@@ -287,7 +287,7 @@ def process_dataset(ds: dict, model) -> dict:
     descriptions = generate_descriptions(ds, stats, samples, model)
 
     # 4. Build catalog entry
-    entry = {
+    return {
         "name": name,
         "displayName": ds["displayName"],
         "layer": ds["layer"],
@@ -310,7 +310,6 @@ def process_dataset(ds: dict, model) -> dict:
             for col, st in stats.items()
         },
     }
-    return entry
 
 
 def main():
@@ -329,7 +328,7 @@ def main():
             existing = {e["name"]: e for e in existing_catalog.get("datasets", [])}
             log.info(f"Resuming — {len(existing)} already processed")
         except Exception:
-            pass
+            log.debug("Could not load existing catalog, starting fresh")
 
     catalog_entries = []
     failed = []

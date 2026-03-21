@@ -1,5 +1,5 @@
 import { KPIGroup } from '@/services/supabase/types';
-import { ClimateEmission } from '@/services/supabase/climate';
+import type { ClimateEmission } from '@/services/supabase/climate';
 import { formatNumberFixed } from '@/lib/formatting';
 
 interface CarbonAccountingKPIsProps {

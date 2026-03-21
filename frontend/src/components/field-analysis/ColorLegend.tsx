@@ -255,24 +255,27 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
         )}
       </div>
       <div className="space-y-1.5">
-        {legendData.colors.map((item, index) => (
-          <div key={index} className="flex items-center space-x-2">
-            <div
-              className="border-border h-3 w-3 flex-shrink-0 rounded-sm border"
-              style={{ backgroundColor: item.color }}
-            />
-            <div className="flex min-w-0 flex-1 items-center justify-between">
-              <span className="text-foreground truncate text-xs font-medium">
-                {item.label}
-              </span>
-              {item.range && (
-                <span className="text-muted-foreground ml-2 flex-shrink-0 text-xs">
-                  {item.range}
+        {legendData.colors.map((item, index) => {
+          const dotStyle = { backgroundColor: item.color };
+          return (
+            <div key={index} className="flex items-center space-x-2">
+              <div
+                className="border-border h-3 w-3 flex-shrink-0 rounded-sm border"
+                style={dotStyle}
+              />
+              <div className="flex min-w-0 flex-1 items-center justify-between">
+                <span className="text-foreground truncate text-xs font-medium">
+                  {item.label}
                 </span>
-              )}
+                {item.range && (
+                  <span className="text-muted-foreground ml-2 flex-shrink-0 text-xs">
+                    {item.range}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       {filterState.useDecileColoring && (
         <div className="mt-2 border-t pt-2">

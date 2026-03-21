@@ -306,15 +306,17 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
   // Don't show tooltip if no relevant data
   if (relevantData.length === 0) return null;
 
+  const tooltipStyle = {
+    left: x,
+    top: y,
+    transform: 'translate(-50%, -100%)',
+    marginTop: -12,
+  };
+
   return (
     <div
       className="border-border bg-background absolute z-50 max-w-sm rounded-xl border shadow-xl backdrop-blur-sm"
-      style={{
-        left: x,
-        top: y,
-        transform: 'translate(-50%, -100%)',
-        marginTop: -12,
-      }}
+      style={tooltipStyle}
     >
       {/* Header with better typography */}
       <div className="border-border border-b px-4 py-3">
@@ -351,6 +353,8 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
   );
 }
 
+const mapContainerStyle = { width: '100%', height: 600 };
+
 // https://geojson.io
 function BlockMapChartInner({ chart }: { chart: MapChart }) {
   const { mapStyle } = useMapTheme();
@@ -373,27 +377,18 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
       } => {
     // Validate chart data
     if (!chart?.data) {
-      console.warn('BlockMapChart: Missing chart data');
       return { isValid: false, error: 'No map data available' };
     }
 
     const { center, zoom, layers } = chart.data;
 
     if (!center || center.length !== 2 || !Array.isArray(layers)) {
-      console.warn('BlockMapChart: Invalid chart data structure', {
-        center,
-        layers: layers?.length,
-      });
       return { isValid: false, error: 'Invalid map configuration' };
     }
 
     // Filter out layers with invalid data or no features
     const validLayers = layers.filter((layer, index) => {
       if (!layer?.data) {
-        console.warn(
-          `BlockMapChart: Layer ${index} (${layer?.name || 'unnamed'}) has no data`,
-          layer
-        );
         return false;
       }
 
@@ -404,30 +399,18 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
         geojsonData.type !== 'FeatureCollection' ||
         !Array.isArray(geojsonData.features)
       ) {
-        console.warn(
-          `BlockMapChart: Layer ${index} (${layer?.name || 'unnamed'}) has invalid GeoJSON data`,
-          geojsonData
-        );
         return false;
       }
 
       // Check if layer has any features (data points)
       if (geojsonData.features.length === 0) {
-        console.log(
-          `BlockMapChart: Layer ${index} (${layer?.name || 'unnamed'}) has no features, excluding from display`
-        );
         return false;
       }
 
-      // Log successful validation
-      console.log(
-        `BlockMapChart: Layer ${index} (${layer.name}) validated successfully with ${geojsonData.features.length} features`
-      );
       return true;
     });
 
     if (validLayers.length === 0) {
-      console.warn('BlockMapChart: No valid layers found');
       return { isValid: false, error: 'No valid map layers available' };
     }
 
@@ -489,7 +472,7 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
             latitude: chartData.center[1],
             zoom: chartData.zoom,
           }}
-          style={{ width: '100%', height: 600 }}
+          style={mapContainerStyle}
           mapStyle={mapStyle}
           interactiveLayerIds={chartData.validLayers.map(
             (_, index) => `layer-${index}`
@@ -542,18 +525,17 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
         <div className="mt-2 flex flex-wrap gap-4">
           {chartData.validLayers.map((layer, index) => {
             const style = getLayerStyle(layer.style, index);
+            const dotStyle = {
+              backgroundColor:
+                style.fillColor || style.strokeColor || style.circleColor,
+            };
             return (
               <button
                 key={`${layer.name}-${index}`}
+                data-testid={`map-legend-${layer.name}-button`}
                 className="hover:bg-muted flex items-center gap-2 rounded-md transition-colors"
               >
-                <div
-                  className="size-4 rounded-full"
-                  style={{
-                    backgroundColor:
-                      style.fillColor || style.strokeColor || style.circleColor,
-                  }}
-                />
+                <div className="size-4 rounded-full" style={dotStyle} />
                 <span className="text-xs font-medium">{layer.name}</span>
               </button>
             );

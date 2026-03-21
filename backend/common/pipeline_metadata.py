@@ -24,7 +24,7 @@ class ProcessingMetadata(BaseModel):
     processing_duration_seconds: float | None = Field(None)
     file_size_bytes: int | None = Field(None)
 
-    # Environment (AUTOMATIC)
+    # Environment fields (populated automatically)
     environment: str = Field(..., description="local/dev/prod")
     runner: str = Field(..., description="github-actions/local/vm")
 

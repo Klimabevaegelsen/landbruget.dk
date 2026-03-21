@@ -290,7 +290,7 @@ class SchemaMixin:
         schema_lines.append("Columns:")
 
         for row in results:
-            col_name, col_type, nullable, key, default, extra = row
+            col_name, col_type, nullable, key, default, _extra = row
             nullable_str = "NULL" if nullable == "YES" else "NOT NULL"
             key_str = f" ({key})" if key else ""
             default_str = f" DEFAULT {default}" if default else ""

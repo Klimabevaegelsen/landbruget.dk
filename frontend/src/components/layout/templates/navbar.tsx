@@ -17,7 +17,7 @@ import {
 import { motion } from 'framer-motion';
 import { Logo } from '@/components/layout/templates/logo';
 import Link from 'next/link';
-import { Container } from '../container';
+import { Container } from '@/components/layout/container';
 import { cn } from '@/lib/utils';
 import { GlobalSearch } from '@/components/global-search';
 import { useState } from 'react';

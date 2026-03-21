@@ -89,7 +89,7 @@ def test_mock_chr_credentials(mock_chr_credentials):
     assert "certificate_password" in mock_chr_credentials
 
     # Values should be strings
-    for key, value in mock_chr_credentials.items():
+    for value in mock_chr_credentials.values():
         assert isinstance(value, str)
 
 
@@ -179,7 +179,7 @@ def test_chr_species_codes(chr_species_codes):
     assert "SHEEP" in chr_species_codes
 
     # Each species should have Danish and English names
-    for species, names in chr_species_codes.items():
+    for names in chr_species_codes.values():
         assert "da" in names
         assert "en" in names
         assert isinstance(names["da"], str)
@@ -197,7 +197,7 @@ def test_chr_movement_types(chr_movement_types):
     assert "SLAUGHTER" in chr_movement_types
 
     # Each type should have a description
-    for movement_type, description in chr_movement_types.items():
+    for description in chr_movement_types.values():
         assert isinstance(description, str)
         assert len(description) > 0
 

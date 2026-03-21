@@ -37,11 +37,9 @@ class SharedDuckDBProcessor:
 
     def _setup_extensions(self) -> None:
         """Setup commonly required DuckDB extensions and cloud auth."""
-        try:
+        with contextlib.suppress(Exception):
             self.conn.execute("INSTALL spatial")
             self.conn.execute("LOAD spatial")
-        except Exception as e:
-            print(f"Warning: Could not load spatial extension: {e}")
 
         # Setup cloud storage auth (also installs/loads httpfs)
         setup_duckdb_cloud_auth(self.conn)
@@ -168,8 +166,7 @@ class SharedDuckDBProcessor:
         try:
             self.conn.execute(f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} USING RTREE({geometry_column})")
             return True
-        except Exception as e:
-            print(f"Warning: Could not create spatial index on {table_name}.{geometry_column}: {e}")
+        except Exception:
             return False
 
     def drop_table_if_exists(self, table_name: str) -> None:
@@ -220,21 +217,21 @@ class PipelineProcessor(SharedDuckDBProcessor):
         if self.logger:
             self.logger.info(message)
         else:
-            print(f"INFO: {message}")
+            pass
 
     def log_warning(self, message: str) -> None:
         """Log warning message if logger available."""
         if self.logger:
             self.logger.warning(message)
         else:
-            print(f"WARNING: {message}")
+            pass
 
     def log_error(self, message: str) -> None:
         """Log error message if logger available."""
         if self.logger:
             self.logger.error(message)
         else:
-            print(f"ERROR: {message}")
+            pass
 
     def safe_execute(self, query: str, description: str = "Query") -> list[Any] | None:
         """

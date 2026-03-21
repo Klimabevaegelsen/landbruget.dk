@@ -22,6 +22,7 @@ export function DocumentationAccordion({
     <div className="mt-4 border-t border-gray-200 pt-4">
       <button
         onClick={() => setIsOpen(!isOpen)}
+        data-testid="toggle-documentation-button"
         className="text-foreground hover:text-foreground flex w-full items-center justify-between text-left text-sm font-medium focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none"
       >
         <span className="flex items-center">

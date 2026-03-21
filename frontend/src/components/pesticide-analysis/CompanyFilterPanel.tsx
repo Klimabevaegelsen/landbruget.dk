@@ -22,7 +22,7 @@ interface CompanyFilterPanelProps {
   onFiltersChange: (filters: Partial<PesticideAnalysisFilters>) => void;
 }
 
-export default function CompanyFilterPanel({
+export function CompanyFilterPanel({
   filters,
   availableYears,
   availableMunicipalities,
@@ -106,6 +106,7 @@ export default function CompanyFilterPanel({
                   onFiltersChange({ years: [] });
                 }
               }}
+              data-testid="all-years-checkbox"
               className="border-border h-4 w-4 rounded"
             />
             <Label htmlFor="all-years" className="text-sm">
@@ -131,6 +132,7 @@ export default function CompanyFilterPanel({
                       });
                     }
                   }}
+                  data-testid={`year-${year}-checkbox`}
                   className="border-border mr-2 h-4 w-4 rounded"
                 />
                 <Label

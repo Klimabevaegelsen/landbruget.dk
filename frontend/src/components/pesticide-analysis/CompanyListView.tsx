@@ -29,7 +29,7 @@ interface CompanyListViewProps {
   ) => void;
 }
 
-export default function CompanyListView({
+export function CompanyListView({
   companies,
   totalCount,
   currentPage,

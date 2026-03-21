@@ -31,7 +31,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 # Add parent directory to path to access common modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -50,21 +50,18 @@ except ImportError:
 try:
     from google import genai
 except ImportError:
-    print("ERROR: google-genai package not installed.\nInstall with: pip install google-genai")
     sys.exit(1)
 
 
 class SchemaUploadError(Exception):
     """Custom exception for schema upload errors."""
 
-    pass
-
 
 class GeminiSchemaUploader:
     """Upload schema documentation to Gemini File Search Store."""
 
     # Default schema files to upload
-    DEFAULT_SCHEMA_FILES = [
+    DEFAULT_SCHEMA_FILES: ClassVar[list[str]] = [
         "schema/tables.md",
         "schema/columns.md",
         "schema/relationships.md",
@@ -77,9 +74,9 @@ class GeminiSchemaUploader:
     def __init__(
         self,
         api_key: str,
-        store_id: Optional[str] = None,
+        store_id: str | None = None,
         schema_dir: str = "schema",
-        logger: Optional[logging.Logger] = None,
+        logger: logging.Logger | None = None,
     ):
         """
         Initialize schema uploader.
@@ -104,7 +101,7 @@ class GeminiSchemaUploader:
         # Initialize Gemini client
         self.client = genai.Client(api_key=self.api_key)
 
-        self.upload_stats: Dict[str, Any] = {
+        self.upload_stats: dict[str, Any] = {
             "uploaded": 0,
             "skipped": 0,
             "deleted": 0,
@@ -138,9 +135,9 @@ class GeminiSchemaUploader:
             return store_id
 
         except Exception as e:
-            raise SchemaUploadError(f"Failed to create file search store: {e}")
+            raise SchemaUploadError(f"Failed to create file search store: {e}") from e
 
-    def list_files_in_store(self) -> List[Dict[str, Any]]:
+    def list_files_in_store(self) -> list[dict[str, Any]]:
         """
         List all files in the store.
 
@@ -174,7 +171,7 @@ class GeminiSchemaUploader:
             return files
 
         except Exception as e:
-            raise SchemaUploadError(f"Failed to list files in store: {e}")
+            raise SchemaUploadError(f"Failed to list files in store: {e}") from e
 
     def delete_old_files(self, dry_run: bool = False) -> int:
         """
@@ -223,9 +220,9 @@ class GeminiSchemaUploader:
             return deleted_count if not dry_run else len(files)
 
         except Exception as e:
-            raise SchemaUploadError(f"Failed to delete old files: {e}")
+            raise SchemaUploadError(f"Failed to delete old files: {e}") from e
 
-    def upload_file(self, file_path: Path, display_name: Optional[str] = None, dry_run: bool = False) -> Optional[str]:
+    def upload_file(self, file_path: Path, display_name: str | None = None, dry_run: bool = False) -> str | None:
         """
         Upload a single file to the store.
 
@@ -261,7 +258,7 @@ class GeminiSchemaUploader:
             self.logger.info(f"Uploading: {display_name} ({file_size_kb:.1f} KB)")
 
             # Read file content
-            with open(file_path, "r", encoding="utf-8") as f:
+            with file_path.open(encoding="utf-8") as f:
                 content = f.read()
 
             # Upload to corpus as document
@@ -284,7 +281,7 @@ class GeminiSchemaUploader:
             self.logger.error(f"Failed to upload {file_path}: {e}")
             return None
 
-    def find_schema_files(self) -> List[Path]:
+    def find_schema_files(self) -> list[Path]:
         """
         Find all schema markdown files to upload.
 
@@ -313,7 +310,7 @@ class GeminiSchemaUploader:
 
         return sorted(found_files)
 
-    def upload_all_schema_files(self, dry_run: bool = False, clean_first: bool = True) -> Dict[str, Any]:
+    def upload_all_schema_files(self, dry_run: bool = False, clean_first: bool = True) -> dict[str, Any]:
         """
         Upload all schema files to the store.
 
@@ -369,7 +366,7 @@ class GeminiSchemaUploader:
         return self.upload_stats
 
 
-def validate_environment() -> Dict[str, str]:
+def validate_environment() -> dict[str, str]:
     """
     Validate that required environment variables are set.
 

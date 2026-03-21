@@ -27,7 +27,8 @@ import logging
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("latest_sync")
@@ -192,17 +193,17 @@ def build_manifest(
                 "rowCount": 0,
                 "sizeBytes": 0,
                 "columns": 0,
-                "lastUpdated": datetime.now(timezone.utc).isoformat(),
+                "lastUpdated": datetime.now(UTC).isoformat(),
             }
         )
 
     manifest = {
         "version": "1.0",
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "generatedAt": datetime.now(UTC).isoformat(),
         "datasets": entries,
     }
 
-    with open(output_path, "w") as f:
+    with Path(output_path).open("w") as f:
         json.dump(manifest, f, indent=2)
 
     logger.info(f"Manifest written to {output_path} ({len(entries)} datasets)")

@@ -39,7 +39,7 @@ interface RankingTableEnhancedProps {
 type SortField = 'rank' | 'company_name' | 'value' | 'municipality';
 type SortDirection = 'asc' | 'desc';
 
-export default function RankingTableEnhanced({
+export function RankingTableEnhanced({
   title,
   category,
   description,

@@ -84,7 +84,7 @@ const getCategoryTitle = (category: string): string => {
   return titles[category] || category;
 };
 
-export default function MunicipalityDetailsModal({
+export function MunicipalityDetailsModal({
   municipality,
   category,
   year,
@@ -143,6 +143,7 @@ export default function MunicipalityDetailsModal({
           </div>
           <button
             onClick={onClose}
+            data-testid="close-municipality-modal-button"
             className="text-muted-foreground hover:text-foreground rounded-full p-2 transition-colors"
           >
             <X className="h-6 w-6" />

@@ -48,6 +48,7 @@ export function YearSlider({
                 value={selectedYear}
                 onChange={handleSelectChange}
                 disabled={isLoading}
+                data-testid="year-slider-mobile-select"
                 className={`border-border bg-background focus:border-primary focus:ring-primary min-h-[44px] w-full rounded-md py-3 pr-10 pl-3 text-sm shadow-sm focus:ring-1 focus:outline-none ${
                   isLoading ? 'cursor-not-allowed opacity-50' : ''
                 }`}
@@ -94,35 +95,41 @@ export function YearSlider({
               value={selectedIndex}
               onChange={handleSliderChange}
               disabled={isLoading}
+              data-testid="year-slider-range-input"
               className={`slider bg-muted h-3 w-full cursor-pointer appearance-none rounded-lg ${
                 isLoading ? 'cursor-not-allowed opacity-50' : ''
               }`}
-              style={{
-                background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${
-                  (selectedIndex / (availableYears.length - 1)) * 100
-                }%, var(--color-muted) ${(selectedIndex / (availableYears.length - 1)) * 100}%, var(--color-muted) 100%)`,
-              }}
+              style={
+                {
+                  background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${
+                    (selectedIndex / (availableYears.length - 1)) * 100
+                  }%, var(--color-muted) ${(selectedIndex / (availableYears.length - 1)) * 100}%, var(--color-muted) 100%)`,
+                } as React.CSSProperties
+              }
             />
 
             {/* Year markers */}
             <div className="relative mt-6 h-8">
-              {availableYears.map((year, index) => (
-                <div
-                  key={year}
-                  className={`absolute text-xs font-medium whitespace-nowrap transition-colors ${
-                    year === selectedYear
-                      ? 'text-primary'
-                      : 'text-muted-foreground'
-                  }`}
-                  style={{
-                    left: `${(index / (availableYears.length - 1)) * 100}%`,
-                    transform: 'translateX(-50%) rotate(-45deg)',
-                    transformOrigin: 'center center',
-                  }}
-                >
-                  {year}
-                </div>
-              ))}
+              {availableYears.map((year, index) => {
+                const markerStyle = {
+                  left: `${(index / (availableYears.length - 1)) * 100}%`,
+                  transform: 'translateX(-50%) rotate(-45deg)',
+                  transformOrigin: 'center center',
+                };
+                return (
+                  <div
+                    key={year}
+                    className={`absolute text-xs font-medium whitespace-nowrap transition-colors ${
+                      year === selectedYear
+                        ? 'text-primary'
+                        : 'text-muted-foreground'
+                    }`}
+                    style={markerStyle}
+                  >
+                    {year}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

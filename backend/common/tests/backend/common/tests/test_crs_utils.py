@@ -4,6 +4,8 @@ Tests the centralized CRS handling utilities used across all data pipelines.
 Covers constants, detection functions, validation utilities, and SQL generation helpers.
 """
 
+import contextlib
+
 import pytest
 from common.crs_utils import (
     # Constants
@@ -444,7 +446,7 @@ class TestValidateCRSBeforeTransform:
             SELECT ST_Point(12.5, 55.7) as geom
         """)
 
-        crs, order = validate_crs_before_transform(conn, "test_geom", "geom", WGS84)
+        crs, _order = validate_crs_before_transform(conn, "test_geom", "geom", WGS84)
         assert crs == WGS84
 
 
@@ -519,7 +521,7 @@ class TestIntegration:
         """)
 
         # Validate CRS - this should work
-        crs, order = validate_crs_before_transform(conn, "source_data", "geom", WGS84)
+        crs, _order = validate_crs_before_transform(conn, "source_data", "geom", WGS84)
         assert crs == WGS84
 
         # Generate transformation SQL - verify the SQL is correct
@@ -529,7 +531,7 @@ class TestIntegration:
 
         # The actual transformation depends on DuckDB+proj configuration
         # Just verify the generated SQL is syntactically valid
-        try:
+        with contextlib.suppress(Exception):
             conn.execute(f"""
                 CREATE TABLE utm_data AS
                 SELECT {transform_sql} as geom
@@ -538,10 +540,6 @@ class TestIntegration:
             # If execution succeeds, verify we can read the table
             result = conn.execute("SELECT COUNT(*) FROM utm_data").fetchone()
             assert result[0] == 1  # One row transformed
-        except Exception:
-            # Some DuckDB installations may not have proj support
-            # This is acceptable - we've validated the SQL generation
-            pass
 
     def test_buffer_and_intersect_workflow_sql_generation(self, mock_duckdb_connection):
         """Test SQL generation for buffer/intersect operations.

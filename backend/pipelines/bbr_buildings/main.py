@@ -238,7 +238,9 @@ def perform_uuid_join_optimized(
             FROM joined_results
         """).fetchone()
 
-        (total_buildings, unique_buildings, avg_area, min_area, max_area, total_area) = final_stats
+        (total_buildings, unique_buildings, avg_area, _min_area, _max_area, total_area) = (
+            final_stats
+        )
 
         if total_buildings > 0:
             print("🎯 UUID JOIN results:")
@@ -647,7 +649,9 @@ def perform_chunked_spatial_join(
             FROM joined_results
         """).fetchone()
 
-        (total_buildings, unique_buildings, avg_area, min_area, max_area, total_area) = final_stats
+        (total_buildings, unique_buildings, avg_area, _min_area, _max_area, total_area) = (
+            final_stats
+        )
 
         if total_buildings > 0:
             print("🔗 Final spatial join results:")

@@ -166,31 +166,27 @@ const feature: Feature<Point> = {
 };
 ```
 
-## Implementation Status
+## Implemented Rules (in `plugin.js`)
 
-### Phase 1: Documentation (✅ Complete)
+These rules are active via `.oxlintrc.json` and run with `npm run lint`:
 
-- [x] Define architectural rules
-- [x] Document enforcement patterns
-- [x] Create examples and rationale
+| Rule                                         | Severity | Purpose                                                                                         |
+| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `landbruget/max-component-size`              | warn     | Files over 150 lines must be split                                                              |
+| `landbruget/no-service-import-in-components` | warn     | Components can't import from `@/services/` (type imports OK)                                    |
+| `landbruget/no-raw-process-env`              | warn     | Use `@/lib/env.ts` instead of `process.env`                                                     |
+| `landbruget/require-data-testid`             | warn     | `<button>`, `<input>`, `<select>`, `<textarea>` need `data-testid`                              |
+| `landbruget/no-default-export`               | warn     | Named exports only (Next.js page/layout/error exempt). Agents grep for `export function X`.     |
+| `landbruget/enforce-absolute-imports`        | warn     | Use `@/` alias instead of `../` relative paths. Agents navigate absolute paths better.          |
+| `landbruget/no-inline-styles`                | warn     | Use Tailwind classes instead of `style={{...}}`. Allows `style={variable}` for computed values. |
+| `landbruget/no-hardcoded-api-urls`           | warn     | No hardcoded supabase.co/localhost URLs. Use `@/lib/env.ts`.                                    |
+| `typescript/no-explicit-any`                 | warn     | No `any` types (built-in oxlint rule)                                                           |
 
-### Phase 2: Plugin Development (🔴 TODO)
+### Future Rules (documented above, not yet implemented)
 
-- [ ] Set up oxlint JS plugin boilerplate
-- [ ] Implement `no-direct-db-import-in-ui` rule
-- [ ] Implement `require-source-tag-prop` rule
-- [ ] Implement `enforce-status-lifecycle-enum` rule
-- [ ] Implement `no-insecure-functions` rule
-- [ ] Implement `geospatial-crs-validation` rule
-- [ ] Write tests for each rule
-- [ ] Configure in `.oxlintrc.json`
-
-### Phase 3: Integration (🔴 TODO)
-
-- [ ] Add to npm scripts
-- [ ] Configure CI/CD to fail on violations
-- [ ] Update CLAUDE.md with rule documentation
-- [ ] Train agents on rule meanings
+- `require-source-tag-prop` — data transparency for agricultural components
+- `enforce-status-lifecycle-enum` — no magic strings for status values
+- `geospatial-crs-validation` — explicit CRS on geospatial data
 
 ## How Agents Use This
 

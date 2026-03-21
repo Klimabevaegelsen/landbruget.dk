@@ -15,6 +15,7 @@ Performance improvements:
 - Server-side filtering support
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -1006,8 +1007,6 @@ class GCSDataAccess:
 
     def __del__(self):
         """Cleanup DuckDB connection."""
-        try:
+        with contextlib.suppress(Exception):
             if hasattr(self, "duckdb_conn") and self.duckdb_conn:
                 self.duckdb_conn.close()
-        except Exception:
-            pass  # Ignore cleanup errors

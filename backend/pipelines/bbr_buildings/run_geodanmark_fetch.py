@@ -102,7 +102,7 @@ def main() -> None:
             f.write(f"bronze-timestamp={timestamp}\n")
     except Exception as e:
         print(f"❌ Error: no buildings data produced: {e}")
-        raise SystemExit(1)
+        raise SystemExit(1) from e
     finally:
         conn.close()
 

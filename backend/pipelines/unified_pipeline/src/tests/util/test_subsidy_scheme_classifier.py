@@ -38,7 +38,7 @@ class TestClassifyEUScheme:
 
     def test_summary_row_detection(self):
         """Test that summary rows are classified correctly."""
-        code, danish = classify_eu_scheme("Total for beneficiary")
+        code, _danish = classify_eu_scheme("Total for beneficiary")
         assert code == "TOTAL_SUMMARY"
 
     def test_unknown_scheme(self):
@@ -71,7 +71,7 @@ class TestClassifyFVMTilsagn:
 
     def test_grassland_66(self):
         """Test grassland 66 classification."""
-        code, danish = classify_fvm_tilsagn("66")
+        code, _danish = classify_fvm_tilsagn("66")
         assert code == "GRAESPLEJE_66"
 
     def test_grassland_67(self):
@@ -82,7 +82,7 @@ class TestClassifyFVMTilsagn:
 
     def test_unknown_code(self):
         """Test handling of unknown codes."""
-        code, danish = classify_fvm_tilsagn("999")
+        code, _danish = classify_fvm_tilsagn("999")
         assert code is None
 
 

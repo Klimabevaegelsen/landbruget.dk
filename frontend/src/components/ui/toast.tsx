@@ -116,6 +116,7 @@ function ToastComponent({
       </div>
       <button
         onClick={() => removeToast(id)}
+        data-testid="dismiss-toast-button"
         className="text-foreground/50 hover:text-foreground absolute top-2 right-2 rounded-md p-1 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 focus:ring-2 focus:outline-none"
       >
         <X className="h-4 w-4" />

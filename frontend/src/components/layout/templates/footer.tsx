@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Container } from '../container';
+import { Container } from '@/components/layout/container';
 import { Logo } from './logo';
 
 export function Footer() {

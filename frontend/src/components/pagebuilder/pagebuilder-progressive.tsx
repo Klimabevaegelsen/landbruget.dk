@@ -1,5 +1,9 @@
 import { PageBuilderItem } from '@/services/supabase/types';
-import { NavigationItem, NavigationGroup, Sidenav } from '../layout/sidenav';
+import {
+  NavigationItem,
+  NavigationGroup,
+  Sidenav,
+} from '@/components/layout/sidenav';
 import {
   Building2,
   DollarSign,

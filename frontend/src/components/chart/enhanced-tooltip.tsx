@@ -53,6 +53,7 @@ export function EnhancedTooltip({
               | number
               | undefined;
             const change = getPercentageChange(value, previousValue);
+            const dotStyle = { backgroundColor: entry.color };
 
             return (
               <div
@@ -62,7 +63,7 @@ export function EnhancedTooltip({
                 <div className="flex items-center space-x-2">
                   <div
                     className="h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: entry.color }}
+                    style={dotStyle}
                   />
                   <span className="text-muted-foreground truncate text-xs">
                     {entry.name}
@@ -137,34 +138,34 @@ export function CompactTooltip({
     <div className="bg-background min-w-[160px] rounded-lg border px-3 py-2 shadow-sm">
       <div className="text-foreground mb-1 text-xs font-medium">{label}</div>
       <div className="space-y-1">
-        {payload.map((entry, index) => (
-          <div
-            key={`item-${index}`}
-            className="flex items-center justify-between"
-          >
-            <div className="flex items-center space-x-1.5">
-              <div
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-muted-foreground text-xs">
-                {entry.name}
-              </span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="text-foreground font-mono text-xs font-medium">
-                {typeof entry.value === 'number'
-                  ? entry.value.toLocaleString('da-DK')
-                  : entry.value}
-              </span>
-              {unit && (
-                <span className="text-muted-foreground bg-muted rounded px-1 py-0.5 text-[10px] font-medium">
-                  {unit}
+        {payload.map((entry, index) => {
+          const dotStyle = { backgroundColor: entry.color };
+          return (
+            <div
+              key={`item-${index}`}
+              className="flex items-center justify-between"
+            >
+              <div className="flex items-center space-x-1.5">
+                <div className="h-1.5 w-1.5 rounded-full" style={dotStyle} />
+                <span className="text-muted-foreground text-xs">
+                  {entry.name}
                 </span>
-              )}
+              </div>
+              <div className="flex items-center space-x-1">
+                <span className="text-foreground font-mono text-xs font-medium">
+                  {typeof entry.value === 'number'
+                    ? entry.value.toLocaleString('da-DK')
+                    : entry.value}
+                </span>
+                {unit && (
+                  <span className="text-muted-foreground bg-muted rounded px-1 py-0.5 text-[10px] font-medium">
+                    {unit}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

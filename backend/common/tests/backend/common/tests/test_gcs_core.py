@@ -11,6 +11,7 @@ Tests cover:
 Tests use realistic Danish data including CVR numbers and special characters (æøå).
 """
 
+import contextlib
 import io
 import json
 import tempfile
@@ -24,8 +25,6 @@ import pytest
 # Mock tenacity module before importing code that uses it
 class MockRetryError(Exception):
     """Mock RetryError for testing."""
-
-    pass
 
 
 RetryError = MockRetryError
@@ -80,7 +79,6 @@ class MockGCSDataAccess:
 
     def _temp_download(self, path):
         """Mock temp download."""
-        pass
 
 
 GCSDataAccess = MockGCSDataAccess
@@ -123,19 +121,18 @@ def mock_gcs_filesystem():
                     return False
 
             return MockWriteContext()
-        else:
-            # Reading mode - return content if exists
-            content = mock_fs._file_contents.get(path, b"" if "b" in mode else "")
-            buffer = io.BytesIO(content) if "b" in mode else io.StringIO(content)
+        # Reading mode - return content if exists
+        content = mock_fs._file_contents.get(path, b"" if "b" in mode else "")
+        buffer = io.BytesIO(content) if "b" in mode else io.StringIO(content)
 
-            class MockReadContext:
-                def __enter__(self):
-                    return buffer
+        class MockReadContext:
+            def __enter__(self):
+                return buffer
 
-                def __exit__(self, *args):
-                    return False
+            def __exit__(self, *args):
+                return False
 
-            return MockReadContext()
+        return MockReadContext()
 
     mock_fs.open.side_effect = mock_open_handler
     mock_fs.invalidate_cache = Mock()
@@ -149,11 +146,9 @@ def mock_duckdb_connection():
     conn = duckdb.connect(":memory:")
 
     # Install spatial extension (ignore if already loaded)
-    try:
+    with contextlib.suppress(Exception):
         conn.execute("INSTALL spatial;")
         conn.execute("LOAD spatial;")
-    except Exception:
-        pass
 
     yield conn
     conn.close()
@@ -162,21 +157,23 @@ def mock_duckdb_connection():
 @pytest.fixture
 def gcs_data_access(mock_gcs_filesystem, mock_duckdb_connection):
     """GCSDataAccess instance with mocked filesystem."""
-    with patch("common.gcs.core.get_gcs_filesystem", return_value=mock_gcs_filesystem):
-        with patch("common.gcs.core.ResourceMonitor") as mock_monitor:
-            # Mock monitor to avoid psutil dependencies in tests
-            mock_monitor_instance = MagicMock()
-            mock_monitor_instance.check_resources.return_value = {
-                "memory_gb": 1.0,
-                "disk_gb": 10.0,
-                "memory_percent": 10.0,
-                "disk_percent": 10.0,
-            }
-            mock_monitor.return_value = mock_monitor_instance
+    with (
+        patch("common.gcs.core.get_gcs_filesystem", return_value=mock_gcs_filesystem),
+        patch("common.gcs.core.ResourceMonitor") as mock_monitor,
+    ):
+        # Mock monitor to avoid psutil dependencies in tests
+        mock_monitor_instance = MagicMock()
+        mock_monitor_instance.check_resources.return_value = {
+            "memory_gb": 1.0,
+            "disk_gb": 10.0,
+            "memory_percent": 10.0,
+            "disk_percent": 10.0,
+        }
+        mock_monitor.return_value = mock_monitor_instance
 
-            gcs = GCSDataAccess(connection=mock_duckdb_connection)
-            gcs.fs = mock_gcs_filesystem
-            yield gcs
+        gcs = GCSDataAccess(connection=mock_duckdb_connection)
+        gcs.fs = mock_gcs_filesystem
+        yield gcs
 
 
 @pytest.fixture
@@ -475,16 +472,16 @@ def test_download_parquet_handles_temp_file_cleanup(gcs_data_access):
     temp_files_created = []
 
     def track_temp_file(*args, **kwargs):
-        temp = tempfile.NamedTemporaryFile(*args, **kwargs)
+        temp = tempfile.NamedTemporaryFile(*args, **kwargs)  # noqa: SIM115
         temp_files_created.append(temp.name)
         return temp
 
-    with patch("tempfile.NamedTemporaryFile", side_effect=track_temp_file):
-        with patch("common.gcs.core.shutil.copyfileobj"):
-            try:
-                gcs_data_access.read_parquet_streaming(gcs_path)
-            except Exception:
-                pass  # Expected to fail without real parquet data
+    with (
+        patch("tempfile.NamedTemporaryFile", side_effect=track_temp_file),
+        patch("common.gcs.core.shutil.copyfileobj"),
+        contextlib.suppress(Exception),
+    ):
+        gcs_data_access.read_parquet_streaming(gcs_path)
 
     # Verify temp file was cleaned up (file should not exist)
     for temp_file in temp_files_created:
@@ -511,7 +508,9 @@ def test_upload_download_integrity_json(gcs_data_access, sample_danish_data):
 
     # Verify special characters preserved
     assert result["description"] == sample_danish_data["description"]
-    assert all(c["name"] == orig["name"] for c, orig in zip(result["companies"], sample_danish_data["companies"]))
+    assert all(
+        c["name"] == orig["name"] for c, orig in zip(result["companies"], sample_danish_data["companies"], strict=False)
+    )
 
 
 def test_upload_download_integrity_json_with_cvr_numbers(gcs_data_access, valid_cvr_numbers):
@@ -527,7 +526,7 @@ def test_upload_download_integrity_json_with_cvr_numbers(gcs_data_access, valid_
     result = gcs_data_access.download_json(gcs_path)
 
     # Verify CVR numbers maintain leading zeros
-    for orig, downloaded in zip(test_data["companies"], result["companies"]):
+    for orig, downloaded in zip(test_data["companies"], result["companies"], strict=False):
         assert orig["cvr"] == downloaded["cvr"]
         assert len(downloaded["cvr"]) == 8
 
@@ -558,7 +557,7 @@ def test_upload_download_integrity_parquet_roundtrip(gcs_data_access, mock_duckd
         mock_duckdb_connection.execute(f"COPY source_data TO '{temp_upload_path}' (FORMAT PARQUET, COMPRESSION zstd)")
 
         # Simulate upload to GCS
-        with open(temp_upload_path, "rb") as f:
+        with Path(temp_upload_path).open("rb") as f:
             file_content = f.read()
             gcs_data_access.fs._file_contents[gcs_path] = file_content
 
@@ -572,7 +571,7 @@ def test_upload_download_integrity_parquet_roundtrip(gcs_data_access, mock_duckd
             temp_download_path = temp_download.name
 
             # Write mock GCS content to temp file
-            with open(temp_download_path, "wb") as f:
+            with Path(temp_download_path).open("wb") as f:
                 f.write(gcs_data_access.fs._file_contents[gcs_path])
 
         # Load into new table
@@ -608,11 +607,11 @@ def test_concurrent_json_uploads(gcs_data_access):
     gcs_paths = [f"gs://test-bucket/concurrent-{i}.json" for i in range(3)]
 
     # Upload all files
-    for data, path in zip(test_data_sets, gcs_paths):
+    for data, path in zip(test_data_sets, gcs_paths, strict=False):
         gcs_data_access.upload_json(data, path)
 
     # Verify all were uploaded correctly
-    for data, path in zip(test_data_sets, gcs_paths):
+    for data, path in zip(test_data_sets, gcs_paths, strict=False):
         result = gcs_data_access.download_json(path)
         assert result == data
 

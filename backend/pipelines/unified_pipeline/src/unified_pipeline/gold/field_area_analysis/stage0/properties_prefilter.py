@@ -8,7 +8,7 @@ PERFORMANCE IMPACT: Reduces Stage 1 complexity from 3.9B to 300M combinations (1
 """
 
 import time
-from typing import Any, Dict
+from typing import Any
 
 from ..config import CONFIG
 from .base import PreFilteringStageBase
@@ -43,7 +43,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
         self.log.info(f"📊 Input: {properties_count:,} properties to filter")
 
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """
         Pre-filter properties using chunked processing to manage memory.
 
@@ -157,7 +157,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
             "performance_improvement": f"{total_properties / total_filtered:.1f}x reduction in Stage 1 complexity",
         }
 
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save output data - already handled in _execute_stage_processing for Stage 0."""
         # Stage 0 classes handle export directly in _execute_stage_processing
         # to use custom output paths and naming conventions

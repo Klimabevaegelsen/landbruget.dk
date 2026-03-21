@@ -1,5 +1,5 @@
 import { ClimateKPIs } from '@/services/supabase/types';
-import { getClimateEmissions } from '@/services/supabase/climate';
+import { getClimateEmissions } from '@/lib/climate-data';
 import { CarbonAccountingKPIs } from '@/components/climate';
 
 export async function BlockClimateKPIs({ block }: { block: ClimateKPIs }) {

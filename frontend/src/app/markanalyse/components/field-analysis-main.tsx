@@ -17,7 +17,7 @@ import { FieldDetailsContent } from './shared/field-details-content';
 import { FieldDetailsPanel } from '@/components/field-analysis/FieldDetailsPanel';
 import { LoadingState } from '@/components/field-analysis/LoadingState';
 import { YearSlider } from '@/components/field-analysis/YearSlider';
-import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
+import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
 import {
   FieldAnalysisData,
   LayerVisibility,
@@ -39,7 +39,7 @@ const FieldAnalysisMap = dynamic(
   }
 );
 
-export default function FieldAnalysisMain() {
+export function FieldAnalysisMain() {
   const [isClient, setIsClient] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isMobile } = useMobileDetection();
@@ -120,10 +120,6 @@ export default function FieldAnalysisMain() {
   // Load PMTiles URLs with caching
   useEffect(() => {
     const loadPMTilesUrls = async () => {
-      console.log(
-        `🗺️ Loading PMTiles URLs for year ${yearSelection.selectedYear}`
-      );
-
       try {
         const urls = await pmtilesCacheService.getFieldAnalysisUrls(
           yearSelection.selectedYear
@@ -135,10 +131,8 @@ export default function FieldAnalysisMain() {
           yearSelection.selectedYear,
           availableYears
         );
-
-        console.log('✅ PMTiles URLs loaded and adjacent years preloaded');
-      } catch (error) {
-        console.error('❌ Failed to load PMTiles URLs:', error);
+      } catch {
+        // PMTiles URL loading failure handled silently
       }
     };
 
@@ -160,7 +154,6 @@ export default function FieldAnalysisMain() {
 
     // Fallback timeout to prevent getting stuck in loading state
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
       loadingTimeoutRef.current = null;
     }, 2000); // 2 second fallback timeout (reduced from 5s)
@@ -227,8 +220,6 @@ export default function FieldAnalysisMain() {
 
   // Handle map ready callback
   const handleMapReady = useCallback(() => {
-    console.log('Map ready - clearing loading state');
-
     // Clear the fallback timeout since map loaded successfully
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -241,7 +232,6 @@ export default function FieldAnalysisMain() {
   // Handle CSV download
   const handleDownloadCSV = useCallback(() => {
     if (!queryVisibleFieldsRef.current) {
-      console.warn('CSV download: queryVisibleFields function not available');
       return;
     }
 
@@ -249,8 +239,6 @@ export default function FieldAnalysisMain() {
       const visibleFields = queryVisibleFieldsRef.current();
 
       if (visibleFields.length === 0) {
-        console.warn('CSV download: No visible fields found');
-        // Could show a toast notification here
         return;
       }
 
@@ -258,10 +246,8 @@ export default function FieldAnalysisMain() {
       const filename = generateCSVFilename(yearSelection.selectedYear);
 
       downloadCSV(csvContent, filename);
-      console.log(`Downloaded CSV with ${visibleFields.length} fields`);
-    } catch (error) {
-      console.error('Error downloading CSV:', error);
-      // Could show an error toast here
+    } catch {
+      // CSV download error handled silently
     }
   }, [yearSelection.selectedYear]);
 
@@ -364,10 +350,7 @@ export default function FieldAnalysisMain() {
           </div>
         </div>
 
-        <div
-          className="absolute inset-0 h-full w-full"
-          style={{ touchAction: 'pan-x pan-y' }}
-        >
+        <div className="absolute inset-0 h-full w-full touch-pan-x touch-pan-y">
           {isLoading ? (
             <LoadingState message="Indlæser kortdata..." />
           ) : (
@@ -404,6 +387,7 @@ export default function FieldAnalysisMain() {
               <div className="flex h-full flex-col items-center justify-start p-4">
                 <button
                   onClick={() => setIsPanelCollapsed(false)}
+                  data-testid="expand-field-panel-button"
                   className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
                   aria-label="Vis panel"
                   title="Vis markdetaljer"
@@ -442,6 +426,7 @@ export default function FieldAnalysisMain() {
                       {/* Collapse Button */}
                       <button
                         onClick={() => setIsPanelCollapsed(true)}
+                        data-testid="collapse-field-panel-button"
                         className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
                         aria-label="Skjul panel"
                         title="Skjul panel for bedre kortoversigt"
@@ -463,6 +448,7 @@ export default function FieldAnalysisMain() {
                       {/* Close Button */}
                       <button
                         onClick={() => setSelectedField(null)}
+                        data-testid="close-field-panel-button"
                         className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
                         aria-label="Luk panel"
                       >
@@ -506,6 +492,7 @@ export default function FieldAnalysisMain() {
             <div className="flex h-full flex-col items-center justify-start p-4">
               <button
                 onClick={() => setIsPanelCollapsed(false)}
+                data-testid="expand-coordinates-panel-button"
                 className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
                 aria-label="Vis koordinater"
                 title="Vis GPS koordinater"
@@ -532,6 +519,7 @@ export default function FieldAnalysisMain() {
                 <h3 className="text-lg font-semibold">GPS Koordinater</h3>
                 <button
                   onClick={() => setIsPanelCollapsed(true)}
+                  data-testid="collapse-coordinates-panel-button"
                   className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
                   aria-label="Skjul panel"
                   title="Skjul GPS koordinater"

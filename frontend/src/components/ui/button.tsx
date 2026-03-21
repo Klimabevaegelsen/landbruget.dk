@@ -50,7 +50,7 @@ function Button({
 
   // Generate a data-testid from aria-label or children if not explicitly provided
   const dataTestId =
-    (props as any)['data-testid'] ||
+    (props as Record<string, unknown>)['data-testid'] ||
     (typeof props['aria-label'] === 'string'
       ? `button-${props['aria-label'].toLowerCase().replace(/\s+/g, '-')}`
       : undefined);

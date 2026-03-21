@@ -507,7 +507,7 @@ async def test_run_success(water_projects_bronze: WaterProjectsBronze) -> None:
     water_projects_bronze._save_raw_data.assert_called_once()
 
     # Verify the  was created correctly
-    args, kwargs = water_projects_bronze._save_raw_data.call_args
+    args, _kwargs = water_projects_bronze._save_raw_data.call_args
     df = args[0]
     assert isinstance(
         df,

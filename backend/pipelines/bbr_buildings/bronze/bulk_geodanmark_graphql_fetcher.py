@@ -16,6 +16,7 @@ GraphQL API details:
   - BBRUUID links to BBR_Bygning.id_lokalId
 """
 
+import contextlib
 import logging
 import os
 import time
@@ -329,10 +330,8 @@ class BulkGeoDanmarkGraphQLFetcher:
         finally:
             # Always free memory regardless of save outcome
             for table_name in table_names:
-                try:
+                with contextlib.suppress(Exception):
                     self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-                except Exception:
-                    pass
 
     def _combine_intermediate_files(self) -> None:
         """Combine all intermediate GeoParquet files into final output."""
@@ -382,7 +381,7 @@ class BulkGeoDanmarkGraphQLFetcher:
             # files and VARCHAR in others — DuckDB's read_parquet union_by_name
             # cannot reconcile these).
             union_parts = []
-            for i, f in enumerate(valid_files):
+            for _i, f in enumerate(valid_files):
                 cols = self.conn.execute(
                     f"SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM read_parquet('{f}'))"
                 ).fetchall()

@@ -14,10 +14,7 @@ export function CategoryPlaceholder() {
   return (
     <div className="relative">
       {/* Placeholder area for entire category */}
-      <div
-        style={{ width: '100%', height: 300, minHeight: 300, minWidth: 100 }}
-        className="border-muted-foreground/25 bg-muted/50 mt-4 flex items-center justify-center rounded-lg border-2 border-dashed"
-      >
+      <div className="border-muted-foreground/25 bg-muted/50 mt-4 flex h-[300px] min-h-[300px] w-full min-w-[100px] items-center justify-center rounded-lg border-2 border-dashed">
         <ResponsiveContainer>
           <div className="flex h-full flex-col items-center justify-center p-8 text-center">
             <div className="bg-muted mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-lg">
@@ -53,6 +50,7 @@ export function CategoryPlaceholder() {
       <div className="bg-background/80 absolute inset-0 flex items-center justify-center rounded-lg opacity-0 backdrop-blur-sm transition-opacity hover:opacity-100">
         <button
           onClick={handleClick}
+          data-testid="contribute-category-data-button"
           className="bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-colors focus:ring-2 focus:ring-offset-2 focus:outline-none"
         >
           <svg

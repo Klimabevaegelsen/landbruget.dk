@@ -9,13 +9,18 @@ on:
     branches: [ main, develop ]
     paths:
       - '**.py'
+      - '**.ts'
+      - '**.tsx'
       - 'pyproject.toml'
-      - 'ruff.toml'
+      - 'frontend/.oxlintrc.json'
+      - 'frontend/oxlint-plugin-landbruget/**'
       - '.github/workflows/code-quality.yml'
   push:
     branches: [ main ]
     paths:
       - '**.py'
+      - '**.ts'
+      - '**.tsx'
 
 
 jobs:
@@ -35,29 +40,11 @@ jobs:
     - name: Install ruff
       run: pip install ruff==0.15.5
 
-    - name: Run ruff linting (critical errors only)
+    - name: Run ruff linting (all rules — zero tolerance)
       run: |
-        # Block ALL F errors (undefined names, unused vars, etc.) + critical E/W errors
-        # F = All Pyflakes errors (F821 undefined names, F401 unused imports, etc.)
-        # E9 = Runtime/syntax errors
-        # E711/E712/E713/E714 = Wrong None/True/False comparisons
-        # W605 = Invalid escape sequences
-        ruff check . --select E9,F,E711,E712,E713,E714,W605 --output-format github
+        # All configured rules in pyproject.toml must pass — zero violations allowed
+        ruff check . --output-format github
       continue-on-error: false
-
-    - name: Run ruff linting (all errors, informational)
-      run: |
-        # Show all issues but don't fail the build
-        echo "## Full Linting Report" >> $GITHUB_STEP_SUMMARY
-        echo "The following issues were found but don't block the PR:" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        ruff check . --output-format concise | head -50 >> $GITHUB_STEP_SUMMARY || true
-        echo '```' >> $GITHUB_STEP_SUMMARY
-
-        # Count total issues
-        TOTAL_ISSUES=$(ruff check . --output-format concise | wc -l)
-        echo "Total linting issues found: $TOTAL_ISSUES" >> $GITHUB_STEP_SUMMARY
-      continue-on-error: true
 
   format-check:
     name: Python Formatting
@@ -226,3 +213,208 @@ jobs:
 
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "These metrics help track code quality improvements over time." >> $GITHUB_STEP_SUMMARY
+
+  architectural-boundaries:
+    name: Architectural Boundary Checks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Medallion import boundaries
+      run: |
+        echo "## Medallion Import Boundaries" >> $GITHUB_STEP_SUMMARY
+        FAILED=0
+
+        # Gold must not import from Bronze (gold should consume silver output, not raw data)
+        GOLD_IMPORTS_BRONZE=$(grep -rn "from bronze\|from \.bronze\|from \.\.bronze\|import bronze" \
+          --include="*.py" \
+          backend/pipelines/*/gold/ 2>/dev/null || true)
+        if [ -n "$GOLD_IMPORTS_BRONZE" ]; then
+          echo "### ❌ Gold layer importing from Bronze:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$GOLD_IMPORTS_BRONZE" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Gold modules should only consume Silver output. Move data access to Silver layer." >> $GITHUB_STEP_SUMMARY
+          FAILED=1
+        fi
+
+        # Bronze must not import from Silver or Gold (bronze is raw ingestion only)
+        BRONZE_IMPORTS_UPPER=$(grep -rn "from silver\|from \.silver\|from gold\|from \.gold" \
+          --include="*.py" \
+          backend/pipelines/*/bronze/ 2>/dev/null || true)
+        if [ -n "$BRONZE_IMPORTS_UPPER" ]; then
+          echo "### ❌ Bronze layer importing from Silver/Gold:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$BRONZE_IMPORTS_UPPER" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Bronze is raw data ingestion. It must not depend on Silver or Gold." >> $GITHUB_STEP_SUMMARY
+          FAILED=1
+        fi
+
+        if [ "$FAILED" -eq 0 ]; then
+          echo "✅ Medallion layer boundaries respected" >> $GITHUB_STEP_SUMMARY
+        else
+          exit 1
+        fi
+
+    - name: Shared logging check (new files only)
+      run: |
+        echo "## Shared Logging Check" >> $GITHUB_STEP_SUMMARY
+
+        # Allowlist: existing files that use raw logging.getLogger()
+        # These should be migrated over time — do NOT add new files here.
+        LOGGING_ALLOWLIST=(
+          "backend/pipelines/chr_pipeline/main.py"
+          "backend/pipelines/svineflytning_pipeline/main.py"
+          "backend/pipelines/drive_data_pipeline/main.py"
+          "backend/pipelines/drive_data_pipeline/utils/error_handling.py"
+          "backend/pipelines/bbr_buildings/main.py"
+          "backend/pipelines/bmd_scraper/main.py"
+          "backend/pipelines/unified_pipeline/src/unified_pipeline/base.py"
+          "backend/pipelines/arbejdstilsynet_inspections/main.py"
+          "backend/common/"
+        )
+        ALLOWLIST_PATTERN=$(printf "|%s" "${LOGGING_ALLOWLIST[@]}")
+        ALLOWLIST_PATTERN="${ALLOWLIST_PATTERN:1}"
+
+        # Check for new files using raw logging setup
+        NEW_LOGGING=$(grep -rn "def setup_logging\|logging\.getLogger(" \
+          --include="*.py" \
+          backend/pipelines/ \
+          | grep -v "_test\.py\|test_\|/tests/\|conftest" \
+          | grep -v -E "$ALLOWLIST_PATTERN" || true)
+
+        if [ -n "$NEW_LOGGING" ]; then
+          echo "### ⚠️ New files using raw logging instead of shared utilities:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$NEW_LOGGING" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Use shared logging from \`backend/common/\` instead of \`logging.getLogger()\`." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ No new raw logging usage detected" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        # Count total raw logging for tracking migration progress
+        RAW_LOGGING_COUNT=$(grep -rn "logging\.getLogger(" \
+          --include="*.py" \
+          backend/pipelines/ \
+          | grep -v "_test\.py\|test_\|/tests/" \
+          | wc -l || echo "0")
+        echo "### Raw logging.getLogger() count (migration tracker): $RAW_LOGGING_COUNT" >> $GITHUB_STEP_SUMMARY
+
+    - name: Hardcoded EPSG check (new files only)
+      run: |
+        echo "## Hardcoded EPSG Check" >> $GITHUB_STEP_SUMMARY
+
+        # Count hardcoded EPSG strings (informational — tracking migration progress)
+        EPSG_COUNT=$(grep -rn "'EPSG:\|\"EPSG:" \
+          --include="*.py" \
+          backend/pipelines/ backend/common/ \
+          | grep -v "crs_utils\.py\|_test\.py\|test_\|/tests/" \
+          | wc -l || echo "0")
+        echo "### Hardcoded EPSG strings (migration tracker): $EPSG_COUNT" >> $GITHUB_STEP_SUMMARY
+        echo "Migrate to constants from \`backend/common/crs_utils.py\` to reduce this number." >> $GITHUB_STEP_SUMMARY
+
+    - name: No cross-pipeline imports
+      run: |
+        echo "## Cross-Pipeline Import Check" >> $GITHUB_STEP_SUMMARY
+
+        # Pipelines must not import from each other — shared code goes in common/
+        CROSS_IMPORTS=$(grep -rn "from pipelines\.\|import pipelines\." \
+          --include="*.py" \
+          backend/pipelines/ \
+          | grep -v "__pycache__\|\.pyc\|/tests/\|_test\.py\|test_\|conftest" || true)
+
+        if [ -n "$CROSS_IMPORTS" ]; then
+          echo "### ❌ Cross-pipeline imports detected:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$CROSS_IMPORTS" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Pipelines must not import from each other. Move shared code to \`backend/common/\`." >> $GITHUB_STEP_SUMMARY
+          exit 1
+        else
+          echo "✅ No cross-pipeline imports detected" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Pandas migration tracker
+      run: |
+        echo "## Processing Engine Migration" >> $GITHUB_STEP_SUMMARY
+
+        # Track pandas usage in pipeline code (excluding tests)
+        # Target: 0 — all data processing should use DuckDB
+        PANDAS_COUNT=$(grep -rn "import pandas\|from pandas" \
+          --include="*.py" \
+          backend/pipelines/ \
+          | grep -v "_test\.py\|test_\|/tests/\|conftest\|__pycache__" \
+          | wc -l | tr -d ' ')
+        echo "### Pandas imports in pipeline code: $PANDAS_COUNT (target: 0, use DuckDB)" >> $GITHUB_STEP_SUMMARY
+
+        GEOPANDAS_COUNT=$(grep -rn "import geopandas\|from geopandas" \
+          --include="*.py" \
+          backend/pipelines/ \
+          | grep -v "_test\.py\|test_\|/tests/\|conftest\|__pycache__" \
+          | wc -l | tr -d ' ')
+        echo "### GeoPandas imports in pipeline code: $GEOPANDAS_COUNT (target: 0, use duckdb-spatial)" >> $GITHUB_STEP_SUMMARY
+
+    - name: Pipeline structure check
+      run: |
+        echo "## Pipeline Structure Check" >> $GITHUB_STEP_SUMMARY
+        MISSING_MAIN=0
+
+        # Every pipeline directory should have a main.py entry point
+        for dir in backend/pipelines/*/; do
+          pipeline_name=$(basename "$dir")
+          # Skip __pycache__ and hidden dirs
+          if [[ "$pipeline_name" == __* ]] || [[ "$pipeline_name" == .* ]]; then
+            continue
+          fi
+          if [ ! -f "$dir/main.py" ]; then
+            echo "⚠️ Pipeline \`$pipeline_name\` is missing \`main.py\` entry point" >> $GITHUB_STEP_SUMMARY
+            MISSING_MAIN=$((MISSING_MAIN + 1))
+          fi
+        done
+
+        if [ "$MISSING_MAIN" -eq 0 ]; then
+          echo "✅ All pipelines have main.py entry points" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  frontend-lint:
+    name: Frontend Linting (oxlint)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Run oxlint
+      working-directory: frontend
+      run: |
+        echo "## Frontend Lint Report (oxlint)" >> $GITHUB_STEP_SUMMARY
+
+        # Run oxlint — warnings don't fail the build, errors do
+        npx oxlint 2>&1 | tee /tmp/oxlint-output.txt
+
+        # Extract summary
+        SUMMARY=$(tail -1 /tmp/oxlint-output.txt)
+        echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+
+        # Fail if any errors (not warnings)
+        if echo "$SUMMARY" | grep -q "and [1-9][0-9]* error"; then
+          echo "❌ oxlint errors found — PR blocked" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi

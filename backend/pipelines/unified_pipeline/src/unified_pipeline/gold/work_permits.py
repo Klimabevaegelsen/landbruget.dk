@@ -235,7 +235,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
 
         if quality_checks:
             (
-                total,
+                _total,
                 missing_company,
                 missing_year,
                 missing_nationality,

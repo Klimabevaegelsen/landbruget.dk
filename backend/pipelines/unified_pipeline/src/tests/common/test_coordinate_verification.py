@@ -374,7 +374,7 @@ def test_coordinate_verification_utility():
     """)
 
     verifier = CoordinateOrderVerifier(conn)
-    is_correct, status, coords = verifier.verify_coordinate_order("good_coords")
+    is_correct, _status, coords = verifier.verify_coordinate_order("good_coords")
 
     assert is_correct
     assert len(coords) == 3

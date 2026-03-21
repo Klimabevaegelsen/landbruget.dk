@@ -161,6 +161,10 @@ type SidebarContentProps = React.HTMLAttributes<HTMLDivElement>;
 const SidebarContent = React.forwardRef<HTMLDivElement, SidebarContentProps>(
   ({ className, children, ...props }, ref) => {
     const { isExpanded } = useSidebar();
+    const mergedStyle = {
+      ...props.style,
+      ...(isExpanded ? {} : { overflow: 'hidden' as const, width: '100%' }),
+    };
 
     return (
       <div
@@ -171,10 +175,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, SidebarContentProps>(
           className
         )}
         {...props}
-        style={{
-          ...props.style,
-          ...(isExpanded ? {} : { overflow: 'hidden', width: '100%' }),
-        }}
+        style={mergedStyle}
       >
         {children}
       </div>

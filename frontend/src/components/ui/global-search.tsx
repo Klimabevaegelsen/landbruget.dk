@@ -174,6 +174,7 @@ export function GlobalSearch() {
       {/* Search Trigger Button */}
       <button
         onClick={() => setOpen(true)}
+        data-testid="open-global-search-button"
         className="text-muted-foreground bg-background border-border hover:bg-accent hover:text-accent-foreground inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors"
       >
         <Search className="h-4 w-4" />

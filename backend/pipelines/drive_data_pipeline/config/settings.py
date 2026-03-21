@@ -1,7 +1,7 @@
 """Settings configuration for the Google Drive Data Pipeline."""
 
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -12,7 +12,7 @@ env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 load_dotenv(env_path)
 
 
-class StorageType(str, Enum):
+class StorageType(StrEnum):
     """Available storage types for the pipeline."""
 
     LOCAL = "local"
@@ -20,7 +20,7 @@ class StorageType(str, Enum):
     R2 = "r2"
 
 
-class LogLevel(str, Enum):
+class LogLevel(StrEnum):
     """Available log levels for the pipeline."""
 
     DEBUG = "DEBUG"

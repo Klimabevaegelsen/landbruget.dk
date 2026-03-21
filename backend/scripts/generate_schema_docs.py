@@ -16,14 +16,18 @@ Environment Variables:
 """
 
 import argparse
+import contextlib
+import logging
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import duckdb
 import pyarrow.parquet as pq
+
+log = logging.getLogger(__name__)
 
 
 class SchemaDocumentationGenerator:
@@ -32,8 +36,8 @@ class SchemaDocumentationGenerator:
     def __init__(
         self,
         output_dir: str = "schema",
-        bucket_name: Optional[str] = None,
-        local_cache: Optional[str] = None,
+        bucket_name: str | None = None,
+        local_cache: str | None = None,
     ):
         """
         Initialize schema documentation generator.
@@ -56,19 +60,16 @@ class SchemaDocumentationGenerator:
     def _setup_duckdb(self) -> None:
         """Setup DuckDB extensions and GCS authentication."""
         # Install required extensions
-        try:
+        with contextlib.suppress(Exception):
             self.conn.execute("INSTALL httpfs")
             self.conn.execute("LOAD httpfs")
-            print("✅ DuckDB httpfs extension loaded")
-        except Exception as e:
-            print(f"Warning: Could not load httpfs extension: {e}")
 
         # Setup GCS authentication if credentials available
         gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
         gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
         if gcs_access_key and gcs_secret_key:
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.execute(f"""
                     CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
                         TYPE GCS,
@@ -76,13 +77,10 @@ class SchemaDocumentationGenerator:
                         SECRET '{gcs_secret_key}'
                     );
                 """)
-                print("✅ DuckDB GCS HMAC authentication configured")
-            except Exception as e:
-                print(f"Warning: Could not setup GCS authentication: {e}")
         else:
-            print("ℹ️  No GCS HMAC credentials found")
+            pass
 
-    def discover_parquet_files(self, search_paths: List[str]) -> List[Tuple[str, str]]:
+    def discover_parquet_files(self, search_paths: list[str]) -> list[tuple[str, str]]:
         """
         Discover Parquet files from GCS or local cache.
 
@@ -104,7 +102,7 @@ class SchemaDocumentationGenerator:
 
         return discovered_files
 
-    def _discover_gcs_files(self, gcs_path: str) -> List[Tuple[str, str]]:
+    def _discover_gcs_files(self, gcs_path: str) -> list[tuple[str, str]]:
         """Discover Parquet files from GCS."""
         files = []
 
@@ -122,27 +120,23 @@ class SchemaDocumentationGenerator:
                 table_name = self._extract_table_name(file_path)
                 files.append((table_name, file_path))
 
-            print(f"✅ Discovered {len(files)} Parquet files from {gcs_path}")
-
-        except Exception as e:
-            print(f"Warning: Could not discover GCS files at {gcs_path}: {e}")
+        except Exception:
+            log.debug("Could not discover GCS files")
 
         return files
 
-    def _discover_local_files(self, local_path: str) -> List[Tuple[str, str]]:
+    def _discover_local_files(self, local_path: str) -> list[tuple[str, str]]:
         """Discover Parquet files from local directory."""
         files = []
         path = Path(local_path)
 
         if not path.exists():
-            print(f"Warning: Local path does not exist: {local_path}")
             return files
 
         for parquet_file in path.rglob("*.parquet"):
             table_name = self._extract_table_name(str(parquet_file))
             files.append((table_name, str(parquet_file)))
 
-        print(f"✅ Discovered {len(files)} Parquet files from {local_path}")
         return files
 
     def _extract_table_name(self, file_path: str) -> str:
@@ -161,11 +155,9 @@ class SchemaDocumentationGenerator:
                 filename = parts[-2]
 
         # Clean up the name
-        table_name = filename.replace("-", "_").replace(" ", "_").lower()
+        return filename.replace("-", "_").replace(" ", "_").lower()
 
-        return table_name
-
-    def get_parquet_schema(self, file_path: str) -> Dict[str, Any]:
+    def get_parquet_schema(self, file_path: str) -> dict[str, Any]:
         """
         Get comprehensive schema information from Parquet file.
 
@@ -192,7 +184,7 @@ class SchemaDocumentationGenerator:
 
             # Column information
             columns = []
-            for i, field in enumerate(schema):
+            for _i, field in enumerate(schema):
                 col_info = {
                     "name": field.name,
                     "type": str(field.type),
@@ -246,18 +238,17 @@ class SchemaDocumentationGenerator:
                     schema_info["column_statistics"] = column_stats
                 except Exception:
                     # SUMMARIZE might fail for some data types
-                    pass
+                    log.debug("SUMMARIZE failed for table")
 
-            except Exception as e:
-                print(f"Warning: Could not get DuckDB statistics for {file_path}: {e}")
+            except Exception:
+                log.debug("Could not get column statistics")
 
         except Exception as e:
             schema_info["error"] = str(e)
-            print(f"Error reading schema from {file_path}: {e}")
 
         return schema_info
 
-    def generate_tables_md(self, files: List[Tuple[str, str]]) -> str:
+    def generate_tables_md(self, files: list[tuple[str, str]]) -> str:
         """
         Generate tables.md with list of all tables.
 
@@ -284,7 +275,6 @@ class SchemaDocumentationGenerator:
         # Get schema info for each file
         table_info = []
         for table_name, file_path in files:
-            print(f"Processing {table_name}...")
             schema_info = self.get_parquet_schema(file_path)
             table_info.append((table_name, schema_info))
 
@@ -341,7 +331,7 @@ class SchemaDocumentationGenerator:
             )
 
             # Metadata if available
-            if "file_metadata" in info and info["file_metadata"]:
+            if info.get("file_metadata"):
                 lines.append("")
                 lines.append("**Metadata:**")
                 for key, value in info["file_metadata"].items():
@@ -356,13 +346,12 @@ class SchemaDocumentationGenerator:
             )
 
         # Save to file
-        with open(output_file, "w", encoding="utf-8") as f:
+        with output_file.open("w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-        print(f"✅ Generated {output_file}")
         return str(output_file)
 
-    def generate_columns_md(self, files: List[Tuple[str, str]]) -> str:
+    def generate_columns_md(self, files: list[tuple[str, str]]) -> str:
         """
         Generate columns.md with detailed column information.
 
@@ -430,7 +419,7 @@ class SchemaDocumentationGenerator:
                 description = ""
 
                 # Try to get description from metadata
-                if "metadata" in col and col["metadata"]:
+                if col.get("metadata"):
                     description = col["metadata"].get("description", "")
 
                 lines.append(f"| {col['name']} | {col['type']} | {nullable} | {description} |")
@@ -438,7 +427,7 @@ class SchemaDocumentationGenerator:
             lines.append("")
 
             # Column statistics if available
-            if "column_statistics" in info and info["column_statistics"]:
+            if info.get("column_statistics"):
                 lines.extend(
                     [
                         "### Column Statistics",
@@ -467,10 +456,9 @@ class SchemaDocumentationGenerator:
             )
 
         # Save to file
-        with open(output_file, "w", encoding="utf-8") as f:
+        with output_file.open("w", encoding="utf-8") as f:
             f.write("\n".join(lines))
 
-        print(f"✅ Generated {output_file}")
         return str(output_file)
 
     def _extract_date_from_path(self, file_path: str) -> str:
@@ -556,27 +544,17 @@ def main():
             f"gs://{bucket}/silver",
         ]
         search_paths.extend(default_paths)
-        print(f"Using default search paths: {default_paths}")
 
     # Discover Parquet files
-    print("\n🔍 Discovering Parquet files...")
     files = generator.discover_parquet_files(search_paths)
 
     if not files:
-        print("❌ No Parquet files found")
         sys.exit(1)
 
-    print(f"\n✅ Found {len(files)} tables to document\n")
-
     # Generate documentation
-    print("📝 Generating tables.md...")
     generator.generate_tables_md(files)
 
-    print("\n📝 Generating columns.md...")
     generator.generate_columns_md(files)
-
-    print("\n✅ Schema documentation generation complete!")
-    print(f"   Output directory: {args.output_dir}")
 
     # Cleanup
     generator.close()

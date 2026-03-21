@@ -42,7 +42,7 @@ interface CompanyFieldsMapProps {
   className?: string;
 }
 
-export default function CompanyFieldsMap({
+export function CompanyFieldsMap({
   company,
   selectedYear = 2023,
   className = '',
@@ -122,19 +122,16 @@ export default function CompanyFieldsMap({
     }));
   };
 
-  const handleFieldSelect = (field: unknown) => {
+  const handleFieldSelect = (_field: unknown) => {
     // Handle field selection - could show field details in a popup
-    console.log('Selected field:', field);
   };
 
-  const handleLocationSelect = (location: { lat: number; lng: number }) => {
+  const handleLocationSelect = (_location: { lat: number; lng: number }) => {
     // Handle location selection
-    console.log('Selected location:', location);
   };
 
-  const handleMapClick = (coordinates: { lat: number; lng: number }) => {
+  const handleMapClick = (_coordinates: { lat: number; lng: number }) => {
     // Handle map click
-    console.log('Map clicked:', coordinates);
   };
 
   if (!isClient) {

@@ -491,7 +491,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         # Sort by timestamp to get the most recent file for the target year
         files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
-        latest_path, timestamp = files_sorted[0]
+        latest_path, _timestamp = files_sorted[0]
 
         # Extract agricultural year from the path
         import re
@@ -609,7 +609,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             if files:
                 # Sort by timestamp to get the most recent file for this year
                 files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
-                latest_path, timestamp = files_sorted[0]
+                latest_path, _ = files_sorted[0]
 
                 self.logger.info(
                     f"📄 Loading FVM marker data from: {latest_path} (field year {field_year})"
@@ -631,7 +631,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 return
 
             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
-            latest_path, timestamp = files_sorted[0]
+            latest_path, _timestamp = files_sorted[0]
             self.logger.info(
                 f"📄 Loading FVM marker data from: {latest_path} (fallback - latest available)"
             )

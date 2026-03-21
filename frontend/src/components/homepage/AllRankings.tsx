@@ -1,6 +1,6 @@
 'use client';
 
-import IndividualRankingTable from './IndividualRankingTable';
+import { IndividualRankingTable } from './IndividualRankingTable';
 
 // Define all 26 rankings
 const RANKINGS = [
@@ -184,7 +184,7 @@ const RANKINGS = [
   },
 ];
 
-export default function AllRankings() {
+export function AllRankings() {
   return (
     <div className="w-full space-y-8">
       {/* Rankings Grid */}

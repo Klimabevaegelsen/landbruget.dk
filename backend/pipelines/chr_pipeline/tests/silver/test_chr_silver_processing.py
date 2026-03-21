@@ -7,6 +7,7 @@ Tests the main silver processing logic including:
 - Error handling and recovery
 """
 
+import contextlib
 import json
 from datetime import date
 from unittest.mock import Mock, patch
@@ -42,7 +43,7 @@ class TestSilverOrchestration:
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
 
-            try:
+            with contextlib.suppress(SystemExit):
                 process_chr_data(
                     silver_dir=silver_dir,
                     in_memory_data=None,
@@ -50,8 +51,6 @@ class TestSilverOrchestration:
                     bronze_timestamp=None,
                     force_streaming=False,
                 )
-            except SystemExit:
-                pass  # Expected when essential tables are empty
 
         assert silver_dir.exists()
 
@@ -72,7 +71,7 @@ class TestSilverOrchestration:
             "vetstat_antibiotics": {"xml": []},
         }
 
-        try:
+        with contextlib.suppress(SystemExit):
             process_chr_data(
                 silver_dir=silver_dir,
                 in_memory_data=in_memory_data,
@@ -80,8 +79,6 @@ class TestSilverOrchestration:
                 bronze_timestamp=None,
                 force_streaming=False,
             )
-        except SystemExit:
-            pass  # Expected if data is insufficient
 
         assert silver_dir.exists()
 
@@ -137,7 +134,7 @@ class TestSilverOrchestration:
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
 
-            try:
+            with contextlib.suppress(SystemExit):
                 process_chr_data(
                     silver_dir=silver_dir,
                     in_memory_data=None,
@@ -145,8 +142,6 @@ class TestSilverOrchestration:
                     bronze_timestamp=None,
                     force_streaming=False,
                 )
-            except SystemExit:
-                pass  # May exit if data insufficient
 
         # Silver directory should still be created
         assert silver_dir.exists()
@@ -343,7 +338,7 @@ class TestErrorHandling:
             mock_config.BRONZE_DATE_FOLDER_OVERRIDE = "20240101_120000"
 
             # Should not raise exception even if individual steps fail
-            try:
+            with contextlib.suppress(SystemExit):
                 process_chr_data(
                     silver_dir=silver_dir,
                     in_memory_data=None,
@@ -351,8 +346,6 @@ class TestErrorHandling:
                     bronze_timestamp=None,
                     force_streaming=False,
                 )
-            except SystemExit:
-                pass  # Expected if data insufficient
 
         assert silver_dir.exists()
 

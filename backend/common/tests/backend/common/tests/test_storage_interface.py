@@ -9,8 +9,9 @@ This module tests the storage_interface.py module, covering:
 Tests use realistic Danish data including CVR numbers and special characters (æøå).
 """
 
+import contextlib
 import json
-import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -46,7 +47,7 @@ class LocalStorage(StorageInterface):
     def save_json(self, data: Any, dst_path: str) -> None:
         full_path = self.base_path / dst_path
         full_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(full_path, "w", encoding="utf-8") as f:
+        with full_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     def save_parquet(self, data: Any, dst_path: str) -> None:
@@ -66,7 +67,7 @@ class LocalStorage(StorageInterface):
             for i in range(0, len(data), batch_size):
                 batch = data[i : i + batch_size]
                 for row in batch:
-                    values = ", ".join([f"'{str(row.get(col, ''))}'" for col in columns])
+                    values = ", ".join([f"'{row.get(col, '')!s}'" for col in columns])
                     conn.execute(f"INSERT INTO temp_data VALUES ({values})")
 
             conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
@@ -84,7 +85,7 @@ class LocalStorage(StorageInterface):
 
     def read_json(self, src_path: str) -> Any:
         full_path = self.base_path / src_path
-        with open(full_path, "r", encoding="utf-8") as f:
+        with full_path.open(encoding="utf-8") as f:
             return json.load(f)
 
 
@@ -97,14 +98,11 @@ class GCSStorage(StorageInterface):
         self.gcs_access = None
 
         # Try to use optimized GCSDataAccess
-        try:
+        with contextlib.suppress(Exception):
             # Check if GCSDataAccess is available (mocked in tests)
-
             if hasattr(sys.modules.get("storage_interface", None), "GCSDataAccess"):
                 self.gcs_access = sys.modules["storage_interface"].GCSDataAccess()
                 self.optimized = True
-        except Exception:
-            pass
 
         # Fall back to google.cloud.storage
         if not self.optimized:
@@ -119,7 +117,7 @@ class GCSStorage(StorageInterface):
                 else:
                     raise ImportError("Neither GCSDataAccess nor google.cloud.storage available")
             except Exception as e:
-                raise ImportError(f"Neither GCSDataAccess nor google.cloud.storage available: {e}")
+                raise ImportError(f"Neither GCSDataAccess nor google.cloud.storage available: {e}") from e
 
     def _get_gcs_path(self, dst_path: str) -> str:
         return f"gs://{self.bucket_name}/{dst_path}"
@@ -148,7 +146,7 @@ class GCSStorage(StorageInterface):
                 conn.execute(f"CREATE OR REPLACE TABLE temp_parquet_data ({col_defs})")
 
                 for row in data:
-                    values = ", ".join([f"'{str(row.get(col, ''))}'" for col in columns])
+                    values = ", ".join([f"'{row.get(col, '')!s}'" for col in columns])
                     conn.execute(f"INSERT INTO temp_parquet_data VALUES ({values})")
 
                 self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
@@ -170,10 +168,9 @@ class GCSStorage(StorageInterface):
         if self.optimized and self.gcs_access:
             gcs_path = self._get_gcs_path(src_path)
             return self.gcs_access.download_json(gcs_path)
-        else:
-            blob = self.bucket.blob(src_path)
-            content = blob.download_as_string()
-            return json.loads(content.decode("utf-8"))
+        blob = self.bucket.blob(src_path)
+        content = blob.download_as_string()
+        return json.loads(content.decode("utf-8"))
 
 
 # Create a mock module for patching
@@ -212,7 +209,7 @@ def test_local_storage_save_json(temp_dir):
     assert full_path.exists()
 
     # Verify content preserves Danish characters
-    with open(full_path, "r", encoding="utf-8") as f:
+    with full_path.open(encoding="utf-8") as f:
         saved_data = json.load(f)
 
     assert saved_data == test_data
@@ -220,7 +217,7 @@ def test_local_storage_save_json(temp_dir):
     assert saved_data["location"] == "Århus"
 
     # Verify file is UTF-8 encoded with non-ASCII characters
-    with open(full_path, "r", encoding="utf-8") as f:
+    with full_path.open(encoding="utf-8") as f:
         raw_content = f.read()
         assert "Ølgod" in raw_content  # Not escaped
         assert "\\u00d8" not in raw_content  # Not ASCII-escaped
@@ -309,7 +306,7 @@ def test_local_storage_save_parquet_empty_list(temp_dir):
     dst_path = "silver/test_data/empty.parquet"
 
     # Empty list should raise an error or handle gracefully
-    with pytest.raises(Exception):  # Could be IndexError or custom error
+    with pytest.raises((IndexError, ValueError)):
         storage.save_parquet(empty_data, dst_path)
 
 
@@ -354,7 +351,7 @@ def test_local_storage_read_parquet(temp_dir):
     storage.save_parquet(test_data, dst_path)
 
     # Read back using DuckDB
-    full_path = os.path.join(str(temp_dir), dst_path)
+    full_path = Path(temp_dir) / dst_path
     conn = duckdb.connect()
     result_df = conn.execute(f"SELECT * FROM '{full_path}'").df()
 
@@ -393,7 +390,7 @@ def test_local_storage_unsupported_type_parquet(temp_dir):
     dst_path = "test/unsupported.parquet"
 
     # This should raise an error because the table doesn't exist
-    with pytest.raises(Exception):  # Could be duckdb.Error or ValueError
+    with pytest.raises((duckdb.CatalogException, ValueError)):
         storage.save_parquet(unsupported_data, dst_path)
 
 
@@ -600,7 +597,7 @@ def test_gcs_storage_fallback_parquet_error(mock_storage_module):
     test_data = {"cvr": "31373077"}
 
     # Fallback mode will try to use conn.register which will fail with InvalidInputException
-    with pytest.raises(Exception):  # Could be ValueError or DuckDB error
+    with pytest.raises((ValueError, duckdb.Error)):
         storage.save_parquet(test_data, "test/data.parquet")
 
 
@@ -608,7 +605,7 @@ def test_gcs_storage_fallback_parquet_error(mock_storage_module):
 @patch("storage_interface.storage", None)
 def test_gcs_storage_no_backend_error():
     """Test that GCSStorage raises error when no backend available."""
-    with pytest.raises(ImportError, match="Neither GCSDataAccess nor google.cloud.storage"):
+    with pytest.raises(ImportError, match=re.escape("Neither GCSDataAccess nor google.cloud.storage")):
         GCSStorage("test-bucket")
 
 
@@ -697,7 +694,7 @@ def test_storage_round_trip_parquet_local(temp_dir, valid_cvr_numbers):
     storage.save_parquet(original_data, dst_path)
 
     # Load and verify
-    full_path = os.path.join(str(temp_dir), dst_path)
+    full_path = Path(temp_dir) / dst_path
     conn = duckdb.connect()
     loaded_df = conn.execute(f"SELECT * FROM '{full_path}'").df()
 

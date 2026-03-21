@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { Container } from '../layout/container';
+import { Container } from '@/components/layout/container';
 
 export function TractorLoader() {
   return (
