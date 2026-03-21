@@ -77,7 +77,7 @@ jobs:
             --image-family=debian-12 \
             --image-project=debian-cloud \
             --scopes=https://www.googleapis.com/auth/cloud-platform \
-            --metadata=enable-oslogin=true,LANDBRUGSDATA_UUID_NAMESPACE=${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }} \
+            --metadata=enable-oslogin=true,LANDBRUGSDATA_UUID_NAMESPACE=${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }},gcs-bucket=${{ secrets.GCS_BUCKET }} \
             --metadata-from-file=startup-script=backend/pipelines/property_owners_sftp/sftp-transfer-startup-with-processing.sh \
             --maintenance-policy=MIGRATE
 
