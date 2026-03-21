@@ -177,7 +177,7 @@ Go through systematically:
 - [ ] No layout shift on load
 - [ ] Works in all supported browsers
 - [ ] Respects reduced motion preference
-- [ ] Code is clean (no TODOs, console log statements, commented code)
+- [ ] Code is clean (no TODOs, console.logs, commented code)
 
 **IMPORTANT**: Polish is about details. Zoom in. Squint at it. Use it yourself. The little things add up.
 
