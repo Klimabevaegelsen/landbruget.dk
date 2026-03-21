@@ -7,6 +7,7 @@ comprehensive native tools that are more efficient and reliable.
 """
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -262,7 +263,8 @@ class SchemaMixin:
 
         # Save to GCS if enabled
         if save_to_gcs:
-            gcs_path = f"gs://landbruget-data/schemas/{self.__class__.__name__}"
+            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+            gcs_path = f"gs://{bucket_name}/schemas/{self.__class__.__name__}"
             schema_manager.save_schema_to_gcs(table_name, schema_info, gcs_path)
 
         # Save locally if enabled

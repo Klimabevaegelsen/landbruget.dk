@@ -2,6 +2,7 @@
 Configuration classes for H3 PFAS exposure analysis.
 """
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -48,8 +49,14 @@ class H3SpatialConfig:
     max_intersection_ratio: float = 1.1  # Allow 10% tolerance for intersection calculations
 
     # GCS Configuration
-    bucket: str = "landbruget-data"
-    gcs_base_path: str = "gs://landbruget-data"
+    bucket: str = field(
+        default_factory=lambda: os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
+    gcs_base_path: str = field(
+        default_factory=lambda: (
+            f"gs://{os.getenv('R2_BUCKET') or os.getenv('GCS_BUCKET', 'landbruget-data')}"
+        )
+    )
 
     # Processing Configuration
     enable_coordinate_flipping: bool = True  # Enable coordinate flipping for spatial operations
