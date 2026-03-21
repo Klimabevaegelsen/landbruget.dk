@@ -387,7 +387,7 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
     }
 
     // Filter out layers with invalid data or no features
-    const validLayers = layers.filter((layer, index) => {
+    const validLayers = layers.filter((layer) => {
       if (!layer?.data) {
         return false;
       }
