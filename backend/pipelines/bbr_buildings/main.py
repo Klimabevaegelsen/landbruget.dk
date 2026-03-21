@@ -988,18 +988,18 @@ def _upload_bronze_data_to_gcs(
 
         # Upload building IDs as JSON
         building_ids_path = (
-            f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_building_ids.json"
+            f"{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_building_ids.json"
         )
         import json
 
         building_ids_json = json.dumps(building_ids, indent=2)
-        gcs_access.upload_text(building_ids_json, building_ids_path)
+        gcs_access.upload_json_string(building_ids_json, building_ids_path)
         logger.info(f"✅ Uploaded building IDs to {building_ids_path}")
 
         # Upload attributes as Parquet if available
         if attributes_df is not None:
             attributes_path = (
-                f"gs://{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_attributes.parquet"
+                f"{bucket_name}/bronze/bbr_buildings/{timestamp}/inspire_attributes.parquet"
             )
 
             # Convert to DataFrame if needed
@@ -1108,7 +1108,7 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
             logger.info(f"📂 Loading GeoDanmark data from provided timestamp: {target_timestamp}")
         else:
             # Find the latest GeoDanmark data (fallback behavior)
-            prefix = f"gs://{bucket_name}/bronze/bbr_buildings/geodanmark/"
+            prefix = f"{bucket_name}/bronze/bbr_buildings/geodanmark/"
 
             # List all files in the geodanmark directory
             files = list(gcs_access.fs.ls(prefix))
@@ -1120,8 +1120,8 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
             # Get the latest timestamp folder
             timestamps = set()
             for file_path in files:
-                # Extract timestamp from path: gs://bucket/bronze/bbr_buildings/geodanmark/TIMESTAMP/
-                path_parts = file_path.replace(f"gs://{bucket_name}/", "").split("/")
+                # Extract timestamp from path: bucket/bronze/bbr_buildings/geodanmark/TIMESTAMP/
+                path_parts = file_path.replace(f"{bucket_name}/", "", 1).split("/")
                 if (
                     len(path_parts) >= 4
                     and path_parts[0] == "bronze"
@@ -1137,7 +1137,7 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
             logger.info(f"📂 Loading GeoDanmark data from latest timestamp: {target_timestamp}")
 
         # GeoDanmark file path in GCS
-        geodanmark_gcs_path = f"gs://{bucket_name}/bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
+        geodanmark_gcs_path = f"{bucket_name}/bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
 
         # Check if file exists
         if not gcs_access.fs.exists(geodanmark_gcs_path):
@@ -1378,7 +1378,7 @@ def _load_bronze_data_from_gcs(
 
         # Load building IDs from INSPIRE subdirectory
         building_ids_path = (
-            f"gs://{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
+            f"{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
         )
         building_ids = gcs_access.download_json(building_ids_path)
         logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
@@ -1386,7 +1386,9 @@ def _load_bronze_data_from_gcs(
         # Try to load attributes from INSPIRE subdirectory
         attributes_df = None
         try:
-            attributes_path = f"gs://{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_attributes.parquet"
+            attributes_path = (
+                f"{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_attributes.parquet"
+            )
 
             import pandas as pd
 
@@ -1429,7 +1431,7 @@ def _upload_silver_data_to_gcs(
                 else:
                     target_name = file_path.name
 
-                gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{target_name}"
+                gcs_path = f"{bucket_name}/silver/bbr_buildings/{timestamp}/{target_name}"
 
                 import shutil
 
@@ -1444,7 +1446,7 @@ def _upload_silver_data_to_gcs(
             if processed_dir.exists() and file_path.name == "joined_buildings.parquet":
                 continue
 
-            gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
+            gcs_path = f"{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
 
             import shutil
 
