@@ -1,7 +1,6 @@
 # backend/chr_pipeline/main.py
 """CHR Pipeline for fetching and processing data."""
 
-import argparse
 import concurrent.futures
 import logging
 import os
@@ -11,6 +10,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import click
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -55,9 +55,7 @@ except ImportError:
     print("⚠️ Incremental processing utilities not available - using legacy full processing")
     INCREMENTAL_PROCESSING_AVAILABLE = False
 
-# Import pipeline metadata system for data tracing
 from common.logging_utils import setup_pipeline_logger
-from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 logger = logging.getLogger(__name__)  # Replaced in setup_logging()
 
@@ -287,89 +285,14 @@ def filter_chr_by_group(
     return filtered_chrs
 
 
-def parse_args() -> dict[str, Any]:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="CHR Data Pipeline")
-
-    parser.add_argument(
-        "--steps",
-        type=str,
-        default="all",
-        help="Pipeline steps to run (all, stamdata, herds, herd_details, "
-        "diko, animal_movements, ejendom, vetstat, silver_*)",
-    )
-    parser.add_argument(
-        "--test-species-codes", type=str, help="Comma-separated list of species codes for testing"
-    )
-    parser.add_argument(
-        "--limit-total-herds", type=int, help="Limit total number of herds to process"
-    )
-    parser.add_argument(
-        "--limit-herds-per-species", type=int, help="Limit number of herds per species"
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=int(os.getenv("CHR_MAX_WORKERS", "5")),
-        help="Number of parallel workers",
-    )
-    parser.add_argument("--log-level", type=str, default="WARNING", help="Logging level")
-    parser.add_argument("--progress", action="store_true", help="Show progress information")
-    parser.add_argument(
-        "--start-date", type=str, help="Start date for data collection (YYYY-MM-DD)"
-    )
-    parser.add_argument("--end-date", type=str, help="End date for data collection (YYYY-MM-DD)")
-    parser.add_argument(
-        "--discovery-year",
-        type=int,
-        help="Year to use for herd volume discovery (default: current year)",
-    )
-    parser.add_argument(
-        "--skip-dependencies",
-        action="store_true",
-        help="Skip running dependency steps (for parallel job execution)",
-    )
-    parser.add_argument(
-        "--chr-group", type=int, help="CHR group number for parallel processing (1-4)"
-    )
-
-    args = parser.parse_args()
-
-    # Convert test_species_codes to list of integers if provided
-    test_species_codes = None
-    if args.test_species_codes:
-        try:
-            test_species_codes = [int(code.strip()) for code in args.test_species_codes.split(",")]
-        except ValueError as e:
-            raise ValueError("test_species_codes must be comma-separated integers") from e
-
-    # Parse dates if provided
-    start_date, end_date = get_default_dates()
-    if args.start_date:
-        try:
-            start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
-        except ValueError as e:
-            raise ValueError("start_date must be in YYYY-MM-DD format") from e
-    if args.end_date:
-        try:
-            end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
-        except ValueError as e:
-            raise ValueError("end_date must be in YYYY-MM-DD format") from e
-
-    return {
-        "steps": args.steps,
-        "test_species_codes": test_species_codes,
-        "limit_total_herds": args.limit_total_herds,
-        "limit_herds_per_species": args.limit_herds_per_species,
-        "workers": args.workers,
-        "log_level": args.log_level,
-        "progress": args.progress,
-        "start_date": start_date,
-        "end_date": end_date,
-        "discovery_year": args.discovery_year or datetime.now().year,
-        "skip_dependencies": args.skip_dependencies,
-        "chr_group": args.chr_group,
-    }
+def _parse_species_codes(raw: str | None) -> list[int] | None:
+    """Convert comma-separated species codes string to list of ints."""
+    if not raw:
+        return None
+    try:
+        return [int(code.strip()) for code in raw.split(",")]
+    except ValueError as exc:
+        raise click.BadParameter("test_species_codes must be comma-separated integers") from exc
 
 
 def fetch_stamdata(
@@ -1064,17 +987,98 @@ def run_bronze_step(step: str, context: dict[str, Any]) -> dict[str, Any]:
     return context
 
 
-def main():
-    """Main pipeline execution."""
+@click.command()
+@click.option(
+    "--steps",
+    default="all",
+    help="Pipeline steps to run (all, stamdata, herds, herd_details, diko, animal_movements, ejendom, vetstat, silver_*)",
+)
+@click.option(
+    "--test-species-codes", default=None, help="Comma-separated list of species codes for testing"
+)
+@click.option(
+    "--limit-total-herds", type=int, default=None, help="Limit total number of herds to process"
+)
+@click.option(
+    "--limit-herds-per-species", type=int, default=None, help="Limit number of herds per species"
+)
+@click.option(
+    "--workers",
+    type=int,
+    default=int(os.getenv("CHR_MAX_WORKERS", "5")),
+    help="Number of parallel workers",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+    default="WARNING",
+    help="Logging level",
+)
+@click.option("--progress", is_flag=True, help="Show progress information")
+@click.option("--start-date", default=None, help="Start date for data collection (YYYY-MM-DD)")
+@click.option("--end-date", default=None, help="End date for data collection (YYYY-MM-DD)")
+@click.option(
+    "--skip-dependencies",
+    is_flag=True,
+    help="Skip running dependency steps (for parallel job execution)",
+)
+def main(
+    steps,
+    test_species_codes,
+    limit_total_herds,
+    limit_herds_per_species,
+    workers,
+    log_level,
+    progress,
+    start_date,
+    end_date,
+    skip_dependencies,
+):
+    """CHR Data Pipeline."""
     # Record start time for execution tracking
-    start_time = datetime.now()
+    start_time_dt = datetime.now()
 
-    args = parse_args()
+    # Parse species codes
+    test_species_codes = _parse_species_codes(test_species_codes)
+
+    # Parse dates
+    default_start, default_end = get_default_dates()
+    if start_date:
+        try:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise click.BadParameter("start_date must be in YYYY-MM-DD format") from exc
+    else:
+        start_date = default_start
+    if end_date:
+        try:
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise click.BadParameter("end_date must be in YYYY-MM-DD format") from exc
+    else:
+        end_date = default_end
+
+    # Build args dict for backward compatibility with downstream code
+    args = {
+        "steps": steps,
+        "test_species_codes": test_species_codes,
+        "limit_total_herds": limit_total_herds,
+        "limit_herds_per_species": limit_herds_per_species,
+        "workers": workers,
+        "log_level": log_level,
+        "progress": progress,
+        "start_date": start_date,
+        "end_date": end_date,
+        "skip_dependencies": skip_dependencies,
+    }
+
     setup_logging(args["log_level"])
 
     # Initialize pipeline metadata manager
-    pipeline_metadata_manager = PipelineMetadataManager()
-    logger.info("✅ Pipeline metadata system initialized")
+    from common.pipeline_metadata import MetadataManager
+
+    pipeline_metadata_manager = MetadataManager()
+    logger.info("Pipeline metadata system initialized")
 
     try:
         # Determine steps to run first to decide if we need FVM credentials
@@ -1427,7 +1431,7 @@ def main():
                 # Create and save metadata for CHR data sources
                 if pipeline_metadata_manager:
                     try:
-                        processing_duration = time.time() - start_time.timestamp()
+                        processing_duration = time.time() - start_time_dt.timestamp()
 
                         # Create metadata for CHR animal movements
                         if unique_bronze_steps and "animal_movements" in unique_bronze_steps:
@@ -1563,7 +1567,7 @@ def main():
 
         # --- Final Cleanup and Summary ---
         logger.info("=== CHR Pipeline Execution Complete ===")
-        logger.info(f"Total execution time: {datetime.now() - start_time}")
+        logger.info(f"Total execution time: {datetime.now() - start_time_dt}")
 
         # Run comprehensive cleanup
         try:

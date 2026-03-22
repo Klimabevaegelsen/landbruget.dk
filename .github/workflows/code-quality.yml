@@ -382,6 +382,84 @@ jobs:
           echo "✅ All pipelines have main.py entry points" >> $GITHUB_STEP_SUMMARY
         fi
 
+  test-coverage-check:
+    name: Test Coverage Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Pipeline test coverage check
+      run: |
+        echo "## Pipeline Test Coverage" >> $GITHUB_STEP_SUMMARY
+
+        # Grandfathered pipelines without tests (2026-03-22 — this list should SHRINK)
+        ALLOWLIST=(
+          "bmd_scraper"
+          "dma_scraper"
+          "property_owners_sftp"
+          "svineflytning_pipeline"
+          "base"
+        )
+
+        TESTED=0
+        ALLOWLISTED=0
+        VIOLATIONS=0
+
+        for dir in backend/pipelines/*/; do
+          pipeline_name=$(basename "$dir")
+
+          # Skip __pycache__, hidden dirs, and non-directories
+          if [[ "$pipeline_name" == __* ]] || [[ "$pipeline_name" == .* ]]; then
+            continue
+          fi
+
+          # Count test files (test_*.py or *_test.py)
+          test_count=$(find "$dir" -type f \( -name "test_*.py" -o -name "*_test.py" \) | wc -l | tr -d ' ')
+
+          # Count source files (*.py excluding tests and __pycache__)
+          source_count=$(find "$dir" -type f -name "*.py" \
+            ! -name "test_*.py" ! -name "*_test.py" ! -name "conftest.py" \
+            ! -path "*/__pycache__/*" | wc -l | tr -d ' ')
+
+          if [ "$test_count" -gt 0 ]; then
+            if [ "$source_count" -gt 0 ]; then
+              pct=$((test_count * 100 / source_count))
+            else
+              pct=100
+            fi
+            echo "- ✅ \`$pipeline_name\`: $test_count test file(s) / $source_count source file(s) ($pct%)" >> $GITHUB_STEP_SUMMARY
+            TESTED=$((TESTED + 1))
+          else
+            # Check if pipeline is in allowlist
+            IS_ALLOWED=0
+            for allowed in "${ALLOWLIST[@]}"; do
+              if [ "$pipeline_name" = "$allowed" ]; then
+                IS_ALLOWED=1
+                break
+              fi
+            done
+
+            if [ "$IS_ALLOWED" -eq 1 ]; then
+              echo "- ⚠️ \`$pipeline_name\`: no tests (allowlisted — migrate!)" >> $GITHUB_STEP_SUMMARY
+              ALLOWLISTED=$((ALLOWLISTED + 1))
+            else
+              echo "- ❌ \`$pipeline_name\`: **no tests — PR blocked**" >> $GITHUB_STEP_SUMMARY
+              VIOLATIONS=$((VIOLATIONS + 1))
+            fi
+          fi
+        done
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Summary: $TESTED tested, $ALLOWLISTED allowlisted, $VIOLATIONS new violations" >> $GITHUB_STEP_SUMMARY
+
+        if [ "$VIOLATIONS" -gt 0 ]; then
+          echo ""
+          echo "ERROR: $VIOLATIONS pipeline(s) have no tests and are not allowlisted."
+          exit 1
+        fi
+
   frontend-lint:
     name: Frontend Linting (oxlint)
     runs-on: ubuntu-latest

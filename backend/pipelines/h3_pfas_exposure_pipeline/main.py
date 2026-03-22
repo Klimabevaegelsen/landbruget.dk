@@ -9,17 +9,15 @@ This pipeline creates H3-based PFAS exposure analysis by joining:
 - H3 hexagons at resolution 10 (~1.5 hectares per hexagon)
 """
 
-import argparse
 import asyncio
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
+import click
 import dotenv
-
-# Import pipeline metadata system for data tracing
-from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from common.cli import PipelineRun, common_options
 from loguru import logger
 
 # Load environment variables
@@ -194,178 +192,120 @@ async def run_pipeline(
         return False
 
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="H3 PFAS Exposure Analysis Pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Run H3 analysis for all available years at resolution 10
-  python main.py --mode h3
-
-  # Run cumulative analysis (sum across all years) for PMTiles frontend
-  python main.py --mode cumulative --h3-resolution 10
-
-  # Run kommune analysis for specific years
-  python main.py --mode kommune --years 2022 2023
-
-  # Run H3 analysis with custom parameters
-  python main.py --mode h3 --h3-resolution 9 --memory-limit 12GB --thread-count 2
-
-  # Run with verbose logging
-  python main.py --mode h3 --verbose --years 2022
-        """,
-    )
-
-    parser.add_argument(
-        "--mode",
-        choices=["h3", "kommune", "cumulative"],
-        default="h3",
-        help="Analysis mode (default: h3)",
-    )
-
-    parser.add_argument(
-        "--years",
-        nargs="*",
-        type=int,
-        help="Years to process (default: all available years)",
-    )
-
-    parser.add_argument(
-        "--h3-resolution",
-        default="10",
-        help="H3 resolution(s) for analysis (default: 10, comma-separated for multiple: 7,8,9,10)",
-    )
-
-    parser.add_argument(
-        "--include-kommune",
-        action="store_true",
-        help="Include kommune analysis when running H3 mode (combines both analyses)",
-    )
-
-    parser.add_argument(
-        "--use-legacy-cumulative",
-        action="store_true",
-        help="Use legacy cumulative analysis (reprocesses all data) instead of optimized version",
-    )
-
-    parser.add_argument(
-        "--memory-limit",
-        default="14GB",
-        help="Memory limit for processing (default: 14GB)",
-    )
-
-    parser.add_argument(
-        "--thread-count",
-        type=int,
-        default=4,
-        help="Number of threads to use (default: 4)",
-    )
-
-    parser.add_argument(
-        "--chunk-size",
-        type=int,
-        default=10000,
-        help="Chunk size for processing (default: 10000)",
-    )
-
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging",
-    )
-
-    return parser.parse_args()
-
-
-def main():
-    """Main entry point."""
-    # Record start time for execution tracking
-    start_time = datetime.now()
-
-    args = parse_args()
+@click.command()
+@click.option(
+    "--mode",
+    type=click.Choice(["h3", "kommune", "cumulative"]),
+    default="h3",
+    help="Analysis mode (default: h3)",
+)
+@click.option(
+    "--years",
+    type=str,
+    default=None,
+    help="Years to process, comma-separated (default: all available years)",
+)
+@click.option(
+    "--h3-resolution",
+    default="10",
+    help="H3 resolution(s) for analysis (default: 10, comma-separated for multiple: 7,8,9,10)",
+)
+@click.option(
+    "--include-kommune", is_flag=True, help="Include kommune analysis when running H3 mode"
+)
+@click.option(
+    "--use-legacy-cumulative",
+    is_flag=True,
+    help="Use legacy cumulative analysis instead of optimized version",
+)
+@click.option("--memory-limit", default="14GB", help="Memory limit for processing (default: 14GB)")
+@click.option("--thread-count", type=int, default=4, help="Number of threads to use (default: 4)")
+@click.option(
+    "--chunk-size", type=int, default=10000, help="Chunk size for processing (default: 10000)"
+)
+@click.option("--verbose", is_flag=True, help="Enable verbose logging")
+@common_options
+def main(
+    mode,
+    years,
+    h3_resolution,
+    include_kommune,
+    use_legacy_cumulative,
+    memory_limit,
+    thread_count,
+    chunk_size,
+    verbose,
+    log_level,
+):
+    """H3 PFAS Exposure Analysis Pipeline."""
+    # Parse years from comma-separated string for backward compat
+    parsed_years = None
+    if years:
+        parsed_years = [int(y.strip()) for y in years.split(",")]
 
     # Set up logging
-    if args.verbose:
+    if verbose:
         os.environ["LOG_LEVEL"] = "DEBUG"
     setup_logging()
 
     # Set up directories
     output_dir = setup_directories()
 
-    # Initialize pipeline metadata manager
-    pipeline_metadata_manager = PipelineMetadataManager()
-    logger.info("✅ Pipeline metadata system initialized")
+    # Initialize pipeline metadata tracking
+    pipeline_run = PipelineRun("h3_pfas_exposure", logger=logger)
 
-    logger.info("🏗️ H3 PFAS Exposure Analysis Pipeline")
-    logger.info(f"📊 Mode: {args.mode}")
-    if args.years:
-        logger.info(f"📅 Years: {args.years}")
+    logger.info("H3 PFAS Exposure Analysis Pipeline")
+    logger.info(f"Mode: {mode}")
+    if parsed_years:
+        logger.info(f"Years: {parsed_years}")
     else:
-        logger.info("📅 Years: all available")
+        logger.info("Years: all available")
 
     # Run the pipeline
     success = False
     try:
         success = asyncio.run(
             run_pipeline(
-                mode=args.mode,
-                years=args.years,
-                h3_resolution=args.h3_resolution,
-                memory_limit=args.memory_limit,
-                thread_count=args.thread_count,
-                chunk_size=args.chunk_size,
-                include_kommune=args.include_kommune,
-                use_legacy_cumulative=args.use_legacy_cumulative,
+                mode=mode,
+                years=parsed_years,
+                h3_resolution=h3_resolution,
+                memory_limit=memory_limit,
+                thread_count=thread_count,
+                chunk_size=chunk_size,
+                include_kommune=include_kommune,
+                use_legacy_cumulative=use_legacy_cumulative,
             )
         )
 
-        # Create and save metadata for H3 PFAS exposure analysis
-        if pipeline_metadata_manager and success:
+        # Save pipeline metadata
+        if success:
             try:
-                import time
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                metadata_dir = output_dir / timestamp
 
-                processing_duration = time.time() - start_time.timestamp()
-
-                # Create metadata for H3 PFAS exposure analysis
-                h3_pfas_metadata = pipeline_metadata_manager.create_metadata(
-                    source_key="h3_pfas_exposure",
-                    record_count=None,  # Could be enhanced to track hexagon count
-                    processing_duration=processing_duration,
-                    file_size_bytes=None,  # Will be calculated automatically
+                pipeline_run.finish(
+                    output_path=metadata_dir / "h3_pfas_exposure_metadata.json",
                     source_datasets=[
                         "pesticide",
                         "agricultural_fields",
                         "bmd_pesticide_database",
-                    ],  # Combined dataset
+                    ],
                 )
-
-                # Save metadata to output directory
-                timestamp = start_time.strftime("%Y%m%d_%H%M%S")
-                metadata_dir = output_dir / timestamp
-                metadata_dir.mkdir(parents=True, exist_ok=True)
-
-                metadata_path = pipeline_metadata_manager.save_metadata(
-                    h3_pfas_metadata, metadata_dir / "h3_pfas_exposure_metadata.json"
-                )
-                logger.info(f"✅ H3 PFAS exposure metadata saved to {metadata_path}")
-
             except Exception as e:
-                logger.error(f"❌ Failed to create H3 PFAS pipeline metadata: {e}")
+                logger.error(f"Failed to create H3 PFAS pipeline metadata: {e}")
 
         if success:
-            logger.info("🎉 Pipeline completed successfully!")
+            logger.info("Pipeline completed successfully!")
             sys.exit(0)
         else:
-            logger.error("❌ Pipeline failed!")
+            logger.error("Pipeline failed!")
             sys.exit(1)
 
     except KeyboardInterrupt:
-        logger.warning("⚠️ Pipeline interrupted by user")
+        logger.warning("Pipeline interrupted by user")
         sys.exit(130)
     except Exception as e:
-        logger.error(f"❌ Pipeline failed with unexpected error: {e}")
+        logger.error(f"Pipeline failed with unexpected error: {e}")
         sys.exit(1)
 
 

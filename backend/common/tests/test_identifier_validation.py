@@ -14,7 +14,6 @@ Reference: .claude/rules/data-quality.md
 import re
 
 import duckdb
-import pandas as pd
 import pytest
 
 # =============================================================================
@@ -204,68 +203,76 @@ def test_bfe_format_invalid_pattern() -> None:
 
 
 # =============================================================================
-# Batch Validation Tests (DataFrame Operations)
+# Batch Validation Tests (DuckDB Operations)
 # =============================================================================
 
 
 def test_batch_cvr_validation_dataframe(
     mock_duckdb_connection: duckdb.DuckDBPyConnection,
 ) -> None:
-    """Test batch CVR validation on DataFrame."""
-    pd.DataFrame(
-        {
-            "cvr": ["31373077", "00113115", "12345678", "invalid", "1234567"],
-            "company_name": ["Arla", "Test Co", "Generic", "Bad", "Short"],
-        }
+    """Test batch CVR validation on DuckDB table."""
+    mock_duckdb_connection.execute(
+        """
+        CREATE TABLE companies AS
+        SELECT * FROM (VALUES
+            ('31373077', 'Arla'),
+            ('00113115', 'Test Co'),
+            ('12345678', 'Generic'),
+            ('invalid', 'Bad'),
+            ('1234567', 'Short')
+        ) AS t(cvr, company_name)
+    """
     )
 
-    # Load into DuckDB
-    mock_duckdb_connection.execute("CREATE TABLE companies AS SELECT * FROM df")
-
     # Validate CVR format using SQL
-    result = mock_duckdb_connection.execute(
+    rows = mock_duckdb_connection.execute(
         """
         SELECT cvr, regexp_matches(cvr, '^[0-9]{8}$') as is_valid
         FROM companies
     """
-    ).fetchdf()
+    ).fetchall()
 
     # Check validation results
-    assert result.loc[0, "is_valid"]  # Valid CVR
-    assert result.loc[1, "is_valid"]  # Valid with leading zeros
-    assert result.loc[2, "is_valid"]  # Valid
-    assert not result.loc[3, "is_valid"]  # Non-numeric
-    assert not result.loc[4, "is_valid"]  # Too short
+    validations = dict(rows)
+    assert validations["31373077"]  # Valid CVR
+    assert validations["00113115"]  # Valid with leading zeros
+    assert validations["12345678"]  # Valid
+    assert not validations["invalid"]  # Non-numeric
+    assert not validations["1234567"]  # Too short
 
 
 def test_batch_chr_validation_dataframe(
     mock_duckdb_connection: duckdb.DuckDBPyConnection,
 ) -> None:
-    """Test batch CHR validation on DataFrame."""
-    pd.DataFrame(
-        {
-            "chr": ["123456", "000123", "654321", "12345", "12345a"],
-            "herd_type": ["Cattle", "Pig", "Cattle", "Invalid", "Invalid"],
-        }
+    """Test batch CHR validation on DuckDB table."""
+    mock_duckdb_connection.execute(
+        """
+        CREATE TABLE herds AS
+        SELECT * FROM (VALUES
+            ('123456', 'Cattle'),
+            ('000123', 'Pig'),
+            ('654321', 'Cattle'),
+            ('12345', 'Invalid'),
+            ('12345a', 'Invalid')
+        ) AS t(chr, herd_type)
+    """
     )
 
-    # Load into DuckDB
-    mock_duckdb_connection.execute("CREATE TABLE herds AS SELECT * FROM df")
-
     # Validate CHR format using SQL
-    result = mock_duckdb_connection.execute(
+    rows = mock_duckdb_connection.execute(
         """
         SELECT chr, regexp_matches(chr, '^[0-9]{6}$') as is_valid
         FROM herds
     """
-    ).fetchdf()
+    ).fetchall()
 
     # Check validation results
-    assert result.loc[0, "is_valid"]  # Valid CHR
-    assert result.loc[1, "is_valid"]  # Valid with leading zeros
-    assert result.loc[2, "is_valid"]  # Valid
-    assert not result.loc[3, "is_valid"]  # Too short
-    assert not result.loc[4, "is_valid"]  # Non-numeric
+    validations = dict(rows)
+    assert validations["123456"]  # Valid CHR
+    assert validations["000123"]  # Valid with leading zeros
+    assert validations["654321"]  # Valid
+    assert not validations["12345"]  # Too short
+    assert not validations["12345a"]  # Non-numeric
 
 
 def test_identifier_normalization_pipeline(
@@ -273,20 +280,17 @@ def test_identifier_normalization_pipeline(
 ) -> None:
     """Test full identifier normalization pipeline (Bronze -> Silver)."""
     # Bronze: Raw data with inconsistent formatting
-    pd.DataFrame(
-        {
-            "cvr": [31373077, 113115, "12345678", "00000123"],
-            "chr": [123456, 123, "654321", "000001"],
-            "bfe": [
-                "0101-123456-12a",
-                "0851-234567-1",
-                "0461-100000-abc",
-                "0101-000001-1a",
-            ],
-        }
+    mock_duckdb_connection.execute(
+        """
+        CREATE TABLE bronze_data AS
+        SELECT * FROM (VALUES
+            (31373077, 123456, '0101-123456-12a'),
+            (113115, 123, '0851-234567-1'),
+            (12345678, 654321, '0461-100000-abc'),
+            (123, 1, '0101-000001-1a')
+        ) AS t(cvr, chr, bfe)
+    """
     )
-
-    mock_duckdb_connection.execute("CREATE TABLE bronze_data AS SELECT * FROM raw_df")
 
     # Silver: Normalize identifiers
     silver_query = """
@@ -297,15 +301,16 @@ def test_identifier_normalization_pipeline(
         FROM bronze_data
     """
 
-    result = mock_duckdb_connection.execute(silver_query).fetchdf()
+    rows = mock_duckdb_connection.execute(silver_query).fetchall()
 
     # Verify normalization
-    assert all(result["cvr_normalized"].str.len() == 8), "All CVRs should be 8 digits"
-    assert all(result["chr_normalized"].str.len() == 6), "All CHRs should be 6 digits"
-    assert all(result["cvr_normalized"].str.match(r"^\d{8}$")), "All CVRs should be numeric"
-    assert all(result["chr_normalized"].str.match(r"^\d{6}$")), "All CHRs should be numeric"
+    for cvr_normalized, chr_normalized, _bfe_normalized in rows:
+        assert len(cvr_normalized) == 8, "All CVRs should be 8 digits"
+        assert len(chr_normalized) == 6, "All CHRs should be 6 digits"
+        assert cvr_normalized.isdigit(), "All CVRs should be numeric"
+        assert chr_normalized.isdigit(), "All CHRs should be numeric"
 
     # Check specific values
-    assert result.loc[0, "cvr_normalized"] == "31373077"
-    assert result.loc[1, "cvr_normalized"] == "00113115"
-    assert result.loc[1, "chr_normalized"] == "000123"
+    assert rows[0][0] == "31373077"
+    assert rows[1][0] == "00113115"
+    assert rows[1][1] == "000123"

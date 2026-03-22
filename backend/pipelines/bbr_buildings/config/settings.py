@@ -56,6 +56,9 @@ class Settings:
         self.output_dir = Path(os.getenv("OUTPUT_DIR", "data"))
 
         # Processing settings
+        self.max_workers = self._get_int_env("MAX_WORKERS", 4)
+        self.chunk_size = self._get_int_env("CHUNK_SIZE", 50000)
+        self.environment = os.getenv("ENVIRONMENT", "dev")
         self.sample_size = self._get_int_env("SAMPLE_SIZE", None)
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
 
@@ -134,6 +137,11 @@ class Settings:
     def has_graphql_credentials(self) -> bool:
         """Check if Datafordeleren GraphQL API key is available."""
         return bool(self.datafordeler_graphql_api_key)
+
+    @property
+    def use_cloud_storage(self) -> bool:
+        """Check if cloud storage should be used (production with bucket configured)."""
+        return self.environment == "production" and bool(self.gcs_bucket)
 
     @property
     def has_gcs_credentials(self) -> bool:

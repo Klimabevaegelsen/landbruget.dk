@@ -8,15 +8,17 @@ to support agricultural and public health analyses.
 Updated to use bulk GeoDanmark download + local joins for improved performance.
 """
 
-import argparse
 import gc
 import json
 import logging
 import os
 import sys
+import types
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+import click
 
 try:
     import pandas as pd
@@ -27,7 +29,7 @@ except ImportError:
 
 # Updated imports for bulk approach
 # Import pipeline metadata system for data tracing
-from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from common.cli import PipelineRun, common_options
 
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 from bronze.bulk_geodanmark_graphql_fetcher import BulkGeoDanmarkGraphQLFetcher
@@ -707,57 +709,67 @@ def perform_chunked_spatial_join(
         conn.close()
 
 
-def main() -> None:
-    """Main entry point for the BBR buildings pipeline."""
-    parser = argparse.ArgumentParser(
-        description="BBR Buildings Data Pipeline - Now with bulk GeoDanmark download!",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+@click.command()
+@click.option(
+    "--layer",
+    type=click.Choice(["bronze", "silver", "both"]),
+    required=True,
+    help="Pipeline layer to execute",
+)
+@click.option(
+    "--input-dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Input directory (required for silver layer)",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=Path("data"),
+    help="Output directory (default: data)",
+)
+@click.option("--sample-size", type=int, default=None, help="Sample size for testing")
+@click.option(
+    "--bulk-download",
+    is_flag=True,
+    default=True,
+    help="Use bulk GeoDanmark download (default: True, much faster!)",
+)
+@click.option(
+    "--bronze-timestamp",
+    type=str,
+    default=None,
+    help="Bronze timestamp to use for silver layer (e.g., 20250715_230139)",
+)
+@click.option(
+    "--enhance-classification",
+    is_flag=True,
+    default=False,
+    help="Enable enhanced building classification in silver layer",
+)
+@common_options
+def main(
+    layer,
+    input_dir,
+    output_dir,
+    sample_size,
+    bulk_download,
+    bronze_timestamp,
+    enhance_classification,
+    log_level,
+) -> None:
+    """BBR Buildings Data Pipeline - Now with bulk GeoDanmark download!"""
+    # Build a namespace-like object so processing functions can use args.layer, args.output_dir, etc.
+    args = types.SimpleNamespace(
+        layer=layer,
+        input_dir=input_dir,
+        output_dir=output_dir,
+        sample_size=sample_size,
+        bulk_download=bulk_download,
+        bronze_timestamp=bronze_timestamp,
+        enhance_classification=enhance_classification,
+        log_level=log_level,
     )
-
-    parser.add_argument(
-        "--layer",
-        choices=["bronze", "silver", "both"],
-        required=True,
-        help="Pipeline layer to execute",
-    )
-
-    parser.add_argument(
-        "--input-dir", type=Path, help="Input directory (required for silver layer)"
-    )
-
-    parser.add_argument(
-        "--output-dir", type=Path, default=Path("data"), help="Output directory (default: data)"
-    )
-
-    parser.add_argument("--sample-size", type=int, help="Sample size for testing")
-
-    parser.add_argument(
-        "--bulk-download",
-        action="store_true",
-        default=True,
-        help="Use bulk GeoDanmark download (default: True, much faster!)",
-    )
-
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        default="INFO",
-        help="Logging level",
-    )
-
-    parser.add_argument(
-        "--bronze-timestamp",
-        type=str,
-        help="Bronze timestamp to use for silver layer (e.g., 20250715_230139)",
-    )
-
-    parser.add_argument(
-        "--enhance-classification",
-        action="store_true",
-        help="Enable enhanced building classification in silver layer",
-    )
-
-    args = parser.parse_args()
 
     # Setup logging
     logger = setup_logger(level=args.log_level)
@@ -768,9 +780,8 @@ def main() -> None:
     # Track pipeline start time for consistent timestamping
     pipeline_start_time = datetime.now()
 
-    # Initialize pipeline metadata manager
-    pipeline_metadata_manager = PipelineMetadataManager()
-    logger.info("✅ Pipeline metadata system initialized")
+    # Initialize pipeline metadata tracking
+    pipeline_run = PipelineRun(source_key="bbr_buildings", logger=logger)
 
     try:
         bronze_result = None
@@ -783,14 +794,12 @@ def main() -> None:
 
         elif args.layer == "silver":
             # Silver layer can work with bronze timestamp from CLI argument or GitHub Actions
-            bronze_timestamp = args.bronze_timestamp or os.getenv("BRONZE_TIMESTAMP")
-            silver_result = run_silver_layer(
-                args, settings, logger, bronze_timestamp=bronze_timestamp
-            )
+            bt = args.bronze_timestamp or os.getenv("BRONZE_TIMESTAMP")
+            silver_result = run_silver_layer(args, settings, logger, bronze_timestamp=bt)
             if silver_result is None:
-                logger.error("❌ Silver layer processing failed")
+                logger.error("Silver layer processing failed")
                 sys.exit(1)
-            logger.info("✅ Silver layer processing completed successfully")
+            logger.info("Silver layer processing completed successfully")
 
         elif args.layer == "both":
             # Run bronze layer and get data in memory
@@ -804,75 +813,45 @@ def main() -> None:
             # Run silver layer with in-memory data
             silver_result = run_silver_layer(args, settings, logger, bronze_data=bronze_result)
             if silver_result is None:
-                logger.error("❌ Silver layer processing failed")
+                logger.error("Silver layer processing failed")
                 sys.exit(1)
-            logger.info("✅ Silver layer processing completed successfully")
+            logger.info("Silver layer processing completed successfully")
 
-        # Create and save metadata for BBR Buildings data sources
-        if pipeline_metadata_manager and (bronze_result or silver_result):
+        # Save metadata using PipelineRun
+        if bronze_result or silver_result:
             try:
-                import time
+                building_count = None
+                if silver_result and "joined_buildings_count" in silver_result:
+                    building_count = silver_result["joined_buildings_count"]
+                elif bronze_result and "building_ids_count" in bronze_result:
+                    building_count = bronze_result["building_ids_count"]
 
-                processing_duration = time.time() - pipeline_start_time.timestamp()
+                # Determine where to save metadata
+                metadata_dir = None
+                if silver_result and "output_dir" in silver_result:
+                    metadata_dir = Path(silver_result["output_dir"])
+                elif args.output_dir:
+                    metadata_dir = (
+                        args.output_dir / "bronze" / pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+                    )
 
-                # Create metadata for BBR INSPIRE buildings
-                if bronze_result or silver_result:
-                    building_count = None
-                    if silver_result and "joined_buildings_count" in silver_result:
-                        building_count = silver_result["joined_buildings_count"]
-                    elif bronze_result and "building_ids_count" in bronze_result:
-                        building_count = bronze_result["building_ids_count"]
-
-                    bbr_inspire_metadata = pipeline_metadata_manager.create_metadata(
-                        source_key="bbr_inspire_buildings",
+                if metadata_dir:
+                    pipeline_run.finish(
                         record_count=building_count,
-                        processing_duration=processing_duration,
-                        file_size_bytes=None,  # Will be calculated automatically
-                        source_datasets=None,
+                        output_path=metadata_dir / "bbr_inspire_buildings_metadata.json",
                     )
 
-                    # Create metadata for GeoDanmark buildings (combined dataset)
-                    geodanmark_metadata = pipeline_metadata_manager.create_metadata(
-                        source_key="geodanmark_buildings",
-                        record_count=building_count,  # Same buildings after join
-                        processing_duration=processing_duration,
-                        file_size_bytes=None,
-                        source_datasets=[
-                            "bbr_inspire_buildings"
-                        ],  # Indicates this combines BBR data
+                    # Create additional metadata for GeoDanmark buildings (combined dataset)
+                    geodanmark_run = PipelineRun(source_key="geodanmark_buildings", logger=logger)
+                    geodanmark_run.start_time = pipeline_run.start_time  # same timing
+                    geodanmark_run.finish(
+                        record_count=building_count,
+                        output_path=metadata_dir / "geodanmark_buildings_metadata.json",
+                        source_datasets=["bbr_inspire_buildings"],
                     )
-
-                    # Determine where to save metadata
-                    metadata_dir = None
-                    if silver_result and "output_dir" in silver_result:
-                        metadata_dir = Path(silver_result["output_dir"])
-                    elif args.output_dir:
-                        metadata_dir = (
-                            args.output_dir
-                            / "bronze"
-                            / pipeline_start_time.strftime("%Y%m%d_%H%M%S")
-                        )
-
-                    if metadata_dir:
-                        metadata_dir.mkdir(parents=True, exist_ok=True)
-
-                        bbr_metadata_path = pipeline_metadata_manager.save_metadata(
-                            bbr_inspire_metadata,
-                            metadata_dir / "bbr_inspire_buildings_metadata.json",
-                        )
-                        logger.info(
-                            f"✅ BBR INSPIRE buildings metadata saved to {bbr_metadata_path}"
-                        )
-
-                        geodanmark_metadata_path = pipeline_metadata_manager.save_metadata(
-                            geodanmark_metadata, metadata_dir / "geodanmark_buildings_metadata.json"
-                        )
-                        logger.info(
-                            f"✅ GeoDanmark buildings metadata saved to {geodanmark_metadata_path}"
-                        )
 
             except Exception as e:
-                logger.error(f"❌ Failed to create BBR Buildings pipeline metadata: {e}")
+                logger.error(f"Failed to create BBR Buildings pipeline metadata: {e}")
 
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
@@ -880,7 +859,7 @@ def main() -> None:
 
 
 def run_bronze_layer_bulk(
-    args: argparse.Namespace,
+    args: types.SimpleNamespace,
     settings: Settings,
     logger: logging.Logger,
     pipeline_start_time: datetime,
@@ -1176,7 +1155,7 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
 
 
 def run_silver_layer(
-    args: argparse.Namespace,
+    args: types.SimpleNamespace,
     settings: Settings,
     logger: logging.Logger,
     bronze_data: dict[str, Any] | None = None,

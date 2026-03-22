@@ -4,17 +4,14 @@ BMD Scraper Pipeline main entry point.
 This script orchestrates the Bronze and Silver stage processing for BMD data.
 """
 
-import argparse
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 
+import click
 import dotenv
-
-# Import pipeline metadata system for data tracing
+from common.cli import PipelineRun, common_options, stage_options
 from common.logging_utils import setup_pipeline_logger
-from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 from bronze import BMDScraper
 from bronze.export import GCSStorage
@@ -23,7 +20,6 @@ from silver import BMDTransformer, upload_to_gcs
 # Load environment variables
 dotenv.load_dotenv()
 
-# Configure logging
 logger = setup_pipeline_logger("bmd_pipeline", level=os.getenv("LOG_LEVEL", "INFO"))
 
 
@@ -190,46 +186,34 @@ def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Path | None:
         return None
 
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="BMD Scraper Pipeline")
-    parser.add_argument(
-        "--stage",
-        choices=["bronze", "silver", "all"],
-        default="all",
-        help="Pipeline stage to run (default: all)",
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
+@click.command()
+@stage_options()
+@common_options
+def main(stage, log_level) -> None:
     """Main entry point for the BMD Scraper pipeline."""
-    args = parse_args()
-    logger.info(f"Starting BMD Scraper pipeline (stage: {args.stage})")
+    global logger
+    logger = setup_pipeline_logger("bmd_pipeline", level=log_level)
+    logger.info(f"Starting BMD Scraper pipeline (stage: {stage})")
 
     # Setup directories
     bronze_dir, silver_dir = setup_directories()
 
-    # Track pipeline start time
-    start_time = datetime.now()
-
-    # Initialize pipeline metadata manager
-    pipeline_metadata_manager = PipelineMetadataManager()
-    logger.info("✅ Pipeline metadata system initialized")
+    # Initialize pipeline metadata tracking
+    pipeline_run = PipelineRun("bmd_pesticide_database", logger=logger)
 
     # Run selected stages
     bronze_file = None
     silver_file = None
 
-    if args.stage in ["bronze", "all"]:
+    if stage in ["bronze", "all"]:
         bronze_file = run_bronze_stage(bronze_dir)
-        if not bronze_file and args.stage == "all":
+        if not bronze_file and stage == "all":
             logger.error("Bronze stage failed, cannot proceed to Silver stage")
             sys.exit(1)
 
-    if args.stage in ["silver", "all"] and (bronze_file or args.stage == "silver"):
+    if stage in ["silver", "all"] and (bronze_file or stage == "silver"):
         # If we're only running silver stage, we need to find the latest bronze file
-        if not bronze_file and args.stage == "silver":
+        if not bronze_file and stage == "silver":
             result = find_latest_bronze_file(bronze_dir)
             if result:
                 _, bronze_file = result
@@ -240,80 +224,38 @@ def main() -> None:
 
         silver_file = run_silver_stage(bronze_file, silver_dir)
 
-    # Calculate and log execution time
-    execution_time = datetime.now() - start_time
-    logger.info(f"Pipeline execution completed in {execution_time}")
+    # Log execution time
+    logger.info(f"Pipeline execution completed in {pipeline_run.elapsed:.1f}s")
 
     # Generate schema documentation if silver stage completed successfully
     if silver_file and silver_file.exists():
         try:
-            logger.info("Generating schema documentation for BMD silver data")
+            from datetime import datetime
 
-            # Import schema documentation (with path adjustment)
-            from pathlib import Path
+            from common.schema_utils import generate_schema_docs
 
-            # Find the project root (directory containing 'backend' folder)
-            current_file = Path(__file__).resolve()
-            project_root = None
-
-            # Go up the directory tree to find the project root
-            for parent in current_file.parents:
-                if (parent / "backend").is_dir():
-                    project_root = parent
-                    break
-
-            if project_root and str(project_root) not in sys.path:
-                sys.path.insert(0, str(project_root))
-
-            from backend.common.schema_documentation import SchemaDocumentationManager
-
-            # Get pipeline start time from the silver file's parent directory name
             timestamp_str = silver_file.parent.name
             pipeline_start_time = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
 
-            # Create DuckDB connection and load the parquet file
-            import duckdb
-
-            conn = duckdb.connect()
-
-            table_name = "bmd_processed"
-            conn.execute(
-                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{silver_file}')"
-            )
-
-            # Initialize schema documentation manager
-            schema_manager = SchemaDocumentationManager(
-                connection=conn,
+            generate_schema_docs(
+                parquet_path=silver_file,
                 pipeline_name="bmd_scraper",
+                table_name="bmd_processed",
                 pipeline_start_time=pipeline_start_time,
+                stage="silver",
                 logger=logger,
             )
-
-            # Generate documentation for BMD table
-            schema_manager.generate_all_documentation([table_name], stage="silver")
-            logger.info("Generated schema documentation for BMD data")
-
-            # Commit to GitHub
-            schema_manager.commit_to_github()
-            logger.info("BMD schema documentation committed to GitHub")
-
         except Exception as e:
             logger.error(f"Failed to generate BMD schema documentation: {e}", exc_info=True)
-            # Don't fail the pipeline if schema documentation fails
 
-    # Create and save metadata for BMD pesticide database
-    if pipeline_metadata_manager and (bronze_file or silver_file):
+    # Save pipeline metadata
+    if bronze_file or silver_file:
         try:
-            import time
+            import duckdb
 
-            processing_duration = time.time() - start_time.timestamp()
-
-            # Determine record count if possible (from silver file)
             record_count = None
             if silver_file and silver_file.exists():
                 try:
-                    import duckdb
-
                     conn = duckdb.connect()
                     result = conn.execute(
                         f"SELECT COUNT(*) FROM read_parquet('{silver_file}')"
@@ -321,42 +263,24 @@ def main() -> None:
                     record_count = result[0] if result else None
                     conn.close()
                 except Exception:
-                    pass  # If we can't get count, that's okay
+                    pass
 
-            # Create metadata for BMD pesticide database
-            bmd_metadata = pipeline_metadata_manager.create_metadata(
-                source_key="bmd_pesticide_database",
+            metadata_dir = silver_file.parent if silver_file else bronze_file.parent
+            pipeline_run.finish(
                 record_count=record_count,
-                processing_duration=processing_duration,
-                file_size_bytes=None,  # Will be calculated automatically
-                source_datasets=None,
+                output_path=metadata_dir / "bmd_pesticide_database_metadata.json",
             )
-
-            # Determine where to save metadata
-            metadata_dir = None
-            if silver_file:
-                metadata_dir = silver_file.parent
-            elif bronze_file:
-                metadata_dir = bronze_file.parent
-
-            if metadata_dir:
-                metadata_path = pipeline_metadata_manager.save_metadata(
-                    bmd_metadata, metadata_dir / "bmd_pesticide_database_metadata.json"
-                )
-                logger.info(f"✅ BMD pesticide database metadata saved to {metadata_path}")
-
         except Exception as e:
-            logger.error(f"❌ Failed to create BMD pipeline metadata: {e}")
+            logger.error(f"Failed to create BMD pipeline metadata: {e}")
 
     # Return success/failure code
     if (
-        (args.stage == "bronze" and bronze_file)
-        or (args.stage == "silver" and silver_file)
-        or (args.stage == "all" and bronze_file and silver_file)
+        (stage == "bronze" and bronze_file)
+        or (stage == "silver" and silver_file)
+        or (stage == "all" and bronze_file and silver_file)
     ):
         sys.exit(0)
-    elif args.stage == "all" and bronze_file and not silver_file:
-        # If only bronze succeeded but silver was attempted, return error
+    elif stage == "all" and bronze_file and not silver_file:
         logger.error("Pipeline partially completed - bronze succeeded but silver failed")
         sys.exit(1)
     else:
