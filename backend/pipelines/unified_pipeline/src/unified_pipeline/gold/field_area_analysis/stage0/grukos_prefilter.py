@@ -71,11 +71,11 @@ class GrukosPreFilter(PreFilteringStageBase):
         Pre-filter Grukos geometries using spatial intersection with fields.
 
         OPTIMIZATION STRATEGY:
-        1. Grukos dataset is a single dissolved geometry covering all indsatsområder
-        2. Fields (600K) as BUILD side - gets spatial indexed
-        3. Grukos as PROBE side
-        4. Only keep portions of Grukos that intersect with ANY field
-        5. Use ST_Dump to decompose any resulting MultiPolygons
+        1. Grukos is typically a single dissolved geometry — ST_Dump it first
+           into individual polygons to avoid a 600K×1 spatial join that returns
+           the same giant geometry for every matching field (timeout on CI).
+        2. Filter the dumped pieces against fields (many small × many small).
+        3. Add unique IDs for downstream joins.
         """
 
         start_time = time.time()
@@ -83,53 +83,62 @@ class GrukosPreFilter(PreFilteringStageBase):
         total_grukos = self.conn.execute("SELECT COUNT(*) FROM grukos_raw").fetchone()[0]
         self.log.info(f"Pre-filtering {total_grukos:,} Grukos geometries against ~600K fields")
 
-        # DuckDB Spatial v1.2.2 COMPLIANT: Single spatial predicate (ST_Intersects only)
+        # Step 1: Decompose the dissolved geometry into individual polygons FIRST.
+        # This avoids a 600K×1 spatial join that produces 600K duplicate rows.
+        self.log.info("Decomposing Grukos with ST_Dump before spatial filtering...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE grukos_dumped AS
+            SELECT
+                UNNEST(ST_Dump(geometry)).geom as geometry
+            FROM grukos_raw
+            WHERE geometry IS NOT NULL
+        """)
+
+        dumped_count = self.conn.execute("SELECT COUNT(*) FROM grukos_dumped").fetchone()[0]
         self.log.info(
-            "Filtering Grukos geometry to portions intersecting with agricultural fields..."
+            f"ST_Dump produced {dumped_count:,} individual polygons from {total_grukos:,} input rows"
         )
 
-        # Create intersection geometries - keeping only the parts that overlap with fields
+        # Step 2: Spatial filter — keep only pieces that intersect with any field
+        self.log.info("Filtering Grukos pieces against agricultural fields...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE grukos_intersecting AS
             SELECT DISTINCT
                 g.geometry
             FROM fields_for_filtering f
-            JOIN grukos_raw g ON ST_Intersects(f.geometry, g.geometry)
+            JOIN grukos_dumped g ON ST_Intersects(f.geometry, g.geometry)
         """)
 
         intersecting_count = self.conn.execute(
             "SELECT COUNT(*) FROM grukos_intersecting"
         ).fetchone()[0]
 
-        # Decompose with ST_Dump and add unique IDs
-        self.log.info("Decomposing with ST_Dump and adding unique IDs...")
+        # Step 3: Add unique IDs
+        self.log.info("Adding unique IDs to filtered Grukos polygons...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE grukos_filtered AS
             SELECT
                 ROW_NUMBER() OVER (
-                    ORDER BY ST_X(ST_Centroid(geom)),
-                             ST_Y(ST_Centroid(geom))
+                    ORDER BY ST_X(ST_Centroid(geometry)),
+                             ST_Y(ST_Centroid(geometry))
                 ) as grukos_id,
-                geom as geometry,
-                ST_Area_Spheroid(geom) as grukos_area_m2
-            FROM (
-                SELECT UNNEST(ST_Dump(geometry)).geom as geom
-                FROM grukos_intersecting
-                WHERE geometry IS NOT NULL
-            )
+                geometry,
+                ST_Area_Spheroid(geometry) as grukos_area_m2
+            FROM grukos_intersecting
+            WHERE geometry IS NOT NULL
         """)
 
         total_filtered = self.conn.execute("SELECT COUNT(*) FROM grukos_filtered").fetchone()[0]
 
         # Final statistics
         processing_time = time.time() - start_time
-        reduction_pct = (1 - total_filtered / total_grukos) * 100 if total_grukos > 0 else 0
+        reduction_pct = (1 - intersecting_count / dumped_count) * 100 if dumped_count > 0 else 0
 
         self.log.info(
-            f"GRUKOS REDUCTION: {total_grukos:,} → {intersecting_count:,} intersecting polygons "
+            f"GRUKOS REDUCTION: {dumped_count:,} dumped → {intersecting_count:,} intersecting polygons "
             f"({reduction_pct:.1f}% reduction)"
         )
-        self.log.info(f"After ST_Dump: {total_filtered:,} Grukos pieces for downstream processing")
+        self.log.info(f"Final: {total_filtered:,} Grukos pieces with IDs for downstream processing")
 
         # Export filtered Grukos using standard pipeline pattern
         output_path = self._get_stage0_output_path("stage0_grukos_filtered")
