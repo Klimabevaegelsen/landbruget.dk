@@ -233,25 +233,28 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         property_area_m2,
 
                         -- Calculate intersection area and percentages
+                        -- TRY() wraps ST_Intersection to handle invalid geometries
+                        -- (DuckDB 1.5 TopologyException on malformed polygons)
                         ST_Area_Spheroid(
-                            ST_Intersection(field_geometry, property_geometry)
+                            TRY(ST_Intersection(field_geometry, property_geometry))
                         ) as intersection_area_m2,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                        (ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) /
                          field_area_m2) * 100 as field_area_share_pct,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                        (ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) /
                          property_area_m2) * 100 as property_area_share_pct,
 
                         -- STREAM intersection geometries for downstream spatial analysis
                         field_geometry,
                         property_geometry,
-                        ST_Intersection(field_geometry, property_geometry) as intersection_geometry
+                        TRY(ST_Intersection(field_geometry, property_geometry)) as intersection_geometry
 
                     FROM chunk_raw_intersections
                     WHERE
                         -- Filter out tiny intersections (< 1% of field area or < 100 m²)
-                        ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) > 100
+                        -- TRY() returns NULL for invalid geometries, which are filtered out
+                        ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) > 100
                         AND (
-                            ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                            ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) /
                             field_area_m2
                         ) > 0.01
                 """)
