@@ -339,6 +339,106 @@ const noHardcodedApiUrls = {
 };
 
 // ---------------------------------------------------------------------------
+// Rule 9: require-test-coverage
+// Vision: Every page, hook, lib, and service file must have test coverage.
+// Migration allowlist: existing files grandfathered in (2026-03-22).
+// This list should SHRINK over time — do NOT add new files.
+// ---------------------------------------------------------------------------
+const TEST_COVERAGE_ALLOWLIST = new Set([
+  // Pages without E2E tests
+  'src/app/(main)/pesticidanalyse/page.tsx',
+  'src/app/(main)/kommuner/page.tsx',
+  'src/app/(main)/kilder/page.tsx',
+  'src/app/(main)/brugsvilkaar/page.tsx',
+  'src/app/(main)/om-os/page.tsx',
+  'src/app/(main)/privatlivspolitik/page.tsx',
+  'src/app/test-components/page.tsx',
+  'src/app/admin/pipeline/page.tsx',
+  // Pages with E2E tests (remove once coverage is verified)
+  'src/app/(main)/page.tsx',
+  'src/app/(main)/virksomhed/[id]/page.tsx',
+  'src/app/(main)/markanalyse/page.tsx',
+  // Hooks without unit tests
+  'src/hooks/use-mobile-detection.ts',
+  'src/hooks/use-touch-gestures.ts',
+  'src/hooks/useCompanyData.ts',
+  'src/hooks/useCompanyNavigation.ts',
+  'src/hooks/useHomepageStatsCache.ts',
+  'src/hooks/useLoadingToast.ts',
+  'src/hooks/useSearch.ts',
+  // Hooks with unit tests (remove once coverage is verified)
+  'src/hooks/useCompanyCache.ts',
+  'src/hooks/useMapTheme.ts',
+  'src/hooks/useRankingsCache.ts',
+  // Lib without unit tests
+  'src/lib/cache-utils.ts',
+  'src/lib/category-utils.ts',
+  'src/lib/chart-colors.ts',
+  'src/lib/climate-data.ts',
+  'src/lib/csv-download.ts',
+  'src/lib/env.ts',
+  'src/lib/formatting.ts',
+  'src/lib/pmtiles-cache-service.ts',
+  'src/lib/rankings.ts',
+  'src/lib/server-cache.ts',
+  'src/lib/utils.ts',
+  // Services without unit tests
+  'src/services/supabase/climate.ts',
+  'src/services/supabase/company-basic.ts',
+  'src/services/supabase/company.ts',
+  'src/services/supabase/config.ts',
+  // Services with unit tests (remove once coverage is verified)
+  'src/services/pmtiles-cache-service.ts',
+]);
+
+const requireTestCoverage = {
+  create(context) {
+    return {
+      Program(node) {
+        const filename = context.filename || '';
+        if (!filename.includes('/src/')) return;
+
+        // Skip test files themselves
+        if (filename.includes('.test.') || filename.includes('__tests__'))
+          return;
+
+        // Skip type-only files
+        if (filename.endsWith('.d.ts') || filename.endsWith('/types.ts'))
+          return;
+
+        // Skip config files
+        if (filename.endsWith('/config.ts')) return;
+
+        // Skip UI primitives (Radix)
+        if (filename.includes('/components/ui/')) return;
+
+        const srcIndex = filename.indexOf('/src/');
+        if (srcIndex === -1) return;
+        const relativePath = filename.slice(srcIndex + 1);
+
+        // Determine if this file requires test coverage
+        const needsTests =
+          /^src\/app\/.*\/page\.tsx$/.test(relativePath) ||
+          (/^src\/hooks\/[^/]+\.ts$/.test(relativePath) &&
+            !relativePath.includes('__tests__')) ||
+          /^src\/lib\/[^/]+\.ts$/.test(relativePath) ||
+          /^src\/services\/.*\.ts$/.test(relativePath);
+
+        if (!needsTests) return;
+
+        // Skip allowlisted files (migration: shrink this list over time)
+        if (TEST_COVERAGE_ALLOWLIST.has(relativePath)) return;
+
+        context.report({
+          node,
+          message: `This file requires test coverage. Pages need E2E tests in tests/*.spec.ts. Hooks/lib/services need unit tests in __tests__/. See .claude/rules/testing.md.`,
+        });
+      },
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Plugin export
 // ---------------------------------------------------------------------------
 const plugin = {
@@ -352,6 +452,7 @@ const plugin = {
     'enforce-absolute-imports': enforceAbsoluteImports,
     'no-inline-styles': noInlineStyles,
     'no-hardcoded-api-urls': noHardcodedApiUrls,
+    'require-test-coverage': requireTestCoverage,
   },
 };
 

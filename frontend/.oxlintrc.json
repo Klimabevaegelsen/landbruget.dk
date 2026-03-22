@@ -10,6 +10,7 @@
     "landbruget/enforce-absolute-imports": "warn",
     "landbruget/no-inline-styles": "warn",
     "landbruget/no-hardcoded-api-urls": "warn",
+    "landbruget/require-test-coverage": "warn",
     "typescript/no-explicit-any": "warn"
   },
   "ignorePatterns": [
