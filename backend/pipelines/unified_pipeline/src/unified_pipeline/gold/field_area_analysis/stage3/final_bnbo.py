@@ -103,46 +103,54 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         self.log.info("🔧 Using existing geometries from Stage 2A - No complex recalculations")
 
         # Step 1: Create property × BNBO intersections (total BNBO within properties)
+        # NOTE: Two-step join to work around DuckDB SPATIAL_JOIN bug where same-named
+        # columns (field_uuid) on both sides cause "Failed to bind column reference".
         self.log.info("📦 Step 1: Creating property_bnbo_intersections")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE _bnbo_candidates AS
+            SELECT
+                p.field_uuid, p.bfe_number, p.property_geometry,
+                fbi.field_id, fbi.block_id, fbi.cvr_number, fbi.year,
+                fbi.bnbo_id, fbi.status_category, fbi.field_bnbo_geometry
+            FROM field_property_intersections p
+            JOIN field_bnbo_intersections fbi ON p.field_uuid = fbi.field_uuid
+        """)
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_bnbo_intersections AS
             SELECT
-                p.field_uuid,
-                p.bfe_number,
-                fbi.field_id,
-                fbi.block_id,
-                fbi.cvr_number,
-                fbi.year,
-                fbi.bnbo_id,
-                fbi.status_category,
-                ST_Intersection(p.property_geometry, fbi.field_bnbo_geometry) as
+                field_uuid, bfe_number, field_id, block_id, cvr_number, year,
+                bnbo_id, status_category,
+                TRY(ST_Intersection(property_geometry, field_bnbo_geometry)) as
                     property_bnbo_geometry
-            FROM field_property_intersections p
-            JOIN field_bnbo_intersections fbi ON p.field_uuid = fbi.field_uuid
-                AND ST_Intersects(p.property_geometry, fbi.field_bnbo_geometry)
+            FROM _bnbo_candidates
+            WHERE ST_Intersects(property_geometry, field_bnbo_geometry)
         """)
+        self.conn.execute("DROP TABLE IF EXISTS _bnbo_candidates")
 
         # Step 2: Create property × BNBO × water intersections
         # (water-covered BNBO within properties)
         self.log.info("📦 Step 2: Creating property_bnbo_water_intersections")
         self.conn.execute("""
-            CREATE OR REPLACE TABLE property_bnbo_water_intersections AS
+            CREATE OR REPLACE TABLE _bnbo_water_candidates AS
             SELECT
-                p.field_uuid,
-                p.bfe_number,
-                fbwi.field_id,
-                fbwi.block_id,
-                fbwi.cvr_number,
-                fbwi.year,
-                fbwi.bnbo_id,
-                fbwi.status_category,
-                fbwi.project_id,
-                ST_Intersection(p.property_geometry, fbwi.field_bnbo_water_geometry) as
-                    property_bnbo_water_geometry
+                p.field_uuid, p.bfe_number, p.property_geometry,
+                fbwi.field_id, fbwi.block_id, fbwi.cvr_number, fbwi.year,
+                fbwi.bnbo_id, fbwi.status_category, fbwi.project_id,
+                fbwi.field_bnbo_water_geometry
             FROM field_property_intersections p
             JOIN stage3a_field_bnbo_water_intersections fbwi ON p.field_uuid = fbwi.field_uuid
-                AND ST_Intersects(p.property_geometry, fbwi.field_bnbo_water_geometry)
         """)
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_bnbo_water_intersections AS
+            SELECT
+                field_uuid, bfe_number, field_id, block_id, cvr_number, year,
+                bnbo_id, status_category, project_id,
+                TRY(ST_Intersection(property_geometry, field_bnbo_water_geometry)) as
+                    property_bnbo_water_geometry
+            FROM _bnbo_water_candidates
+            WHERE ST_Intersects(property_geometry, field_bnbo_water_geometry)
+        """)
+        self.conn.execute("DROP TABLE IF EXISTS _bnbo_water_candidates")
 
         # Get result statistics
         property_bnbo_count = self.conn.execute(

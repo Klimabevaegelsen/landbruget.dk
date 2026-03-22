@@ -99,23 +99,29 @@ class FinalGrukosAnalysis(FieldAnalysisStageBase):
         self.log.info("Using existing geometries from Stage 2C - No complex recalculations")
 
         # Create property × grukos intersections
+        # NOTE: Two-step join to work around DuckDB SPATIAL_JOIN bug where same-named
+        # columns (field_uuid) on both sides cause "Failed to bind column reference".
         self.log.info("Creating property_grukos_intersections")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE _grukos_candidates AS
+            SELECT
+                p.field_uuid, p.bfe_number, p.property_geometry,
+                fgi.field_id, fgi.block_id, fgi.cvr_number, fgi.year,
+                fgi.grukos_id, fgi.field_grukos_geometry
+            FROM field_property_intersections p
+            JOIN field_grukos_intersections fgi ON p.field_uuid = fgi.field_uuid
+        """)
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_grukos_intersections AS
             SELECT
-                p.field_uuid,
-                p.bfe_number,
-                fgi.field_id,
-                fgi.block_id,
-                fgi.cvr_number,
-                fgi.year,
-                fgi.grukos_id,
-                ST_Intersection(p.property_geometry, fgi.field_grukos_geometry) as
+                field_uuid, bfe_number, field_id, block_id, cvr_number, year,
+                grukos_id,
+                TRY(ST_Intersection(property_geometry, field_grukos_geometry)) as
                     property_grukos_geometry
-            FROM field_property_intersections p
-            JOIN field_grukos_intersections fgi ON p.field_uuid = fgi.field_uuid
-                AND ST_Intersects(p.property_geometry, fgi.field_grukos_geometry)
+            FROM _grukos_candidates
+            WHERE ST_Intersects(property_geometry, field_grukos_geometry)
         """)
+        self.conn.execute("DROP TABLE IF EXISTS _grukos_candidates")
 
         # Get result statistics
         property_grukos_count = self.conn.execute(

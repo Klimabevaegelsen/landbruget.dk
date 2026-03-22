@@ -103,46 +103,54 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         self.log.info("🔧 Using existing geometries from Stage 2B - No complex recalculations")
 
         # Step 1: Create property × wetland intersections (total wetlands within properties)
+        # NOTE: Two-step join to work around DuckDB SPATIAL_JOIN bug where same-named
+        # columns (field_uuid) on both sides cause "Failed to bind column reference".
         self.log.info("📦 Step 1: Creating property_wetland_intersections")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE _wetland_candidates AS
+            SELECT
+                p.field_uuid, p.bfe_number, p.property_geometry,
+                fwi.field_id, fwi.block_id, fwi.cvr_number, fwi.year,
+                fwi.wetland_id, fwi.toerv_pct, fwi.field_wetland_geometry
+            FROM field_property_intersections p
+            JOIN field_wetland_intersections fwi ON p.field_uuid = fwi.field_uuid
+        """)
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_wetland_intersections AS
             SELECT
-                p.field_uuid,
-                p.bfe_number,
-                fwi.field_id,
-                fwi.block_id,
-                fwi.cvr_number,
-                fwi.year,
-                fwi.wetland_id,
-                fwi.toerv_pct,
-                ST_Intersection(p.property_geometry, fwi.field_wetland_geometry) as
+                field_uuid, bfe_number, field_id, block_id, cvr_number, year,
+                wetland_id, toerv_pct,
+                TRY(ST_Intersection(property_geometry, field_wetland_geometry)) as
                     property_wetland_geometry
-            FROM field_property_intersections p
-            JOIN field_wetland_intersections fwi ON p.field_uuid = fwi.field_uuid
-                AND ST_Intersects(p.property_geometry, fwi.field_wetland_geometry)
+            FROM _wetland_candidates
+            WHERE ST_Intersects(property_geometry, field_wetland_geometry)
         """)
+        self.conn.execute("DROP TABLE IF EXISTS _wetland_candidates")
 
         # Step 2: Create property × wetland × water intersections
         # (water-covered wetlands within properties)
         self.log.info("📦 Step 2: Creating property_wetland_water_intersections")
         self.conn.execute("""
-            CREATE OR REPLACE TABLE property_wetland_water_intersections AS
+            CREATE OR REPLACE TABLE _wetland_water_candidates AS
             SELECT
-                p.field_uuid,
-                p.bfe_number,
-                fwwi.field_id,
-                fwwi.block_id,
-                fwwi.cvr_number,
-                fwwi.year,
-                fwwi.wetland_id,
-                fwwi.toerv_pct,
-                fwwi.project_id,
-                ST_Intersection(p.property_geometry, fwwi.field_wetland_water_geometry) as
-                    property_wetland_water_geometry
+                p.field_uuid, p.bfe_number, p.property_geometry,
+                fwwi.field_id, fwwi.block_id, fwwi.cvr_number, fwwi.year,
+                fwwi.wetland_id, fwwi.toerv_pct, fwwi.project_id,
+                fwwi.field_wetland_water_geometry
             FROM field_property_intersections p
             JOIN stage3b_field_wetland_water_intersections fwwi ON p.field_uuid = fwwi.field_uuid
-                AND ST_Intersects(p.property_geometry, fwwi.field_wetland_water_geometry)
         """)
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_wetland_water_intersections AS
+            SELECT
+                field_uuid, bfe_number, field_id, block_id, cvr_number, year,
+                wetland_id, toerv_pct, project_id,
+                TRY(ST_Intersection(property_geometry, field_wetland_water_geometry)) as
+                    property_wetland_water_geometry
+            FROM _wetland_water_candidates
+            WHERE ST_Intersects(property_geometry, field_wetland_water_geometry)
+        """)
+        self.conn.execute("DROP TABLE IF EXISTS _wetland_water_candidates")
 
         # Get result statistics
         property_wetland_count = self.conn.execute(
