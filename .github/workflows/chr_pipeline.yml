@@ -193,15 +193,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Set up environment variables
@@ -341,15 +346,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Download context artifact
@@ -516,15 +526,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Download context artifact
@@ -674,15 +689,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Download context artifact
@@ -804,15 +824,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Download context artifact with herd details
@@ -964,15 +989,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Download context artifact
@@ -1104,15 +1134,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Download context artifact
@@ -1280,15 +1315,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Download bronze timestamp artifact
@@ -1368,15 +1408,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
       - name: Run silver processing (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
@@ -1438,15 +1483,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
       - name: Set up environment variables
         env:
@@ -1642,15 +1692,20 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
           cd backend/pipelines/unified_pipeline
           uv pip install --system -e .
 
-          # Install CHR pipeline dependencies
+          # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
-          uv pip install --system -e .
+          uv pip install --system --no-binary lxml -e .
 
 
       - name: Set up environment variables
