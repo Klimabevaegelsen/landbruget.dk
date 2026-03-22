@@ -363,10 +363,8 @@ def process_chr_data_streaming(
                     )
 
                     try:
-                        # FIXED: Use raw gcsfs instead of gcs_access.list_files() for directory listing
-                        import gcsfs
-
-                        fs = gcsfs.GCSFileSystem()
+                        # Use gcs_access.fs (s3fs via common layer) for directory listing
+                        fs = gcs_access.fs
 
                         # Find all month-suffixed directories for this bronze timestamp
                         all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
@@ -509,9 +507,8 @@ def process_chr_data_streaming(
                 # If not found in base directory, search CHR-group-suffixed directories (for ejendom etc.)
                 if not file_found:
                     try:
-                        import gcsfs
-
-                        fs = gcsfs.GCSFileSystem()
+                        # Use gcs_access.fs (s3fs via common layer) for directory listing
+                        fs = gcs_access.fs
 
                         # Find all suffixed directories for this bronze timestamp
                         all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
@@ -647,9 +644,8 @@ def process_chr_data_streaming(
             )
 
             try:
-                import gcsfs
-
-                fs = gcsfs.GCSFileSystem()
+                # Use gcs_access.fs (s3fs via common layer) for directory listing
+                fs = gcs_access.fs
 
                 # Find all directories that match the bronze timestamp with suffixes
                 all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")

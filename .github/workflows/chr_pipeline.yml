@@ -287,7 +287,7 @@ jobs:
         with:
           name: chr-context-data
           path: /tmp/chr_context.json
-          retention-days: 1
+          retention-days: 3
 
       - name: Create bronze timestamp file
         run: |
@@ -301,7 +301,7 @@ jobs:
         with:
           name: bronze-timestamp
           path: /tmp/bronze_timestamp.txt
-          retention-days: 1
+          retention-days: 3
 
       - name: Upload bronze data summary
         if: always()
@@ -310,7 +310,7 @@ jobs:
           name: bronze-foundation-logs
           path: |
             /tmp/data/
-          retention-days: 1
+          retention-days: 3
 
   # Job 2: Parallel Data Collection - Group 1 (diko + spf_su - only need foundation)
   bronze-parallel-group-1:
@@ -1062,7 +1062,7 @@ jobs:
         with:
           name: chr-context-with-details
           path: /tmp/chr_context_with_details.json
-          retention-days: 1
+          retention-days: 3
 
   # Job 4: Parallel Data Collection - Group 2 (ejendom split into 4 CHR groups + vetstat when not using monthly processing)
   bronze-parallel-group-2:
