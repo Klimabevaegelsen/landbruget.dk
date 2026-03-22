@@ -120,10 +120,15 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         """)
 
         # Step 2: Create 3-way field × BNBO × water intersections (Water-covered BNBO in fields)
-        # SPATIAL_JOIN COMPLIANT: Uses existing geometries from Step 1 and Stage 1A foundation
+        # NOTE: Split into two queries to work around DuckDB 1.5 SPATIAL_JOIN bug
+        # where same-named columns (bnbo_id) on both sides of a spatial join cause
+        # "Failed to bind column reference" internal error. Any query combining
+        # ST_Intersects with bnbo_id from both tables triggers the buggy optimizer.
         self.log.info("📦 Step 2: Creating field_bnbo_water_intersections (3-way water-covered)")
+
+        # Step 2a: Join on bnbo_id (no spatial predicate — avoids SPATIAL_JOIN optimizer)
         self.conn.execute("""
-            CREATE OR REPLACE TABLE field_bnbo_water_intersections AS
+            CREATE OR REPLACE TABLE field_bnbo_water_candidates AS
             SELECT
                 fbi.field_uuid,
                 fbi.field_id,
@@ -133,12 +138,26 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 fbi.bnbo_id,
                 fbi.status_category,
                 wpbi.project_id,
-                ST_Intersection(fbi.field_bnbo_geometry, wpbi.intersection_geometry) as field_bnbo_water_geometry
+                fbi.field_bnbo_geometry,
+                wpbi.intersection_geometry
             FROM field_bnbo_intersections fbi
             JOIN water_projects_bnbo_intersections wpbi
                 ON fbi.bnbo_id = wpbi.bnbo_id
-                AND ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
         """)
+
+        # Step 2b: Spatial filter and intersection (single-table, no SPATIAL_JOIN)
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE field_bnbo_water_intersections AS
+            SELECT
+                field_uuid, field_id, block_id, cvr_number, year,
+                bnbo_id, status_category, project_id,
+                ST_Intersection(field_bnbo_geometry, intersection_geometry) as field_bnbo_water_geometry
+            FROM field_bnbo_water_candidates
+            WHERE ST_Intersects(field_bnbo_geometry, intersection_geometry)
+        """)
+
+        # Clean up intermediate table
+        self.conn.execute("DROP TABLE IF EXISTS field_bnbo_water_candidates")
 
         # Get result statistics
         total_bnbo_intersections = self.conn.execute(
