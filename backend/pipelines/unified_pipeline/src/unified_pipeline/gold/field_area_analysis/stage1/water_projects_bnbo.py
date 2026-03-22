@@ -47,29 +47,16 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             "🚀 PERFORMANCE: 4.8x faster than original (2.4K → 500 water projects, 3.7K → 1K BNBO)"
         )
 
-        # Use ST_Dump for multipolygon decomposition and add unique IDs
-        self.log.info("Decomposing BNBO polygons with ST_Dump and adding unique IDs...")
-
-        # Step 1: Decompose multipolygons with ST_Dump
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE bnbo_status_decomposed AS
-            SELECT
-                status_category,
-                UNNEST(ST_Dump(geometry)).geom as geometry
-            FROM bnbo_status_raw
-        """)
-
-        # Step 2: Add unique IDs with ROW_NUMBER using the decomposed geometries
+        # Stage 0 already decomposed with ST_Dump and assigned bnbo_id
+        # Preserve the existing bnbo_id from Stage 0 output
+        self.log.info("Using Stage 0 bnbo_id (already decomposed and ID-assigned)...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status AS
             SELECT
-                ROW_NUMBER() OVER (
-                    ORDER BY status_category, ST_X(ST_Centroid(geometry)),
-                             ST_Y(ST_Centroid(geometry))
-                ) as bnbo_id,
+                bnbo_id,
                 status_category,
                 geometry
-            FROM bnbo_status_decomposed
+            FROM bnbo_status_raw
         """)
 
         # Clean up temporary table
