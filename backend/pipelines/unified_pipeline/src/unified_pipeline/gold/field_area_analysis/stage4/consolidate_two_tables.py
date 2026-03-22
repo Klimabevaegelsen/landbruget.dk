@@ -183,8 +183,12 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                         FROM {table_name}
                     """)
                     self.log.info(f"  ✅ Converted {table_name}.{geom_col} from BLOB to GEOMETRY")
+                elif col_type and col_type.startswith("GEOMETRY"):
+                    self.log.debug(
+                        f"  ℹ️ {table_name}.{geom_col} is already {col_type}, no conversion needed"
+                    )
                 else:
-                    self.log.debug(f"  ℹ️ {table_name}.{geom_col} is already {col_type}")
+                    self.log.warning(f"  ⚠️ {table_name}.{geom_col} has unexpected type {col_type}")
 
             except Exception as e:
                 self.log.warning(f"Could not convert {table_name}.{geom_col}: {e}")
