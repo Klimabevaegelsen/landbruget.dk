@@ -56,12 +56,14 @@ class TestHerdsTable:
         assert (silver_dir / "herds.parquet").exists()
 
         # Verify data
-        herds_df = con.execute("SELECT * FROM herds").df()
-        assert len(herds_df) == 1
-        assert herds_df.iloc[0]["herd_number"] == 123456
-        assert herds_df.iloc[0]["chr_number"] == 123456
-        assert herds_df.iloc[0]["species_name"] == "Kvæg"
-        assert herds_df.iloc[0]["is_organic"]
+        row = con.execute(
+            "SELECT herd_number, chr_number, species_name, is_organic FROM herds"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == 123456
+        assert row[1] == 123456
+        assert row[2] == "Kvæg"
+        assert row[3] is True
 
     def test_create_herds_table_with_none_input(self, tmp_path):
         """Test that None input returns None gracefully."""
@@ -125,14 +127,13 @@ class TestHerdsTable:
         assert result is not None
 
         # Verify CHR number handling
-        herds_df = con.execute("SELECT * FROM herds ORDER BY herd_number").df()
-        assert len(herds_df) == 2
-        assert herds_df.iloc[0]["chr_number"] == 123456
-        # Invalid CHR should be NULL or not equal to "INVALID" string
-        import pandas as pd
-
-        chr_val = herds_df.iloc[1]["chr_number"]
-        assert pd.isna(chr_val) or chr_val != "INVALID"
+        rows = con.execute(
+            "SELECT herd_number, chr_number FROM herds ORDER BY herd_number"
+        ).fetchall()
+        assert len(rows) == 2
+        assert rows[0][1] == 123456
+        # Invalid CHR should be NULL (TRY_CAST of 'INVALID' to BIGINT yields NULL)
+        assert rows[1][1] is None
 
     def test_herd_deduplication(self, tmp_path):
         """Test that duplicate herds are removed."""
@@ -184,8 +185,8 @@ class TestHerdsTable:
         create_herds_table(con, "bes_details", silver_dir)
 
         # Should deduplicate
-        herds_df = con.execute("SELECT * FROM herds").df()
-        assert len(herds_df) == 1
+        count = con.execute("SELECT COUNT(*) FROM herds").fetchone()[0]
+        assert count == 1
 
     def test_date_field_transformation(self, tmp_path):
         """Test that date fields are properly transformed."""
@@ -217,10 +218,10 @@ class TestHerdsTable:
 
         create_herds_table(con, "bes_details", silver_dir)
 
-        herds_df = con.execute("SELECT * FROM herds").df()
-        assert herds_df.iloc[0]["date_created"] is not None
-        assert herds_df.iloc[0]["date_updated"] is not None
-        assert herds_df.iloc[0]["date_ceased"] is not None
+        row = con.execute("SELECT date_created, date_updated, date_ceased FROM herds").fetchone()
+        assert row[0] is not None
+        assert row[1] is not None
+        assert row[2] is not None
 
 
 @pytest.mark.chr_silver
@@ -240,6 +241,7 @@ class TestHerdOwners:
                     'BesaetningsNummer': '123456',
                     'Ejer': {
                         'CvrNummer': '12345678',
+                        'CprNummer': NULL,
                         'Navn': 'Test Farm ApS',
                         'Adresse': 'Landevej 123',
                         'PostNummer': '8000',
@@ -249,6 +251,7 @@ class TestHerdOwners:
                         'KommuneNavn': 'Aarhus',
                         'Land': 'Danmark',
                         'TelefonNummer': '12345678',
+                        'MobilNummer': NULL,
                         'Email': 'test@farm.dk',
                         'Adressebeskyttelse': 'Nej',
                         'Reklamebeskyttelse': 'Nej'
@@ -263,12 +266,14 @@ class TestHerdOwners:
         assert (silver_dir / "herd_owners.parquet").exists()
 
         # Verify data
-        owners_df = con.execute("SELECT * FROM herd_owners").df()
-        assert len(owners_df) == 1
-        assert owners_df.iloc[0]["herd_number"] == 123456
-        assert owners_df.iloc[0]["owner_cvr"] == "12345678"
-        assert owners_df.iloc[0]["owner_name"] == "Test Farm ApS"
-        assert owners_df.iloc[0]["owner_postal_code"] == "8000"
+        row = con.execute(
+            "SELECT herd_number, owner_cvr, owner_name, owner_postal_code FROM herd_owners"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == 123456
+        assert row[1] == "12345678"
+        assert row[2] == "Test Farm ApS"
+        assert row[3] == "8000"
 
     def test_owner_cvr_format_validation(self, tmp_path):
         """Test CVR format is preserved (8 digits with leading zeros)."""
@@ -283,9 +288,20 @@ class TestHerdOwners:
                     'BesaetningsNummer': '123456',
                     'Ejer': {
                         'CvrNummer': '00012345',
+                        'CprNummer': NULL,
                         'Navn': 'Test Farm',
                         'Adresse': 'Vej 1',
-                        'PostNummer': '8000'
+                        'PostNummer': '8000',
+                        'PostDistrikt': NULL,
+                        'ByNavn': NULL,
+                        'KommuneNummer': NULL,
+                        'KommuneNavn': NULL,
+                        'Land': NULL,
+                        'TelefonNummer': NULL,
+                        'MobilNummer': NULL,
+                        'Email': NULL,
+                        'Adressebeskyttelse': NULL,
+                        'Reklamebeskyttelse': NULL
                     }
                 }
             }] AS Response
@@ -293,9 +309,9 @@ class TestHerdOwners:
 
         create_herd_owners_table(con, "bes_details", silver_dir)
 
-        owners_df = con.execute("SELECT * FROM herd_owners").df()
+        row = con.execute("SELECT owner_cvr FROM herd_owners").fetchone()
         # CVR should be stored as string preserving leading zeros
-        assert owners_df.iloc[0]["owner_cvr"] == "00012345"
+        assert row[0] == "00012345"
 
     def test_owner_missing_required_fields(self, tmp_path):
         """Test handling of owners with missing required fields."""
@@ -310,7 +326,21 @@ class TestHerdOwners:
                 'Besaetning': {
                     'BesaetningsNummer': '123456',
                     'Ejer': {
-                        'TelefonNummer': '12345678'
+                        'CvrNummer': NULL,
+                        'CprNummer': NULL,
+                        'Navn': NULL,
+                        'Adresse': NULL,
+                        'PostNummer': NULL,
+                        'PostDistrikt': NULL,
+                        'ByNavn': NULL,
+                        'KommuneNummer': NULL,
+                        'KommuneNavn': NULL,
+                        'Land': NULL,
+                        'TelefonNummer': '12345678',
+                        'MobilNummer': NULL,
+                        'Email': NULL,
+                        'Adressebeskyttelse': NULL,
+                        'Reklamebeskyttelse': NULL
                     }
                 }
             }] AS Response
@@ -320,8 +350,8 @@ class TestHerdOwners:
 
         # Should filter out incomplete owners
         if result is not None:
-            owners_df = con.execute("SELECT * FROM herd_owners").df()
-            assert len(owners_df) == 0
+            count = con.execute("SELECT COUNT(*) FROM herd_owners").fetchone()[0]
+            assert count == 0
 
 
 @pytest.mark.chr_silver
@@ -341,13 +371,20 @@ class TestHerdUsers:
                     'BesaetningsNummer': '123456',
                     'Bruger': {
                         'CvrNummer': '87654321',
+                        'CprNummer': NULL,
                         'Navn': 'User Farm ApS',
                         'Adresse': 'Gade 45',
                         'PostNummer': '8200',
                         'PostDistrikt': 'Aarhus N',
                         'ByNavn': 'Aarhus',
                         'KommuneNummer': '751',
-                        'KommuneNavn': 'Aarhus'
+                        'KommuneNavn': 'Aarhus',
+                        'Land': NULL,
+                        'TelefonNummer': NULL,
+                        'MobilNummer': NULL,
+                        'Email': NULL,
+                        'Adressebeskyttelse': NULL,
+                        'Reklamebeskyttelse': NULL
                     }
                 }
             }] AS Response
@@ -358,11 +395,11 @@ class TestHerdUsers:
         assert result is not None
         assert (silver_dir / "herd_users.parquet").exists()
 
-        users_df = con.execute("SELECT * FROM herd_users").df()
-        assert len(users_df) == 1
-        assert users_df.iloc[0]["herd_number"] == 123456
-        assert users_df.iloc[0]["user_cvr"] == "87654321"
-        assert users_df.iloc[0]["user_name"] == "User Farm ApS"
+        row = con.execute("SELECT herd_number, user_cvr, user_name FROM herd_users").fetchone()
+        assert row is not None
+        assert row[0] == 123456
+        assert row[1] == "87654321"
+        assert row[2] == "User Farm ApS"
 
     def test_user_different_from_owner(self, tmp_path):
         """Test that user can be different from owner."""
@@ -377,15 +414,37 @@ class TestHerdUsers:
                     'BesaetningsNummer': '123456',
                     'Ejer': {
                         'CvrNummer': '12345678',
+                        'CprNummer': NULL,
                         'Navn': 'Owner Farm',
                         'Adresse': 'Vej 1',
-                        'PostNummer': '8000'
+                        'PostNummer': '8000',
+                        'PostDistrikt': NULL,
+                        'ByNavn': NULL,
+                        'KommuneNummer': NULL,
+                        'KommuneNavn': NULL,
+                        'Land': NULL,
+                        'TelefonNummer': NULL,
+                        'MobilNummer': NULL,
+                        'Email': NULL,
+                        'Adressebeskyttelse': NULL,
+                        'Reklamebeskyttelse': NULL
                     },
                     'Bruger': {
                         'CvrNummer': '87654321',
+                        'CprNummer': NULL,
                         'Navn': 'User Farm',
                         'Adresse': 'Vej 2',
-                        'PostNummer': '8200'
+                        'PostNummer': '8200',
+                        'PostDistrikt': NULL,
+                        'ByNavn': NULL,
+                        'KommuneNummer': NULL,
+                        'KommuneNavn': NULL,
+                        'Land': NULL,
+                        'TelefonNummer': NULL,
+                        'MobilNummer': NULL,
+                        'Email': NULL,
+                        'Adressebeskyttelse': NULL,
+                        'Reklamebeskyttelse': NULL
                     }
                 }
             }] AS Response
@@ -394,12 +453,12 @@ class TestHerdUsers:
         create_herd_owners_table(con, "bes_details", silver_dir)
         create_herd_users_table(con, "bes_details", silver_dir)
 
-        owners_df = con.execute("SELECT * FROM herd_owners").df()
-        users_df = con.execute("SELECT * FROM herd_users").df()
+        owner_cvr = con.execute("SELECT owner_cvr FROM herd_owners").fetchone()[0]
+        user_cvr = con.execute("SELECT user_cvr FROM herd_users").fetchone()[0]
 
-        assert owners_df.iloc[0]["owner_cvr"] != users_df.iloc[0]["user_cvr"]
-        assert owners_df.iloc[0]["owner_cvr"] == "12345678"
-        assert users_df.iloc[0]["user_cvr"] == "87654321"
+        assert owner_cvr != user_cvr
+        assert owner_cvr == "12345678"
+        assert user_cvr == "87654321"
 
 
 @pytest.mark.chr_silver
@@ -440,12 +499,12 @@ class TestHerdSizes:
         assert result is not None
         assert (silver_dir / "herd_sizes.parquet").exists()
 
-        sizes_df = con.execute("SELECT * FROM herd_sizes ORDER BY category").df()
-        assert len(sizes_df) == 2
-        assert sizes_df.iloc[0]["category"] == "Kvier"
-        assert sizes_df.iloc[0]["count"] == 25
-        assert sizes_df.iloc[1]["category"] == "Køer"
-        assert sizes_df.iloc[1]["count"] == 50
+        rows = con.execute("SELECT category, count FROM herd_sizes ORDER BY category").fetchall()
+        assert len(rows) == 2
+        assert rows[0][0] == "Kvier"
+        assert rows[0][1] == 25
+        assert rows[1][0] == "Køer"
+        assert rows[1][1] == 50
 
     def test_herd_sizes_aggregation(self, tmp_path):
         """Test aggregation of herd sizes across multiple categories."""
@@ -473,11 +532,11 @@ class TestHerdSizes:
 
         create_herd_sizes_table(con, "bes_details", silver_dir)
 
-        sizes_df = con.execute("SELECT * FROM herd_sizes").df()
-        total_animals = sizes_df["count"].sum()
-
-        assert total_animals == 180
-        assert len(sizes_df) == 3
+        result = con.execute(
+            "SELECT COUNT(*) AS num_rows, SUM(count) AS total FROM herd_sizes"
+        ).fetchone()
+        assert result[1] == 180
+        assert result[0] == 3
 
     def test_herd_sizes_with_empty_besstr(self, tmp_path):
         """Test handling of herds with no size data."""
@@ -502,8 +561,8 @@ class TestHerdSizes:
 
         # Should handle gracefully
         if result is not None:
-            sizes_df = con.execute("SELECT * FROM herd_sizes").df()
-            assert len(sizes_df) == 0
+            count = con.execute("SELECT COUNT(*) FROM herd_sizes").fetchone()[0]
+            assert count == 0
 
     def test_herd_sizes_uuid_generation(self, tmp_path):
         """Test that each herd size record gets a unique ID."""
@@ -522,13 +581,14 @@ class TestHerdSizes:
                     'BesStr': [
                         {'BesaetningsStoerrelseTekst': 'Køer', 'BesaetningsStoerrelse': '50'},
                         {'BesaetningsStoerrelseTekst': 'Kvier', 'BesaetningsStoerrelse': '25'}
-                    ]
+                    ],
+                    'BesStrDatoAjourfoert': '2024-01-01'
                 }
             }] AS Response
         """)
 
         create_herd_sizes_table(con, "bes_details", silver_dir)
 
-        sizes_df = con.execute("SELECT * FROM herd_sizes").df()
         # Each record should have a unique UUID
-        assert len(sizes_df["size_id"].unique()) == 2
+        unique_count = con.execute("SELECT COUNT(DISTINCT size_id) FROM herd_sizes").fetchone()[0]
+        assert unique_count == 2

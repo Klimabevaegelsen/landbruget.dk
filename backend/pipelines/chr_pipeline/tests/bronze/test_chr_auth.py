@@ -8,7 +8,7 @@ environments, this module mocks the cryptographic operations.
 import base64
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
@@ -63,8 +63,8 @@ def mock_certificate():
     """Create a mock certificate and private key for testing."""
     mock_cert = MagicMock()
     mock_cert.subject = MagicMock()
-    mock_cert.not_valid_before = datetime.utcnow()
-    mock_cert.not_valid_after = datetime.utcnow() + timedelta(days=365)
+    mock_cert.not_valid_before = datetime.now(tz=UTC)
+    mock_cert.not_valid_after = datetime.now(tz=UTC) + timedelta(days=365)
 
     mock_private_key = MagicMock()
     mock_private_key.public_key.return_value = MagicMock()

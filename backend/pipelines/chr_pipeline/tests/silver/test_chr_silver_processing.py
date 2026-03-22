@@ -162,12 +162,20 @@ class TestDataLoading:
             patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess") as mock_gcs_class,
             patch.dict("os.environ", {"GCS_BUCKET": "test-bucket"}),
         ):
+            import io
+
             mock_gcs = Mock()
             mock_gcs.file_exists.return_value = True
-            mock_gcs.fs.open.return_value.__enter__ = Mock(
-                return_value=Mock(read=Mock(return_value=b'{"test": "data"}'))
-            )
-            mock_gcs.fs.open.return_value.__exit__ = Mock(return_value=None)
+
+            # Each fs.open() must return a fresh BytesIO that signals EOF,
+            # otherwise shutil.copyfileobj loops forever consuming all memory
+            def make_mock_file(*args, **kwargs):
+                ctx = Mock()
+                ctx.__enter__ = Mock(return_value=io.BytesIO(b'{"test": "data"}'))
+                ctx.__exit__ = Mock(return_value=None)
+                return ctx
+
+            mock_gcs.fs.open = make_mock_file
             mock_gcs_class.return_value = mock_gcs
 
             result = download_bronze_data_from_gcs(bronze_timestamp, local_bronze_dir)
@@ -384,11 +392,19 @@ class TestDataTransformation:
         assert result == "age_groups"
         assert (silver_dir / "age_groups.parquet").exists()
 
-        # Check content
-        lookup_df = con.execute("SELECT * FROM age_groups").df()
-        assert len(lookup_df) == 2
-        assert "Aldersgruppekode" in lookup_df.columns
-        assert "Aldersgruppe" in lookup_df.columns
+        # Check content by reading the parquet file
+        rows = con.execute(
+            f"SELECT * FROM read_parquet('{silver_dir / 'age_groups.parquet'}')"
+        ).fetchall()
+        assert len(rows) == 2
+        columns = [
+            desc[0]
+            for desc in con.execute(
+                f"SELECT * FROM read_parquet('{silver_dir / 'age_groups.parquet'}')"
+            ).description
+        ]
+        assert "age_groups_code" in columns
+        assert "age_groups_name" in columns
 
     def test_date_casting_in_transformations(self):
         """Test that date fields are properly cast during transformation."""
