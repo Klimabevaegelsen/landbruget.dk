@@ -222,41 +222,32 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 )
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE chunk_final_intersections AS
+                    WITH intersected AS (
+                        -- Compute ST_Intersection ONCE per row (was computed 6× before)
+                        SELECT
+                            field_id, block_id, cvr_number, year, field_uuid,
+                            field_area_m2, bfe_number, property_area_m2,
+                            field_geometry, property_geometry,
+                            TRY(ST_Intersection(field_geometry, property_geometry)) as intersection_geometry
+                        FROM chunk_raw_intersections
+                    ),
+                    with_area AS (
+                        -- Compute ST_Area_Spheroid ONCE per row
+                        SELECT *,
+                            ST_Area_Spheroid(intersection_geometry) as intersection_area_m2
+                        FROM intersected
+                        WHERE intersection_geometry IS NOT NULL
+                    )
                     SELECT
-                        field_id,
-                        block_id,
-                        cvr_number,
-                        year,
-                        field_uuid,
-                        field_area_m2,
-                        bfe_number,
-                        property_area_m2,
-
-                        -- Calculate intersection area and percentages
-                        -- TRY() wraps ST_Intersection to handle invalid geometries
-                        -- (DuckDB 1.5 TopologyException on malformed polygons)
-                        ST_Area_Spheroid(
-                            TRY(ST_Intersection(field_geometry, property_geometry))
-                        ) as intersection_area_m2,
-                        (ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) /
-                         field_area_m2) * 100 as field_area_share_pct,
-                        (ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) /
-                         property_area_m2) * 100 as property_area_share_pct,
-
-                        -- STREAM intersection geometries for downstream spatial analysis
-                        field_geometry,
-                        property_geometry,
-                        TRY(ST_Intersection(field_geometry, property_geometry)) as intersection_geometry
-
-                    FROM chunk_raw_intersections
-                    WHERE
-                        -- Filter out tiny intersections (< 1% of field area or < 100 m²)
-                        -- TRY() returns NULL for invalid geometries, which are filtered out
-                        ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) > 100
-                        AND (
-                            ST_Area_Spheroid(TRY(ST_Intersection(field_geometry, property_geometry))) /
-                            field_area_m2
-                        ) > 0.01
+                        field_id, block_id, cvr_number, year, field_uuid,
+                        field_area_m2, bfe_number, property_area_m2,
+                        intersection_area_m2,
+                        (intersection_area_m2 / field_area_m2) * 100 as field_area_share_pct,
+                        (intersection_area_m2 / property_area_m2) * 100 as property_area_share_pct,
+                        field_geometry, property_geometry, intersection_geometry
+                    FROM with_area
+                    WHERE intersection_area_m2 > 100
+                        AND (intersection_area_m2 / field_area_m2) > 0.01
                 """)
 
                 chunk_final_count = self.conn.execute(
