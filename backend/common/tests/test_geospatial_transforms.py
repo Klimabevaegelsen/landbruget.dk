@@ -2,7 +2,7 @@
 
 This module tests the geospatial data quality standards for landbruget.dk:
 - CRS transformations (EPSG:25832 -> EPSG:4326)
-- Denmark bounds validation (lon ∈ [7.5, 15.5], lat ∈ [54.5, 58])
+- Denmark bounds validation (lon in [7.5, 15.5], lat in [54.5, 58])
 - Coordinate precision preservation
 - Geometry type preservation (Point, LineString, Polygon)
 - Invalid geometry handling
@@ -14,7 +14,6 @@ Reference: .claude/rules/data-quality.md
 """
 
 import duckdb
-import pandas as pd
 import pytest
 
 from backend.common.crs_utils import (
@@ -207,18 +206,20 @@ def test_sql_bounds_check_wgs84(
 ) -> None:
     """Test SQL-based bounds checking for WGS84 coordinates."""
     # Create test points (some inside, some outside Denmark)
-    pd.DataFrame(
-        {
-            "name": ["Copenhagen", "Aarhus", "Paris", "Berlin"],
-            "lon": [12.5683, 10.2039, 2.3522, 13.4050],
-            "lat": [55.6761, 56.1629, 48.8566, 52.5200],
-        }
+    mock_duckdb_connection.execute(
+        """
+        CREATE TABLE test_cities AS
+        SELECT * FROM (VALUES
+            ('Copenhagen', 12.5683, 55.6761),
+            ('Aarhus', 10.2039, 56.1629),
+            ('Paris', 2.3522, 48.8566),
+            ('Berlin', 13.4050, 52.5200)
+        ) AS t(name, lon, lat)
+    """
     )
 
-    mock_duckdb_connection.execute("CREATE TABLE test_cities AS SELECT * FROM df")
-
     # Check which points are within Denmark bounds
-    result = mock_duckdb_connection.execute(
+    rows = mock_duckdb_connection.execute(
         f"""
         SELECT
             name,
@@ -227,13 +228,16 @@ def test_sql_bounds_check_wgs84(
                 as is_in_denmark
         FROM test_cities
     """
-    ).fetchdf()
+    ).fetchall()
+
+    # Build lookup
+    results = dict(rows)
 
     # Verify results
-    assert result.loc[result["name"] == "Copenhagen", "is_in_denmark"].iloc[0]
-    assert result.loc[result["name"] == "Aarhus", "is_in_denmark"].iloc[0]
-    assert not result.loc[result["name"] == "Paris", "is_in_denmark"].iloc[0]
-    assert not result.loc[result["name"] == "Berlin", "is_in_denmark"].iloc[0]
+    assert results["Copenhagen"]
+    assert results["Aarhus"]
+    assert not results["Paris"]
+    assert not results["Berlin"]
 
 
 # =============================================================================
@@ -373,25 +377,38 @@ def test_null_geometry_handling(
     mock_duckdb_connection: duckdb.DuckDBPyConnection,
 ) -> None:
     """Test that NULL geometries are handled correctly."""
-    pd.DataFrame({"id": [1, 2, 3], "geom_wkt": ["POINT(12.5 55.6)", None, "POINT(10.2 56.1)"]})
+    mock_duckdb_connection.execute(
+        """
+        CREATE TABLE test_geoms AS
+        SELECT * FROM (VALUES
+            (1, 'POINT(12.5 55.6)'),
+            (2, NULL),
+            (3, 'POINT(10.2 56.1)')
+        ) AS t(id, geom_wkt)
+    """
+    )
 
-    mock_duckdb_connection.execute("CREATE TABLE test_geoms AS SELECT * FROM df")
-
-    result = mock_duckdb_connection.execute(
+    rows = mock_duckdb_connection.execute(
         """
         SELECT
             id,
-            CASE WHEN geom_wkt IS NULL THEN NULL
-                 ELSE ST_GeomFromText(geom_wkt)
-            END as geom
+            geom_wkt IS NOT NULL as has_geom,
+            CASE WHEN geom_wkt IS NOT NULL
+                 THEN ST_AsText(ST_GeomFromText(geom_wkt))
+                 ELSE NULL
+            END as geom_text
         FROM test_geoms
     """
-    ).fetchdf()
+    ).fetchall()
 
     # Check NULL handling
-    assert result.loc[0, "geom"] is not None
-    assert pd.isna(result.loc[1, "geom"]) or result.loc[1, "geom"] is None
-    assert result.loc[2, "geom"] is not None
+    for row_id, has_geom, _geom_text in rows:
+        if row_id == 1:
+            assert has_geom  # id=1 has geometry
+        elif row_id == 2:
+            assert not has_geom  # id=2 has no geometry
+        elif row_id == 3:
+            assert has_geom  # id=3 has geometry
 
 
 def test_invalid_wkt_handling(

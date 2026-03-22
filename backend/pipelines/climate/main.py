@@ -16,10 +16,12 @@ Requirements:
     - Access to silver layer data (chr, fvm_marker_YYYY, fertiliser)
 """
 
-import argparse
 import logging
 import sys
 from pathlib import Path
+
+import click
+from common.cli import common_options
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,62 +34,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Calculate farm climate emissions from agricultural data",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Calculate emissions for a single farm
-  python main.py --cvr 31373077 --year 2024
-
-  # Calculate for all farms with data
-  python main.py --cvr all --year 2024
-
-  # Dry run (no output written)
-  python main.py --cvr 12345678 --year 2024 --dry-run
-
-  # Write only to GCS gold layer
-  python main.py --cvr 12345678 --year 2024 --output gold
-        """,
-    )
-
-    parser.add_argument(
-        "--cvr", required=True, help="CVR number (8 digits) or 'all' to process all farms with data"
-    )
-
-    parser.add_argument(
-        "--year", type=int, required=True, help="Year to calculate emissions for (YYYY)"
-    )
-
-    parser.add_argument(
-        "--output",
-        choices=["gold", "supabase", "both"],
-        default="both",
-        help="Output destination: 'gold' (GCS), 'supabase' (database), or 'both' (default)",
-    )
-
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Calculate emissions but don't write output (for testing)",
-    )
-
-    parser.add_argument(
-        "--log-level",
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Logging level (default: INFO)",
-    )
-
-    parser.add_argument(
-        "--limit", type=int, help="Limit number of CVRs to process (useful with --cvr all)"
-    )
-
-    return parser.parse_args()
 
 
 def get_cvr_list(
@@ -231,17 +177,34 @@ def write_output(reports: list[EmissionReport], output_mode: str):
         logger.warning("Supabase sync not yet implemented")
 
 
-def main():
-    """Main CLI entry point."""
-    args = parse_args()
-
+@click.command()
+@click.option(
+    "--cvr", required=True, help="CVR number (8 digits) or 'all' to process all farms with data"
+)
+@click.option("--year", type=int, required=True, help="Year to calculate emissions for (YYYY)")
+@click.option(
+    "--output",
+    type=click.Choice(["gold", "supabase", "both"]),
+    default="both",
+    help="Output destination (default: both)",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Calculate emissions but don't write output (for testing)"
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Limit number of CVRs to process (useful with --cvr all)",
+)
+@common_options
+def main(cvr, year, output, dry_run, limit, log_level):
+    """Calculate farm climate emissions from agricultural data."""
     # Set log level
-    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    logging.getLogger().setLevel(getattr(logging, log_level))
 
     logger.info("Starting Climate Tool")
-    logger.info(
-        f"CVR: {args.cvr}, Year: {args.year}, Output: {args.output}, Dry Run: {args.dry_run}"
-    )
+    logger.info(f"CVR: {cvr}, Year: {year}, Output: {output}, Dry Run: {dry_run}")
 
     # Initialize components
     try:
@@ -253,7 +216,7 @@ def main():
 
     # Get list of CVRs to process
     try:
-        cvrs = get_cvr_list(loader, args.cvr, args.year, args.limit)
+        cvrs = get_cvr_list(loader, cvr, year, limit)
 
         if not cvrs:
             logger.error("No CVRs to process")
@@ -270,23 +233,23 @@ def main():
 
     logger.info(f"Processing {len(cvrs)} farm(s)...")
 
-    for i, cvr in enumerate(cvrs, 1):
+    for i, cvr_num in enumerate(cvrs, 1):
         try:
-            logger.info(f"[{i}/{len(cvrs)}] Processing CVR {cvr}...")
+            logger.info(f"[{i}/{len(cvrs)}] Processing CVR {cvr_num}...")
 
             # Calculate emissions
-            report = calculator.calculate_emissions(cvr, args.year)
+            report = calculator.calculate_emissions(cvr_num, year)
             reports.append(report)
 
             # Print summary
             print(
-                f"  {cvr}: {report.total_co2e_kg:,.0f} kg CO2e ({report.data_completeness:.0%} complete)"
+                f"  {cvr_num}: {report.total_co2e_kg:,.0f} kg CO2e ({report.data_completeness:.0%} complete)"
             )
 
             successful += 1
 
         except Exception as e:
-            logger.error(f"Failed to process CVR {cvr}: {e}")
+            logger.error(f"Failed to process CVR {cvr_num}: {e}")
             failed += 1
             continue
 
@@ -315,14 +278,14 @@ def main():
         print_emission_report(reports[0], verbose=True)
 
     # Write output (unless dry run)
-    if not args.dry_run and reports:
+    if not dry_run and reports:
         try:
-            write_output(reports, args.output)
+            write_output(reports, output)
             logger.info("Output writing complete")
         except Exception as e:
             logger.error(f"Failed to write output: {e}")
             sys.exit(1)
-    elif args.dry_run:
+    elif dry_run:
         logger.info("Dry run - no output written")
 
     logger.info("Climate Tool finished successfully")

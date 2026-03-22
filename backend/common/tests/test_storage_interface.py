@@ -280,20 +280,22 @@ def test_local_storage_save_parquet_list_of_dicts(temp_dir, valid_cvr_numbers):
     full_path = temp_dir / dst_path
     assert full_path.exists()
 
-    # Read back and verify using DataFrame for easier verification
+    # Read back and verify using fetchall
     conn = duckdb.connect()
-    result_df = conn.execute(f"SELECT * FROM '{full_path}'").df()
+    rows = conn.execute(f"SELECT * FROM '{full_path}'").fetchall()
 
-    assert len(result_df) == 3
+    assert len(rows) == 3
 
     # Verify all CVR numbers are present (alphabetical order by default)
-    loaded_cvrs = set(result_df["cvr_number"].tolist())
+    loaded_cvrs = {cvr for cvr, _, _ in rows}
     expected_cvrs = set(valid_cvr_numbers[:3])
     assert loaded_cvrs == expected_cvrs
 
     # Verify all company names and municipalities are present
-    assert "Danish Crown" in result_df["company_name"].tolist()
-    assert "Esbjerg" in result_df["municipality"].tolist()
+    company_names = [name for _, name, _ in rows]
+    municipalities = [muni for _, _, muni in rows]
+    assert "Danish Crown" in company_names
+    assert "Esbjerg" in municipalities
 
     conn.close()
 
@@ -353,11 +355,11 @@ def test_local_storage_read_parquet(temp_dir):
     # Read back using DuckDB
     full_path = Path(temp_dir) / dst_path
     conn = duckdb.connect()
-    result_df = conn.execute(f"SELECT * FROM '{full_path}'").df()
+    rows = conn.execute(f"SELECT * FROM '{full_path}'").fetchall()
 
-    assert len(result_df) == 2
-    assert result_df["cvr"].tolist() == ["31373077", "10150817"]
-    assert result_df["year"].tolist() == ["2023", "2023"]
+    assert len(rows) == 2
+    assert [cvr for cvr, _, _ in rows] == ["31373077", "10150817"]
+    assert [year for _, year, _ in rows] == ["2023", "2023"]
 
     conn.close()
 
@@ -696,17 +698,17 @@ def test_storage_round_trip_parquet_local(temp_dir, valid_cvr_numbers):
     # Load and verify
     full_path = Path(temp_dir) / dst_path
     conn = duckdb.connect()
-    loaded_df = conn.execute(f"SELECT * FROM '{full_path}'").df()
+    rows = conn.execute(f"SELECT * FROM '{full_path}'").fetchall()
 
-    assert len(loaded_df) == 3
+    assert len(rows) == 3
 
     # Verify all CVR numbers are present (order may vary)
-    loaded_cvrs = set(loaded_df["cvr"].tolist())
+    loaded_cvrs = {cvr for cvr, _, _ in rows}
     expected_cvrs = set(valid_cvr_numbers[:3])
     assert loaded_cvrs == expected_cvrs
 
     # Verify all company names are present
-    loaded_names = set(loaded_df["name"].tolist())
+    loaded_names = {name for _, name, _ in rows}
     expected_names = {"Arla Foods", "Danish Crown", "Sønderjysk Mejeri"}
     assert loaded_names == expected_names
 

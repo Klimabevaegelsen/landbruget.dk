@@ -40,16 +40,15 @@ logger = logging.getLogger(__name__)
 
 # Initialize storage paths and clients
 GCS_BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
-GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 LOCAL_DATA_PATH = os.getenv(
     "LOCAL_DATA_PATH", "/tmp/data"
 )  # Default to /tmp/data for GitHub Actions
 
-# Use GCS if we have the required configuration
-USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT and GCS_AVAILABLE)
+# Use cloud storage if we have bucket name and GCSDataAccess available
+USE_GCS = bool(GCS_BUCKET and GCS_AVAILABLE)
 
 logger.info(
-    f"GCS Configuration - Bucket: {GCS_BUCKET}, Project: {GOOGLE_CLOUD_PROJECT}, "
+    f"Storage Configuration - Bucket: {GCS_BUCKET}, "
     f"GCS_AVAILABLE: {GCS_AVAILABLE}, USE_GCS: {USE_GCS}"
 )
 
