@@ -1022,6 +1022,12 @@ def run_bronze_step(step: str, context: dict[str, Any]) -> dict[str, Any]:
     is_flag=True,
     help="Skip running dependency steps (for parallel job execution)",
 )
+@click.option(
+    "--chr-group",
+    type=int,
+    default=None,
+    help="CHR group number for parallel processing (1-4)",
+)
 def main(
     steps,
     test_species_codes,
@@ -1033,6 +1039,7 @@ def main(
     start_date,
     end_date,
     skip_dependencies,
+    chr_group,
 ):
     """CHR Data Pipeline."""
     # Record start time for execution tracking
@@ -1070,6 +1077,7 @@ def main(
         "start_date": start_date,
         "end_date": end_date,
         "skip_dependencies": skip_dependencies,
+        "chr_group": chr_group,
     }
 
     setup_logging(args["log_level"])
