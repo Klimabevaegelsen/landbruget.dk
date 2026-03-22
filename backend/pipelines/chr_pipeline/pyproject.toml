@@ -11,7 +11,7 @@ authors = [
 dependencies = [
     "zeep~=4.3.1",
     "certifi~=2025.6.15",
-    "lxml>=5.2,<6",
+    "lxml>=5.2",
     "xmlsec==1.3.14",
     "s3fs>=2024.1.0",
     "python-dotenv~=1.1.1",
@@ -38,8 +38,8 @@ only-packages = true
 artifacts = ["*.py"]
 
 [tool.uv]
-# xmlsec 1.3.14 binary wheels are only compatible with lxml 5.x
-# lxml 6.x bundles a different libxml2 version causing runtime mismatch
+# xmlsec and lxml binary wheels bundle different libxml2 versions causing runtime mismatch
+# CI uses --no-binary lxml to build from source against system libxml2
 # See: https://github.com/xmlsec/python-xmlsec/issues/316
 
 [tool.uv.sources]

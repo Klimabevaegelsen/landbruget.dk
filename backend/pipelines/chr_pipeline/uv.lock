@@ -339,7 +339,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.5.0" },
     { name = "landbruget-common", editable = "../../common" },
     { name = "loguru", specifier = "~=0.7.3" },
-    { name = "lxml", specifier = ">=5.2,<6" },
+    { name = "lxml", specifier = ">=5.2" },
     { name = "pyarrow", specifier = "~=20.0.0" },
     { name = "python-dotenv", specifier = "~=1.1.1" },
     { name = "s3fs", specifier = ">=2024.1.0" },
