@@ -73,11 +73,12 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
 
             # Upload to GCS using gcs_access
             full_gcs_path = f"gs://{CONFIG.bucket}/{gcs_path}"
+            fs_path = f"{CONFIG.bucket}/{gcs_path}"
 
             # Use gcs_access fs to upload
             import shutil
 
-            with open(temp_path, "rb") as src, self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
+            with open(temp_path, "rb") as src, self.gcs_access.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             # Clean up temporary file
