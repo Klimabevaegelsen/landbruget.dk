@@ -21,7 +21,7 @@
     "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^5.2.2",
-    "@number-flow/react": "^0.5.14",
+    "@number-flow/react": "^0.6.0",
     "@playwright/test": "^1.58.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
