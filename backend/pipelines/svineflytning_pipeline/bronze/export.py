@@ -78,9 +78,10 @@ def _save_to_gcs(blob_path: str, data_iterator: Iterator[dict]) -> str:
     # Add bronze/svineflytning/{timestamp} prefix to all files
     full_path = f"bronze/svineflytning/{blob_path}"
     gcs_path = f"gs://{GCS_BUCKET}/{full_path}"
+    fs_path = f"{GCS_BUCKET}/{full_path}"
 
     # Create a streaming upload using gcsfs
-    with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
+    with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
         # Write opening bracket for JSON array
         f.write("[\n")
 
@@ -203,9 +204,10 @@ def export_movements_optimized(
             gcs_path = (
                 f"gs://{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
             )
+            fs_path = f"{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
 
             # Stream directly to GCS using gcsfs
-            with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
+            with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
                 f.write("[\n")
 
                 first_item = True

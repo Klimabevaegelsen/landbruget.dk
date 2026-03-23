@@ -439,11 +439,12 @@ class H3PMTilesGenerator:
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             gcs_path = f"gs://{self.config.bucket}/gold/pmtiles/h3_pfas_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pfas_{year}_res{self.config.h3_resolution}.pmtiles"
+            fs_path = gcs_path.replace("gs://", "", 1)
 
             self.log.info(f"☁️ Uploading PMTiles to: {gcs_path}")
 
             # Upload using GCS access - use the correct streaming method
-            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             # Set public read ACL on the uploaded file
@@ -720,11 +721,12 @@ class H3PMTilesGenerator:
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             gcs_path = f"gs://{self.config.bucket}/gold/pmtiles/kommune_pfas_{year}/{timestamp}/kommune_pfas_{year}.pmtiles"
+            fs_path = gcs_path.replace("gs://", "", 1)
 
             self.log.info(f"☁️ Uploading kommune PMTiles to: {gcs_path}")
 
             # Upload using GCS access - use the correct streaming method
-            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             # Set public read ACL on the uploaded file

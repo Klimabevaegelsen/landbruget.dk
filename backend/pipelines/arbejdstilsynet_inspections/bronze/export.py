@@ -100,13 +100,14 @@ class GCSStorage:
             # ✅ OPTIMIZED: Use streaming upload if available
             if self.use_optimized and self.gcs_access:
                 full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+                fs_path = f"{self.bucket_name}/{gcs_path}"
 
                 # Stream file directly without loading into memory
                 import shutil
 
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                    self.gcs_access.fs.open(fs_path, "wb") as gcs_file,
                 ):
                     shutil.copyfileobj(file_obj, gcs_file)
 
@@ -138,12 +139,12 @@ class GCSStorage:
                         metadata_content = json.dumps(
                             metadata.model_dump(mode="json"), indent=2, default=str
                         )
-                        metadata_gcs_path = full_gcs_path.replace(".csv", "_metadata.json")
+                        metadata_fs_path = fs_path.replace(".csv", "_metadata.json")
 
-                        with self.gcs_access.fs.open(metadata_gcs_path, "w") as f:
+                        with self.gcs_access.fs.open(metadata_fs_path, "w") as f:
                             f.write(metadata_content)
 
-                        logging.info(f"✅ Uploaded metadata to {metadata_gcs_path}")
+                        logging.info(f"✅ Uploaded metadata to {metadata_fs_path}")
                     except Exception as e:
                         logging.warning(f"⚠️  Failed to create metadata: {e}")
 
