@@ -155,8 +155,9 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
             else:
                 gcs_access.upload_json(data, gcs_path)
         else:
-            # XML or other content - use streaming write
-            with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
+            # XML or other content - use streaming write (strip gs:// for raw fs access)
+            fs_path = gcs_path.replace("gs://", "", 1)
+            with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
         logger.info(f"✅ Saved {data_type} data immediately to {gcs_path}")
@@ -262,10 +263,11 @@ def _save_to_gcs(blob_path: str, content: str, format_type: str):
     """Helper function to save content to GCS using unified GCSDataAccess."""
     # Add bronze/chr/{timestamp_with_suffixes} prefix to all files
     bronze_dir = get_bronze_directory_path()
-    gcs_path = f"gs://{GCS_BUCKET}/bronze/chr/{bronze_dir}/{blob_path}"
+    # Use bucket/path format directly (no gs:// prefix) since fs.open() expects raw S3/R2 paths
+    fs_path = f"{GCS_BUCKET}/bronze/chr/{bronze_dir}/{blob_path}"
 
     # Use streaming write for both JSON and XML
-    with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
+    with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
         f.write(content)
 
 
@@ -453,7 +455,8 @@ def _save_to_gcs_streaming(filename: str, data_list: list[Any], path_suffix: str
     # If path_suffix is provided, add it to the bronze directory
     if path_suffix:
         bronze_dir += path_suffix
-    gcs_path = f"gs://{GCS_BUCKET}/bronze/chr/{bronze_dir}/{filename}"
+    # Use bucket/path format directly (no gs:// prefix) since fs.open() expects raw S3/R2 paths
+    fs_path = f"{GCS_BUCKET}/bronze/chr/{bronze_dir}/{filename}"
 
     # Estimate data size for logging
     import sys
@@ -465,7 +468,7 @@ def _save_to_gcs_streaming(filename: str, data_list: list[Any], path_suffix: str
 
     try:
         # Use gcsfs streaming write via unified GCSDataAccess
-        with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
+        with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
             f.write("[\n")
 
             for i, item in enumerate(data_list):
