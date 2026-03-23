@@ -101,8 +101,9 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
 
                 # Check if file exists in GCS
                 if gcs_access.file_exists(gcs_path):
-                    # Download file
-                    with gcs_access.fs.open(gcs_path, "rb") as src, open(local_path, "wb") as dst:
+                    # Download file (strip gs:// for raw fs access)
+                    fs_path = gcs_path.replace("gs://", "", 1)
+                    with gcs_access.fs.open(fs_path, "rb") as src, open(local_path, "wb") as dst:
                         shutil.copyfileobj(src, dst)
 
                     logging.info(f"Downloaded {filename} from GCS")

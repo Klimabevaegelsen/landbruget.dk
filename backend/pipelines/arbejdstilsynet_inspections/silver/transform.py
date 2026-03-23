@@ -118,11 +118,12 @@ class GCSStorage:
             # Use streaming upload if available
             if self.use_optimized and self.gcs_access:
                 full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+                fs_path = f"{self.bucket_name}/{gcs_path}"
 
                 # Stream file directly without loading into memory
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                    self.gcs_access.fs.open(fs_path, "wb") as gcs_file,
                 ):
                     shutil.copyfileobj(file_obj, gcs_file)
 

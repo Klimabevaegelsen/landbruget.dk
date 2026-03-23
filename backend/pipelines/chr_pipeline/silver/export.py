@@ -161,8 +161,9 @@ def upload_silver_data_to_gcs(silver_dir: Path, export_timestamp: str) -> bool:
                 # Create GCS path: silver/chr/{timestamp}/{filename}
                 gcs_path = f"gs://{bucket_name}/silver/chr/{export_timestamp}/{parquet_file.name}"
 
-                # Upload file using streaming
-                with open(parquet_file, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                # Upload file using streaming (strip gs:// for raw fs access)
+                fs_path = gcs_path.replace("gs://", "", 1)
+                with open(parquet_file, "rb") as src, gcs_access.fs.open(fs_path, "wb") as dst:
                     import shutil
 
                     shutil.copyfileobj(src, dst)

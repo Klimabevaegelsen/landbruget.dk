@@ -143,8 +143,8 @@ class OptimizedStorageBackend:
                 # Use optimized file upload
                 with open(tmp_path, "rb") as f:
                     file_data = f.read()
-                gcs_path = f"gs://{self.bucket_name}/{blob_name}"
-                with self.gcs_access.fs.open(gcs_path, "wb") as gcs_file:
+                fs_path = f"{self.bucket_name}/{blob_name}"
+                with self.gcs_access.fs.open(fs_path, "wb") as gcs_file:
                     gcs_file.write(file_data)
                 print(f"Saved {blob_name} to optimized GCS storage (parquet)")
             else:

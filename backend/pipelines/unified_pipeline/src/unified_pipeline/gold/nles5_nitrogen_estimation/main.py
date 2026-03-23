@@ -757,6 +757,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         dataset_name = f"{self.config.dataset}_{subdataset}"
                         gcs_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
                         full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+                        fs_path = f"{self.config.bucket}/{gcs_path}"
 
                         # Export to local file first to avoid DuckDB temp file issues
                         # with GCS writes
@@ -790,7 +791,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
                             with (
                                 open(local_parquet, "rb") as src,
-                                self.gcs_access.fs.open(full_gcs_path, "wb") as dst,
+                                self.gcs_access.fs.open(fs_path, "wb") as dst,
                             ):
                                 shutil.copyfileobj(src, dst)
 
@@ -2458,6 +2459,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             dataset_name = f"{self.config.dataset}_nitrogen_estimates"
             gcs_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
             full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+            fs_path = f"{self.config.bucket}/{gcs_path}"
 
             # Export to local file first to avoid DuckDB temp file issues with GCS writes
             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
@@ -2542,7 +2544,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
                 with (
                     open(local_parquet, "rb") as src,
-                    self.gcs_access.fs.open(full_gcs_path, "wb") as dst,
+                    self.gcs_access.fs.open(fs_path, "wb") as dst,
                 ):
                     shutil.copyfileobj(src, dst)
 
