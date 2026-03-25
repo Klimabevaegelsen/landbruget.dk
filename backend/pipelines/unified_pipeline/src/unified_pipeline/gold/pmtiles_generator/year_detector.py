@@ -11,6 +11,11 @@ from .config import PMTilesGeneratorConfig
 logger = logging.getLogger(__name__)
 
 
+def _normalize_path(path: str) -> str:
+    """Normalize gs:// paths to r2:// since list_files returns gs:// prefix."""
+    return path.replace("gs://", "r2://", 1) if path.startswith("gs://") else path
+
+
 class DataSourceYearDetector:
     """Detects available years for different data sources in GCS."""
 
@@ -80,7 +85,7 @@ class DataSourceYearDetector:
         try:
             # Use direct glob pattern like pesticide_proximity does
             # For "silver/fvm_marker_" -> use "silver/fvm_marker_*"
-            direct_pattern = f"gs://{self.config.gcs_bucket}/{path_pattern}*"
+            direct_pattern = f"r2://{self.config.gcs_bucket}/{path_pattern}*"
             all_paths = await asyncio.to_thread(self.gcs.list_files, direct_pattern)
 
             # Extract years using regex like pesticide_proximity does
@@ -118,7 +123,7 @@ class DataSourceYearDetector:
         try:
             # List all pesticide proximity directories
             all_paths = await asyncio.to_thread(
-                self.gcs.list_files, f"gs://{self.config.gcs_bucket}/gold/*"
+                self.gcs.list_files, f"r2://{self.config.gcs_bucket}/gold/*"
             )
 
             years = set()
@@ -126,7 +131,8 @@ class DataSourceYearDetector:
             pattern = re.compile(r"pesticide_proximity_(\d{4})_(\d{4})/?$")
 
             for path in all_paths:
-                path_parts = path.replace(f"gs://{self.config.gcs_bucket}/", "").split("/")
+                normalized = _normalize_path(path)
+                path_parts = normalized.replace(f"r2://{self.config.gcs_bucket}/", "").split("/")
 
                 for part in path_parts:
                     match = pattern.match(part)
@@ -154,7 +160,7 @@ class DataSourceYearDetector:
             # NLES5 data is stored in timestamped directories under
             # gold/nles5_nitrogen_estimation_nitrogen_estimates/{timestamp}/
             nles5_base_path = (
-                f"gs://{self.config.gcs_bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/"
+                f"r2://{self.config.gcs_bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/"
             )
 
             # Check if the base path exists
@@ -166,8 +172,9 @@ class DataSourceYearDetector:
             # Find timestamped directories (format: YYYYMMDD_HHMMSS)
             timestamp_dirs = []
             for path in paths:
-                # Extract directory name from path
-                parts = path.replace(nles5_base_path, "").split("/")
+                # Extract directory name from path — normalize gs:// → r2://
+                normalized = _normalize_path(path)
+                parts = normalized.replace(nles5_base_path, "").split("/")
                 if parts and parts[0] and parts[0][0].isdigit():
                     timestamp_dirs.append(parts[0])
 

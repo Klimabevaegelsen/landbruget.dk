@@ -1,5 +1,7 @@
 """Configuration for PMTiles Generator Gold Pipeline."""
 
+import os
+
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig
@@ -64,8 +66,13 @@ class PMTilesGeneratorConfig(BaseJobConfig):
         default_factory=list, description="Years to exclude from processing"
     )
 
-    # Data source paths in GCS
-    gcs_bucket: str = Field(default="landbruget-data", description="GCS bucket for source data")
+    # Data source bucket (R2_BUCKET → GCS_BUCKET → default)
+    gcs_bucket: str = Field(
+        default_factory=lambda: (
+            os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        ),
+        description="Storage bucket for source data",
+    )
 
     # Dataset paths
     fvm_marker_path: str = Field(

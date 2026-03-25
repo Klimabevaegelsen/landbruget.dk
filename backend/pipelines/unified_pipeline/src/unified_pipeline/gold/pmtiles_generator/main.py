@@ -67,43 +67,19 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         logger.info("Pipeline setup completed")
 
     def _ensure_gcs_credentials(self):
-        """Ensure GCS HMAC credentials are properly configured for DuckDB."""
-        try:
-            # Check for HMAC credentials in environment variables
-            gcs_access_key = os.environ.get("GCS_ACCESS_KEY_ID")
-            gcs_secret_key = os.environ.get("GCS_SECRET_ACCESS_KEY")
+        """Ensure cloud storage credentials are properly configured for DuckDB.
 
-            if gcs_access_key and gcs_secret_key:
-                logger.info("✅ Found GCS HMAC credentials, configuring DuckDB")
+        Uses the shared setup_duckdb_cloud_auth which tries R2 first, then GCS HMAC.
+        """
+        from common.gcs.filesystem import setup_duckdb_cloud_auth
 
-                # Install and load httpfs extension for GCS access
-                self.duckdb_conn.execute("INSTALL httpfs")
-                self.duckdb_conn.execute("LOAD httpfs")
-
-                # Set correct GCS region (landbruget-data bucket is in EUROPE-WEST1)
-                self.duckdb_conn.execute("SET s3_region = 'europe-west1'")
-
-                # Escape single quotes in credentials to prevent SQL injection
-                escaped_key = gcs_access_key.replace("'", "''")
-                escaped_secret = gcs_secret_key.replace("'", "''")
-
-                # Create persistent GCS secret for native access
-                self.duckdb_conn.execute(f"""
-                    CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
-                        TYPE GCS,
-                        KEY_ID '{escaped_key}',
-                        SECRET '{escaped_secret}'
-                    );
-                """)
-                logger.info("✅ DuckDB GCS HMAC authentication configured successfully")
-            else:
-                logger.warning("⚠️  GCS HMAC credentials not found in environment variables")
-                logger.warning(
-                    "    Set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY for optimal performance"
-                )
-        except Exception as e:
-            logger.error(f"❌ Failed to setup GCS HMAC authentication: {e}")
-            # Don't raise - let it fall back to service account auth
+        if setup_duckdb_cloud_auth(self.duckdb_conn):
+            logger.info("DuckDB cloud storage authentication configured")
+        else:
+            logger.warning(
+                "No R2 or GCS credentials found — "
+                "set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID"
+            )
 
     async def run(self, target_year: int | None = None) -> dict[str, any]:
         """Run the PMTiles generation pipeline.
