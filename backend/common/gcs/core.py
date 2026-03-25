@@ -296,7 +296,7 @@ class GCSDataAccess:
 
             self.monitor.check_resources("post_direct_query")
 
-    def export_table_to_gcs_direct(self, table_name: str, gcs_path: str, **parquet_options):
+    def export_table_to_gcs_direct(self, table_name: str, gcs_path: str, *, connection=None, **parquet_options):
         """
         OPTIMAL: Export DuckDB table directly to GCS without DataFrame conversion.
 
@@ -304,7 +304,14 @@ class GCSDataAccess:
         - No DataFrame conversion bottleneck
         - Direct DuckDB COPY with optimized Parquet settings
         - Streaming upload to GCS
+
+        Args:
+            table_name: Name of the table to export
+            gcs_path: GCS destination path
+            connection: Optional external DuckDB connection (uses self.duckdb_conn if None)
+            **parquet_options: Parquet export options
         """
+        conn = connection or self.duckdb_conn
         gcs_path = _strip_protocol(gcs_path)
         self.monitor.check_resources("start_direct_export")
 
@@ -323,10 +330,10 @@ class GCSDataAccess:
 
         with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
             # DIRECT: DuckDB writes table directly to optimized parquet
-            self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
+            conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
 
             # Get row count for logging
-            count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
             # Stream copy to GCS without loading into memory
             with Path(tmp.name).open("rb") as src, self.fs.open(gcs_path, "wb") as dst:
@@ -466,7 +473,7 @@ class GCSDataAccess:
         self.query_parquet_direct(gcs_path, query, table_name)
         return table_name
 
-    def export_to_gcs_native(self, table_name: str, gcs_path: str, **parquet_options) -> bool:
+    def export_to_gcs_native(self, table_name: str, gcs_path: str, *, connection=None, **parquet_options) -> bool:
         """
         ULTIMATE PERFORMANCE: Export table directly to GCS using native DuckDB HMAC access.
 
@@ -476,11 +483,21 @@ class GCSDataAccess:
         Args:
             table_name: Name of the table to export
             gcs_path: GCS destination path (gs://bucket/path/file.parquet)
+            connection: Optional external DuckDB connection (uses self.duckdb_conn if None)
             **parquet_options: Parquet export options
 
         Returns:
             True if native export was used, False if fallback was used
         """
+        conn = connection or self.duckdb_conn
+        # If using an external connection for native export, ensure R2 auth is configured
+        if connection is not None and self._native_gcs_available:
+            try:
+                from common.gcs.filesystem import setup_duckdb_cloud_auth
+
+                setup_duckdb_cloud_auth(connection)
+            except Exception as e:
+                self.log.debug(f"Could not configure R2 auth on external connection: {e}")
         if self._native_gcs_available:
             self.log.info(f"Using native GCS export to {gcs_path}")
             self.monitor.check_resources("start_native_export")
@@ -497,10 +514,10 @@ class GCSDataAccess:
                 options_str = ", ".join(copy_options)
 
                 # Direct native export - no temp files!
-                self.duckdb_conn.execute(f"COPY {table_name} TO '{gcs_path}' ({options_str})")
+                conn.execute(f"COPY {table_name} TO '{gcs_path}' ({options_str})")
 
                 # Log success
-                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                 self.log.info(f"Native export saved {count:,} rows to {gcs_path}")
                 self.monitor.check_resources("post_native_export")
                 return True
@@ -510,7 +527,7 @@ class GCSDataAccess:
                 # Fall through to existing method
 
         # Fallback to existing method
-        self.export_table_to_gcs_direct(table_name, gcs_path, **parquet_options)
+        self.export_table_to_gcs_direct(table_name, gcs_path, connection=connection, **parquet_options)
         return False
 
     def query_multiple_direct(
