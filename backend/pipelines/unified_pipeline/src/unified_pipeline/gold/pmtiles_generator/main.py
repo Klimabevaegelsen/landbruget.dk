@@ -485,6 +485,20 @@ async def main():
 
         logger.info("=" * 50)
 
+        # Fail if no field analysis tiles were generated
+        if "field_analysis_pmtiles" in results:
+            field_pmtiles = results["field_analysis_pmtiles"]
+            if isinstance(field_pmtiles, dict):
+                successful = sum(1 for p in field_pmtiles.values() if p)
+                if successful == 0 and len(field_pmtiles) > 0:
+                    logger.error(
+                        "No field analysis PMTiles were generated — check GCS data availability"
+                    )
+                    sys.exit(1)
+            elif field_pmtiles is None:
+                logger.error("Field analysis PMTiles generation failed")
+                sys.exit(1)
+
     except Exception as e:
         logger.error(f"Pipeline failed: {e}")
         sys.exit(1)
