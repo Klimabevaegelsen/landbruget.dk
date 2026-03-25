@@ -101,7 +101,7 @@ class PMTilesDataLoader:
             f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)"
         )
 
-        base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
+        base_path = f"r2://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"FVM marker data not found in: {base_path}")
@@ -191,7 +191,7 @@ class PMTilesDataLoader:
         logger.info(f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)")
 
         base_path = (
-            f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
+            f"r2://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
         )
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
@@ -245,7 +245,7 @@ class PMTilesDataLoader:
             DuckDB table name or None if failed
         """
         production_year = year + 1
-        base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{production_year}"
+        base_path = f"r2://{self.config.gcs_bucket}/gold/field_production_{production_year}"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"Field production data not found in: {base_path}")
@@ -297,7 +297,7 @@ class PMTilesDataLoader:
             DuckDB table name or None if failed
         """
         next_year = year + 1
-        base_path = f"gs://{self.config.gcs_bucket}/gold/pesticide_proximity_{year}_{next_year}"
+        base_path = f"r2://{self.config.gcs_bucket}/gold/pesticide_proximity_{year}_{next_year}"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"Pesticide proximity data not found in: {base_path}")
@@ -346,7 +346,7 @@ class PMTilesDataLoader:
         """
         try:
             path = self.config.nles5_estimation_path
-            gcs_path = f"gs://{self.config.gcs_bucket}/{path}"
+            gcs_path = f"r2://{self.config.gcs_bucket}/{path}"
 
             logger.info(f"Loading NLES5 data from {gcs_path}")
 
@@ -1034,7 +1034,7 @@ class PMTilesDataLoader:
         Returns:
             DuckDB table name or None if not available
         """
-        base_path = f"gs://{self.config.gcs_bucket}/silver/bmd"
+        base_path = f"r2://{self.config.gcs_bucket}/silver/bmd"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"BMD data not found in: {base_path}")
@@ -1108,7 +1108,7 @@ class PMTilesDataLoader:
         """Find timestamped directories ranked by recency (newest first).
 
         Args:
-            base_path: Base GCS path like gs://bucket/silver/dataset/
+            base_path: Base storage path like r2://bucket/silver/dataset/
             max_results: Maximum number of paths to return
 
         Returns:
@@ -1145,10 +1145,13 @@ class PMTilesDataLoader:
             files_with_timestamps.sort(key=lambda x: x[1], reverse=True)
 
             # Extract unique directory paths, preserving order
+            # Normalize gs:// → r2:// since list_files_with_timestamps returns gs:// paths
+            # but DuckDB needs r2:// for R2 storage access
             seen = set()
             dir_paths = []
             for file_path, _ in files_with_timestamps:
                 dir_path = "/".join(file_path.split("/")[:-1]) + "/"
+                dir_path = dir_path.replace("gs://", "r2://", 1)
                 if dir_path not in seen:
                     seen.add(dir_path)
                     dir_paths.append(dir_path)
@@ -1167,7 +1170,7 @@ class PMTilesDataLoader:
         """Find the latest timestamped directory in a base path.
 
         Args:
-            base_path: Base GCS path like gs://bucket/silver/dataset/
+            base_path: Base storage path like r2://bucket/silver/dataset/
 
         Returns:
             Full path to latest timestamped directory, or None if not found
@@ -1177,7 +1180,7 @@ class PMTilesDataLoader:
 
     async def _load_bnbo_status(self) -> str | None:
         """Load BNBO status dissolved data."""
-        base_path = f"gs://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
+        base_path = f"r2://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"BNBO status data not found in: {base_path}")
@@ -1215,7 +1218,7 @@ class PMTilesDataLoader:
 
     async def _load_wetlands(self) -> str | None:
         """Load wetlands dissolved data."""
-        base_path = f"gs://{self.config.gcs_bucket}/{self.config.wetlands_path}"
+        base_path = f"r2://{self.config.gcs_bucket}/{self.config.wetlands_path}"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"Wetlands data not found in: {base_path}")
@@ -1253,7 +1256,7 @@ class PMTilesDataLoader:
 
     async def _load_water_projects(self) -> str | None:
         """Load water projects dissolved data."""
-        base_path = f"gs://{self.config.gcs_bucket}/{self.config.water_projects_path}"
+        base_path = f"r2://{self.config.gcs_bucket}/{self.config.water_projects_path}"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"Water projects data not found in: {base_path}")
@@ -1292,7 +1295,7 @@ class PMTilesDataLoader:
 
     async def _load_bbr_buildings(self) -> str | None:
         """Load BBR buildings data."""
-        base_path = f"gs://{self.config.gcs_bucket}/{self.config.bbr_buildings_path}"
+        base_path = f"r2://{self.config.gcs_bucket}/{self.config.bbr_buildings_path}"
         gcs_paths = await self._find_timestamped_paths_ranked(base_path)
         if not gcs_paths:
             logger.warning(f"BBR buildings data not found in: {base_path}")
