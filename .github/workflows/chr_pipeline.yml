@@ -1296,7 +1296,7 @@ jobs:
         bronze-herd-details,
         bronze-parallel-group-2,
       ]
-    if: ${{ always() && !cancelled() && ((inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_')) }}
+    if: ${{ always() && !cancelled() && ((needs.bronze-foundation.result == 'success' && needs.bronze-herd-details.result == 'success') || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_')) }}
 
     permissions:
       contents: "read"
