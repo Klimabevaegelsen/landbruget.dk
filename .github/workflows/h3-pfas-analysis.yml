@@ -1,5 +1,9 @@
 name: H3 PFAS Exposure Analysis
 
+concurrency:
+  group: h3-pfas-analysis
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
@@ -33,9 +37,8 @@ on:
         required: false
         default: "10000"
 
-  schedule:
-    # Run weekly on Sunday at 02:00 UTC
-    - cron: "0 2 * * 0"
+  # Triggered by Pipeline Cascade Dispatcher after pesticide_disaggregation completes.
+  # No independent schedule — H3 analysis needs fresh disaggregation data.
 
   push:
     paths:

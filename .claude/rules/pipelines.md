@@ -38,3 +38,42 @@ cd pipelines/<name> && python main.py    # Run specific pipeline
 - Use `gsutil -m` for parallel transfers
 - Avoid re-uploading unchanged files
 - Be mindful of egress costs on large datasets
+
+## Pipeline Dependency Graph
+
+**The full dependency graph is defined in `pipeline_dependencies.yml` at the repo root.**
+
+When modifying or running any pipeline, always check downstream dependencies.
+
+### Cascade Chains (what to re-run when X changes)
+
+```
+unified_pipeline →
+  field_area_analysis, field_production, pesticide_disaggregation
+  → pesticide_proximity, pesticide_compliance, h3_pfas_analysis
+  → generate_pmtiles → pmtiles_cache_warmup
+
+bmd_scraper →
+  pesticide_disaggregation
+  → pesticide_proximity, pesticide_compliance, h3_pfas_analysis
+  → generate_pmtiles → pmtiles_cache_warmup
+
+drive_data_pipeline →
+  property_cadastral_merge → field_area_analysis
+  → generate_pmtiles → pmtiles_cache_warmup
+
+bbr_buildings_pipeline →
+  pesticide_proximity
+  → generate_pmtiles → pmtiles_cache_warmup
+
+chr_pipeline, svineflytning_pipeline, dma_scraper → (no downstream)
+```
+
+### Rules
+
+1. **When modifying pipeline code**: After changes, list all downstream pipelines that need re-running. Check `pipeline_dependencies.yml` for the full chain. Offer to trigger them via `gh workflow run <workflow>.yml --ref main`.
+2. **When a pipeline fails in CI**: Warn that all downstream data is now stale. List affected pipelines.
+3. **When running /run-pipeline**: After execution, show downstream pipelines and offer to trigger them.
+4. **When reviewing PRs touching pipeline code**: If data contracts changed (output schema, GCS paths), verify downstream consumers are updated too.
+5. **Cross-pipeline dependencies**: `pesticide_disaggregation` needs BOTH `unified_pipeline` (fvm_marker) AND `bmd_scraper` (pesticides). Both must be fresh.
+6. **Y+1 pattern**: Pesticide year Y uses field data from year Y+1. When re-running pesticide pipelines for year Y, ensure fvm_marker_{Y+1} is available.

@@ -1,5 +1,9 @@
 name: Pesticide Compliance Matrix Pipeline
 
+concurrency:
+  group: pesticide-compliance
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
