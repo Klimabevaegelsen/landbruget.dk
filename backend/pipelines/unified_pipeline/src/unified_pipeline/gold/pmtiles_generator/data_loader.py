@@ -88,7 +88,7 @@ class PMTilesDataLoader:
         """Load FVM marker data for a specific year.
 
         For 2023 pesticide data, we need 2024 field boundaries (Y+1 pattern).
-        For other years, use the same year as the pesticide data.
+        Falls back to older timestamps if the latest is unreadable.
 
         Args:
             year: Target pesticide year
@@ -96,52 +96,52 @@ class PMTilesDataLoader:
         Returns:
             DuckDB table name or None if failed
         """
-        try:
-            # Pesticide data always uses Y+1 field boundaries
-            boundary_year = year + 1
-            logger.info(
-                f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)"
-            )
+        boundary_year = year + 1
+        logger.info(
+            f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)"
+        )
 
-            base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
-
-            # Find the latest timestamped directory
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-            if not gcs_path:
-                logger.warning(f"FVM marker data not found in: {base_path}")
-                return None
-
-            logger.info(f"Loading FVM marker data from {gcs_path}")
-
-            # Create table name
-            table_name = f"fvm_marker_{year}"
-
-            # Load data into DuckDB
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}data.parquet')
-            WHERE year = {boundary_year}
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            # Verify data loaded
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            if count == 0:
-                logger.warning(f"No FVM marker data found for year {year}")
-                return None
-
-            logger.info(f"Loaded {count:,} FVM marker records for year {year}")
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading FVM marker data for year {year}: {e}")
+        base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"FVM marker data not found in: {base_path}")
             return None
+
+        table_name = f"fvm_marker_{year}"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading FVM marker data from {gcs_path}")
+
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}data.parquet')
+                WHERE year = {boundary_year}
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                if count == 0:
+                    logger.warning(f"No FVM marker data in {gcs_path} for year {year}")
+                    continue
+
+                logger.info(f"Loaded {count:,} FVM marker records for year {year}")
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load FVM marker from {gcs_path}, trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading FVM marker data for year {year}: {e}")
+
+        return None
 
     async def _ensure_fvm_schema_compatibility(self, table_name: str, year: int) -> None:
         """Ensure FVM table has required columns for all years.
@@ -179,9 +179,7 @@ class PMTilesDataLoader:
     async def _load_field_environmental_analysis(self, year: int) -> str | None:
         """Load field environmental analysis data for a specific year.
 
-        Environmental data (BNBO/wetlands) should only be joined for specific year pairings:
-        - Pesticide 2023 uses 2024 field boundaries, so can use 2024 environmental data
-        - Other years should only use their exact year match if available
+        Falls back to older timestamps if the latest is unreadable.
 
         Args:
             year: Target year (for pesticide data)
@@ -189,49 +187,51 @@ class PMTilesDataLoader:
         Returns:
             DuckDB table name or None if failed
         """
-        try:
-            # Environmental data always uses Y+1 pattern to match field boundaries
-            env_year = year + 1
-            logger.info(
-                f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)"
-            )
+        env_year = year + 1
+        logger.info(f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)")
 
-            base_path = (
-                f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
-            )
-
-            # Find the latest timestamped directory (same pattern as production data)
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-            if not gcs_path:
-                logger.warning(f"Environmental analysis data not found in: {base_path}")
-                return None
-
-            logger.info(f"Loading field environmental analysis from {gcs_path}")
-
-            table_name = f"field_environmental_{year}"
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}/data.parquet')
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(
-                f"Loaded {count:,} environmental records from {env_year} "
-                f"data for pesticide year {year}"
-            )
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading field environmental analysis for year {year}: {e}")
+        base_path = (
+            f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
+        )
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"Environmental analysis data not found in: {base_path}")
             return None
+
+        table_name = f"field_environmental_{year}"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading field environmental analysis from {gcs_path}")
+
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}/data.parquet')
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(
+                    f"Loaded {count:,} environmental records from {env_year} "
+                    f"data for pesticide year {year}"
+                )
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load environmental analysis from {gcs_path}, "
+                        f"trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading field environmental analysis for year {year}: {e}")
+
+        return None
 
     async def _load_field_production(self, year: int) -> str | None:
         """Load field production estimates for a specific year.
@@ -244,44 +244,48 @@ class PMTilesDataLoader:
         Returns:
             DuckDB table name or None if failed
         """
-        try:
-            # Production data uses Y+1 pattern to match field boundaries
-            production_year = year + 1
-            base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{production_year}"
-
-            # Find the latest timestamped directory
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-            if not gcs_path:
-                logger.warning(f"Field production data not found in: {base_path}")
-                return None
-
-            logger.info(f"Loading field production data from {gcs_path}")
-
-            table_name = f"field_production_{year}"
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}data.parquet')
-            WHERE year = {production_year}
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(
-                f"Loaded {count:,} field production records for year {production_year} "
-                f"(for pesticide year {year})"
-            )
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading field production data for year {year}: {e}")
+        production_year = year + 1
+        base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{production_year}"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"Field production data not found in: {base_path}")
             return None
+
+        table_name = f"field_production_{year}"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading field production data from {gcs_path}")
+
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}data.parquet')
+                WHERE year = {production_year}
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(
+                    f"Loaded {count:,} field production records for year {production_year} "
+                    f"(for pesticide year {year})"
+                )
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load field production from {gcs_path}, "
+                        f"trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading field production data for year {year}: {e}")
+
+        return None
 
     async def _load_pesticide_proximity(self, year: int) -> str | None:
         """Load pesticide proximity data for a specific year.
@@ -292,39 +296,44 @@ class PMTilesDataLoader:
         Returns:
             DuckDB table name or None if failed
         """
-        try:
-            next_year = year + 1
-            base_path = f"gs://{self.config.gcs_bucket}/gold/pesticide_proximity_{year}_{next_year}"
-
-            # Find the latest timestamped directory
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-            if not gcs_path:
-                logger.warning(f"Pesticide proximity data not found in: {base_path}")
-                return None
-
-            logger.info(f"Loading pesticide proximity data from {gcs_path}")
-
-            table_name = f"pesticide_proximity_{year}"
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}pesticide_proximity_{year}_{next_year}.parquet')
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(f"Loaded {count:,} pesticide proximity records for year {year}")
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading pesticide proximity data for year {year}: {e}")
+        next_year = year + 1
+        base_path = f"gs://{self.config.gcs_bucket}/gold/pesticide_proximity_{year}_{next_year}"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"Pesticide proximity data not found in: {base_path}")
             return None
+
+        table_name = f"pesticide_proximity_{year}"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading pesticide proximity data from {gcs_path}")
+
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}pesticide_proximity_{year}_{next_year}.parquet')
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(f"Loaded {count:,} pesticide proximity records for year {year}")
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load pesticide proximity from {gcs_path}, "
+                        f"trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading pesticide proximity data for year {year}: {e}")
+
+        return None
 
     async def _load_nles5_estimates(self, year: int) -> str | None:
         """Load NLES5 nitrogen estimation data for a specific year.
@@ -1020,41 +1029,46 @@ class PMTilesDataLoader:
     async def _load_bmd_data(self) -> str | None:
         """Load BMD pesticide product database.
 
+        Falls back to older timestamps if the latest is unreadable.
+
         Returns:
             DuckDB table name or None if not available
         """
-        try:
-            # Try to find BMD data in GCS
-            base_path = f"gs://{self.config.gcs_bucket}/silver/bmd"
-
-            # Find the latest timestamped directory
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-            if not gcs_path:
-                logger.warning(f"BMD data not found in: {base_path}")
-                return None
-
-            table_name = "bmd_data"
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}pesticide_products.parquet')
-            WHERE registrerings_nr IS NOT NULL
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(f"Loaded {count:,} BMD pesticide product records")
-            return table_name
-
-        except Exception as e:
-            logger.warning(f"Could not load BMD data: {e}")
+        base_path = f"gs://{self.config.gcs_bucket}/silver/bmd"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"BMD data not found in: {base_path}")
             return None
+
+        table_name = "bmd_data"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}pesticide_products.parquet')
+                WHERE registrerings_nr IS NOT NULL
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(f"Loaded {count:,} BMD pesticide product records")
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load BMD data from {gcs_path}, trying older timestamp: {e}"
+                    )
+                else:
+                    logger.warning(f"Could not load BMD data: {e}")
+
+        return None
 
     async def load_environmental_layers(self) -> dict[str, str]:
         """Load environmental layer data (year-independent).
@@ -1088,17 +1102,17 @@ class PMTilesDataLoader:
 
         return layers
 
-    async def _find_latest_timestamped_path(self, base_path: str) -> str | None:
-        """Find the latest timestamped directory in a base path.
-
-        Uses the same proven pattern as other pipelines in the codebase.
-        Handles different file patterns for different datasets.
+    async def _find_timestamped_paths_ranked(
+        self, base_path: str, max_results: int = 3
+    ) -> list[str]:
+        """Find timestamped directories ranked by recency (newest first).
 
         Args:
             base_path: Base GCS path like gs://bucket/silver/dataset/
+            max_results: Maximum number of paths to return
 
         Returns:
-            Full path to latest timestamped directory, or None if not found
+            List of directory paths sorted newest-first, or empty list
         """
         try:
             # Ensure base_path ends with / for proper pattern matching
@@ -1125,154 +1139,193 @@ class PMTilesDataLoader:
                     continue  # Try next pattern
 
             if not files_with_timestamps:
-                return None
+                return []
 
-            # Sort by timestamp (most recent first) and get the latest
+            # Sort by timestamp (most recent first)
             files_with_timestamps.sort(key=lambda x: x[1], reverse=True)
-            latest_file_path = files_with_timestamps[0][0]
 
-            # Extract directory path from file path
-            # Convert gs://bucket/silver/dataset/YYYYMMDD_HHMMSS/file.parquet
-            # to gs://bucket/silver/dataset/YYYYMMDD_HHMMSS/
-            latest_dir_path = "/".join(latest_file_path.split("/")[:-1]) + "/"
+            # Extract unique directory paths, preserving order
+            seen = set()
+            dir_paths = []
+            for file_path, _ in files_with_timestamps:
+                dir_path = "/".join(file_path.split("/")[:-1]) + "/"
+                if dir_path not in seen:
+                    seen.add(dir_path)
+                    dir_paths.append(dir_path)
+                    if len(dir_paths) >= max_results:
+                        break
 
-            logger.info(f"Found latest timestamped directory: {latest_dir_path}")
-            return latest_dir_path
+            if dir_paths:
+                logger.info(f"Found {len(dir_paths)} timestamped directory(ies) for {base_path}")
+            return dir_paths
 
         except Exception as e:
-            logger.error(f"Error finding latest timestamped path for {base_path}: {e}")
-            return None
+            logger.error(f"Error finding timestamped paths for {base_path}: {e}")
+            return []
+
+    async def _find_latest_timestamped_path(self, base_path: str) -> str | None:
+        """Find the latest timestamped directory in a base path.
+
+        Args:
+            base_path: Base GCS path like gs://bucket/silver/dataset/
+
+        Returns:
+            Full path to latest timestamped directory, or None if not found
+        """
+        paths = await self._find_timestamped_paths_ranked(base_path, max_results=1)
+        return paths[0] if paths else None
 
     async def _load_bnbo_status(self) -> str | None:
         """Load BNBO status dissolved data."""
-        try:
-            base_path = f"gs://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-
-            if not gcs_path:
-                logger.warning(f"BNBO status data not found in: {base_path}")
-                return None
-
-            table_name = "bnbo_status_dissolved"
-            logger.info(f"Found latest timestamped directory: {gcs_path}")
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}*.parquet')
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(f"Loaded {count:,} BNBO status records")
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading BNBO status data: {e}")
+        base_path = f"gs://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"BNBO status data not found in: {base_path}")
             return None
+
+        table_name = "bnbo_status_dissolved"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading BNBO status data from {gcs_path}")
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}*.parquet')
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(f"Loaded {count:,} BNBO status records")
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load BNBO status from {gcs_path}, trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading BNBO status data: {e}")
+
+        return None
 
     async def _load_wetlands(self) -> str | None:
         """Load wetlands dissolved data."""
-        try:
-            base_path = f"gs://{self.config.gcs_bucket}/{self.config.wetlands_path}"
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-
-            if not gcs_path:
-                logger.warning(f"Wetlands data not found in: {base_path}")
-                return None
-
-            table_name = "wetlands_dissolved"
-            logger.info(f"Found latest timestamped directory: {gcs_path}")
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}*.parquet')
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(f"Loaded {count:,} wetlands records")
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading wetlands data: {e}")
+        base_path = f"gs://{self.config.gcs_bucket}/{self.config.wetlands_path}"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"Wetlands data not found in: {base_path}")
             return None
+
+        table_name = "wetlands_dissolved"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading wetlands data from {gcs_path}")
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}*.parquet')
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(f"Loaded {count:,} wetlands records")
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load wetlands from {gcs_path}, trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading wetlands data: {e}")
+
+        return None
 
     async def _load_water_projects(self) -> str | None:
         """Load water projects dissolved data."""
-        try:
-            base_path = f"gs://{self.config.gcs_bucket}/{self.config.water_projects_path}"
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-
-            if not gcs_path:
-                logger.warning(f"Water projects data not found in: {base_path}")
-                return None
-
-            table_name = "water_projects_dissolved"
-            logger.info(f"Found latest timestamped directory: {gcs_path}")
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}*.parquet')
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(f"Loaded {count:,} water projects records")
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading water projects data: {e}")
+        base_path = f"gs://{self.config.gcs_bucket}/{self.config.water_projects_path}"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"Water projects data not found in: {base_path}")
             return None
+
+        table_name = "water_projects_dissolved"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading water projects data from {gcs_path}")
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}*.parquet')
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(f"Loaded {count:,} water projects records")
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load water projects from {gcs_path}, "
+                        f"trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading water projects data: {e}")
+
+        return None
 
     async def _load_bbr_buildings(self) -> str | None:
         """Load BBR buildings data."""
-        try:
-            base_path = f"gs://{self.config.gcs_bucket}/{self.config.bbr_buildings_path}"
-
-            # Find the latest timestamped directory
-            gcs_path = await self._find_latest_timestamped_path(base_path)
-            if not gcs_path:
-                logger.warning(f"BBR buildings data not found in: {base_path}")
-                return None
-
-            table_name = "bbr_buildings"
-
-            query = f"""
-            CREATE OR REPLACE TABLE {table_name} AS
-            SELECT *
-            FROM read_parquet('{gcs_path}joined_buildings.parquet')
-            WHERE category_group IN ('residential', 'publicServices', 'agricultural')
-                AND geo_building_centroid IS NOT NULL
-            """
-
-            await asyncio.to_thread(self.conn.execute, query)
-
-            count_result = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
-            )
-            count = count_result.fetchone()[0]
-
-            logger.info(f"Loaded {count:,} BBR buildings records")
-            return table_name
-
-        except Exception as e:
-            logger.error(f"Error loading BBR buildings data: {e}")
+        base_path = f"gs://{self.config.gcs_bucket}/{self.config.bbr_buildings_path}"
+        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not gcs_paths:
+            logger.warning(f"BBR buildings data not found in: {base_path}")
             return None
+
+        table_name = "bbr_buildings"
+
+        for i, gcs_path in enumerate(gcs_paths):
+            try:
+                logger.info(f"Loading BBR buildings data from {gcs_path}")
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{gcs_path}joined_buildings.parquet')
+                WHERE category_group IN ('residential', 'publicServices', 'agricultural')
+                    AND geo_building_centroid IS NOT NULL
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(f"Loaded {count:,} BBR buildings records")
+                return table_name
+
+            except Exception as e:
+                if i < len(gcs_paths) - 1:
+                    logger.warning(
+                        f"Failed to load BBR buildings from {gcs_path}, trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading BBR buildings data: {e}")
+
+        return None

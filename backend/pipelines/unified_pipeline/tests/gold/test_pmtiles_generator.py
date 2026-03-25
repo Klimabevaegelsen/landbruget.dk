@@ -164,6 +164,111 @@ class TestPMTilesDataLoader:
             assert result == "integrated_2021"
 
 
+class TestTimestampFallback:
+    """Test timestamp fallback in data loader."""
+
+    @pytest.mark.asyncio
+    async def test_find_timestamped_paths_ranked_returns_multiple(
+        self, test_config, mock_gcs_access, duckdb_conn
+    ):
+        """Test that ranked paths returns multiple directories sorted newest-first."""
+        mock_gcs_access.list_files_with_timestamps = Mock(
+            return_value=[
+                (
+                    "gs://test-bucket/silver/fvm_marker_2024/20260320_100000/data.parquet",
+                    1710921600,
+                ),
+                (
+                    "gs://test-bucket/silver/fvm_marker_2024/20260322_170000/data.parquet",
+                    1711094400,
+                ),
+                (
+                    "gs://test-bucket/silver/fvm_marker_2024/20260319_080000/data.parquet",
+                    1710835200,
+                ),
+            ]
+        )
+
+        loader = PMTilesDataLoader(test_config, mock_gcs_access, duckdb_conn)
+        paths = await loader._find_timestamped_paths_ranked(
+            "gs://test-bucket/silver/fvm_marker_2024"
+        )
+
+        assert len(paths) == 3
+        # Newest first
+        assert "20260322_170000" in paths[0]
+        assert "20260320_100000" in paths[1]
+        assert "20260319_080000" in paths[2]
+
+    @pytest.mark.asyncio
+    async def test_find_timestamped_paths_ranked_respects_max_results(
+        self, test_config, mock_gcs_access, duckdb_conn
+    ):
+        """Test that max_results limits the number of paths returned."""
+        mock_gcs_access.list_files_with_timestamps = Mock(
+            return_value=[
+                ("gs://test-bucket/silver/data/20260322/data.parquet", 3),
+                ("gs://test-bucket/silver/data/20260321/data.parquet", 2),
+                ("gs://test-bucket/silver/data/20260320/data.parquet", 1),
+            ]
+        )
+
+        loader = PMTilesDataLoader(test_config, mock_gcs_access, duckdb_conn)
+        paths = await loader._find_timestamped_paths_ranked(
+            "gs://test-bucket/silver/data", max_results=2
+        )
+
+        assert len(paths) == 2
+
+    @pytest.mark.asyncio
+    async def test_find_timestamped_paths_ranked_deduplicates_directories(
+        self, test_config, mock_gcs_access, duckdb_conn
+    ):
+        """Test that paths from the same directory are deduplicated."""
+        mock_gcs_access.list_files_with_timestamps = Mock(
+            return_value=[
+                ("gs://test-bucket/silver/data/20260322/data.parquet", 2),
+                ("gs://test-bucket/silver/data/20260322/other.parquet", 2),
+                ("gs://test-bucket/silver/data/20260321/data.parquet", 1),
+            ]
+        )
+
+        loader = PMTilesDataLoader(test_config, mock_gcs_access, duckdb_conn)
+        paths = await loader._find_timestamped_paths_ranked("gs://test-bucket/silver/data")
+
+        assert len(paths) == 2
+
+    @pytest.mark.asyncio
+    async def test_find_timestamped_paths_ranked_empty_when_no_files(
+        self, test_config, mock_gcs_access, duckdb_conn
+    ):
+        """Test that empty list is returned when no files are found."""
+        mock_gcs_access.list_files_with_timestamps = Mock(return_value=[])
+
+        loader = PMTilesDataLoader(test_config, mock_gcs_access, duckdb_conn)
+        paths = await loader._find_timestamped_paths_ranked("gs://test-bucket/silver/data")
+
+        assert paths == []
+
+    @pytest.mark.asyncio
+    async def test_find_latest_timestamped_path_returns_first(
+        self, test_config, mock_gcs_access, duckdb_conn
+    ):
+        """Test that _find_latest_timestamped_path returns only the newest path."""
+        mock_gcs_access.list_files_with_timestamps = Mock(
+            return_value=[
+                ("gs://test-bucket/silver/data/20260322/data.parquet", 2),
+                ("gs://test-bucket/silver/data/20260321/data.parquet", 1),
+            ]
+        )
+
+        loader = PMTilesDataLoader(test_config, mock_gcs_access, duckdb_conn)
+        path = await loader._find_latest_timestamped_path("gs://test-bucket/silver/data")
+
+        assert path is not None
+        assert "20260322" in path
+
+
 class TestFieldAnalysisPMTilesGenerator:
     """Test field analysis PMTiles generation."""
 
