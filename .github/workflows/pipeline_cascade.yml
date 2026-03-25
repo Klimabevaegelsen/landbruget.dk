@@ -42,6 +42,11 @@ jobs:
             "BMD Monthly Data Scraper")
               TARGETS="pesticide_disaggregation_matrix.yml"
               ;;
+            "Google Drive Data Pipeline")
+              # Trigger property_cadastral_merge, which depends on drive_data silver outputs.
+              # Format: workflow_file|json_payload
+              TARGETS="unified_pipeline.yml|{\"ref\":\"main\",\"inputs\":{\"source\":\"property_cadastral_merge\",\"stage\":\"all\",\"agricultural_fields_year\":\"both\"}}"
+              ;;
             "BBR Buildings Pipeline")
               TARGETS="generate-pmtiles.yml"
               ;;
@@ -57,9 +62,6 @@ jobs:
             "H3 PFAS Exposure Analysis")
               TARGETS="generate-pmtiles.yml"
               ;;
-            "Generate PMTiles")
-              TARGETS="pmtiles-cache-warmup.yml"
-              ;;
           esac
 
           if [ -z "$TARGETS" ]; then
@@ -67,19 +69,35 @@ jobs:
             exit 0
           fi
 
-          for wf in $TARGETS; do
+          FAILED=0
+          for target in $TARGETS; do
+            wf="$target"
+            payload='{"ref":"main"}'
+
+            if [[ "$target" == *"|"* ]]; then
+              wf="${target%%|*}"
+              payload="${target#*|}"
+            fi
+
             echo "  Triggering $wf..."
             HTTP=$(curl -s -w "%{http_code}" -o /tmp/resp.txt -X POST \
               -H "Authorization: token $GH_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/${wf}/dispatches" \
-              -d '{"ref":"main"}')
+              -d "$payload")
             if [ "$HTTP" = "204" ]; then
               echo "    OK"
             else
               echo "    FAILED ($HTTP): $(cat /tmp/resp.txt)"
+              FAILED=$((FAILED + 1))
             fi
           done
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo ""
+            echo "❌ Downstream dispatch failures: $FAILED"
+            exit 1
+          fi
 
   log-failure:
     runs-on: ubuntu-latest
