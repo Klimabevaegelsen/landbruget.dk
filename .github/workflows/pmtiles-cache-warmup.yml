@@ -3,7 +3,7 @@ name: PMTiles Cache Warmup
 on:
   # Run after data pipeline completes
   workflow_run:
-    workflows: ["Data Pipeline", "Generate PMTiles"]
+    workflows: ["Generate PMTiles"]
     types: [completed]
     branches: [main]
 

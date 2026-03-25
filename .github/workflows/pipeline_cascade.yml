@@ -1,0 +1,92 @@
+name: Pipeline Cascade Dispatcher
+
+on:
+  workflow_run:
+    workflows:
+      - "Unified Pipeline - Monthly"
+      - "Unified Pipeline - Manual"
+      - "BMD Monthly Data Scraper"
+      - "Google Drive Data Pipeline"
+      - "BBR Buildings Pipeline"
+      - "Pesticide Disaggregation Matrix Pipeline"
+      - "Field Area Analysis Multi-Stage Pipeline"
+      - "Field Production Matrix Pipeline"
+      - "H3 PFAS Exposure Analysis"
+      - "Generate PMTiles"
+    types: [completed]
+    branches: [main]
+
+jobs:
+  dispatch-downstream:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch downstream pipelines
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMPLETED: ${{ github.event.workflow_run.name }}
+        run: |
+          echo "Upstream succeeded: $COMPLETED (run ${{ github.event.workflow_run.id }})"
+
+          # Dependency graph — mirrors pipeline_dependencies.yml
+          # Only lists DIRECT downstream that aren't already dispatched inline
+          # by the monthly workflow (field_area_analysis, property_cadastral_merge,
+          # cvr_enrichment are handled by monthly-dependent batch).
+          TARGETS=""
+          case "$COMPLETED" in
+            "Unified Pipeline - Monthly"|"Unified Pipeline - Manual")
+              TARGETS="pesticide_disaggregation_matrix.yml field_production_matrix.yml generate-pmtiles.yml"
+              ;;
+            "BMD Monthly Data Scraper")
+              TARGETS="pesticide_disaggregation_matrix.yml"
+              ;;
+            "BBR Buildings Pipeline")
+              TARGETS="generate-pmtiles.yml"
+              ;;
+            "Pesticide Disaggregation Matrix Pipeline")
+              TARGETS="pesticide_compliance_matrix.yml h3-pfas-analysis.yml"
+              ;;
+            "Field Area Analysis Multi-Stage Pipeline")
+              TARGETS="generate-pmtiles.yml"
+              ;;
+            "Field Production Matrix Pipeline")
+              TARGETS="generate-pmtiles.yml"
+              ;;
+            "H3 PFAS Exposure Analysis")
+              TARGETS="generate-pmtiles.yml"
+              ;;
+            "Generate PMTiles")
+              TARGETS="pmtiles-cache-warmup.yml"
+              ;;
+          esac
+
+          if [ -z "$TARGETS" ]; then
+            echo "No downstream pipelines to trigger."
+            exit 0
+          fi
+
+          for wf in $TARGETS; do
+            echo "  Triggering $wf..."
+            HTTP=$(curl -s -w "%{http_code}" -o /tmp/resp.txt -X POST \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/${wf}/dispatches" \
+              -d '{"ref":"main"}')
+            if [ "$HTTP" = "204" ]; then
+              echo "    OK"
+            else
+              echo "    FAILED ($HTTP): $(cat /tmp/resp.txt)"
+            fi
+          done
+
+  log-failure:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure'
+    steps:
+      - name: Log upstream failure
+        run: |
+          echo "UPSTREAM FAILED: ${{ github.event.workflow_run.name }} (run ${{ github.event.workflow_run.id }})"
+          echo "Downstream pipelines NOT triggered."
+          echo "Fix the upstream issue, then re-run to cascade."

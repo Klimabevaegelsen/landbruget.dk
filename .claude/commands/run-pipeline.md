@@ -168,3 +168,33 @@ pipelines/<name>/
 2. Check GCS for archived files
 3. Run data quality checks: `/validate-data`
 4. Update pipeline documentation if needed
+
+## Downstream Dependencies
+
+After pipeline execution completes, check `pipeline_dependencies.yml` for downstream dependencies.
+
+If the pipeline has downstream dependencies:
+1. List them with their workflow files
+2. Show the full cascade chain (transitive dependencies)
+3. Offer to trigger them:
+   ```bash
+   gh workflow run <workflow>.yml --ref main
+   ```
+
+Example output after running unified_pipeline:
+```
+### Downstream Pipelines Affected
+The following pipelines depend on unified_pipeline and should be re-run:
+
+Direct:
+  - field_area_analysis (field_area_analysis_multi_stage.yml)
+  - field_production (field_production_matrix.yml)
+  - pesticide_disaggregation (pesticide_disaggregation_matrix.yml)
+
+Transitive:
+  - pesticide_proximity → generate_pmtiles → pmtiles_cache_warmup
+  - pesticide_compliance
+  - h3_pfas_analysis → generate_pmtiles → pmtiles_cache_warmup
+
+Trigger all downstream? (gh workflow run ...)
+```

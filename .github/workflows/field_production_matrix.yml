@@ -1,5 +1,9 @@
 name: Field Production Matrix Pipeline
 
+concurrency:
+  group: field-production
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:

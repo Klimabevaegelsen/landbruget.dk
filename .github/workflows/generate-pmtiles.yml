@@ -1,9 +1,12 @@
 name: Generate PMTiles
 
+concurrency:
+  group: generate-pmtiles
+  cancel-in-progress: false
+
 on:
-  schedule:
-    # Run weekly on Monday at 2 AM UTC
-    - cron: "0 2 * * 1"
+  # Triggered by Pipeline Cascade Dispatcher after upstream gold data refreshes.
+  # No independent schedule — PMTiles should only regenerate with fresh data.
   workflow_dispatch:
     inputs:
       target_year:
