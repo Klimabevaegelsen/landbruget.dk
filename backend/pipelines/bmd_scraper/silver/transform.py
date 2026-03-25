@@ -707,9 +707,11 @@ class BMDTransformer:
             if OptimizedGCSDataAccess:
                 try:
                     gcs_access = OptimizedGCSDataAccess()
-                    bucket_name = "landbruget-data"
+                    bucket_name = os.getenv("R2_BUCKET") or os.getenv(
+                        "GCS_BUCKET", "landbruget-data"
+                    )
                     gcs_path = (
-                        f"gs://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
+                        f"r2://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
                     )
 
                     # Use native GCS export with server-side compression
