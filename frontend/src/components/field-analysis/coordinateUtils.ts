@@ -99,6 +99,13 @@ export function generateSkraafotoUrl(lat: number, lng: number): string {
 }
 
 /**
+ * Generate Google Maps URL from WGS84 coordinates
+ */
+export function generateGoogleMapsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+/**
  * Copy coordinates to clipboard
  */
 export async function copyCoordinatesToClipboard(

@@ -4,7 +4,7 @@ import React from 'react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FieldAnalysisData } from '@/components/field-analysis/types';
-import { FieldDetailsContent } from '@/app/markanalyse/components/shared/field-details-content';
+import { FieldDetailsContent } from '@/app/markanalyse/components/shared/field-details';
 
 interface FieldDetailsSheetProps {
   field: FieldAnalysisData | null;

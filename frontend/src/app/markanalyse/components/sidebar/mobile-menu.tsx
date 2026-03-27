@@ -13,6 +13,8 @@ import {
   YearSelection,
   getYearRangeDisplay,
 } from '@/components/field-analysis/types';
+import { VisualizationModeSelect } from '@/app/markanalyse/components/shared/visualization-mode-select';
+import { ColorUnitSelect } from '@/app/markanalyse/components/shared/color-unit-select';
 
 interface MobileFieldMenuProps {
   layerVisibility: LayerVisibility;
@@ -102,48 +104,25 @@ export function MobileFieldMenu({
           <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
             Visualiseringsmodus
           </label>
-          <select
+          <VisualizationModeSelect
             value={filterState.visualizationMode}
-            onChange={(e) =>
-              onFilterChange({
-                visualizationMode: e.target
-                  .value as FilterState['visualizationMode'],
-              })
-            }
+            onChange={(mode) => onFilterChange({ visualizationMode: mode })}
             data-testid="mobile-visualization-mode-select"
-            className="touch-target border-border bg-background w-full rounded-lg border px-3 py-3 text-sm"
-          >
-            <option value="total_pesticide_belastning">
-              Total pesticidbelastning
-            </option>
-            <option value="pfas_belastning">PFAS belastning</option>
-            <option value="diquat_belastning">Diquat belastning</option>
-            <option value="glyphosate_belastning">Glyphosate belastning</option>
-            <option value="applications_count">Antal pesticider</option>
-            <option value="organic_status">Økologisk status</option>
-            <option value="area_size">Markareal</option>
-          </select>
+            className="w-full"
+          />
         </div>
 
         <div className="space-y-2 px-4 py-2">
           <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
             Farveskala enhed
           </label>
-          <select
+          <ColorUnitSelect
             value={filterState.colorUnit}
-            onChange={(e) =>
-              onFilterChange({
-                colorUnit: e.target.value as FilterState['colorUnit'],
-              })
-            }
+            onChange={(unit) => onFilterChange({ colorUnit: unit })}
+            visualizationMode={filterState.visualizationMode}
             data-testid="mobile-color-unit-select"
-            className="touch-target border-border bg-background w-full rounded-lg border px-3 py-3 text-sm"
-          >
-            <option value="total">Total mængde (kg/L)</option>
-            <option value="per_hectare">Per hektar</option>
-            <option value="belastning">Belastning (anbefalet)</option>
-            <option value="applications">Antal pesticider</option>
-          </select>
+            className="w-full"
+          />
         </div>
 
         <MobileMenuItem

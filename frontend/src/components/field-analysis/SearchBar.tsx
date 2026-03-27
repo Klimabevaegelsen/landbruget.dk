@@ -239,7 +239,7 @@ export function SearchBar({
           onChange={handleInputChange}
           placeholder={placeholder}
           data-testid="address-search-input"
-          className="border-border text-foreground placeholder:text-muted-foreground bg-background/95 block w-full rounded-lg border py-3 pr-10 pl-10 text-base shadow-lg backdrop-blur-sm transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
+          className="border-border text-foreground placeholder:text-muted-foreground bg-background/95 focus:ring-ring block w-full rounded-lg border py-3 pr-10 pl-10 text-base shadow-lg backdrop-blur-sm transition-colors focus:border-transparent focus:ring-2 focus:outline-none lg:py-2.5 lg:text-sm"
         />
 
         {/* Clear Button */}
@@ -256,11 +256,11 @@ export function SearchBar({
 
       {/* Results Dropdown */}
       {isOpen && (
-        <div className="bg-background/95 absolute z-[100] mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 shadow-xl backdrop-blur-sm">
+        <div className="bg-background/95 border-border absolute z-[100] mt-1 max-h-64 w-full overflow-y-auto rounded-lg border shadow-xl backdrop-blur-sm">
           {isLoading && (
             <div className="px-4 py-3 text-center">
               <div className="text-muted-foreground inline-flex items-center space-x-2">
-                <div className="border-border h-4 w-4 animate-spin rounded-full border-2 border-t-blue-500"></div>
+                <div className="border-border border-t-primary h-4 w-4 animate-spin rounded-full border-2"></div>
                 <span className="text-sm">Søger...</span>
               </div>
             </div>
@@ -278,9 +278,9 @@ export function SearchBar({
                 key={`${result.tekst}-${index}`}
                 onClick={() => handleSelectResult(result)}
                 data-testid={`search-result-${index}-button`}
-                className={`hover:bg-muted w-full border-b border-gray-100 px-4 py-4 text-left transition-colors last:border-b-0 lg:py-3 ${
+                className={`hover:bg-muted border-border w-full border-b px-4 py-4 text-left transition-colors last:border-b-0 lg:py-3 ${
                   index === selectedIndex
-                    ? 'bg-blue-50 text-blue-900'
+                    ? 'bg-accent text-accent-foreground'
                     : 'text-foreground'
                 }`}
               >
