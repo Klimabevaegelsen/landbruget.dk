@@ -1,0 +1,134 @@
+name: Backend Merge Pipeline Dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/pipelines/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  detect-backend-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_field_area: ${{ steps.detect.outputs.run_field_area }}
+      run_pesticide_disaggregation: ${{ steps.detect.outputs.run_pesticide_disaggregation }}
+      run_field_production: ${{ steps.detect.outputs.run_field_production }}
+      run_chr: ${{ steps.detect.outputs.run_chr }}
+      run_drive: ${{ steps.detect.outputs.run_drive }}
+      run_bbr: ${{ steps.detect.outputs.run_bbr }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed backend paths
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+            CHANGED_FILES=$(git show --name-only --pretty='' "$AFTER")
+          else
+            CHANGED_FILES=$(git diff --name-only "$BEFORE" "$AFTER")
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          has_match() {
+            local pattern="$1"
+            if echo "$CHANGED_FILES" | grep -Eq "$pattern"; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+
+          RUN_FIELD_AREA=$(has_match '^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_area_analysis/|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/bnbo_status.py$|^\.github/workflows/field_area_analysis_multi_stage.yml$')
+          RUN_PESTICIDE_DISAGGREGATION=$(has_match '^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pesticide_disaggregation/|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/pesticides.py$|^\.github/workflows/pesticide_disaggregation_matrix.yml$')
+          RUN_FIELD_PRODUCTION=$(has_match '^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_production/|^\.github/workflows/field_production_matrix.yml$')
+          RUN_CHR=$(has_match '^backend/pipelines/chr_pipeline/|^\.github/workflows/chr_pipeline.yml$')
+          RUN_DRIVE=$(has_match '^backend/pipelines/drive_data_pipeline/|^\.github/workflows/drive_pipeline.yml$')
+          RUN_BBR=$(has_match '^backend/pipelines/bbr_buildings/|^\.github/workflows/bbr_buildings_pipeline.yml$')
+
+          {
+            echo "run_field_area=$RUN_FIELD_AREA"
+            echo "run_pesticide_disaggregation=$RUN_PESTICIDE_DISAGGREGATION"
+            echo "run_field_production=$RUN_FIELD_PRODUCTION"
+            echo "run_chr=$RUN_CHR"
+            echo "run_drive=$RUN_DRIVE"
+            echo "run_bbr=$RUN_BBR"
+          } >> "$GITHUB_OUTPUT"
+
+  dispatch-workflows:
+    runs-on: ubuntu-latest
+    needs: detect-backend-changes
+    steps:
+      - name: Dispatch selected pipelines
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_FIELD_AREA: ${{ needs.detect-backend-changes.outputs.run_field_area }}
+          RUN_PESTICIDE_DISAGGREGATION: ${{ needs.detect-backend-changes.outputs.run_pesticide_disaggregation }}
+          RUN_FIELD_PRODUCTION: ${{ needs.detect-backend-changes.outputs.run_field_production }}
+          RUN_CHR: ${{ needs.detect-backend-changes.outputs.run_chr }}
+          RUN_DRIVE: ${{ needs.detect-backend-changes.outputs.run_drive }}
+          RUN_BBR: ${{ needs.detect-backend-changes.outputs.run_bbr }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dispatch() {
+            local workflow_file="$1"
+            local payload="$2"
+
+            echo "Triggering ${workflow_file}"
+            http_code=$(curl -s -w "%{http_code}" -o /tmp/dispatch_resp.txt -X POST \
+              -H "Authorization: token ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/${workflow_file}/dispatches" \
+              -d "${payload}")
+
+            if [[ "$http_code" != "204" ]]; then
+              echo "Failed to trigger ${workflow_file} (HTTP ${http_code})"
+              cat /tmp/dispatch_resp.txt
+              exit 1
+            fi
+          }
+
+          if [[ "$RUN_FIELD_AREA" == "true" ]]; then
+            dispatch "field_area_analysis_multi_stage.yml" '{"ref":"main","inputs":{"stage":"all","agricultural_fields_year":"both"}}'
+          fi
+
+          if [[ "$RUN_PESTICIDE_DISAGGREGATION" == "true" ]]; then
+            dispatch "pesticide_disaggregation_matrix.yml" '{"ref":"main","inputs":{"years":"all","max_parallel_jobs":"5","stage":"gold"}}'
+          fi
+
+          if [[ "$RUN_FIELD_PRODUCTION" == "true" ]]; then
+            dispatch "field_production_matrix.yml" '{"ref":"main","inputs":{"years":"all","max_parallel_jobs":"8"}}'
+          fi
+
+          if [[ "$RUN_CHR" == "true" ]]; then
+            dispatch "chr_pipeline.yml" '{"ref":"main","inputs":{"step":"all","log_level":"WARNING"}}'
+          fi
+
+          if [[ "$RUN_DRIVE" == "true" ]]; then
+            dispatch "drive_pipeline.yml" '{"ref":"main","inputs":{"log_level":"INFO"}}'
+          fi
+
+          if [[ "$RUN_BBR" == "true" ]]; then
+            dispatch "bbr_buildings_pipeline.yml" '{"ref":"main","inputs":{"layer":"both","log_level":"INFO"}}'
+          fi
+
+          if [[ "$RUN_FIELD_AREA" != "true" && "$RUN_PESTICIDE_DISAGGREGATION" != "true" && "$RUN_FIELD_PRODUCTION" != "true" && "$RUN_CHR" != "true" && "$RUN_DRIVE" != "true" && "$RUN_BBR" != "true" ]]; then
+            echo "No mapped backend pipeline changes detected."
+          fi
