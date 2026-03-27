@@ -1,9 +1,10 @@
 """Stage 0B: BNBO Pre-filtering
 
 Reduce BNBO polygons to only those that intersect with agricultural fields.
-Smaller dataset but still important for memory optimization.
+Now loads individual features (not dissolved) to preserve per-BNBO metadata
+(dates, well IDs, waterworks names, municipality).
 
-EXPECTED REDUCTION: 3.7K → ~1K BNBO polygons (estimated 70% reduction)
+EXPECTED REDUCTION: 5.4K → ~1K BNBO polygons (estimated 70-80% reduction)
 PERFORMANCE IMPACT: Reduces Stage 2 BNBO processing complexity significantly
 """
 
@@ -12,6 +13,19 @@ from typing import Any
 
 from ..config import CONFIG
 from .base import PreFilteringStageBase
+
+# Metadata columns from WFS source to carry through the pipeline
+BNBO_METADATA_COLS = [
+    "datoaend",  # Date status was last changed (approval/completion date)
+    "oprettet",  # Date BNBO record was first created
+    "systid_fra",  # System valid-from (version tracking)
+    "status_bnbo",  # Original detailed status text
+    "dgunr",  # Well ID (DGU number)
+    "anlaegsnav",  # Waterworks name
+    "kommunenav",  # Municipality name
+    "bek",  # Regulation year
+    "anlaegid",  # Facility ID
+]
 
 
 class BNBOPreFilter(PreFilteringStageBase):
@@ -234,37 +248,57 @@ class BNBOPreFilter(PreFilteringStageBase):
 
             self.log.warning(f"   Traceback: {traceback.format_exc()}")
 
+        # Detect which metadata columns are available in the loaded dataset
+        raw_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'bnbo_status_raw'"
+            ).fetchall()
+        ]
+        self.log.info(f"📋 BNBO raw columns: {raw_columns}")
+
+        available_meta = [c for c in BNBO_METADATA_COLS if c in raw_columns]
+        self.log.info(f"📋 BNBO metadata columns to carry: {available_meta}")
+        meta_select = ", ".join(available_meta) + ", " if available_meta else ""
+
+        # Determine geometry column: prefer geometry_spatial (GEOMETRY type) over geometry (WKT)
+        geom_col = "geometry_spatial" if "geometry_spatial" in raw_columns else "geometry"
+        self.log.info(f"📍 Using geometry column: {geom_col}")
+
         # Geometry may be GEOMETRY('OGC:CRS84') from GeoParquet or BLOB - handle both
         try:
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE bnbo_status_full AS
                 SELECT
                     status_category,
-                    UNNEST(ST_Dump(geometry)).geom as geometry
+                    {meta_select}
+                    UNNEST(ST_Dump({geom_col})).geom as geometry
                 FROM bnbo_status_raw
-                WHERE geometry IS NOT NULL
+                WHERE {geom_col} IS NOT NULL
             """)
         except Exception as e:
             self.log.warning(f"⚠️ Failed with direct geometry approach: {e}")
             self.log.info("🔄 Trying with type-safe CASE statement...")
 
             # Fallback: Use type-safe approach with explicit type checking
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE bnbo_status_full AS
                 SELECT
                     status_category,
+                    {meta_select}
                     UNNEST(ST_Dump(
                         CASE
-                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                ST_GeomFromText(geometry)
-                            WHEN typeof(geometry) = 'BLOB' THEN
-                                ST_GeomFromWKB(geometry)
+                            WHEN typeof({geom_col}) = 'VARCHAR' AND {geom_col} != '' THEN
+                                ST_GeomFromText({geom_col})
+                            WHEN typeof({geom_col}) = 'BLOB' THEN
+                                ST_GeomFromWKB({geom_col})
                             ELSE
-                                geometry
+                                {geom_col}
                         END
                     )).geom as geometry
                 FROM bnbo_status_raw
-                WHERE geometry IS NOT NULL
+                WHERE {geom_col} IS NOT NULL
             """)
 
         # Log dataset sizes
@@ -292,12 +326,24 @@ class BNBOPreFilter(PreFilteringStageBase):
         total_bnbo = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_full").fetchone()[0]
         self.log.info(f"🚀 Pre-filtering {total_bnbo:,} BNBO polygons against {600000:,} fields")
 
+        # Detect available metadata columns in bnbo_status_full
+        full_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'bnbo_status_full'"
+            ).fetchall()
+        ]
+        available_meta = [c for c in BNBO_METADATA_COLS if c in full_columns]
+        meta_select_b = ", ".join(f"b.{c}" for c in available_meta)
+        meta_select_b = f", {meta_select_b}" if meta_select_b else ""
+
         # DuckDB Spatial v1.2.2 COMPLIANT: Single spatial predicate (ST_Intersects only)
         self.log.info("Filtering BNBO polygons that intersect with agricultural fields...")
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE bnbo_intersecting AS
             SELECT DISTINCT
-                b.status_category,
+                b.status_category{meta_select_b},
                 b.geometry
             FROM fields_for_filtering f
             JOIN bnbo_status_full b ON ST_Intersects(f.geometry, b.geometry)
@@ -307,9 +353,21 @@ class BNBOPreFilter(PreFilteringStageBase):
             0
         ]
 
+        # Detect available metadata in bnbo_intersecting
+        intersecting_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'bnbo_intersecting'"
+            ).fetchall()
+        ]
+        available_meta_final = [c for c in BNBO_METADATA_COLS if c in intersecting_columns]
+        meta_select_plain = ", ".join(available_meta_final)
+        meta_select_plain = f",\n                {meta_select_plain}" if meta_select_plain else ""
+
         # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
         self.log.info("Adding unique IDs to filtered BNBO polygons...")
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE bnbo_filtered AS
             SELECT
                 ROW_NUMBER() OVER (
@@ -317,7 +375,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                              ST_X(ST_Centroid(geometry)),
                              ST_Y(ST_Centroid(geometry))
                 ) as bnbo_id,
-                status_category,
+                status_category{meta_select_plain},
                 geometry,
                 ST_Area_Spheroid(geometry) as bnbo_area_m2
             FROM bnbo_intersecting

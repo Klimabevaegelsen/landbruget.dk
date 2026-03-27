@@ -48,14 +48,11 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         )
 
         # Stage 0 already decomposed with ST_Dump and assigned bnbo_id
-        # Preserve the existing bnbo_id from Stage 0 output
+        # Preserve the existing bnbo_id and metadata from Stage 0 output
         self.log.info("Using Stage 0 bnbo_id (already decomposed and ID-assigned)...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status AS
-            SELECT
-                bnbo_id,
-                status_category,
-                geometry
+            SELECT *
             FROM bnbo_status_raw
         """)
 
