@@ -102,9 +102,23 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("✅ GEOMETRY ONLY - All area calculations moved to Stage 4")
         self.log.info("🔧 SPATIAL_JOIN Compliance - Single spatial predicates in JOIN ON")
 
+        # Detect available BNBO metadata columns from stage0 output
+        bnbo_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'bnbo_prefiltered'"
+            ).fetchall()
+        ]
+        from ..stage0.bnbo_prefilter import BNBO_METADATA_COLS
+
+        available_meta = [c for c in BNBO_METADATA_COLS if c in bnbo_columns]
+        meta_select_b = "".join(f",\n                b.{c}" for c in available_meta)
+        self.log.info(f"📋 Carrying BNBO metadata columns: {available_meta}")
+
         # Step 1: Create 2-way field × BNBO intersections (Total BNBO in fields)
         self.log.info("📦 Step 1: Creating field_bnbo_intersections (2-way total BNBO)")
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE field_bnbo_intersections AS
             SELECT
                 f.field_uuid,
@@ -113,7 +127,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 f.cvr_number,
                 f.year,
                 b.bnbo_id,
-                b.status_category,
+                b.status_category{meta_select_b},
                 ST_Intersection(f.geometry, b.geometry) as field_bnbo_geometry
             FROM agricultural_fields f
             JOIN bnbo_prefiltered b ON ST_Intersects(f.geometry, b.geometry)
@@ -126,8 +140,20 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         # ST_Intersects with bnbo_id from both tables triggers the buggy optimizer.
         self.log.info("📦 Step 2: Creating field_bnbo_water_intersections (3-way water-covered)")
 
+        # Build metadata column lists for water intersection queries
+        fbi_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'field_bnbo_intersections'"
+            ).fetchall()
+        ]
+        available_meta_fbi = [c for c in BNBO_METADATA_COLS if c in fbi_columns]
+        meta_select_fbi = "".join(f",\n                fbi.{c}" for c in available_meta_fbi)
+        meta_cols_plain = "".join(f", {c}" for c in available_meta_fbi)
+
         # Step 2a: Join on bnbo_id (no spatial predicate — avoids SPATIAL_JOIN optimizer)
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE field_bnbo_water_candidates AS
             SELECT
                 fbi.field_uuid,
@@ -136,7 +162,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 fbi.cvr_number,
                 fbi.year,
                 fbi.bnbo_id,
-                fbi.status_category,
+                fbi.status_category{meta_select_fbi},
                 wpbi.project_id,
                 fbi.field_bnbo_geometry,
                 wpbi.intersection_geometry
@@ -146,11 +172,11 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         """)
 
         # Step 2b: Spatial filter and intersection (single-table, no SPATIAL_JOIN)
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE field_bnbo_water_intersections AS
             SELECT
                 field_uuid, field_id, block_id, cvr_number, year,
-                bnbo_id, status_category, project_id,
+                bnbo_id, status_category{meta_cols_plain}, project_id,
                 ST_Intersection(field_bnbo_geometry, intersection_geometry) as field_bnbo_water_geometry
             FROM field_bnbo_water_candidates
             WHERE ST_Intersects(field_bnbo_geometry, intersection_geometry)

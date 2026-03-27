@@ -102,24 +102,39 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         self.log.info("✅ GEOMETRY ONLY - All area calculations moved to Stage 4")
         self.log.info("🔧 Using existing geometries from Stage 2A - No complex recalculations")
 
+        # Detect available BNBO metadata columns from stage2 output
+        fbi_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'field_bnbo_intersections'"
+            ).fetchall()
+        ]
+        from ..stage0.bnbo_prefilter import BNBO_METADATA_COLS
+
+        available_meta = [c for c in BNBO_METADATA_COLS if c in fbi_columns]
+        meta_select_fbi = "".join(f", fbi.{c}" for c in available_meta)
+        meta_cols_plain = "".join(f", {c}" for c in available_meta)
+        self.log.info(f"📋 Carrying BNBO metadata columns: {available_meta}")
+
         # Step 1: Create property × BNBO intersections (total BNBO within properties)
         # NOTE: Two-step join to work around DuckDB SPATIAL_JOIN bug where same-named
         # columns (field_uuid) on both sides cause "Failed to bind column reference".
         self.log.info("📦 Step 1: Creating property_bnbo_intersections")
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE _bnbo_candidates AS
             SELECT
                 p.field_uuid, p.bfe_number, p.property_geometry,
                 fbi.field_id, fbi.block_id, fbi.cvr_number, fbi.year,
-                fbi.bnbo_id, fbi.status_category, fbi.field_bnbo_geometry
+                fbi.bnbo_id, fbi.status_category{meta_select_fbi}, fbi.field_bnbo_geometry
             FROM field_property_intersections p
             JOIN field_bnbo_intersections fbi ON p.field_uuid = fbi.field_uuid
         """)
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE property_bnbo_intersections AS
             SELECT
                 field_uuid, bfe_number, field_id, block_id, cvr_number, year,
-                bnbo_id, status_category,
+                bnbo_id, status_category{meta_cols_plain},
                 TRY(ST_Intersection(property_geometry, field_bnbo_geometry)) as
                     property_bnbo_geometry
             FROM _bnbo_candidates
@@ -127,24 +142,36 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         """)
         self.conn.execute("DROP TABLE IF EXISTS _bnbo_candidates")
 
+        # Detect metadata in water intersection table
+        fbwi_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'stage3a_field_bnbo_water_intersections'"
+            ).fetchall()
+        ]
+        available_meta_water = [c for c in BNBO_METADATA_COLS if c in fbwi_columns]
+        meta_select_fbwi = "".join(f", fbwi.{c}" for c in available_meta_water)
+        meta_cols_water = "".join(f", {c}" for c in available_meta_water)
+
         # Step 2: Create property × BNBO × water intersections
         # (water-covered BNBO within properties)
         self.log.info("📦 Step 2: Creating property_bnbo_water_intersections")
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE _bnbo_water_candidates AS
             SELECT
                 p.field_uuid, p.bfe_number, p.property_geometry,
                 fbwi.field_id, fbwi.block_id, fbwi.cvr_number, fbwi.year,
-                fbwi.bnbo_id, fbwi.status_category, fbwi.project_id,
+                fbwi.bnbo_id, fbwi.status_category{meta_select_fbwi}, fbwi.project_id,
                 fbwi.field_bnbo_water_geometry
             FROM field_property_intersections p
             JOIN stage3a_field_bnbo_water_intersections fbwi ON p.field_uuid = fbwi.field_uuid
         """)
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE property_bnbo_water_intersections AS
             SELECT
                 field_uuid, bfe_number, field_id, block_id, cvr_number, year,
-                bnbo_id, status_category, project_id,
+                bnbo_id, status_category{meta_cols_water}, project_id,
                 TRY(ST_Intersection(property_geometry, field_bnbo_water_geometry)) as
                     property_bnbo_water_geometry
             FROM _bnbo_water_candidates

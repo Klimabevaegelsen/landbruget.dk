@@ -419,6 +419,22 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.log.info(f"Created DuckDB table '{table_name}' with {feature_count:,} features")
 
+        # Cast date columns from VARCHAR to TIMESTAMP for proper typing
+        date_columns = ["datoaend", "oprettet", "systid_fra", "systid_til"]
+        existing_columns = [
+            col[0]
+            for col in self.conn.execute(
+                f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}'"
+            ).fetchall()
+        ]
+        for col in date_columns:
+            if col in existing_columns:
+                self.conn.execute(f"""
+                    ALTER TABLE {table_name} ALTER COLUMN {col}
+                    SET DATA TYPE TIMESTAMP USING TRY_CAST({col} AS TIMESTAMP)
+                """)
+                self.log.info(f"Cast column '{col}' to TIMESTAMP")
+
         # Clean up temporary table
         self.conn.execute("DROP TABLE IF EXISTS bnbo_features_raw")
 

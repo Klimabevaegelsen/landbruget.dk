@@ -17,7 +17,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     # Dataset names - using consistent naming from silver layer
     properties_dataset: str = "property_cadastral_merged"
     soil_types_dataset: str = "soil_types"
-    bnbo_status_dataset: str = "bnbo_status_dissolved"
+    bnbo_status_dataset: str = "bnbo_status"
     wetlands_dataset: str = "wetlands_dissolved"  # Use dissolved wetlands - now preserves
     # toerv_pct AND eliminates overlaps
     water_projects_dataset: str = "water_projects_dissolved"

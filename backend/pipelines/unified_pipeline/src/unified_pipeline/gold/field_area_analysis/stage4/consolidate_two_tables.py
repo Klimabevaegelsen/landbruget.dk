@@ -251,8 +251,28 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # FIXED: Pre-aggregate each intersection type separately to avoid Cartesian product
         self.log.info("🔧 PRE-AGGREGATING intersection data to prevent JOIN explosion...")
 
+        # Detect available BNBO metadata columns for date aggregation
+        fbi_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'field_bnbo_intersections'"
+            ).fetchall()
+        ]
+        has_datoaend = "datoaend" in fbi_columns
+        has_oprettet = "oprettet" in fbi_columns
+        date_agg_sql = ""
+        if has_datoaend:
+            date_agg_sql += """,
+                MIN(datoaend) as bnbo_earliest_status_change,
+                MAX(datoaend) as bnbo_latest_status_change"""
+        if has_oprettet:
+            date_agg_sql += """,
+                MIN(oprettet) as bnbo_earliest_created,
+                MAX(oprettet) as bnbo_latest_created"""
+
         # Pre-aggregate BNBO intersections by field
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE bnbo_field_aggregates AS
             SELECT
                 field_uuid,
@@ -265,7 +285,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     as bnbo_action_required_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
                     THEN ST_Area_Spheroid(field_bnbo_geometry) ELSE 0 END) / 10000.0
-                    as bnbo_completed_hectares
+                    as bnbo_completed_hectares{date_agg_sql}
             FROM field_bnbo_intersections
             GROUP BY field_uuid
         """)
@@ -350,8 +370,19 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
 
         self.log.info("✅ Pre-aggregation completed - no more Cartesian products!")
 
+        # Build date column references for the final field-level query
+        field_date_cols = ""
+        if has_datoaend:
+            field_date_cols += """
+                ba.bnbo_earliest_status_change,
+                ba.bnbo_latest_status_change,"""
+        if has_oprettet:
+            field_date_cols += """
+                ba.bnbo_earliest_created,
+                ba.bnbo_latest_created,"""
+
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE field_environmental_analysis_fields AS
             SELECT
                 f.field_uuid,
@@ -409,6 +440,8 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(bwa.bnbo_completed_water_covered_hectares, 0) as
                     bnbo_completed_water_covered_hectares,
 
+                -- BNBO Date Analysis (from pre-aggregated data, if available)
+                {field_date_cols}
                 -- Wetland Analysis (using pre-aggregated data)
                 COALESCE(wa.field_wetland_total_m2, 0) as field_wetland_total_m2,
                 COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
@@ -502,8 +535,28 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # OPTIMIZATION: Pre-aggregate property intersection data to prevent JOIN explosion
         self.log.info("🔧 PRE-AGGREGATING property intersection data to prevent JOIN explosion...")
 
+        # Detect available BNBO metadata columns in property tables
+        pbi_columns = [
+            col[0]
+            for col in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'property_bnbo_intersections'"
+            ).fetchall()
+        ]
+        prop_has_datoaend = "datoaend" in pbi_columns
+        prop_has_oprettet = "oprettet" in pbi_columns
+        prop_date_agg_sql = ""
+        if prop_has_datoaend:
+            prop_date_agg_sql += """,
+                MIN(datoaend) as property_bnbo_earliest_status_change,
+                MAX(datoaend) as property_bnbo_latest_status_change"""
+        if prop_has_oprettet:
+            prop_date_agg_sql += """,
+                MIN(oprettet) as property_bnbo_earliest_created,
+                MAX(oprettet) as property_bnbo_latest_created"""
+
         # Pre-aggregate property BNBO intersections by (field_uuid, bfe_number)
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE property_bnbo_aggregates AS
             SELECT
                 field_uuid,
@@ -517,7 +570,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     as property_bnbo_action_required_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
                     THEN ST_Area_Spheroid(property_bnbo_geometry) ELSE 0 END) / 10000.0
-                    as property_bnbo_completed_hectares
+                    as property_bnbo_completed_hectares{prop_date_agg_sql}
             FROM property_bnbo_intersections
             GROUP BY field_uuid, bfe_number
         """)
@@ -576,9 +629,20 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
 
         self.log.info("✅ Property pre-aggregation completed - no more massive JOINs!")
 
+        # Build property date column references for the final query
+        prop_date_cols = ""
+        if prop_has_datoaend:
+            prop_date_cols += """
+                pba.property_bnbo_earliest_status_change,
+                pba.property_bnbo_latest_status_change,"""
+        if prop_has_oprettet:
+            prop_date_cols += """
+                pba.property_bnbo_earliest_created,
+                pba.property_bnbo_latest_created,"""
+
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
         # NOTE: fp.intersection_geometry is stored as native GEOMETRY type (verified in GCS)
-        self.conn.execute("""
+        self.conn.execute(f"""
             CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT
                 fp.field_uuid,
@@ -609,6 +673,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(pbwa.property_bnbo_completed_water_covered_hectares, 0)
                     as property_bnbo_completed_water_covered_hectares,
 
+                {prop_date_cols}
                 -- Grukos Analysis (groundwater action areas - indsatsområder)
                 COALESCE(pga.property_grukos_total_m2, 0) as property_grukos_total_m2
 
