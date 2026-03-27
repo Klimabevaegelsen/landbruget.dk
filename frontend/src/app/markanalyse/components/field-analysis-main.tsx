@@ -1,20 +1,13 @@
 'use client';
 
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-} from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { ViewState } from '@vis.gl/react-maplibre';
 import { useMobileDetection } from '@/hooks/use-mobile-detection';
 import { FieldSidebar } from './sidebar/field-sidebar';
 import { MobileFieldMenu } from './sidebar/mobile-menu';
 import { FieldDetailsSheet } from './sheets/field-details-sheet';
-import { FieldDetailsContent } from './shared/field-details-content';
-import { FieldDetailsPanel } from '@/components/field-analysis/FieldDetailsPanel';
+import { FieldDetailsContent, CoordinatesCard } from './shared/field-details';
 import { LoadingState } from '@/components/field-analysis/LoadingState';
 import { YearSlider } from '@/components/field-analysis/YearSlider';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
@@ -29,6 +22,7 @@ import {
   downloadCSV,
   generateCSVFilename,
 } from '@/utils/csv-export';
+import { useToast } from '@/components/ui/toast';
 
 // Dynamically import the map component to avoid SSR issues
 const FieldAnalysisMap = dynamic(
@@ -43,6 +37,7 @@ export function FieldAnalysisMain() {
   const [isClient, setIsClient] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isMobile } = useMobileDetection();
+  const { addToast } = useToast();
 
   // State management
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
@@ -111,11 +106,7 @@ export function FieldAnalysisMain() {
     setIsClient(true);
   }, []);
 
-  // Memoize availableYears to prevent unnecessary re-renders
-  const availableYears = useMemo(
-    () => yearSelection.availableYears,
-    [yearSelection.availableYears]
-  );
+  const availableYears = yearSelection.availableYears;
 
   // Load PMTiles URLs with caching
   useEffect(() => {
@@ -131,15 +122,20 @@ export function FieldAnalysisMain() {
           yearSelection.selectedYear,
           availableYears
         );
-      } catch {
-        // PMTiles URL loading failure handled silently
+      } catch (error) {
+        console.error('PMTiles URL loading failed:', error);
+        addToast({
+          title: 'Kortdata fejl',
+          description: 'Kunne ikke indlæse kortlag. Prøv at genindlæse siden.',
+          variant: 'error',
+        });
       }
     };
 
     if (isClient) {
       loadPMTilesUrls();
     }
-  }, [yearSelection.selectedYear, availableYears, isClient]);
+  }, [yearSelection.selectedYear, availableYears, isClient, addToast]);
 
   // Handle loading state when PMTiles URLs change
   useEffect(() => {
@@ -246,10 +242,15 @@ export function FieldAnalysisMain() {
       const filename = generateCSVFilename(yearSelection.selectedYear);
 
       downloadCSV(csvContent, filename);
-    } catch {
-      // CSV download error handled silently
+    } catch (error) {
+      console.error('CSV download failed:', error);
+      addToast({
+        title: 'Eksport fejl',
+        description: 'Kunne ikke downloade CSV. Prøv igen.',
+        variant: 'error',
+      });
     }
-  }, [yearSelection.selectedYear]);
+  }, [yearSelection.selectedYear, addToast]);
 
   // Handle escape key
   useEffect(() => {
@@ -322,24 +323,14 @@ export function FieldAnalysisMain() {
         <div
           className={`pointer-events-none absolute z-30 max-h-[calc(100vh-8rem)] transition-all duration-300 ${
             isMobile
-              ? 'top-[9rem] right-4 left-4' // Mobile: below search bar with proper spacing
-              : 'top-4' // Desktop: standard top position
+              ? 'top-[9rem] right-4 left-4'
+              : `top-4 w-60 max-w-[calc(100vw-2rem)] ${
+                  (selectedField || clickedCoordinates) && !isPanelCollapsed
+                    ? 'right-[calc(28rem+1rem)]'
+                    : 'right-16'
+                }`
           }`}
           data-testid="year-slider-container"
-          style={
-            isMobile
-              ? {}
-              : {
-                  // Desktop positioning only
-                  width: '15rem',
-                  maxWidth: 'calc(100vw - 2rem)',
-                  // When panel is open, adjust position to avoid overlap
-                  right:
-                    (selectedField || clickedCoordinates) && !isPanelCollapsed
-                      ? 'calc(28rem + 1rem)' // Panel width + margin
-                      : '4rem', // Leave space for zoom controls (was 1rem)
-                }
-          }
         >
           <div className="pointer-events-auto">
             <YearSlider
@@ -517,33 +508,53 @@ export function FieldAnalysisMain() {
             <div className="flex h-full flex-col">
               <div className="flex items-center justify-between border-b p-4">
                 <h3 className="text-lg font-semibold">GPS Koordinater</h3>
-                <button
-                  onClick={() => setIsPanelCollapsed(true)}
-                  data-testid="collapse-coordinates-panel-button"
-                  className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
-                  aria-label="Skjul panel"
-                  title="Skjul GPS koordinater"
-                >
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsPanelCollapsed(true)}
+                    data-testid="collapse-coordinates-panel-button"
+                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                    aria-label="Skjul panel"
+                    title="Skjul GPS koordinater"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setClickedCoordinates(null)}
+                    data-testid="close-coordinates-panel-button"
+                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                    aria-label="Luk panel"
+                    title="Luk GPS koordinater"
+                  >
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto">
-                <FieldDetailsPanel
-                  coordinates={clickedCoordinates}
-                  onClose={() => setClickedCoordinates(null)}
-                />
+              <div className="flex-1 overflow-y-auto p-4">
+                <CoordinatesCard coordinates={clickedCoordinates} />
               </div>
             </div>
           )}

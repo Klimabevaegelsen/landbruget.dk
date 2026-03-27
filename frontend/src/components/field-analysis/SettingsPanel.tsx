@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Monitor, Moon, Sun, Download, Eye } from 'lucide-react';
+import { Monitor, Moon, Sun, Eye } from 'lucide-react';
 import { useTheme } from '@/components/theme/theme-provider';
 
 interface SettingsPanelProps {
@@ -10,11 +10,6 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ className = '' }: SettingsPanelProps) {
   const { theme, setTheme } = useTheme();
-
-  const handleExportData = () => {
-    // Placeholder for data export functionality
-    alert('Dataeksport funktionalitet kommer snart!');
-  };
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -93,26 +88,6 @@ export function SettingsPanel({ className = '' }: SettingsPanelProps) {
             </span>
             <p className="text-muted-foreground text-xs">
               Vis kortet i fuldskærm
-            </p>
-          </div>
-        </button>
-      </div>
-
-      {/* Data Export */}
-      <div className="space-y-3">
-        <h4 className="text-foreground text-sm font-medium">Data</h4>
-        <button
-          onClick={handleExportData}
-          data-testid="export-data-button"
-          className="bg-background hover:bg-muted/50 border-border flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors"
-        >
-          <Download className="h-4 w-4" />
-          <div className="flex-1">
-            <span className="text-foreground text-sm font-medium">
-              Eksporter data
-            </span>
-            <p className="text-muted-foreground text-xs">
-              Download synlige data som CSV
             </p>
           </div>
         </button>

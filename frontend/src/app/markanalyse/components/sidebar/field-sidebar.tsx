@@ -18,6 +18,7 @@ import {
   YearSelection,
 } from '@/components/field-analysis/types';
 import { SettingsPanel } from '@/components/field-analysis/SettingsPanel';
+import { VisualizationModeSelect } from '@/app/markanalyse/components/shared/visualization-mode-select';
 
 interface FieldSidebarProps {
   layerVisibility: LayerVisibility;
@@ -200,29 +201,11 @@ function FieldSidebarExpandedContent({
               <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
                 Visualisering
               </label>
-              <select
+              <VisualizationModeSelect
                 value={filterState.visualizationMode}
-                onChange={(e) =>
-                  onFilterChange({
-                    visualizationMode: e.target
-                      .value as FilterState['visualizationMode'],
-                  })
-                }
-                data-testid="visualization-mode-select"
-                className="border-border bg-background hover:bg-accent/20 focus:ring-primary w-full rounded-lg border px-3 py-2.5 text-sm transition-colors focus:border-transparent focus:ring-2"
-              >
-                <option value="total_pesticide_belastning">
-                  Total pesticidbelastning
-                </option>
-                <option value="pfas_belastning">PFAS belastning</option>
-                <option value="diquat_belastning">Diquat belastning</option>
-                <option value="glyphosate_belastning">
-                  Glyphosate belastning
-                </option>
-                <option value="applications_count">Antal pesticider</option>
-                <option value="organic_status">Økologisk status</option>
-                <option value="area_size">Markareal</option>
-              </select>
+                onChange={(mode) => onFilterChange({ visualizationMode: mode })}
+                className="w-full"
+              />
             </div>
 
             <label className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors">

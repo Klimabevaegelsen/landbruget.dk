@@ -5,9 +5,15 @@ import { FieldAnalysisData } from './types';
 import {
   formatWgs84Coordinates,
   generateSkraafotoUrl,
+  generateGoogleMapsUrl,
   copyCoordinatesToClipboard,
 } from './coordinateUtils';
 import { formatNumber } from '@/lib/formatting';
+import {
+  parsePesticideDetail,
+  parsePesticideDetailWithUnit,
+  getPesticideRiskLevel,
+} from '@/app/markanalyse/components/shared/field-details/pesticide-utils';
 import {
   MapPin,
   Copy,
@@ -51,92 +57,6 @@ export function FieldDetailsPanel({
     if (success) {
       setCopiedCoordinates(true);
       setTimeout(() => setCopiedCoordinates(false), 2000);
-    }
-  };
-
-  // Parse pesticide detail strings (format: "ProductName:dosage; ProductName2:dosage2")
-  const parsePesticideDetail = (
-    detailString: string | undefined
-  ): Array<{ name: string; dosage: number }> => {
-    if (!detailString || detailString.trim() === '') return [];
-
-    try {
-      return detailString
-        .split(';')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-        .map((item) => {
-          const [name, dosageStr] = item.split(':');
-          return {
-            name: name?.trim() || 'Ukendt produkt',
-            dosage: parseFloat(dosageStr?.trim() || '0'),
-          };
-        })
-        .filter((item) => item.dosage > 0)
-        .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
-    } catch (e) {
-      console.warn('Error parsing pesticide detail:', detailString, e);
-      return [];
-    }
-  };
-
-  // Parse enhanced pesticide detail strings with risk information (format: "ProductName:dosage:unit:health_risk:env_risk:signal_word")
-  const parsePesticideDetailWithUnit = (
-    detailString: string | undefined
-  ): Array<{
-    name: string;
-    dosage: number;
-    unit: string;
-    healthRisk?: string;
-    envRisk?: string;
-    signalWord?: string;
-  }> => {
-    if (!detailString || detailString.trim() === '') return [];
-
-    try {
-      return detailString
-        .split(';')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-        .map((item) => {
-          const parts = item.split(':');
-          const name = parts[0]?.trim() || 'Ukendt produkt';
-          const dosage = parseFloat(parts[1]?.trim() || '0');
-          const rawUnit = parts[2]?.trim() || 'ukendt';
-          const healthRisk = parts[3]?.trim() || undefined;
-          const envRisk = parts[4]?.trim() || undefined;
-          const signalWord = parts[5]?.trim() || undefined;
-
-          // Convert unit codes to user-friendly names
-          const friendlyUnit =
-            rawUnit === '2'
-              ? 'kg'
-              : rawUnit === '4'
-                ? 'L'
-                : rawUnit === '1'
-                  ? 'g'
-                  : rawUnit === '5'
-                    ? 'ml'
-                    : rawUnit === '3'
-                      ? 'tabletter'
-                      : rawUnit;
-
-          return {
-            name,
-            dosage,
-            unit: friendlyUnit,
-            healthRisk:
-              healthRisk && healthRisk !== '' ? healthRisk : undefined,
-            envRisk: envRisk && envRisk !== '' ? envRisk : undefined,
-            signalWord:
-              signalWord && signalWord !== '' ? signalWord : undefined,
-          };
-        })
-        .filter((item) => item.dosage > 0)
-        .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
-    } catch (e) {
-      console.warn('Error parsing enhanced pesticide detail:', detailString, e);
-      return [];
     }
   };
 
@@ -265,34 +185,6 @@ export function FieldDetailsPanel({
 
     document.addEventListener('touchmove', handleTouchMove);
     document.addEventListener('touchend', handleTouchEnd);
-  };
-
-  const getPesticideRiskLevel = (
-    belastning: number
-  ): { level: string; color: string; description: string } => {
-    if (belastning === 0)
-      return {
-        level: 'Ingen',
-        color: 'text-green-600',
-        description: 'Ingen registreret pesticidanvendelse',
-      };
-    if (belastning < 10)
-      return {
-        level: 'Lav',
-        color: 'text-conventional',
-        description: 'Lav pesticidbelastning',
-      };
-    if (belastning < 50)
-      return {
-        level: 'Moderat',
-        color: 'text-conventional',
-        description: 'Moderat pesticidbelastning',
-      };
-    return {
-      level: 'Høj',
-      color: 'text-destructive',
-      description: 'Høj pesticidbelastning',
-    };
   };
 
   const riskLevel = fieldData
@@ -440,8 +332,10 @@ export function FieldDetailsPanel({
               <button
                 onClick={() => {
                   const coords = fieldData?.click_coordinates || coordinates!;
-                  const googleMapsUrl = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
-                  window.open(googleMapsUrl, '_blank');
+                  window.open(
+                    generateGoogleMapsUrl(coords.lat, coords.lng),
+                    '_blank'
+                  );
                 }}
                 data-testid="open-google-maps-button"
                 className={`bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex min-h-[36px] items-center justify-center rounded px-3 py-2 text-center text-xs font-medium transition-colors ${
