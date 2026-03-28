@@ -19,7 +19,7 @@ export function DocumentationAccordion({
   }
 
   return (
-    <div className="mt-4 border-t border-gray-200 pt-4">
+    <div className="border-border mt-4 border-t pt-4">
       <button
         onClick={() => setIsOpen(!isOpen)}
         data-testid="toggle-documentation-button"
@@ -54,13 +54,13 @@ export function DocumentationAccordion({
             <ul className="mt-2 space-y-2">
               {documentation.sources.map((source, index) => (
                 <li key={index} className="flex items-start">
-                  <span className="mr-2 text-green-600">•</span>
+                  <span className="text-primary mr-2">•</span>
                   <div>
                     <a
                       href={source.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-medium text-green-700 hover:text-green-800 hover:underline"
+                      className="text-primary hover:text-primary/80 font-medium hover:underline"
                     >
                       {source.name}
                     </a>
@@ -79,7 +79,7 @@ export function DocumentationAccordion({
                   href={documentation.dataLineage}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-green-700 hover:text-green-800 hover:underline"
+                  className="text-primary hover:text-primary/80 hover:underline"
                 >
                   Se detaljeret databehandling og kvalitetssikring →
                 </a>

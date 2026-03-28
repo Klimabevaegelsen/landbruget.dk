@@ -12,7 +12,7 @@ export async function BlockClimateBreakdown({
 
     if (!emissions || emissions.length === 0) {
       return (
-        <div className="rounded bg-gray-50 p-4 text-gray-600">
+        <div className="bg-muted text-muted-foreground rounded p-4">
           Ingen klimadata tilgængelig
         </div>
       );
@@ -32,7 +32,7 @@ export async function BlockClimateBreakdown({
 
     if (filteredEmissions.length === 0) {
       return (
-        <div className="rounded bg-gray-50 p-4 text-gray-600">
+        <div className="bg-muted text-muted-foreground rounded p-4">
           Ingen klimadata tilgængelig for det valgte årsinterval
         </div>
       );
@@ -42,7 +42,7 @@ export async function BlockClimateBreakdown({
   } catch (error) {
     console.error('Error loading climate breakdown:', error);
     return (
-      <div className="rounded bg-red-50 p-4 text-red-600">
+      <div className="bg-destructive/5 text-destructive rounded p-4">
         Fejl ved indlæsning af klimadata
       </div>
     );

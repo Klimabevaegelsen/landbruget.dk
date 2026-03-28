@@ -12,7 +12,7 @@ import {
   TrendingUp,
   Loader2,
 } from 'lucide-react';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import {
   CompanySummary,
   CompanyDetailsResponse,
@@ -30,8 +30,6 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { addToast, removeToast } = useToast();
-
   // Fetch detailed company data
   useEffect(() => {
     const fetchDetails = async () => {
@@ -41,10 +39,8 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
       setError(null);
 
       // Show loading toast for company details
-      const toastId = addToast({
-        title: 'Indlæser virksomhedsdetaljer',
+      const toastId = toast.loading('Indlæser virksomhedsdetaljer', {
         description: `Henter detaljer for ${company.company_name}...`,
-        variant: 'loading',
       });
 
       try {
@@ -74,12 +70,12 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
       } finally {
         setLoading(false);
         // Remove loading toast when details fetch completes
-        removeToast(toastId);
+        toast.dismiss(toastId);
       }
     };
 
     fetchDetails();
-  }, [company.cvr_number, company.company_name, addToast, removeToast]);
+  }, [company.cvr_number, company.company_name]);
 
   const formatBelastning = (value: number) => {
     return value.toLocaleString('da-DK', {

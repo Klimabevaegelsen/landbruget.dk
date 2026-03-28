@@ -274,8 +274,8 @@ export function HomepageRankings() {
               </div>
             )}
             <div className="flex items-center space-x-2">
-              <Database className="h-3 w-3 text-green-500" />
-              <p className="text-xs text-green-600">
+              <Database className="text-primary h-3 w-3" />
+              <p className="text-primary text-xs">
                 {getCacheStats().total_companies} virksomheder cachet for hurtig
                 adgang
               </p>

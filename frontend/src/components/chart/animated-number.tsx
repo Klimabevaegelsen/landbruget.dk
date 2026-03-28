@@ -68,9 +68,9 @@ export function StatusIndicator({
   const isNeutral = value === 0;
 
   const colorClass = isPositive
-    ? 'text-green-600 dark:text-green-500'
+    ? 'text-success'
     : isNegative
-      ? 'text-destructive dark:text-destructive'
+      ? 'text-destructive'
       : 'text-muted-foreground';
 
   const bgClass = isPositive

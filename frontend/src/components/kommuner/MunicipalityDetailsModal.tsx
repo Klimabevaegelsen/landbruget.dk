@@ -128,7 +128,7 @@ export function MunicipalityDetailsModal({
   if (!municipality) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="bg-foreground/50 fixed inset-0 z-50 flex items-center justify-center">
       <div className="bg-background relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg border shadow-lg">
         {/* Header */}
         <div className="border-border flex items-center justify-between border-b p-6">
@@ -155,7 +155,7 @@ export function MunicipalityDetailsModal({
           {loading && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-green-600 border-t-transparent"></div>
+                <div className="border-primary mx-auto h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"></div>
                 <p className="text-muted-foreground mt-4">Indlæser data...</p>
               </div>
             </div>
@@ -163,7 +163,7 @@ export function MunicipalityDetailsModal({
 
           {error && (
             <div className="py-12 text-center">
-              <p className="text-red-600">Fejl: {error}</p>
+              <p className="text-destructive">Fejl: {error}</p>
             </div>
           )}
 
@@ -180,7 +180,7 @@ export function MunicipalityDetailsModal({
                 <CardContent>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
-                      <div className="text-2xl font-bold text-green-600">
+                      <div className="text-primary text-2xl font-bold">
                         {data.metadata.total_companies}
                       </div>
                       <div className="text-muted-foreground text-sm">

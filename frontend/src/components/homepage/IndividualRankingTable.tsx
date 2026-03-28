@@ -140,7 +140,7 @@ export function IndividualRankingTable({
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-gray-400"></div>
+            <div className="border-border h-6 w-6 animate-spin rounded-full border-b-2"></div>
             <span className="text-muted-foreground ml-2 text-sm">
               Indlæser...
             </span>

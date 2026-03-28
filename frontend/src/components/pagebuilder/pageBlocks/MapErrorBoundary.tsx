@@ -73,7 +73,7 @@ export class MapErrorBoundary extends React.Component<
                   this.setState({ hasError: false, error: undefined })
                 }
                 data-testid="map-retry-button"
-                className="mt-4 inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
+                className="bg-primary hover:bg-primary/90 focus:ring-primary text-primary-foreground mt-4 inline-flex items-center rounded-md border border-transparent px-4 py-2 text-sm font-medium focus:ring-2 focus:ring-offset-2 focus:outline-none"
               >
                 Prøv igen
               </button>

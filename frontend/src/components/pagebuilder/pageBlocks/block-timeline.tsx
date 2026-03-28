@@ -286,7 +286,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                     return (
                       <div
                         key={`${date}-${eventIndex}`}
-                        className={`flex flex-col gap-1 ${!isLastEvent && events.length > 1 ? 'border-b border-gray-200 pb-2' : ''}`}
+                        className={`flex flex-col gap-1 ${!isLastEvent && events.length > 1 ? 'border-border/50 border-b pb-2' : ''}`}
                       >
                         <div
                           className="text-sm font-semibold"
