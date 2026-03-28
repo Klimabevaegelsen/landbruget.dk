@@ -12,21 +12,9 @@ updates:
         patterns:
           - "*"
 
-  # Backend Python packages (uv)
+  # Backend Python packages (uv workspace — single lock file at root)
   - package-ecosystem: "uv"
-    directories:
-      - "/backend/common"
-      - "/backend/pipelines/unified_pipeline"
-      - "/backend/pipelines/chr_pipeline"
-      - "/backend/pipelines/drive_data_pipeline"
-      - "/backend/pipelines/svineflytning_pipeline"
-      - "/backend/pipelines/arbejdstilsynet_inspections"
-      - "/backend/pipelines/bbr_buildings"
-      - "/backend/pipelines/bmd_scraper"
-      - "/backend/pipelines/climate"
-      - "/backend/pipelines/dma_scraper"
-      - "/backend/pipelines/h3_pfas_exposure_pipeline"
-      - "/backend/pipelines/property_owners_sftp"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"

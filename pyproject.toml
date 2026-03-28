@@ -4,57 +4,20 @@ version = "0.1.0"
 description = "Agricultural data analysis platform"
 requires-python = ">=3.11"
 dynamic = ["readme"]
-dependencies = [
-    # Core Data Processing
-    "numpy~=2.0.0",
-    "pyarrow~=18.0.0",
-    # Geospatial Processing - User prefers duckdb-spatial over geopandas
-    "ibis-framework[duckdb]~=10.6.0",
-    "duckdb~=1.5.0",
-    # Note: spatial extension is loaded at runtime with: duckdb.install_extension("spatial")
-    "shapely~=2.0.6",
-    "pyproj~=3.7.0",
-    "fiona~=1.10.1",
-    # Cloud Services
-    "s3fs>=2024.1.0",
-    # google-cloud-secret-manager only needed by property_owners_sftp (kept there)
-    "fsspec~=2025.5.1",
-    # Web Framework
-    "fastapi~=0.115.7",
-    "uvicorn~=0.34.0",
-    "pydantic~=2.10.6",
-    # HTTP and API Clients
-    "aiohttp~=3.11.11",
-    "requests~=2.31.0",
-    "zeep~=4.3.1",
-    "paramiko~=3.5.0",
-    "certifi~=2025.6.15",
-    "pyOpenSSL~=25.0.0",
-    # PDF Processing
-    "pdfplumber~=0.11.5",
-    # Utilities
-    "python-dotenv~=1.1.1",
-    "tqdm~=4.67.1",
-    "psutil~=6.1.1",
-    "cryptography~=44.0.0",
-    "lxml~=5.3.0",
-    "ijson~=3.3.0",
-    "loguru~=0.7.3",
-    "simple-singleton~=2.0.0",
-    # Development tools
-    "ruff~=0.8.0",
-    "pytest~=8.3.0",
-    "jupyter~=1.1.1",
-    "pip>=25.1.1",
-    "xmlschema>=4.1.0",
-    "openpyxl>=3.1.5",
-    "psycopg2-binary>=2.9.10",
-    "tenacity>=9.1.2",
-]
+dependencies = []
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv.workspace]
+members = [
+    "backend/common",
+    "backend/pipelines/*",
+]
+exclude = [
+    "backend/pipelines/base",
+]
 
 [tool.hatch.build.targets.wheel]
 bypass-selection = true

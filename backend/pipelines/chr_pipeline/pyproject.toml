@@ -43,7 +43,7 @@ artifacts = ["*.py"]
 # See: https://github.com/xmlsec/python-xmlsec/issues/316
 
 [tool.uv.sources]
-landbruget-common = { path = "../../common", editable = true }
+landbruget-common = { workspace = true }
 
 [dependency-groups]
 dev = [
