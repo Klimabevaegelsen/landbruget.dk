@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from .animal_movements import load_animal_movements, load_cattle_movement_summaries
 from .auth import create_chr_dyr_client, get_fvm_credentials
 
-# Import GCS access from common module
+# Import cloud storage access from common module
 try:
     from common.storage import StorageAccess
 
@@ -58,7 +58,7 @@ _storage_access = None
 
 
 def initialize_consolidated_processing():
-    """Initialize DuckDB connection and GCS access for consolidated processing."""
+    """Initialize DuckDB connection and cloud storage access for consolidated processing."""
     global _duckdb_conn, _storage_access
 
     if not STORAGE_AVAILABLE:
@@ -145,7 +145,7 @@ def add_to_consolidated_table(movement_data):
 
 
 def finalize_consolidated_processing():
-    """Save consolidated data to GCS and cleanup resources."""
+    """Save consolidated data to cloud storage and cleanup resources."""
     global _duckdb_conn, _storage_access
 
     if not _duckdb_conn or not _storage_access:
@@ -162,7 +162,7 @@ def finalize_consolidated_processing():
             logger.warning("No movement data to save - consolidated table is empty")
             return True
 
-        logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
+        logger.info(f"Saving {record_count:,} consolidated movement records to cloud storage")
 
         # MINIMAL FIX: Create unique parquet file per matrix job to prevent overwrites
         import os

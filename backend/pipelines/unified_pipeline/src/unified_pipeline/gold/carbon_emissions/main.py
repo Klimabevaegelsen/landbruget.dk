@@ -123,15 +123,15 @@ class CarbonEmissionsGold(BaseSource[CarbonEmissionsGoldConfig], GoldJobInterfac
         self.log.info(f"Discovering CVRs with livestock data (year {year})...")
         try:
             pattern = f"{loader.bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet"
-            files = loader.gcs.list_files(pattern)
+            files = loader.storage.list_files(pattern)
             if files:
                 latest_file = sorted(files)[-1]
                 table_name = "gr_discover_temp"
-                loader.gcs.create_table_from_storage(table_name, latest_file)
-                result_df = loader.gcs.duckdb_conn.execute(
+                loader.storage.create_table_from_storage(table_name, latest_file)
+                result_df = loader.storage.duckdb_conn.execute(
                     f"SELECT DISTINCT cvr_number FROM {table_name} WHERE cvr_number IS NOT NULL"
                 ).df()
-                loader.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                loader.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                 livestock_cvrs = set(result_df["cvr_number"].astype(str).str.zfill(8).tolist())
                 cvr_set.update(livestock_cvrs)
                 self.log.info(f"  Found {len(livestock_cvrs)} CVRs with livestock")
@@ -142,18 +142,20 @@ class CarbonEmissionsGold(BaseSource[CarbonEmissionsGoldConfig], GoldJobInterfac
         self.log.info(f"Discovering CVRs with field data (year {year})...")
         try:
             pattern = f"{loader.bucket}/silver/fvm_marker_{year}/*/data.parquet"
-            files = loader.gcs.list_files(pattern)
+            files = loader.storage.list_files(pattern)
             if files:
                 latest_file = sorted(files)[-1]
                 table_name = "fvm_discover_temp"
-                loader.gcs.create_table_from_storage(table_name, latest_file)
-                sample = loader.gcs.duckdb_conn.execute(f"SELECT * FROM {table_name} LIMIT 0").df()
+                loader.storage.create_table_from_storage(table_name, latest_file)
+                sample = loader.storage.duckdb_conn.execute(
+                    f"SELECT * FROM {table_name} LIMIT 0"
+                ).df()
                 cvr_col = "cvr_number" if "cvr_number" in sample.columns else "cvr"
-                result_df = loader.gcs.duckdb_conn.execute(
+                result_df = loader.storage.duckdb_conn.execute(
                     f"SELECT DISTINCT {cvr_col} as cvr_number FROM {table_name} "
                     f"WHERE {cvr_col} IS NOT NULL"
                 ).df()
-                loader.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                loader.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                 field_cvrs = set(result_df["cvr_number"].astype(str).str.zfill(8).tolist())
                 cvr_set.update(field_cvrs)
                 self.log.info(f"  Found {len(field_cvrs)} CVRs with fields")

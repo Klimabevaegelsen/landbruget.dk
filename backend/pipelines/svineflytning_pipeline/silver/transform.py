@@ -3,7 +3,7 @@ Silver layer transformation for Svineflytning (pig movement) data.
 
 This module processes raw pig movement data from the bronze layer into clean,
 structured data for analytical purposes. It handles JSON parsing, data cleaning,
-standardization, and exports processed data to both local and GCS storage.
+standardization, and exports processed data to both local and cloud storage.
 """
 
 import json
@@ -82,7 +82,7 @@ class SvineflytningSilverProcessor:
         Process bronze pig movement data into silver layer.
 
         Args:
-            bronze_data_path: Path to bronze data (local file or GCS path)
+            bronze_data_path: Path to bronze data (local file or cloud storage path)
             export_timestamp: Timestamp for the export (defaults to current time)
 
         Returns:
@@ -123,7 +123,7 @@ class SvineflytningSilverProcessor:
 
     def _load_bronze_data(self, data_path: str) -> list[dict[str, Any]]:
         """
-        Load bronze data from local file or GCS.
+        Load bronze data from local file or cloud storage.
 
         Args:
             data_path: Path to the bronze data file
@@ -552,8 +552,8 @@ class SvineflytningSilverProcessor:
         local_destination = self.output_dir / export_timestamp
         local_destination.mkdir(parents=True, exist_ok=True)
 
-        # 🚀 ENHANCED: Try native GCS export first if available
-        gcs_export_success = False
+        # Try native cloud storage export first if available
+        cloud_export_success = False
         tables = ["silver_movements", "silver_properties", "silver_vehicles"]
         exported_files = []
 
@@ -563,7 +563,7 @@ class SvineflytningSilverProcessor:
 
                 storage_access = StorageAccess()
 
-                # Try native DuckDB HTTPFS GCS export for each table
+                # Try native DuckDB HTTPFS cloud storage export for each table
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
                     storage_path = (
@@ -577,17 +577,17 @@ class SvineflytningSilverProcessor:
                         compression="zstd",
                     )
                     exported_files.append(storage_path)
-                    logger.info(f"✅ Native GCS export successful: {storage_path}")
+                    logger.info(f"✅ Native cloud storage export successful: {storage_path}")
 
-                gcs_export_success = True
+                cloud_export_success = True
                 destination_base = f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
                 storage_type = "storage"
 
             except Exception as e:
-                logger.warning(f"Native GCS export failed, using fallback: {e}")
-                gcs_export_success = False
+                logger.warning(f"Native cloud storage export failed, using fallback: {e}")
+                cloud_export_success = False
 
-        if not gcs_export_success:
+        if not cloud_export_success:
             # Fallback: Export each table to local files first
             for table in tables:
                 filename = f"{table.replace('silver_', '')}.parquet"
@@ -599,11 +599,11 @@ class SvineflytningSilverProcessor:
                 """)
                 logger.info(f"Exported {table} to local file: {local_path}")
 
-        # If using GCS and native export didn't work, upload the local files
-        if USE_CLOUD_STORAGE and not gcs_export_success:
+        # If using cloud storage and native export didn't work, upload the local files
+        if USE_CLOUD_STORAGE and not cloud_export_success:
             success = self._upload_silver_data_to_storage(local_destination, export_timestamp)
             if success:
-                # Build GCS paths for return
+                # Build cloud storage paths for return
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
                     storage_path = (
@@ -613,14 +613,14 @@ class SvineflytningSilverProcessor:
                 destination_base = f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
                 storage_type = "storage"
             else:
-                logger.warning("GCS upload failed, falling back to local files")
+                logger.warning("Cloud storage upload failed, falling back to local files")
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
                     local_path = local_destination / filename
                     exported_files.append(str(local_path))
                 destination_base = str(local_destination)
                 storage_type = "local"
-        elif not gcs_export_success:
+        elif not cloud_export_success:
             # Local storage only (populate files list if not done already)
             if not exported_files:
                 for table in tables:
@@ -639,7 +639,7 @@ class SvineflytningSilverProcessor:
 
     def _upload_silver_data_to_storage(self, silver_dir: Path, export_timestamp: str) -> bool:
         """
-        Upload all silver parquet files to GCS using streaming.
+        Upload all silver parquet files to cloud storage using streaming.
 
         Args:
             silver_dir: Local directory containing silver parquet files
@@ -649,7 +649,7 @@ class SvineflytningSilverProcessor:
             True if upload successful, False otherwise
         """
         try:
-            # Try to import GCS utilities
+            # Try to import cloud storage utilities
             from common.storage import StorageAccess
 
             storage_access = StorageAccess()
@@ -661,12 +661,14 @@ class SvineflytningSilverProcessor:
                 logger.warning(f"No parquet files found in {silver_dir}")
                 return False
 
-            logger.info(f"Uploading {len(parquet_files)} silver files to GCS bucket '{GCS_BUCKET}'")
+            logger.info(
+                f"Uploading {len(parquet_files)} silver files to storage bucket '{GCS_BUCKET}'"
+            )
 
             uploaded_count = 0
             for parquet_file in parquet_files:
                 try:
-                    # Create GCS path: silver/svineflytning/{timestamp}/{filename}
+                    # Create cloud storage path: silver/svineflytning/{timestamp}/{filename}
                     storage_path = (
                         f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{parquet_file.name}"
                     )
@@ -687,16 +689,16 @@ class SvineflytningSilverProcessor:
                     logger.error(f"❌ Failed to upload {parquet_file.name}: {e}")
 
             if uploaded_count == len(parquet_files):
-                logger.info(f"✅ Successfully uploaded all {uploaded_count} silver files to GCS")
+                logger.info("✅ Successfully uploaded all silver files to cloud storage")
                 return True
             logger.warning(f"⚠️ Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
             return False
 
         except ImportError:
-            logger.warning("GCS utilities not available - skipping silver data upload")
+            logger.warning("Cloud storage utilities not available - skipping silver data upload")
             return False
         except Exception as e:
-            logger.error(f"❌ Error uploading silver data to GCS: {e}")
+            logger.error(f"❌ Error uploading silver data to cloud storage: {e}")
             return False
 
 
@@ -709,7 +711,7 @@ def process_svineflytning_silver(
     Main function to process svineflytning data from bronze to silver.
 
     Args:
-        bronze_data_path: Path to bronze data (local or GCS)
+        bronze_data_path: Path to bronze data (local or cloud storage)
         output_dir: Output directory for silver data
         export_timestamp: Timestamp for the export
 
@@ -724,7 +726,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Process Svineflytning data to silver layer")
-    parser.add_argument("bronze_data_path", help="Path to bronze data file or GCS path")
+    parser.add_argument("bronze_data_path", help="Path to bronze data file or cloud storage path")
     parser.add_argument(
         "--output-dir", default="/data/silver/svineflytning", help="Output directory"
     )

@@ -181,7 +181,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save both geometric intersection tables to GCS."""
+        """Save both geometric intersection tables to cloud storage."""
         # Save property × wetland intersections
         self._save_stage_output("property_wetland_intersections", "property_wetland_intersections")
 

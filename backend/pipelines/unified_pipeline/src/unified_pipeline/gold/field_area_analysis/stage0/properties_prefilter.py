@@ -161,4 +161,4 @@ class PropertiesPreFilter(PreFilteringStageBase):
         """Save output data - already handled in _execute_stage_processing for Stage 0."""
         # Stage 0 classes handle export directly in _execute_stage_processing
         # to use custom output paths and naming conventions
-        self.log.info("✅ Properties pre-filtering data already saved to GCS")
+        self.log.info("✅ Properties pre-filtering data already saved to cloud storage")

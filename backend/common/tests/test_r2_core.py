@@ -36,21 +36,21 @@ class TestPathNormalization:
         ):
             from common.storage.core import StorageAccess
 
-            gcs = StorageAccess.__new__(StorageAccess)
-            gcs.fs = mock_fs
-            gcs.log = MagicMock()
-            gcs.duckdb_conn = duckdb.connect(":memory:")
-            gcs.monitor = MagicMock()
-            gcs._native_cloud_available = False
-            return gcs
+            storage = StorageAccess.__new__(StorageAccess)
+            storage.fs = mock_fs
+            storage.log = MagicMock()
+            storage.duckdb_conn = duckdb.connect(":memory:")
+            storage.monitor = MagicMock()
+            storage._native_cloud_available = False
+            return storage
 
     def test_file_exists_with_bare_path(self):
         """file_exists should pass bare bucket/path directly to s3fs."""
         mock_fs = MagicMock()
         mock_fs.exists.return_value = True
-        gcs = self._make_storage_access(mock_fs)
+        storage = self._make_storage_access(mock_fs)
 
-        result = gcs.file_exists("my-bucket/silver/data.parquet")
+        result = storage.file_exists("my-bucket/silver/data.parquet")
         assert result is True
         mock_fs.exists.assert_called_once_with("my-bucket/silver/data.parquet")
 
@@ -58,9 +58,9 @@ class TestPathNormalization:
         """file_exists should also strip r2:// prefix."""
         mock_fs = MagicMock()
         mock_fs.exists.return_value = True
-        gcs = self._make_storage_access(mock_fs)
+        storage = self._make_storage_access(mock_fs)
 
-        result = gcs.file_exists("r2://my-bucket/silver/data.parquet")
+        result = storage.file_exists("r2://my-bucket/silver/data.parquet")
         assert result is True
         # Should strip r2:// prefix
         call_arg = mock_fs.exists.call_args[0][0]
@@ -70,9 +70,9 @@ class TestPathNormalization:
         """get_file_size should work with bare bucket/path."""
         mock_fs = MagicMock()
         mock_fs.size.return_value = 1024
-        gcs = self._make_storage_access(mock_fs)
+        storage = self._make_storage_access(mock_fs)
 
-        result = gcs.get_file_size("my-bucket/gold/output.parquet")
+        result = storage.get_file_size("my-bucket/gold/output.parquet")
         assert result == 1024
         mock_fs.size.assert_called_once_with("my-bucket/gold/output.parquet")
 
@@ -80,9 +80,9 @@ class TestPathNormalization:
         """get_file_size should strip r2:// prefix."""
         mock_fs = MagicMock()
         mock_fs.size.return_value = 2048
-        gcs = self._make_storage_access(mock_fs)
+        storage = self._make_storage_access(mock_fs)
 
-        result = gcs.get_file_size("r2://my-bucket/gold/output.parquet")
+        result = storage.get_file_size("r2://my-bucket/gold/output.parquet")
         assert result == 2048
         call_arg = mock_fs.size.call_args[0][0]
         assert not call_arg.startswith("r2://")
@@ -94,9 +94,9 @@ class TestPathNormalization:
             "my-bucket/silver/file1.parquet",
             "my-bucket/silver/file2.parquet",
         ]
-        gcs = self._make_storage_access(mock_fs)
+        storage = self._make_storage_access(mock_fs)
 
-        result = gcs.list_files("my-bucket/silver/*.parquet")
+        result = storage.list_files("my-bucket/silver/*.parquet")
         assert len(result) == 2
         # Results should be bare paths (no protocol prefix)
         for r in result:
@@ -107,9 +107,9 @@ class TestPathNormalization:
         """list_files with r2:// should work the same way."""
         mock_fs = MagicMock()
         mock_fs.glob.return_value = ["my-bucket/silver/file1.parquet"]
-        gcs = self._make_storage_access(mock_fs)
+        storage = self._make_storage_access(mock_fs)
 
-        result = gcs.list_files("r2://my-bucket/silver/*.parquet")
+        result = storage.list_files("r2://my-bucket/silver/*.parquet")
         assert len(result) >= 1
         # glob should be called with bare path
         call_arg = mock_fs.glob.call_args[0][0]
@@ -159,42 +159,42 @@ class TestUploadDownloadJSON:
         ):
             from common.storage.core import StorageAccess
 
-            gcs = StorageAccess.__new__(StorageAccess)
-            gcs.fs = mock_fs
-            gcs.log = MagicMock()
-            gcs.duckdb_conn = duckdb.connect(":memory:")
-            gcs.monitor = MagicMock()
-            gcs._native_cloud_available = False
-            return gcs
+            storage = StorageAccess.__new__(StorageAccess)
+            storage.fs = mock_fs
+            storage.log = MagicMock()
+            storage.duckdb_conn = duckdb.connect(":memory:")
+            storage.monitor = MagicMock()
+            storage._native_cloud_available = False
+            return storage
 
     def test_upload_json_roundtrip(self):
         """JSON upload then download should preserve data."""
-        gcs = self._make_storage_access_with_memory_fs()
+        storage = self._make_storage_access_with_memory_fs()
         test_data = {"farms": [{"cvr": "31373077", "name": "Test Farm"}]}
 
-        gcs.upload_json(test_data, "bucket/test.json")
-        result = gcs.download_json("bucket/test.json")
+        storage.upload_json(test_data, "bucket/test.json")
+        result = storage.download_json("bucket/test.json")
 
         assert result == test_data
 
     def test_danish_characters_roundtrip(self):
         """Danish characters (æøå) should survive upload/download roundtrip."""
-        gcs = self._make_storage_access_with_memory_fs()
+        storage = self._make_storage_access_with_memory_fs()
         test_data = {
             "locations": ["København", "Århus", "Ålborg", "Sønderjylland"],
             "special_chars": "æøå ÆØÅ",
             "description": "Landbrugsstyrelsen data",
         }
 
-        gcs.upload_json(test_data, "bucket/danish.json")
-        result = gcs.download_json("bucket/danish.json")
+        storage.upload_json(test_data, "bucket/danish.json")
+        result = storage.download_json("bucket/danish.json")
 
         assert result["locations"] == test_data["locations"]
         assert result["special_chars"] == "æøå ÆØÅ"
 
     def test_upload_json_with_cvr_numbers(self):
         """CVR numbers with leading zeros should be preserved."""
-        gcs = self._make_storage_access_with_memory_fs()
+        storage = self._make_storage_access_with_memory_fs()
         test_data = {
             "companies": [
                 {"cvr": "00113115", "name": "Test"},
@@ -202,8 +202,8 @@ class TestUploadDownloadJSON:
             ]
         }
 
-        gcs.upload_json(test_data, "bucket/cvr.json")
-        result = gcs.download_json("bucket/cvr.json")
+        storage.upload_json(test_data, "bucket/cvr.json")
+        result = storage.download_json("bucket/cvr.json")
 
         assert result["companies"][0]["cvr"] == "00113115"
 
@@ -229,20 +229,20 @@ class TestNativeR2Support:
         ):
             from common.storage.core import StorageAccess
 
-            gcs = StorageAccess.__new__(StorageAccess)
-            gcs.fs = mock_fs
-            gcs.log = MagicMock()
-            gcs.duckdb_conn = duckdb.connect(":memory:")
-            gcs.monitor = MagicMock()
+            storage = StorageAccess.__new__(StorageAccess)
+            storage.fs = mock_fs
+            storage.log = MagicMock()
+            storage.duckdb_conn = duckdb.connect(":memory:")
+            storage.monitor = MagicMock()
 
             # Setup R2 auth
             from common.storage.filesystem import _setup_native_r2_auth
 
-            auth_result = _setup_native_r2_auth(gcs.duckdb_conn)
+            auth_result = _setup_native_r2_auth(storage.duckdb_conn)
             assert auth_result is True
 
             # Now check native support detection
-            result = gcs._check_native_cloud_support()
+            result = storage._check_native_cloud_support()
             # Should detect the r2 secret
             assert result is True
 

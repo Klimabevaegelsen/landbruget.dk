@@ -43,14 +43,14 @@ def main(stage, start_date, end_date, storage_bucket, log_level):
     # Initialize pipeline metadata tracking
     pipeline_run = PipelineRun("arbejdstilsynet_inspections", logger=logger)
 
-    # Determine GCS bucket to use
+    # Determine storage bucket to use
     actual_storage_bucket = resolve_bucket(storage_bucket)
     if actual_storage_bucket == "landbruget-data" and not storage_bucket:
         # Only warn if no explicit bucket was provided and we fell back to default
         if not os.getenv("R2_BUCKET") and not os.getenv("GCS_BUCKET"):
             logger.warning(
-                "GCS_BUCKET not provided via --gcs-bucket argument or environment variable. "
-                "GCS uploads will be skipped."
+                "Storage bucket not provided via --storage-bucket argument or environment variable. "
+                "Cloud storage uploads will be skipped."
             )
             actual_storage_bucket = None
         else:

@@ -5,7 +5,7 @@ This module provides standardized functions for:
 1. Pipelines to save CVR numbers they discover during processing
 2. CVR enrichment pipeline to collect all discovered CVR numbers
 
-The approach uses a standard file structure in GCS:
+The approach uses a standard file structure in cloud storage:
 - Each pipeline saves CVR numbers to: cvr_collections/{pipeline_name}/{timestamp}/cvr_numbers.json
 - CVR enrichment pipeline reads from all cvr_collections/*/ folders
 """
@@ -33,8 +33,8 @@ class CVRCollectionManager:
         Initialize CVR collection manager.
 
         Args:
-            storage_access: GCS data access instance
-            bucket: GCS bucket for CVR collections
+            storage_access: cloud storage data access instance
+            bucket: storage bucket for CVR collections
         """
         self.storage = storage_access
         self.bucket = bucket
@@ -52,7 +52,7 @@ class CVRCollectionManager:
             timestamp: Optional timestamp, defaults to current time
 
         Returns:
-            GCS path where CVR numbers were saved
+            storage path where CVR numbers were saved
         """
         if timestamp is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -69,10 +69,10 @@ class CVRCollectionManager:
             "generated_at": datetime.now().isoformat(),
         }
 
-        # Define GCS path
+        # Define storage path
         storage_path = f"cvr_collections/{pipeline_name}/{timestamp}/cvr_numbers.json"
 
-        # Save to GCS
+        # Save to cloud storage
         self.storage.upload_json(cvr_data, f"{self.bucket}/{storage_path}")
 
         self.log.info(
@@ -343,14 +343,14 @@ def save_pipeline_cvr_numbers(
     Args:
         pipeline_name: Name of the pipeline
         cvr_numbers: List of CVR numbers to save
-        storage_access: GCS data access instance (creates default if None)
-        bucket: GCS bucket name
+        storage_access: cloud storage data access instance (creates default if None)
+        bucket: storage bucket name
         timestamp: Optional timestamp
 
     Returns:
-        GCS path where data was saved
+        storage path where data was saved
     """
-    # Create default GCS access if none provided
+    # Create default cloud storage access if none provided
     if storage_access is None:
         from common.storage import StorageAccess
 

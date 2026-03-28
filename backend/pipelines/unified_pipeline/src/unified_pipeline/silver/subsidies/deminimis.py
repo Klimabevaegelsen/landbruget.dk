@@ -1,7 +1,7 @@
 """
 Silver layer processor for De Minimis national aid data.
 
-Source: Deminimis_stoette.parquet (GCS)
+Source: Deminimis_stoette.parquet (cloud storage)
 Data: National aid ledger entries (credits and debits)
 
 Key transformations:
@@ -56,7 +56,7 @@ class DeminimisSilverConfig(BaseJobConfig):
     # Bronze source
     bronze_path: str = Field(
         default="bronze/subsidies/Deminimis_stoette.parquet",
-        description="GCS path for bronze data",
+        description="Storage path for bronze data",
     )
 
     # Column mappings
@@ -105,7 +105,7 @@ class DeminimisSilver(BaseSource[DeminimisSilverConfig], SilverJobInterface):
             raise
 
     async def _load_bronze_data(self, bronze_data: Any | None = None) -> None:
-        """Load bronze data from GCS or memory."""
+        """Load bronze data from cloud storage or memory."""
         if bronze_data is not None:
             self.log.info("Using in-memory bronze data")
             self.conn.register("raw_deminimis", bronze_data)
@@ -263,7 +263,7 @@ class DeminimisSilver(BaseSource[DeminimisSilverConfig], SilverJobInterface):
         return summary
 
     async def _save_silver_data(self) -> str:
-        """Save silver data to GCS."""
+        """Save silver data to cloud storage."""
         output_path = f"silver/{self.config.dataset}"
 
         self.log.info(f"Saving silver data to: {self.config.bucket}/{output_path}")

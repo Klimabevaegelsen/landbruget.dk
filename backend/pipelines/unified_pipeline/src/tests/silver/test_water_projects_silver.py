@@ -714,7 +714,7 @@ async def test_run_success(silver_source: WaterProjectsSilver) -> None:
         ["test_layer1", xml_payload],
     )
 
-    # Mock _save_data to avoid GCS operations
+    # Mock _save_data to avoid cloud storage operations
     silver_source._save_data = MagicMock()
 
     # Mock geometry validation
@@ -889,7 +889,7 @@ async def test_run_with_bronze_data_list(silver_source: WaterProjectsSilver) -> 
 
     bronze_data = [("test_layer1", xml_payload)]
 
-    # Mock _save_data to avoid GCS operations
+    # Mock _save_data to avoid cloud storage operations
     silver_source._save_data = MagicMock()
 
     # Mock geometry validation

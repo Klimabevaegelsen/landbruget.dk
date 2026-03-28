@@ -11,7 +11,7 @@ from typing import Any
 import ijson  # Add this import for streaming JSON parsing
 from dotenv import load_dotenv
 
-# Import the unified GCS access layer
+# Import the unified cloud storage access layer
 try:
     from common.storage import StorageAccess
 
@@ -44,10 +44,10 @@ logger = logging.getLogger(__name__)
 GCS_BUCKET = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 
-# Use GCS if we have the required configuration
+# Use cloud storage if we have the required configuration
 USE_CLOUD_STORAGE = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT and STORAGE_AVAILABLE)
 
-# Initialize GCS access layer if available
+# Initialize cloud storage access layer if available
 storage_access = None
 if USE_CLOUD_STORAGE:
     try:
@@ -66,21 +66,21 @@ if not USE_CLOUD_STORAGE:
 
 def _save_to_storage(blob_path: str, data_iterator: Iterator[dict]) -> str:
     """
-    Helper function to stream content to GCS using unified StorageAccess.
+    Helper function to stream content to cloud storage using unified StorageAccess.
 
     Args:
         blob_path: The path to save the blob to.
         data_iterator: Iterator yielding data to stream.
 
     Returns:
-        str: The full GCS path where the content was saved.
+        str: The full cloud storage path where the content was saved.
     """
     # Add bronze/svineflytning/{timestamp} prefix to all files
     full_path = f"bronze/svineflytning/{blob_path}"
     storage_path = f"{GCS_BUCKET}/{full_path}"
     fs_path = f"{GCS_BUCKET}/{full_path}"
 
-    # Create a streaming upload using gcsfs
+    # Create a streaming upload using s3fs
     with storage_access.fs.open(fs_path, "w", encoding="utf-8") as f:
         # Write opening bracket for JSON array
         f.write("[\n")
@@ -136,7 +136,7 @@ def export_movements(
     output_dir: str = "/data/raw/svineflytning",
 ) -> dict[str, Any]:
     """
-    Export pig movement data to either GCS or local storage using streaming.
+    Export pig movement data to either cloud storage or local storage using streaming.
 
     Args:
         data_iterator: Iterator yielding data to export
@@ -150,11 +150,11 @@ def export_movements(
     destination = None
     if USE_CLOUD_STORAGE:
         try:
-            logger.debug(f"Streaming data to GCS bucket '{GCS_BUCKET}'")
+            logger.debug(f"Streaming data to storage bucket '{GCS_BUCKET}'")
             destination = _save_to_storage(f"{export_timestamp}/{filename}", data_iterator)
-            logger.debug(f"Successfully exported to GCS: {destination}")
+            logger.debug(f"Successfully exported to cloud storage: {destination}")
         except Exception as e:
-            logger.error(f"Error writing to GCS: {e}")
+            logger.error(f"Error writing to cloud storage: {e}")
             logger.warning("Falling back to local storage")
             filepath = Path(output_dir) / export_timestamp / filename
             destination = _save_locally(filepath, data_iterator)
@@ -199,14 +199,14 @@ def export_movements_optimized(
 
     if USE_CLOUD_STORAGE:
         try:
-            logger.debug(f"Starting streaming upload to GCS bucket '{GCS_BUCKET}'")
+            logger.debug(f"Starting streaming upload to storage bucket '{GCS_BUCKET}'")
 
             storage_path = (
                 f"{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
             )
             fs_path = f"{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
 
-            # Stream directly to GCS using gcsfs
+            # Stream directly to cloud storage using s3fs
             with storage_access.fs.open(fs_path, "w", encoding="utf-8") as f:
                 f.write("[\n")
 
@@ -222,10 +222,10 @@ def export_movements_optimized(
                 f.write("\n]")
 
             destination = storage_path
-            logger.debug(f"Successfully exported to GCS: {destination}")
+            logger.debug(f"Successfully exported to cloud storage: {destination}")
 
         except Exception as e:
-            logger.error(f"Error writing to GCS: {e}")
+            logger.error(f"Error writing to cloud storage: {e}")
             logger.warning("Falling back to local storage")
 
             # Fallback to local storage

@@ -142,7 +142,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.execute(
                 f"SET max_temp_directory_size = '{self.config.max_temp_directory_size}'"
             )
-            # Ensure correct GCS region is set (may be reset by local config)
+            # Ensure correct cloud storage region is set (may be reset by local config)
             self.conn.execute("SET s3_region = 'europe-west1'")
 
             # CPU optimization - use all available cores
@@ -566,7 +566,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.register(table_name, silver_data[dataset])
             return True
 
-        # Load from GCS using direct download and load into our connection
+        # Load from cloud storage using direct download and load into our connection
         try:
             storage_path = self._get_latest_silver_path(dataset)
 
@@ -578,7 +578,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 """)
 
             count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            self.log.info(f"Loaded {dataset} from GCS into table {table_name} ({count:,} rows)")
+            self.log.info(
+                f"Loaded {dataset} from cloud storage into table {table_name} ({count:,} rows)"
+            )
             return True
         except FileNotFoundError:
             self.log.error(f"No silver data found for {dataset}")
@@ -821,7 +823,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self._create_year_table_optimized("temp_year_data", year, column_names)
 
             else:
-                # STREAMING: Load from GCS using temporary download and immediate processing
+                # STREAMING: Load from cloud storage using temporary download and immediate processing
                 try:
                     storage_path = self._get_latest_silver_path(dataset_name)
 
@@ -837,7 +839,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         self._create_year_table_from_file_optimized(temp_file, year, column_names)
 
                 except Exception as e:
-                    self.log.warning(f"Could not load {dataset_name} from GCS: {e}")
+                    self.log.warning(f"Could not load {dataset_name} from cloud storage: {e}")
                     return 0
 
             # Check if any data was loaded
@@ -1866,7 +1868,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 # Normal job: save to latest directory
                 output_path = f"{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
 
-            # Export directly from DuckDB table to GCS
+            # Export directly from DuckDB table to cloud storage
             self.storage.upload_from_duckdb_table(
                 "final_production_estimates",
                 output_path,

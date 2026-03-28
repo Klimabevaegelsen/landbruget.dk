@@ -130,7 +130,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
     1. Collects CVR numbers from all pipeline CVR collections
     2. Fetches CVR register data for each unique CVR number
     3. Processes and structures the data
-    4. Saves enriched data to GCS for consumption by other systems
+    4. Saves enriched data to cloud storage for consumption by other systems
     """
 
     def __init__(self, config: CVREnrichmentGoldConfig):
@@ -517,7 +517,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
     @timed(name="Saving enriched data")
     def _save_enriched_data(self, processed_data: dict[str, Any]) -> str:
         """
-        Save the processed CVR enrichment data to GCS using chunked processing.
+        Save the processed CVR enrichment data to cloud storage using chunked processing.
 
         Args:
             processed_data: Processed enrichment data
@@ -616,7 +616,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self._create_empty_tables(table_name)
             self.log.warning(f"Created empty table {table_name} - no company data to process")
 
-        # Save all tables to GCS
+        # Save all tables to cloud storage
         tables_to_save = [table_name]
         if companies_data:
             # Add the additional normalized tables

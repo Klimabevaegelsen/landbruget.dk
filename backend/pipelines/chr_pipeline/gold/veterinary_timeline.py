@@ -7,7 +7,7 @@ import duckdb
 
 from .config import GOLD_BASE_DIR
 
-# Try to import GCS utilities
+# Try to import cloud storage utilities
 try:
     from common.storage import StorageAccess
     from unified_pipeline.util.migration_helpers import migrate_save_data_pattern
@@ -755,11 +755,11 @@ def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> list[st
 
 def load_data_sources(storage_access: StorageAccess) -> dict[str, bool]:
     """
-    Load all available data sources dynamically using GCS patterns.
+    Load all available data sources dynamically using cloud storage patterns.
     Uses unified pipeline pattern: shared DuckDB connection with StorageAccess.
 
     Args:
-        storage_access: GCS access instance with shared DuckDB connection
+        storage_access: Cloud storage access instance with shared DuckDB connection
 
     Returns:
         Dict mapping table names to whether they were loaded successfully
@@ -786,7 +786,7 @@ def load_data_sources(storage_access: StorageAccess) -> dict[str, bool]:
 
     for table_name, pattern in data_source_patterns:
         try:
-            # Use GCS pattern matching to find files
+            # Use cloud storage pattern matching to find files
             full_pattern = f"{bucket}/{pattern}"
             files = storage_access.list_files(full_pattern)
 
@@ -1006,7 +1006,7 @@ def create_veterinary_timeline(
     Args:
         con: DuckDB connection
         pipeline_run_date: Pipeline run date for SPF-SU disease snapshots
-        storage_access: GCS access instance (optional)
+        storage_access: Cloud storage access instance (optional)
 
     Returns:
         True if successful, False otherwise
@@ -1014,9 +1014,9 @@ def create_veterinary_timeline(
     try:
         logger.info("🏗️ Creating comprehensive veterinary timeline...")
 
-        # Ensure we have GCS access
+        # Ensure we have cloud storage access
         if storage_access is None:
-            logger.error("❌ GCS access is required for data loading")
+            logger.error("❌ Cloud storage access is required for data loading")
             return False
 
         # Load all data sources dynamically (using shared connection)
@@ -1159,7 +1159,7 @@ def process_veterinary_timeline(
     Args:
         export_timestamp: Export timestamp for file naming
         gold_dir: Output directory for gold data (optional)
-        storage_access: GCS access instance (optional)
+        storage_access: Cloud storage access instance (optional)
         pipeline_run_date: Date for SPF-SU disease snapshots (optional)
 
     Returns:
@@ -1181,7 +1181,7 @@ def process_veterinary_timeline(
         # Initialize DuckDB connection
         con = duckdb.connect()
 
-        # Initialize GCS access with shared connection (unified pipeline pattern)
+        # Initialize cloud storage access with shared connection (unified pipeline pattern)
         if storage_access is None and STORAGE_AVAILABLE:
             storage_access = StorageAccess(connection=con)
 
@@ -1189,7 +1189,7 @@ def process_veterinary_timeline(
         success = create_veterinary_timeline(con, pipeline_run_date, storage_access)
 
         if success:
-            # Export tables using GCS pattern (tables are in storage_access.duckdb_conn)
+            # Export tables using cloud storage pattern (tables are in storage_access.duckdb_conn)
             if storage_access and migrate_save_data_pattern:
                 bucket = "landbruget-data"
                 # Use subdataset parameter to create separate filenames
@@ -1219,7 +1219,7 @@ def process_veterinary_timeline(
                     logger.info("ℹ️ No timeline_summary table to export")
             else:
                 # Fallback to local export
-                logger.warning("⚠️ GCS not available, exporting locally only")
+                logger.warning("⚠️ Cloud storage not available, exporting locally only")
                 # Local export logic would go here
 
             logger.info("✅ Veterinary timeline processing completed successfully")

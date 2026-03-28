@@ -5,7 +5,7 @@ from pathlib import Path
 
 import duckdb
 
-# Try to import GCS utilities
+# Try to import cloud storage utilities
 try:
     from common.storage import StorageAccess
     from unified_pipeline.util.migration_helpers import migrate_save_data_pattern
@@ -26,11 +26,11 @@ def setup_database(conn: duckdb.DuckDBPyConnection) -> None:
 
 def load_transportation_data_sources(storage_access) -> dict[str, bool]:
     """
-    Load all transportation data sources dynamically using GCS patterns.
+    Load all transportation data sources dynamically using cloud storage patterns.
     Uses unified pipeline pattern: shared DuckDB connection with StorageAccess.
 
     Args:
-        storage_access: GCS access instance with shared DuckDB connection
+        storage_access: Cloud storage access instance with shared DuckDB connection
 
     Returns:
         Dict mapping table names to whether they were loaded successfully
@@ -76,7 +76,7 @@ def load_transportation_data_sources(storage_access) -> dict[str, bool]:
 
     for table_name, pattern in data_source_patterns:
         try:
-            # Use GCS pattern matching to find files
+            # Use cloud storage pattern matching to find files
             full_pattern = f"{bucket}/{pattern}"
             files = storage_access.list_files(full_pattern)
 
@@ -1315,7 +1315,7 @@ def create_transportation_analysis(storage_access) -> bool:
     Create comprehensive transportation analysis combining all sources.
 
     Args:
-        storage_access: GCS access instance with shared DuckDB connection
+        storage_access: Cloud storage access instance with shared DuckDB connection
 
     Returns:
         True if successful, False otherwise
@@ -1326,7 +1326,7 @@ def create_transportation_analysis(storage_access) -> bool:
         # Setup database with spatial extension
         setup_database(storage_access.duckdb_conn)
 
-        # Load all data sources from GCS
+        # Load all data sources from cloud storage
         loaded_tables = load_transportation_data_sources(storage_access)
 
         # Log loaded tables
@@ -1375,7 +1375,7 @@ def process_transportation_analysis(
     Args:
         export_timestamp: Export timestamp for file naming
         gold_dir: Output directory for gold data (optional)
-        storage_access: GCS access instance (optional)
+        storage_access: Cloud storage access instance (optional)
 
     Returns:
         True if successful, False otherwise
@@ -1400,12 +1400,12 @@ def process_transportation_analysis(
         conn = duckdb.connect()
         setup_database(conn)
 
-        # Initialize GCS access with shared connection (unified pipeline pattern)
+        # Initialize cloud storage access with shared connection (unified pipeline pattern)
         if storage_access is None and STORAGE_AVAILABLE:
             storage_access = StorageAccess(connection=conn)
 
         if storage_access is None:
-            logger.error("❌ GCS access is required for data loading")
+            logger.error("❌ Cloud storage access is required for data loading")
             return False
 
         # Create transportation analysis using dynamic data loading
@@ -1424,7 +1424,7 @@ def process_transportation_analysis(
                 table_exists = False
 
             if table_exists:
-                # Export tables using GCS pattern (tables are in storage_access.duckdb_conn)
+                # Export tables using cloud storage pattern (tables are in storage_access.duckdb_conn)
                 if storage_access and migrate_save_data_pattern:
                     bucket = "landbruget-data"
                     # Use subdataset parameter to create separate filenames
@@ -1441,7 +1441,7 @@ def process_transportation_analysis(
                     logger.info("✅ Transportation analysis processing completed successfully")
                 else:
                     # Fallback to local export
-                    logger.warning("⚠️ GCS not available, exporting locally only")
+                    logger.warning("⚠️ Cloud storage not available, exporting locally only")
             else:
                 logger.info("✅ Transportation analysis skipped successfully - no data to export")
 

@@ -77,8 +77,8 @@ class IncrementalProcessor:
         Merge multiple parquet files into a single output file with deduplication.
 
         Args:
-            source_paths: List of GCS paths to parquet files to merge
-            output_path: GCS path for the merged output file
+            source_paths: List of storage paths to parquet files to merge
+            output_path: storage path for the merged output file
             deduplication_columns: Columns to use for deduplication (if None, no deduplication)
             partition_columns: Columns to partition by (optional)
 
@@ -485,8 +485,8 @@ def merge_chr_parquet_files(
     Convenience function to merge CHR parquet files with standard deduplication.
 
     Args:
-        source_paths: List of GCS paths to CHR parquet files
-        output_path: GCS path for merged output
+        source_paths: List of storage paths to CHR parquet files
+        output_path: storage path for merged output
         remove_duplicates: Whether to deduplicate based on CHR number and date
 
     Returns:
@@ -508,8 +508,8 @@ def merge_vetstat_parquet_files(
     Convenience function to merge VetStat parquet files with standard deduplication.
 
     Args:
-        source_paths: List of GCS paths to VetStat parquet files
-        output_path: GCS path for merged output
+        source_paths: List of storage paths to VetStat parquet files
+        output_path: storage path for merged output
         remove_duplicates: Whether to deduplicate based on CHR number and product
 
     Returns:

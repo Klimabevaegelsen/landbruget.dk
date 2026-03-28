@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class FieldAreaAnalysisConfig(BaseModel):
     """Shared configuration across all pipeline stages."""
 
-    # GCS Configuration
+    # Cloud Storage Configuration
     bucket: str = (
         os.getenv("STORAGE_BUCKET")
         or os.getenv("R2_BUCKET")

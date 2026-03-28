@@ -263,7 +263,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
             self.conn.execute(batch_query)
 
-            # Stream this batch to GCS immediately to avoid memory accumulation
+            # Stream this batch to cloud storage immediately to avoid memory accumulation
             batch_intersections = self.conn.execute(
                 "SELECT COUNT(*) FROM batch_intersections"
             ).fetchone()[0]
@@ -275,7 +275,9 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 self.storage.export_table_to_storage_direct(
                     "batch_intersections", batch_storage_path
                 )
-                self.log.info(f"  📤 Streamed {batch_intersections:,} intersections to GCS")
+                self.log.info(
+                    f"  📤 Streamed {batch_intersections:,} intersections to cloud storage"
+                )
 
             # Log batch progress
             batch_stats = self.conn.execute("""

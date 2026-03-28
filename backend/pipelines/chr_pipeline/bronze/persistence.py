@@ -6,7 +6,7 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-# Import GCS access for persistent storage
+# Import cloud storage access for persistent storage
 try:
     from common.storage import StorageAccess
 
@@ -27,7 +27,7 @@ _PROBLEMATIC_HERDS_LOADED = False
 
 
 def _load_problematic_herds() -> None:
-    """Load problematic herds from persistent storage (GCS)."""
+    """Load problematic herds from persistent storage (cloud storage)."""
     global _PROBLEMATIC_HERDS, _PROBLEMATIC_HERDS_LOADED
 
     if _PROBLEMATIC_HERDS_LOADED:
@@ -35,7 +35,7 @@ def _load_problematic_herds() -> None:
 
     if STORAGE_AVAILABLE:
         try:
-            gcs = StorageAccess()
+            storage = StorageAccess()
             bucket_name = (
                 os.getenv("STORAGE_BUCKET")
                 or os.getenv("R2_BUCKET")
@@ -45,32 +45,38 @@ def _load_problematic_herds() -> None:
             storage_path = f"{bucket_name}/{problematic_herds_path}"
 
             try:
-                data = gcs.download_json(storage_path)
+                data = storage.download_json(storage_path)
                 if data and "problematic_herds" in data:
                     _PROBLEMATIC_HERDS.update(data["problematic_herds"])
-                    logger.info(f"Loaded {len(_PROBLEMATIC_HERDS)} problematic herds from GCS")
+                    logger.info(
+                        f"Loaded {len(_PROBLEMATIC_HERDS)} problematic herds from cloud storage"
+                    )
                 else:
-                    logger.info("No problematic herds found in GCS - starting with empty set")
+                    logger.info(
+                        "No problematic herds found in cloud storage - starting with empty set"
+                    )
             except Exception as e:
-                logger.debug(f"Could not load problematic herds from GCS: {e}")
+                logger.debug(f"Could not load problematic herds from cloud storage: {e}")
                 # This is expected on first run or if file doesn't exist
 
         except Exception as e:
-            logger.debug(f"Failed to access GCS: {e}")
+            logger.debug(f"Failed to access cloud storage: {e}")
     else:
-        logger.debug("GCS access not available - problematic herds will not persist across runs")
+        logger.debug(
+            "Cloud storage access not available - problematic herds will not persist across runs"
+        )
 
     _PROBLEMATIC_HERDS_LOADED = True
 
 
 def _save_problematic_herds() -> None:
-    """Save problematic herds to persistent storage (GCS)."""
+    """Save problematic herds to persistent storage (cloud storage)."""
     if not _PROBLEMATIC_HERDS:
         return
 
     if STORAGE_AVAILABLE:
         try:
-            gcs = StorageAccess()
+            storage = StorageAccess()
             bucket_name = (
                 os.getenv("STORAGE_BUCKET")
                 or os.getenv("R2_BUCKET")
@@ -85,13 +91,13 @@ def _save_problematic_herds() -> None:
                 "total_count": len(_PROBLEMATIC_HERDS),
             }
 
-            gcs.upload_json(data, storage_path)
-            logger.info(f"Saved {len(_PROBLEMATIC_HERDS)} problematic herds to GCS")
+            storage.upload_json(data, storage_path)
+            logger.info(f"Saved {len(_PROBLEMATIC_HERDS)} problematic herds to cloud storage")
 
         except Exception as e:
-            logger.warning(f"Could not save problematic herds to GCS: {e}")
+            logger.warning(f"Could not save problematic herds to cloud storage: {e}")
     else:
-        logger.debug("GCS access not available - cannot save problematic herds")
+        logger.debug("Cloud storage access not available - cannot save problematic herds")
 
 
 def add_problematic_herd(herd_number: int) -> None:

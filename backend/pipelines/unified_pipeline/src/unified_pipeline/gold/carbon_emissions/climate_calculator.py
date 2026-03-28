@@ -5,7 +5,7 @@ This module orchestrates all emission calculations for farm climate impact asses
 It integrates cattle, field, and other emission sources using existing formula modules.
 
 Data Flow:
-1. data_loader.py → Fetch raw data from GCS (Danish schema)
+1. data_loader.py → Fetch raw data from cloud storage (Danish schema)
 2. data_transformer.py → Transform to structured objects (LivestockSummary, FieldSummary, FertilizerSummary)
 3. climate_calculator.py (this file) → Convert to formula module inputs → Calculate emissions
 """
@@ -140,7 +140,7 @@ class FarmClimateCalculator:
         Initialize calculator with data loader.
 
         Args:
-            data_loader: ClimateDataLoader instance that loads farm data from GCS
+            data_loader: ClimateDataLoader instance that loads farm data from cloud storage
         """
         self.data_loader = data_loader
 
@@ -157,7 +157,7 @@ class FarmClimateCalculator:
         """
         logger.info(f"Calculating emissions for CVR {cvr}, year {year}")
 
-        # 1. Load raw data from GCS
+        # 1. Load raw data from cloud storage
         livestock_df = self.data_loader.load_livestock(cvr, year)
         field_df = self.data_loader.load_fields(cvr, year)
         fertilizer_df = self.data_loader.load_fertilizer(cvr, year)
@@ -931,7 +931,7 @@ if __name__ == "__main__":
     Example demonstrating the complete climate calculation workflow.
 
     Prerequisites:
-    - GCS bucket with Danish agricultural data
+    - storage bucket with Danish agricultural data
     - Credentials configured in backend/.env
     - data_loader.py and data_transformer.py modules
     """
@@ -948,7 +948,7 @@ if __name__ == "__main__":
     # Configure logging
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    # Initialize loader with GCS credentials
+    # Initialize loader with cloud storage credentials
     loader = ClimateDataLoader()
 
     # Initialize calculator

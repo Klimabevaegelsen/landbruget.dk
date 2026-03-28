@@ -16,7 +16,7 @@ from zeep.helpers import serialize_object
 # Add backend directory to path BEFORE any common imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-# Import the unified GCS access layer
+# Import the unified cloud storage access layer
 try:
     from common.storage import StorageAccess
 
@@ -54,14 +54,14 @@ logger.info(
     f"STORAGE_AVAILABLE: {STORAGE_AVAILABLE}, USE_CLOUD_STORAGE: {USE_CLOUD_STORAGE}"
 )
 
-# Initialize GCS access layer if available
+# Initialize cloud storage access layer if available
 storage_access = None
 if USE_CLOUD_STORAGE:
     try:
         logger.info("Attempting to initialize StorageAccess...")
         storage_access = StorageAccess()
         logger.info(
-            f"Successfully initialized StorageAccess. Using GCS storage with bucket: {GCS_BUCKET}"
+            f"Successfully initialized StorageAccess. Using cloud storage with bucket: {GCS_BUCKET}"
         )
     except Exception as e:
         logger.error(f"Failed to initialize StorageAccess: {e}", exc_info=True)
@@ -113,7 +113,7 @@ if METADATA_AVAILABLE:
 
 def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -> bool:
     """
-    Save data immediately to GCS without buffering - fixes parallel processing issues.
+    Save data immediately to cloud storage without buffering - fixes parallel processing issues.
 
     This replaces the broken save_raw_data + finalize_export pattern that doesn't work
     with parallel GitHub Actions jobs. Each job now saves its data immediately.
@@ -128,7 +128,7 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
     """
     try:
         if not USE_CLOUD_STORAGE:
-            logger.warning("GCS not available - cannot save data immediately")
+            logger.warning("Cloud storage not available - cannot save data immediately")
             return False
 
         # Determine file format based on data type
@@ -146,7 +146,7 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
                 content = json.dumps(data, indent=2, default=str)
             content_type = "application/json"
 
-        # Save directly to GCS using unified StorageAccess
+        # Save directly to cloud storage using unified StorageAccess
         blob_path = f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}"
         storage_path = f"{GCS_BUCKET}/{blob_path}"
 
@@ -183,7 +183,7 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
                     file_size_bytes=len(str(data).encode("utf-8")) if data else None,
                 )
 
-                # Use unified GCS upload method
+                # Use unified cloud storage upload method
                 metadata_blob_path = blob_path.replace(".json", "_metadata.json").replace(
                     ".xml", "_metadata.json"
                 )
@@ -262,7 +262,7 @@ def _serialize_data(data: Any) -> str | None:
 
 
 def _save_to_storage(blob_path: str, content: str, format_type: str):
-    """Helper function to save content to GCS using unified StorageAccess."""
+    """Helper function to save content to cloud storage using unified StorageAccess."""
     # Add bronze/chr/{timestamp_with_suffixes} prefix to all files
     bronze_dir = get_bronze_directory_path()
     # Use bare bucket/path format since fs.open() expects raw S3/R2 paths
@@ -324,7 +324,7 @@ def finalize_export(clear_buffer: bool = True):
         logger.warning("No data buffered for export.")
         return
 
-    storage_mode = "GCS (GitHub Actions)" if USE_CLOUD_STORAGE else "local filesystem"
+    storage_mode = "cloud storage (GitHub Actions)" if USE_CLOUD_STORAGE else "local filesystem"
     logger.info(f"Starting export using {storage_mode}")
 
     # Check if we're in a memory-constrained environment (like GitHub Actions)
@@ -357,7 +357,7 @@ def finalize_export(clear_buffer: bool = True):
                         _save_to_storage_streaming(filename, json_data_list)
                         total_files += 1
                     except Exception as e:
-                        logger.error(f"Error in streaming GCS export for {filename}: {e}")
+                        logger.error(f"Error in streaming cloud storage export for {filename}: {e}")
                         failed_files.append(filename)
                 else:
                     filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
@@ -372,13 +372,13 @@ def finalize_export(clear_buffer: bool = True):
                 if USE_CLOUD_STORAGE:
                     try:
                         logger.info(
-                            f"Writing {data_count} records to GCS bucket '{GCS_BUCKET}': {filename}"
+                            f"Writing {data_count} records to storage bucket '{GCS_BUCKET}': {filename}"
                         )
                         json_content = json.dumps(json_data_list, indent=2, default=str)
                         _save_to_storage(filename, json_content, "json")
                         total_files += 1
                     except Exception as e:
-                        logger.error(f"Error writing JSON to GCS {filename}: {e}")
+                        logger.error(f"Error writing JSON to cloud storage {filename}: {e}")
                         failed_files.append(filename)
                 else:
                     filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
@@ -401,12 +401,12 @@ def finalize_export(clear_buffer: bool = True):
             if USE_CLOUD_STORAGE:
                 try:
                     logger.info(
-                        f"Writing {len(xml_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}"
+                        f"Writing {len(xml_data_list)} records to storage bucket '{GCS_BUCKET}': {filename}"
                     )
                     _save_to_storage(filename, full_xml_content, "xml")
                     total_files += 1
                 except Exception as e:
-                    logger.error(f"Error writing XML to GCS {filename}: {e}")
+                    logger.error(f"Error writing XML to cloud storage {filename}: {e}")
                     failed_files.append(filename)
             else:
                 filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
@@ -457,10 +457,10 @@ def finalize_export(clear_buffer: bool = True):
 
 
 def _save_to_storage_streaming(filename: str, data_list: list[Any], path_suffix: str = ""):
-    """Save large datasets to GCS using streaming via unified StorageAccess.
+    """Save large datasets to cloud storage using streaming via unified StorageAccess.
 
     Args:
-        filename: Target filename in GCS
+        filename: Target filename in cloud storage
         data_list: List of data items to save
         path_suffix: Optional suffix to add to the bronze directory path (for matrix job separation)
     """
@@ -477,7 +477,7 @@ def _save_to_storage_streaming(filename: str, data_list: list[Any], path_suffix:
 
     estimated_size_mb = sys.getsizeof(data_list) / (1024 * 1024)
     logger.info(
-        f"Starting streaming upload to GCS for {filename} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
+        f"Starting streaming upload to cloud storage for {filename} ({len(data_list)} records, ~{estimated_size_mb:.1f}MB)"
     )
 
     try:
@@ -514,9 +514,9 @@ def _save_to_storage_streaming(filename: str, data_list: list[Any], path_suffix:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
-        logger.info(f"Completed streaming upload to GCS for {filename}")
+        logger.info(f"Completed streaming upload to cloud storage for {filename}")
 
-        # Create and upload metadata using unified GCS access
+        # Create and upload metadata using unified cloud storage access
         if _metadata_manager:
             try:
                 metadata = _metadata_manager.create_metadata(
@@ -545,7 +545,7 @@ def _save_to_storage_streaming(filename: str, data_list: list[Any], path_suffix:
             logger.debug(f"Forced garbage collection after {estimated_size_mb:.1f}MB upload")
 
     except Exception as e:
-        logger.error(f"Error during streaming upload to GCS for {filename}: {e}")
+        logger.error(f"Error during streaming upload to cloud storage for {filename}: {e}")
         raise
 
 

@@ -8,7 +8,7 @@ from typing import Any
 from dotenv import load_dotenv
 from zeep import Client
 
-# Import GCS access for persistent storage
+# Import cloud storage access for persistent storage
 try:
     from common.storage import StorageAccess
 
@@ -29,7 +29,7 @@ _HIGH_VOLUME_HERDS_LOADED = False
 
 
 def _load_high_volume_herds() -> None:
-    """Load high-volume herds configuration from GCS."""
+    """Load high-volume herds configuration from cloud storage."""
     global _HIGH_VOLUME_HERDS, _HIGH_VOLUME_HERDS_LOADED
 
     if _HIGH_VOLUME_HERDS_LOADED:
@@ -47,9 +47,11 @@ def _load_high_volume_herds() -> None:
 
             if gcs_data_access.file_exists(config_path):
                 _HIGH_VOLUME_HERDS = gcs_data_access.download_json(config_path)
-                logger.info(f"Loaded {len(_HIGH_VOLUME_HERDS)} high-volume herds from GCS")
+                logger.info(
+                    f"Loaded {len(_HIGH_VOLUME_HERDS)} high-volume herds from cloud storage"
+                )
             else:
-                logger.info("No high-volume herds config found in GCS, creating default")
+                logger.info("No high-volume herds config found in cloud storage, creating default")
                 _HIGH_VOLUME_HERDS = {}
 
             # Initialize known problematic herds if not already configured
@@ -60,7 +62,7 @@ def _load_high_volume_herds() -> None:
             _HIGH_VOLUME_HERDS = {}
             _initialize_known_high_volume_herds()
     else:
-        logger.debug("GCS access not available - using empty high-volume herds dict")
+        logger.debug("Cloud storage access not available - using empty high-volume herds dict")
         _HIGH_VOLUME_HERDS = {}
         _initialize_known_high_volume_herds()
 
@@ -94,7 +96,7 @@ def _initialize_known_high_volume_herds() -> None:
 
 
 def _save_high_volume_herds() -> None:
-    """Save high-volume herds configuration to GCS."""
+    """Save high-volume herds configuration to cloud storage."""
     if STORAGE_AVAILABLE:
         try:
             gcs_data_access = StorageAccess()
@@ -106,12 +108,14 @@ def _save_high_volume_herds() -> None:
             config_path = f"{bucket_name}/bronze/chr/config/high_volume_herds.json"
 
             gcs_data_access.upload_json(_HIGH_VOLUME_HERDS, config_path)
-            logger.info(f"Saved {len(_HIGH_VOLUME_HERDS)} high-volume herd configurations to GCS")
+            logger.info(
+                f"Saved {len(_HIGH_VOLUME_HERDS)} high-volume herd configurations to cloud storage"
+            )
 
         except Exception as e:
-            logger.warning(f"Failed to save high-volume herds config to GCS: {e}")
+            logger.warning(f"Failed to save high-volume herds config to cloud storage: {e}")
     else:
-        logger.debug("GCS access not available - cannot save high-volume herds config")
+        logger.debug("Cloud storage access not available - cannot save high-volume herds config")
 
 
 def add_high_volume_herd(

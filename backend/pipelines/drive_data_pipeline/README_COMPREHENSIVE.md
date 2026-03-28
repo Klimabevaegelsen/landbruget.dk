@@ -223,7 +223,7 @@ GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
 
 # Storage configuration
 STORAGE_TYPE=gcs  # or 'local'
-GCS_BUCKET=landbruget-data
+STORAGE_BUCKET=landbruget-data
 
 # Processing configuration
 MAX_WORKERS=4

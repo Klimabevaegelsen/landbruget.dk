@@ -55,7 +55,7 @@ except ImportError as e:
 
 def download_bronze_data_from_storage(bronze_dir_override: str, local_bronze_dir: Path) -> bool:
     """
-    Download bronze data from GCS to local filesystem for silver processing.
+    Download bronze data from cloud storage to local filesystem for silver processing.
 
     Args:
         bronze_dir_override: The timestamp folder name (e.g., "20250713_125139")
@@ -65,7 +65,7 @@ def download_bronze_data_from_storage(bronze_dir_override: str, local_bronze_dir
         True if download successful, False otherwise
     """
     if not CVR_COLLECTION_AVAILABLE or StorageAccess is None:
-        logging.error("GCS utilities not available - cannot download bronze data")
+        logging.error("Cloud storage utilities not available - cannot download bronze data")
         return False
 
     bucket_name = (
@@ -74,7 +74,7 @@ def download_bronze_data_from_storage(bronze_dir_override: str, local_bronze_dir
         or os.getenv("GCS_BUCKET", "landbruget-data")
     )
     if not bucket_name:
-        logging.error("GCS_BUCKET not set - cannot download bronze data")
+        logging.error("Storage bucket not set - cannot download bronze data")
         return False
 
     try:
@@ -112,7 +112,7 @@ def download_bronze_data_from_storage(bronze_dir_override: str, local_bronze_dir
                     ):
                         shutil.copyfileobj(src, dst)
 
-                    logging.info(f"Downloaded {filename} from GCS")
+                    logging.info("Downloaded from cloud storage")
                     downloaded_count += 1
                 else:
                     # Handle optional files
@@ -122,9 +122,11 @@ def download_bronze_data_from_storage(bronze_dir_override: str, local_bronze_dir
                         "chr_dyr_movement_summaries.json",
                     ]
                     if filename in optional_files:
-                        logging.info(f"Optional file {filename} not found in GCS - skipping")
+                        logging.info(
+                            f"Optional file {filename} not found in cloud storage - skipping"
+                        )
                     else:
-                        logging.warning(f"Required file {filename} not found in GCS")
+                        logging.warning(f"Required file {filename} not found in cloud storage")
 
             except Exception as e:
                 logging.error(f"Failed to download {filename}: {e}")
@@ -133,13 +135,13 @@ def download_bronze_data_from_storage(bronze_dir_override: str, local_bronze_dir
         # ejendom_oplysninger, ejendom_vet_events, spf_su_herds, stamdata_species_usage (7 files)
         # Optional files: chr_dyr_movement_summaries, vetstat_antibiotics.xml, vetstat_antibiotics.json
         if downloaded_count >= 7:  # At least the required files (excluding optional files)
-            logging.info(f"Successfully downloaded {downloaded_count} files from GCS")
+            logging.info(f"Successfully downloaded {downloaded_count} files from cloud storage")
             return True
         logging.error(f"Only downloaded {downloaded_count} files - insufficient for processing")
         return False
 
     except Exception as e:
-        logging.error(f"Failed to download bronze data from GCS: {e}")
+        logging.error(f"Failed to download bronze data from cloud storage: {e}")
         return False
 
 
@@ -236,7 +238,7 @@ def _save_discovered_cvr_numbers(
         unique_cvr_numbers = sorted(set(all_cvr_numbers))
 
         if unique_cvr_numbers:
-            # Initialize GCS access and save CVR numbers
+            # Initialize cloud storage access and save CVR numbers
             storage_access = StorageAccess()
 
             storage_path = save_pipeline_cvr_numbers(
@@ -261,9 +263,9 @@ def process_chr_data_streaming(
     export_timestamp: str | None = None,
 ) -> bool:
     """
-    Memory-efficient CHR silver processing using streaming GCS access.
+    Memory-efficient CHR silver processing using streaming cloud storage access.
 
-    This function processes CHR bronze data directly from GCS without loading
+    This function processes CHR bronze data directly from cloud storage without loading
     everything into memory, significantly reducing memory usage and eliminating
     the risk of OOM errors on large datasets.
 
@@ -286,27 +288,27 @@ def process_chr_data_streaming(
         export_timestamp = bronze_timestamp
         logging.info(f"Using bronze timestamp as export timestamp: {export_timestamp}")
 
-    # Get GCS bucket from environment
+    # Get storage bucket from environment
     bucket_name = (
         os.getenv("STORAGE_BUCKET")
         or os.getenv("R2_BUCKET")
         or os.getenv("GCS_BUCKET", "landbruget-data")
     )
     if not bucket_name:
-        logging.error("GCS_BUCKET environment variable not set")
+        logging.error("Storage bucket environment variable not set")
         return False
 
-    # Check if GCS utilities are available
+    # Check if cloud storage utilities are available
     if not CVR_COLLECTION_AVAILABLE or StorageAccess is None:
-        logging.error("GCS utilities not available - cannot process data")
+        logging.error("Cloud storage utilities not available - cannot process data")
         return False
 
     try:
-        # Initialize GCS access with DuckDB connection
+        # Initialize cloud storage access with DuckDB connection
         storage_access = StorageAccess()
         con = storage_access.duckdb_conn
 
-        logging.info("Initialized GCS access with DuckDB connection")
+        logging.info("Initialized cloud storage access with DuckDB connection")
 
         # Define datasets to process in order
         datasets_config = {
@@ -510,7 +512,7 @@ def process_chr_data_streaming(
                 # Single file processing - check both base directory and CHR-group-suffixed directories
                 storage_path = f"{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
 
-                # Check if file exists in base GCS directory
+                # Check if file exists in base cloud storage directory
                 file_found = storage_access.file_exists(storage_path)
 
                 # If not found in base directory, search CHR-group-suffixed directories (for ejendom etc.)
@@ -565,7 +567,7 @@ def process_chr_data_streaming(
                     file_extension = dataset_info["file"].split(".")[-1].lower()
 
                     if file_extension == "parquet":
-                        # Download parquet file to temp location (DuckDB can't read directly from GCS)
+                        # Download parquet file to temp location (DuckDB can't read directly from cloud storage)
                         logging.info(f"Loading parquet file via temp download: {storage_path}")
                         with tempfile.NamedTemporaryFile(
                             suffix=".parquet", delete=False
@@ -1008,15 +1010,15 @@ def process_chr_data_streaming(
         except Exception as e:
             logging.warning(f"Failed to save CVR numbers: {e}")
 
-        # Upload silver data to GCS
+        # Upload silver data to cloud storage
         try:
             upload_success = upload_silver_data_to_storage(silver_dir, export_timestamp)
             if upload_success:
-                logging.info("Silver data uploaded to GCS successfully")
+                logging.info("Silver data uploaded to cloud storage successfully")
             else:
-                logging.warning("Silver data upload to GCS failed or was skipped")
+                logging.warning("Silver data upload to cloud storage failed or was skipped")
         except Exception as e:
-            logging.error(f"Error during silver data upload to GCS: {e}")
+            logging.error(f"Error during silver data upload to cloud storage: {e}")
 
         # Cleanup DuckDB tables to free memory
         try:
@@ -1069,7 +1071,7 @@ def process_chr_data(
     # Create silver directory if it doesn't exist
     silver_dir.mkdir(parents=True, exist_ok=True)
 
-    # Ensure we have an export timestamp for GCS upload
+    # Ensure we have an export timestamp for cloud storage upload
     if export_timestamp is None:
         export_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         logging.info(f"Generated export timestamp: {export_timestamp}")
@@ -1808,15 +1810,15 @@ def process_chr_data(
     else:
         logging.warning("Schema documentation disabled due to import error")
 
-    # --- 14. Upload Silver Data to GCS ---
+    # --- 14. Upload Silver Data to Cloud Storage ---
     try:
         upload_success = upload_silver_data_to_storage(silver_dir, export_timestamp)
         if upload_success:
-            logging.info("Silver data uploaded to GCS successfully")
+            logging.info("Silver data uploaded to cloud storage successfully")
         else:
-            logging.warning("Silver data upload to GCS failed or was skipped")
+            logging.warning("Silver data upload to cloud storage failed or was skipped")
     except Exception as e:
-        logging.error(f"Error during silver data upload to GCS: {e}")
+        logging.error(f"Error during silver data upload to cloud storage: {e}")
 
     # --- 15. Cleanup Intermediate Files ---
     if vetstat_antibiotics_jsonl_path and vetstat_antibiotics_jsonl_path.exists():

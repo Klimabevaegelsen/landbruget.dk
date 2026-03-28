@@ -53,7 +53,7 @@ class BaseJobConfig(BaseModel):
         >>>     output_bucket: str
     """
 
-    # Option to save data locally without uploading to GCS
+    # Option to save data locally without uploading to cloud storage
     save_local: bool = False
 
     # Dev mode options for schema generation
@@ -186,15 +186,15 @@ class BaseSource(Generic[T], ABC):
 
     This class defines the common interface and shared functionality that
     all data sources must implement. It handles configuration management,
-    logging, and access to GCS utilities.
+    logging, and access to cloud storage utilities.
 
     Type parameter:
         T: Configuration type that extends BaseJobConfig
 
     Attributes:
         config: Source-specific configuration object
-        storage_access: Unified GCS and DuckDB access layer
-        storage_access: High-performance GCS data access layer (new)
+        storage_access: Unified cloud storage and DuckDB access layer
+        storage_access: High-performance cloud storage data access layer (new)
         log: Logger instance for this source
     """
 
@@ -212,7 +212,7 @@ class BaseSource(Generic[T], ABC):
         self.conn = duckdb.connect(database=":memory:")
         self._configure_duckdb()
 
-        # Create GCS access layer with shared connection
+        # Create cloud storage access layer with shared connection
         self.storage = StorageAccess(connection=self.conn)
 
         # Initialize pipeline metadata manager (pipeline-level data tracing)
@@ -265,7 +265,7 @@ class BaseSource(Generic[T], ABC):
             data: Table name (str) or data structure to save
             dataset: Primary dataset name
             source_key: Key from DATA_SOURCE_REGISTRY for metadata
-            bucket: GCS bucket name (optional, uses config if not provided)
+            bucket: Storage bucket name (optional, uses config if not provided)
             stage: Pipeline stage (bronze/silver/gold)
             subdataset: Optional subdataset name for multi-table outputs
             conn: Optional DuckDB connection (deprecated - uses shared connection)
@@ -330,7 +330,7 @@ class BaseSource(Generic[T], ABC):
 
                 self.log.info(f"✅ Pipeline metadata saved to {metadata_file_path}")
 
-                # If using GCS, also upload the metadata file
+                # If using cloud storage, also upload the metadata file
                 if not self.config.save_local:
                     try:
                         metadata_storage_path = (
@@ -342,10 +342,10 @@ class BaseSource(Generic[T], ABC):
 
                         self.storage.upload_json_string(metadata_json_string, metadata_storage_path)
                         self.log.info(
-                            f"✅ Pipeline metadata uploaded to GCS: {metadata_storage_path}"
+                            f"✅ Pipeline metadata uploaded to cloud storage: {metadata_storage_path}"
                         )
                     except Exception as e:
-                        self.log.warning(f"⚠️  Failed to upload metadata to GCS: {e}")
+                        self.log.warning(f"⚠️  Failed to upload metadata to cloud storage: {e}")
 
             except Exception as e:
                 self.log.error(f"❌ Failed to create pipeline metadata: {e}")
@@ -643,7 +643,7 @@ class BaseSource(Generic[T], ABC):
         filename: str | None = None,
     ) -> None:
         """
-        Save data using unified GCS access layer.
+        Save data using unified cloud storage access layer.
 
         ✅ MIGRATION: Now uses StorageAccess for optimal performance with shared connection.
         Eliminates temporary file overhead and provides 18x performance improvement.
@@ -651,7 +651,7 @@ class BaseSource(Generic[T], ABC):
         Args:
             data: Table name (str) or data structure to save
             dataset: Primary dataset name
-            bucket: GCS bucket name
+            bucket: Storage bucket name
             stage: Pipeline stage (bronze/silver/gold)
             subdataset: Optional subdataset name for multi-table outputs
             conn: Optional DuckDB connection (deprecated - uses shared connection)
@@ -683,7 +683,7 @@ class BaseSource(Generic[T], ABC):
                 raise ValueError(f"Unsupported data type for local save: {type(data)}")
             self.log.info(f"✅ Saved locally: {local_path}")
         else:
-            # ✅ MIGRATION: Save to GCS using optimized unified access
+            # ✅ MIGRATION: Save to cloud storage using optimized unified access
             storage_path = f"{bucket}/{path}"
             if isinstance(data, str):  # Table name
                 self.storage.upload_from_duckdb_table(data, storage_path)
@@ -691,7 +691,7 @@ class BaseSource(Generic[T], ABC):
                 self.storage.upload_json(data, storage_path)
             else:
                 raise ValueError(f"Unsupported data type: {type(data)}")
-            self.log.info(f"✅ Saved to GCS: {storage_path}")
+            self.log.info(f"✅ Saved to cloud storage: {storage_path}")
 
     def _read_silver_data(self, dataset: str) -> Any | None:
         """Read data from silver layer for gold processing."""
@@ -710,7 +710,7 @@ class BaseSource(Generic[T], ABC):
                 self.log.warning(f"No files found for {stage}/{dataset} at {prefix}")
                 return None
 
-            # Get the most recent file by sorting GCS paths (timestamps are in path)
+            # Get the most recent file by sorting storage paths (timestamps are in path)
             latest_file_path = sorted(files, reverse=True)[0]
             latest_file_name = latest_file_path.replace(f"{bucket}/", "")
             self.log.info(f"Reading latest {stage} data: {latest_file_path}")
@@ -735,7 +735,7 @@ class BaseSource(Generic[T], ABC):
                 return table_name
 
             if latest_file_path.endswith(".json"):
-                # ✅ MIGRATION: Use unified GCS access for JSON downloads
+                # ✅ MIGRATION: Use unified cloud storage access for JSON downloads
                 storage_path = latest_file_path
                 return self.storage.download_json(storage_path)
             self.log.error(f"Unsupported file type: {latest_file_path}")
@@ -758,7 +758,7 @@ class BaseSource(Generic[T], ABC):
 
         Args:
             dataset: The name of the dataset to read
-            bucket_name: The name of the GCS bucket
+            bucket_name: The name of the storage bucket
             bronze_data: Optional in-memory data from bronze stage
 
         Returns:
@@ -840,7 +840,7 @@ class BaseSource(Generic[T], ABC):
 
         Args:
             dataset: The name of the dataset to read
-            bucket_name: The name of the GCS bucket
+            bucket_name: The name of the storage bucket
 
         Returns:
             Optional[str]: A table name containing the bronze layer data,
@@ -921,21 +921,21 @@ class BaseSource(Generic[T], ABC):
 
             self.log.error(f"No data files found in {latest_dir_path}")
             return None
-        # Read from GCS - find latest timestamped directory
+        # Read from cloud storage - find latest timestamped directory
         bronze_prefix = f"{bucket_name}/bronze/{dataset}/*/*"
         try:
             files = self.storage.list_files(bronze_prefix)
             if not files:
-                self.log.error(f"No bronze data found in GCS at {bronze_prefix}")
+                self.log.error(f"No bronze data found in cloud storage at {bronze_prefix}")
                 return None
 
             # Find the latest file by sorting the path (contains timestamp)
             latest_file_path = sorted(files, reverse=True)[0]
 
-            self.log.info(f"Reading bronze data from GCS: {latest_file_path}")
+            self.log.info(f"Reading bronze data from cloud storage: {latest_file_path}")
 
             if latest_file_path.endswith(".parquet"):
-                # ✅ MIGRATION: Use modern GCS access with shared self.storage
+                # ✅ MIGRATION: Use modern cloud storage access with shared self.storage
                 storage_path = latest_file_path
 
                 # Use the optimized temp download with base class DuckDB connection
@@ -993,7 +993,7 @@ class BaseSource(Generic[T], ABC):
                 return None
 
         except Exception as e:
-            self.log.error(f"Failed to read bronze data from GCS: {e}")
+            self.log.error(f"Failed to read bronze data from cloud storage: {e}")
             return None
 
     # Legacy methods - keeping for backward compatibility during transition
@@ -1196,7 +1196,7 @@ class BaseSource(Generic[T], ABC):
 
     def list_available_schemas(self) -> dict[str, Any]:
         """
-        List all available schemas in the local schemas directory and GCS.
+        List all available schemas in the local schemas directory and cloud storage.
 
         Returns:
             Dictionary with information about available schemas
@@ -1222,7 +1222,7 @@ class BaseSource(Generic[T], ABC):
                                 }
                             )
 
-        # Check GCS schemas if not in local-only mode
+        # Check cloud storage schemas if not in local-only mode
         if not self.config.save_local:
             try:
                 for stage in ["bronze", "silver", "gold"]:
@@ -1243,7 +1243,7 @@ class BaseSource(Generic[T], ABC):
                                     }
                                 )
             except Exception as e:
-                self.log.warning(f"Could not list GCS schemas: {e}")
+                self.log.warning(f"Could not list cloud storage schemas: {e}")
 
         schemas_info["available_datasets"] = list(schemas_info["available_datasets"])
         return schemas_info
@@ -1325,21 +1325,21 @@ class BaseSource(Generic[T], ABC):
 
     def save_data_direct(self, table_name: str, dataset: str, bucket: str, stage: str) -> str:
         """
-        ✅ OPTIMIZED: Save DuckDB table directly to GCS without DataFrame conversion.
+        ✅ OPTIMIZED: Save DuckDB table directly to cloud storage without DataFrame conversion.
 
         This method provides maximum performance by:
         - Avoiding DataFrame conversion bottleneck (2-3x faster)
         - Using optimized Parquet export settings
-        - Direct streaming to GCS with gcsfs
+        - Direct streaming to cloud storage with s3fs
 
         Args:
             table_name: Name of DuckDB table to export
-            dataset: Dataset name for GCS path
-            bucket: GCS bucket name
+            dataset: Dataset name for storage path
+            bucket: Storage bucket name
             stage: Processing stage (bronze, silver, gold)
 
         Returns:
-            str: GCS path where data was saved
+            str: Storage path where data was saved
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         storage_path = f"{bucket}/{stage}/{dataset}/{timestamp}/data.parquet"
@@ -1405,7 +1405,7 @@ class BaseSource(Generic[T], ABC):
         return sorted(files)[-1]  # Latest by timestamp
 
     def _get_available_fvm_marker_years(self) -> list[int]:
-        """Get all available fvm_marker years from GCS storage."""
+        """Get all available fvm_marker years from cloud storage."""
         try:
             # ✅ MIGRATION: Use modern storage_access.list_files to find years
             gcs_pattern = f"{self.config.bucket}/silver/fvm_marker_*/*/*.parquet"
@@ -1445,14 +1445,14 @@ class BaseSource(Generic[T], ABC):
             self._standardized_schema_manager = None
 
     # ========================================
-    # ENHANCED GCS METHODS WITH NATIVE HMAC
+    # ENHANCED CLOUD STORAGE METHODS WITH NATIVE HMAC
     # ========================================
 
     def load_parquet_with_native_acceleration(
         self, storage_path: str, table_name: str | None = None, query: str = "SELECT *"
     ) -> str:
         """
-        ⚡ ENHANCED: Load parquet from GCS with automatic native acceleration.
+        ⚡ ENHANCED: Load parquet from cloud storage with automatic native acceleration.
 
         This method automatically uses native HMAC access when available, falling back
         to the existing temp file approach when not available.
@@ -1472,7 +1472,7 @@ class BaseSource(Generic[T], ABC):
             # Try native method first (3-5x faster if HMAC available)
             return self.storage.query_parquet_native(storage_path, query, table_name)
         except Exception as e:
-            self.log.warning(f"Native GCS load failed, using fallback: {e}")
+            self.log.warning(f"Native cloud storage load failed, using fallback: {e}")
             # Fallback to existing method
             return self.storage.query_parquet_direct(storage_path, query, table_name)
 
@@ -1480,7 +1480,7 @@ class BaseSource(Generic[T], ABC):
         self, table_name: str, storage_path: str, **parquet_options
     ) -> bool:
         """
-        ⚡ ENHANCED: Save table to GCS with automatic native acceleration.
+        ⚡ ENHANCED: Save table to cloud storage with automatic native acceleration.
 
         This method automatically uses native HMAC access when available, falling back
         to the existing temp file approach when not available.
@@ -1499,7 +1499,7 @@ class BaseSource(Generic[T], ABC):
                 table_name, storage_path, **parquet_options
             )
         except Exception as e:
-            self.log.warning(f"Native GCS save failed, using fallback: {e}")
+            self.log.warning(f"Native cloud storage save failed, using fallback: {e}")
             # Fallback to existing method
             self.storage.export_table_to_storage_direct(table_name, storage_path, **parquet_options)
             return False
@@ -1514,9 +1514,9 @@ class BaseSource(Generic[T], ABC):
         native HMAC acceleration when available.
 
         Returns:
-            GCS path where data was saved
+            Storage path where data was saved
         """
-        # Build GCS path using existing logic
+        # Build storage path using existing logic
         storage_path = f"{bucket}/{stage}/{dataset}_{self.date_pattern}/{self.date_pattern}/{dataset}_{self.date_pattern}.parquet"
 
         # Use enhanced save method with native acceleration

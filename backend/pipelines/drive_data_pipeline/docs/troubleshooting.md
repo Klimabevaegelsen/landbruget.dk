@@ -107,7 +107,7 @@ This guide helps you diagnose and resolve common issues that may occur when runn
 2. Check available disk space
 3. Verify that no other process is locking the output files
 4. If using Docker, ensure volume mounts are configured correctly
-5. For GCS storage, verify that service account has proper storage permissions
+5. For cloud storage, verify that service account has proper storage permissions
 
 #### Issue: File corruption in Bronze layer
 

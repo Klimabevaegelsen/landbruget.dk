@@ -19,17 +19,17 @@ def _normalize_path(path: str) -> str:
 
 
 class DataSourceYearDetector:
-    """Detects available years for different data sources in GCS."""
+    """Detects available years for different data sources in cloud storage."""
 
     def __init__(self, config: PMTilesGeneratorConfig, storage_access: StorageAccess):
         """Initialize the year detector.
 
         Args:
             config: PMTiles generator configuration
-            storage_access: GCS data access instance
+            storage_access: cloud storage data access instance
         """
         self.config = config
-        self.gcs = storage_access
+        self.storage = storage_access
 
     async def detect_all_available_years(self) -> dict[str, list[int]]:
         """Detect available years for all data sources.
@@ -88,7 +88,7 @@ class DataSourceYearDetector:
             # Use direct glob pattern like pesticide_proximity does
             # For "silver/fvm_marker_" -> use "silver/fvm_marker_*"
             direct_pattern = f"r2://{self.config.storage_bucket}/{path_pattern}*"
-            all_paths = await asyncio.to_thread(self.gcs.list_files, direct_pattern)
+            all_paths = await asyncio.to_thread(self.storage.list_files, direct_pattern)
 
             # Extract years using regex like pesticide_proximity does
             years = set()
@@ -125,7 +125,7 @@ class DataSourceYearDetector:
         try:
             # List all pesticide proximity directories
             all_paths = await asyncio.to_thread(
-                self.gcs.list_files, f"r2://{self.config.storage_bucket}/gold/*"
+                self.storage.list_files, f"r2://{self.config.storage_bucket}/gold/*"
             )
 
             years = set()
@@ -166,7 +166,7 @@ class DataSourceYearDetector:
             nles5_base_path = f"r2://{self.config.storage_bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/"
 
             # Check if the base path exists
-            paths = await asyncio.to_thread(self.gcs.list_files, f"{nles5_base_path}*")
+            paths = await asyncio.to_thread(self.storage.list_files, f"{nles5_base_path}*")
             if not paths:
                 logger.warning("NLES5 data path not found")
                 return []
@@ -197,7 +197,7 @@ class DataSourceYearDetector:
                 FROM read_parquet('{latest_path}')
                 ORDER BY year
                 """
-                result = await asyncio.to_thread(self.gcs.duckdb_conn.execute, query)
+                result = await asyncio.to_thread(self.storage.duckdb_conn.execute, query)
                 years = [row[0] for row in result.fetchall()]
 
                 if years:

@@ -66,7 +66,7 @@ class PMTilesGeneratorConfig(BaseJobConfig):
         default_factory=list, description="Years to exclude from processing"
     )
 
-    # Data source bucket (R2_BUCKET → GCS_BUCKET → default)
+    # Data source bucket (STORAGE_BUCKET → R2_BUCKET → GCS_BUCKET → default)
     storage_bucket: str = Field(
         default_factory=lambda: (
             os.getenv("STORAGE_BUCKET")

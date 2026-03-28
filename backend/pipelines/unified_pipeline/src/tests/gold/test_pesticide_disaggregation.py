@@ -24,10 +24,10 @@ def setup_test_duckdb(
     pesticide_data: dict | list,
 ) -> None:
     """
-    Set up DuckDB with test data directly (synchronous, no GCS access).
+    Set up DuckDB with test data directly (synchronous, no cloud storage access).
 
     This is a test helper that bypasses the async _setup_duckdb method
-    which expects GCS file paths. Instead, it directly loads test data
+    which expects cloud storage file paths. Instead, it directly loads test data
     into DuckDB tables with the expected schema.
 
     Args:
@@ -156,7 +156,7 @@ class TestPesticideDisaggregationGold:
 
     @pytest.fixture
     def mock_storage_access(self):
-        """Mock GCS access for testing."""
+        """Mock cloud storage access for testing."""
         return Mock()
 
     @pytest.fixture
@@ -391,13 +391,13 @@ class TestPesticideDisaggregationGold:
             # For the test data with exact matches, confidence should be 1.0
 
     @pytest.mark.skip(
-        reason="This test requires full GCS mocking and is too complex for unit testing. "
+        reason="This test requires full cloud storage mocking and is too complex for unit testing. "
         "The coverage validation is tested via integration tests."
     )
     def test_coverage_validation_failure(self, config, mock_storage_access):
         """Test that processor handles coverage validation failures gracefully.
 
-        NOTE: This test is skipped because it requires extensive GCS mocking.
+        NOTE: This test is skipped because it requires extensive cloud storage mocking.
         The coverage validation logic is tested via integration tests.
         """
         pass

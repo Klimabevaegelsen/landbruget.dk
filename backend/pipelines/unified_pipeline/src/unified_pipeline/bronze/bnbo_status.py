@@ -3,7 +3,7 @@ Bronze layer data ingestion for BNBO status data.
 
 This module handles the extraction of BNBO (Boringsnære Beskyttelsesområder)
 status data from a WFS (Web Feature Service) endpoint. It fetches raw data
-from the Danish Environmental Portal and saves it to Google Cloud Storage
+from the Danish Environmental Portal and saves it to cloud storage
 for further processing in the silver layer.
 
 The module contains:
@@ -43,7 +43,7 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
         description (str): A brief description of the data source.
         url (str): The endpoint URL for the WFS service.
         frequency (str): How often the data should be updated.
-        bucket (str): Google Cloud Storage bucket name for storing the data.
+        bucket (str): cloud storage bucket name for storing the data.
         batch_size (int): Number of features to fetch in a single request.
         max_concurrent (int): Maximum number of concurrent requests.
         request_timeout (int): Timeout for HTTP requests in seconds.
@@ -311,7 +311,7 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
 
         This is the main entry point that orchestrates the entire process:
         1. Fetches raw data from the WFS service
-        2. Saves the raw data to Google Cloud Storage
+        2. Saves the raw data to cloud storage
         3. Returns the raw data for in-memory passing to silver stage
 
         Returns:

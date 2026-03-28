@@ -117,7 +117,7 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
             self.log.info("Using in-memory silver data")
             self.conn.register("stoetteoplysninger_silver", silver_data[self.config.silver_dataset])
         else:
-            # Load from GCS
+            # Load from cloud storage
             pattern = f"{self.config.bucket}/silver/{self.config.silver_dataset}/**/*.parquet"
             self.log.info(f"Loading silver data from: {pattern}")
 
@@ -284,8 +284,8 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
         return validation
 
     async def _save_gold_data(self) -> dict[str, str]:
-        """Save gold tables to GCS."""
-        self.log.info("Saving gold data to GCS")
+        """Save gold tables to cloud storage."""
+        self.log.info("Saving gold data to cloud storage")
 
         output_paths = {}
 

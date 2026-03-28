@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 def _get_optimized_storage_access() -> type | None:
     """
-    Get optimized GCS access with robust import handling.
+    Get optimized cloud storage access with robust import handling.
 
     Returns StorageAccess if available, otherwise None for fallback.
     """
@@ -29,7 +29,7 @@ def _get_optimized_storage_access() -> type | None:
         return None
 
 
-# Get optimized GCS access class or None if not available
+# Get optimized cloud storage access class or None if not available
 OptimizedStorageAccess = _get_optimized_storage_access()
 
 
@@ -214,7 +214,7 @@ class BMDScraper:
         return file_path
 
 
-class GCSStorage:
+class CloudStorage:
     """Google Cloud Storage backend for BMD files - OPTIMIZED VERSION."""
 
     def __init__(self, bucket_name, prefix="bronze/bmd"):
@@ -222,7 +222,7 @@ class GCSStorage:
         self.prefix = prefix
         self.is_available = self._check_storage_available()
 
-        # ✅ OPTIMIZED: Initialize optimized GCS access
+        # Initialize optimized cloud storage access
         self.storage = None
         self.use_optimized = False
 
@@ -230,9 +230,9 @@ class GCSStorage:
             try:
                 self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
-                logging.info("✅ BMD GCSStorage: Initialized optimized GCS access")
+                logging.info("✅ BMD CloudStorage: Initialized optimized cloud storage access")
             except Exception as e:
-                logging.warning(f"Failed to initialize optimized GCS access: {e}")
+                logging.warning(f"Failed to initialize optimized cloud storage access: {e}")
                 self.storage = None
                 self.use_optimized = False
 
@@ -247,13 +247,13 @@ class GCSStorage:
             return False
 
     def upload_file(self, local_path, storage_path=None):
-        """Upload a file to GCS bucket using optimized streaming."""
+        """Upload a file to storage bucket using optimized streaming."""
         if not self.is_available:
-            logging.warning("GCS not available, skipping upload")
+            logging.warning("Cloud storage not available, skipping upload")
             return False
 
         if storage_path is None:
-            # Use the file structure from local path but with GCS prefix
+            # Use the file structure from local path but with cloud storage prefix
             relative_path = os.path.relpath(
                 local_path, start=os.path.dirname(os.path.dirname(local_path))
             )
@@ -269,9 +269,9 @@ class GCSStorage:
 
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.storage.fs.open(full_storage_path, "wb") as gcs_file,
+                    self.storage.fs.open(full_storage_path, "wb") as cloud_file,
                 ):
-                    shutil.copyfileobj(file_obj, gcs_file)
+                    shutil.copyfileobj(file_obj, cloud_file)
 
                 logging.info(
                     f"✅ Uploaded {local_path} to {full_storage_path} (optimized streaming)"
@@ -287,7 +287,7 @@ class GCSStorage:
             return True
 
         except Exception as e:
-            logging.error(f"Failed to upload to GCS: {e}")
+            logging.error(f"Failed to upload to cloud storage: {e}")
             return False
 
 
@@ -299,9 +299,9 @@ def main() -> None:
     if file_path:
         logging.info(f"BMD scraping completed successfully. File saved to {file_path}")
 
-        # Example of how to use GCS storage in production
-        # Uncomment to use if GCS integration is needed
-        # storage = GCSStorage(bucket_name="your-bucket-name")
+        # Example of how to use cloud storage in production
+        # Uncomment to use if cloud storage integration is needed
+        # storage = CloudStorage(bucket_name="your-bucket-name")
         # storage.upload_file(file_path)
     else:
         logging.error("BMD scraping failed.")

@@ -513,7 +513,7 @@ def main():
     )
     parser.add_argument(
         "--bucket",
-        help="GCS bucket name (default: from GCS_BUCKET env var)",
+        help="Cloud storage bucket name (default: from GCS_BUCKET env var)",
         default=None,
     )
     parser.add_argument(
@@ -522,8 +522,8 @@ def main():
         default="schema",
     )
     parser.add_argument(
-        "--gcs-path",
-        help="GCS path pattern to search (e.g., bucket/gold/**)",
+        "--storage-path",
+        help="Storage path pattern to search (e.g., bucket/gold/**)",
         action="append",
     )
     parser.add_argument(

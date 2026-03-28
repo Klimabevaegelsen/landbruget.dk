@@ -36,7 +36,7 @@ class DAGIBronzeConfig(BaseJobConfig):
         base_url: Base URL for the DAWA API
         endpoints: Dictionary mapping layer names to API endpoints
         dataset: Name of the dataset in storage
-        bucket: GCS bucket name for raw data storage
+        bucket: storage bucket name for raw data storage
         timeout: Request timeout in seconds
         max_concurrent_requests: Maximum number of concurrent requests
         retries: Number of retry attempts for failed requests
@@ -169,7 +169,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
         Run the DAGI data source processing pipeline.
 
         This method processes all configured DAGI layers, fetching
-        their data from the DAWA API and storing it in Google Cloud Storage.
+        their data from the DAWA API and storing it in cloud storage.
         Returns the raw data for in-memory passing to silver stage.
 
         Returns:
@@ -187,21 +187,21 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
                 if not layer_data:
                     raise RuntimeError("No DAGI data could be fetched from any layer")
 
-                # Save each layer as raw data using GCS access for JSON strings
+                # Save each layer as raw data using cloud storage access for JSON strings
                 for layer_name, raw_data in layer_data.items():
                     try:
                         dataset_name = f"{self.config.dataset}_{layer_name}"
 
                         # For DAGI, raw_data is a JSON string, so we need to save it directly
                         # as JSON
-                        # Create the GCS path following the unified pattern
+                        # Create the storage path following the unified pattern
                         timestamp = self.date_pattern
                         filename = f"{dataset_name}.json"
                         storage_path = (
                             f"{self.config.bucket}/bronze/{dataset_name}/{timestamp}/{filename}"
                         )
 
-                        # Save JSON string directly to GCS
+                        # Save JSON string directly to cloud storage
                         self.storage.upload_json_string(raw_data, storage_path)
                         self.log.info(f"Saved raw data for {layer_name} to {storage_path}")
                     except Exception as e:

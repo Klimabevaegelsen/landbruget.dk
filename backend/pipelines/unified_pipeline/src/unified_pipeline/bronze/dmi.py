@@ -40,7 +40,7 @@ class DMIBronzeConfig(BaseJobConfig):
         type (str): Type of the data source (api)
         description (str): Brief description of the data
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         parameters (List[str]): List of climate parameters to fetch
         api_base_url (str): Base URL for DMI GovCloud API
         max_concurrent_fetches (int): Maximum number of concurrent API requests
@@ -163,13 +163,13 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
     This class is responsible for fetching raw climate data from the DMI GovCloud API
     for multiple climate parameters. It handles async API communication, error handling,
-    and stores the raw data in Google Cloud Storage for further processing.
+    and stores the raw data in cloud storage for further processing.
 
     Processing flow:
     1. Initialize API client with configuration
     2. Calculate time range for data fetching (2011 to present)
     3. Fetch monthly aggregated data for each parameter concurrently
-    4. Store raw responses in GCS
+    4. Store raw responses in cloud storage
     5. Return structured data for in-memory passing to silver stage
     """
 

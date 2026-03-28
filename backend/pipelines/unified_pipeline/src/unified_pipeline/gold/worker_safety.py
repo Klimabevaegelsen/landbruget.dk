@@ -35,7 +35,7 @@ class WorkerSafetyGoldConfig(BaseJobConfig):
     )
 
     # Input silver datasets
-    worker_safety_dataset: str = "worker safety"  # Note: space in dataset name as per GCS path
+    worker_safety_dataset: str = "worker safety"  # Note: space in dataset name as per storage path
 
     # Processing configuration
     start_year: int = Field(default=2020, description="Start year for analysis")
@@ -90,7 +90,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             raise
 
     async def _load_silver_data(self, silver_data: dict[str, Any] | None) -> None:
-        """Load worker safety silver data from GCS.
+        """Load worker safety silver data from cloud storage.
 
         Supports two formats:
         1. Two-file format: worker_safety_2020-2024_mv.parquet + _skadeart.parquet
@@ -98,7 +98,9 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         """
 
         if silver_data:
-            self.log.warning("In-memory data passing not implemented for worker safety - using GCS")
+            self.log.warning(
+                "In-memory data passing not implemented for worker safety - using cloud storage"
+            )
 
         # Get latest silver data path
         silver_path = self._get_latest_silver_path(self.config.worker_safety_dataset)

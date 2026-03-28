@@ -58,7 +58,7 @@ def _get_cvr_collection_utility():
         return None, None
 
 
-# Get optimized GCS access class or None if not available
+# Get optimized cloud storage access class or None if not available
 OptimizedStorageAccess = _get_optimized_storage()
 
 # Get CVR collection utilities
@@ -66,7 +66,7 @@ extract_cvr_numbers_from_table, save_pipeline_cvr_numbers = _get_cvr_collection_
 
 
 class OptimizedStorageBackend:
-    """Storage backend that uses optimized GCS access when available, with fallback."""
+    """Storage backend that uses optimized cloud storage access when available, with fallback."""
 
     def __init__(self, bucket_name: str):
         self.bucket_name = bucket_name
@@ -77,9 +77,11 @@ class OptimizedStorageBackend:
             try:
                 self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
-                print(f"✅ DMA Storage: Using optimized GCS access for bucket: {bucket_name}")
+                print(
+                    f"✅ DMA Storage: Using optimized cloud storage access for bucket: {bucket_name}"
+                )
             except Exception as e:
-                print(f"⚠️ Failed to initialize optimized GCS access: {e}")
+                print(f"⚠️ Failed to initialize optimized cloud storage access: {e}")
                 self._init_fallback(bucket_name)
         else:
             self._init_fallback(bucket_name)
@@ -95,12 +97,12 @@ class OptimizedStorageBackend:
             raise RuntimeError(f"Failed to initialize storage: {e}") from e
 
     def save_json(self, data, blob_name: str):
-        """Save JSON data to GCS."""
+        """Save JSON data to cloud storage."""
         try:
             if self.use_optimized:
                 storage_path = f"{self.bucket_name}/{blob_name}"
                 self.storage.upload_json(data, storage_path)
-                print(f"Saved {blob_name} to optimized GCS storage")
+                print(f"Saved {blob_name} to optimized cloud storage")
             else:
                 import json
 
@@ -114,7 +116,7 @@ class OptimizedStorageBackend:
             raise
 
     def save_parquet(self, data, blob_name: str):
-        """Save Parquet data to GCS."""
+        """Save Parquet data to cloud storage."""
         try:
             if self.use_optimized:
                 # For optimized storage, we need to use DuckDB integration
@@ -138,15 +140,15 @@ class OptimizedStorageBackend:
             data.to_parquet(tmp_path, index=False)
 
         try:
-            # Upload to GCS
+            # Upload to cloud storage
             if self.use_optimized:
                 # Use optimized file upload
                 with open(tmp_path, "rb") as f:
                     file_data = f.read()
                 fs_path = f"{self.bucket_name}/{blob_name}"
-                with self.storage.fs.open(fs_path, "wb") as gcs_file:
-                    gcs_file.write(file_data)
-                print(f"Saved {blob_name} to optimized GCS storage (parquet)")
+                with self.storage.fs.open(fs_path, "wb") as cloud_file:
+                    cloud_file.write(file_data)
+                print(f"Saved {blob_name} to optimized cloud storage (parquet)")
             else:
                 # Use fallback upload via s3fs
                 r2_path = f"{self.bucket_name}/{blob_name}"
@@ -158,7 +160,7 @@ class OptimizedStorageBackend:
                 os.unlink(tmp_path)
 
     def read_json(self, blob_name: str):
-        """Read JSON data from GCS."""
+        """Read JSON data from cloud storage."""
         try:
             if self.use_optimized:
                 storage_path = f"{self.bucket_name}/{blob_name}"
@@ -272,11 +274,11 @@ def _save_discovered_cvr_numbers(data, timestamp: str):
         unique_cvr_numbers = sorted(set(cvr_numbers))
 
         if unique_cvr_numbers:
-            # Save CVR numbers using the collection utility (with automatic GCS access initialization)
+            # Save CVR numbers using the collection utility (with automatic storage access initialization)
             storage_path = save_pipeline_cvr_numbers(
                 pipeline_name="dma_scraper",
                 cvr_numbers=unique_cvr_numbers,
-                storage_access=None,  # Will create default GCS access
+                storage_access=None,  # Will create default storage access
                 bucket="landbruget-data",
                 timestamp=timestamp,
             )
@@ -387,7 +389,7 @@ def main(total_pages, run_silver, timestamp, start_date, end_date, log_level):
             )
 
             if ENVIRONMENT.lower() in ("production", "container"):
-                print("Note: Schema documentation for GCS files not yet implemented")
+                print("Note: Schema documentation for cloud storage files not yet implemented")
             elif os.path.exists(parquet_path):
                 from common.schema_utils import generate_schema_docs
 
@@ -422,7 +424,7 @@ def main(total_pages, run_silver, timestamp, start_date, end_date, log_level):
                     processing_duration=pipeline_run.elapsed,
                 )
                 storage_backend.save_json(metadata.model_dump(), metadata_path)
-                print(f"DMA companies metadata saved to GCS: {metadata_path}")
+                print(f"DMA companies metadata saved to cloud storage: {metadata_path}")
             else:
                 metadata_dir = os.path.join(PREFIX_SILVER_SAVE_PATH, ts)
                 os.makedirs(metadata_dir, exist_ok=True)

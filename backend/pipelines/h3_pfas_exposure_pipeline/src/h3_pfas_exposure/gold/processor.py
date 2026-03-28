@@ -1,5 +1,5 @@
 """
-Main H3 PFAS processor with modular architecture and GCS data loading.
+Main H3 PFAS processor with modular architecture and cloud storage data loading.
 """
 
 import contextlib
@@ -17,7 +17,7 @@ from .spatial_joiner import SpatialJoiner
 
 
 class H3PFASProcessorRefactored:
-    """Refactored H3 PFAS processor with modular architecture and GCS data loading."""
+    """Refactored H3 PFAS processor with modular architecture and cloud storage data loading."""
 
     def __init__(self, config: H3SpatialConfig, local_data_dir: Path | None = None):
         self.config = config
@@ -236,7 +236,7 @@ class H3PFASProcessorRefactored:
                 self.log.error(f"❌ Failed to load extension {ext_name}: {e}")
                 raise
 
-        # Initialize GCS access with shared connection
+        # Initialize cloud storage access with shared connection
         from common.storage import StorageAccess
 
         self.storage = StorageAccess(connection=self.conn)
@@ -629,9 +629,9 @@ class H3PFASProcessorRefactored:
         self._monitor_resources(f"cleanup_year_{year}")
 
     async def run_analysis_multi_year(self, years: list[int] | None = None) -> bool:
-        """Run multi-year H3 PFAS analysis from GCS data."""
+        """Run multi-year H3 PFAS analysis from cloud storage data."""
         self.log.info(
-            "🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from GCS"
+            "🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from cloud storage"
         )
 
         # Setup DuckDB
@@ -731,8 +731,8 @@ class H3PFASProcessorRefactored:
         return successful_years > 0
 
     async def run_kommune_analysis_multi_year(self, years: list[int] | None = None) -> bool:
-        """Run multi-year kommune-level PFAS analysis from GCS data."""
-        self.log.info("🏛️ Starting multi-year kommune-level PFAS analysis from GCS")
+        """Run multi-year kommune-level PFAS analysis from cloud storage data."""
+        self.log.info("🏛️ Starting multi-year kommune-level PFAS analysis from cloud storage")
 
         # Setup DuckDB
         self.setup_duckdb()
@@ -837,12 +837,12 @@ class H3PFASProcessorRefactored:
         return successful_years > 0
 
     def _load_kommune_boundaries(self) -> str:
-        """Load Danish kommune boundaries from GCS using proper authentication."""
-        self.log.info("🗺️ Loading Danish kommune boundaries from GCS")
+        """Load Danish kommune boundaries from cloud storage using proper authentication."""
+        self.log.info("🗺️ Loading Danish kommune boundaries from cloud storage")
 
         kommune_table = "kommune_boundaries"
 
-        # Load kommune data from GCS using StorageAccess for proper authentication
+        # Load kommune data from cloud storage using StorageAccess for proper authentication
         try:
             # Use existing StorageAccess instance with shared DuckDB connection
             import tempfile
@@ -861,7 +861,7 @@ class H3PFASProcessorRefactored:
 
                 # Load directly from parquet using StorageAccess
                 try:
-                    # Use StorageAccess to create table directly from GCS
+                    # Use StorageAccess to create table directly from cloud storage
                     storage_access.create_table_from_storage("silver_kommuner_raw", latest_file)
 
                     # Create the kommune_boundaries table from silver data
@@ -895,7 +895,7 @@ class H3PFASProcessorRefactored:
             )
 
             if not bronze_files:
-                raise ValueError("No DAGI kommune data found in GCS")
+                raise ValueError("No DAGI kommune data found in cloud storage")
 
             # Extract timestamps and find the latest
             timestamps = []
@@ -956,7 +956,7 @@ class H3PFASProcessorRefactored:
             self.log.info(f"✅ Loaded {count:,} kommune boundaries from bronze layer")
 
         except Exception as e:
-            self.log.error(f"❌ Could not load kommune boundaries from GCS: {e}")
+            self.log.error(f"❌ Could not load kommune boundaries from cloud storage: {e}")
             self.log.error("Kommune boundaries are required for proper PMTiles generation")
             raise ValueError(f"Failed to load kommune boundaries: {e}") from e
 
@@ -965,7 +965,7 @@ class H3PFASProcessorRefactored:
     async def _process_single_year_kommune_from_storage(
         self, year: int, bmd_table: str, kommune_table: str, data_loader, result_saver
     ) -> int:
-        """Process a single year for kommune-level analysis using GCS data."""
+        """Process a single year for kommune-level analysis using cloud storage data."""
         self.log.info(f"🏛️ Processing kommune-level PFAS analysis for year {year}")
 
         # Step 1: Load and prepare field data (Y+1 pattern)
@@ -1152,9 +1152,9 @@ class H3PFASProcessorRefactored:
     async def _process_single_year_from_storage(
         self, year: int, bmd_table: str, data_loader, result_saver
     ) -> int:
-        """Process a single year using GCS data with the refactored spatial methodology."""
+        """Process a single year using cloud storage data with the refactored spatial methodology."""
         self.log.info(
-            f"⚙️ Processing H3 PFAS-containing active ingredient exposure for year {year} (GCS data, refactored methodology)"
+            f"⚙️ Processing H3 PFAS-containing active ingredient exposure for year {year} (cloud storage data, refactored methodology)"
         )
 
         # Step 1: Load and prepare field data (Y+1 pattern)
@@ -1186,7 +1186,7 @@ class H3PFASProcessorRefactored:
         # Step 6: Validate results
         self._validate_results(results_table)
 
-        # Step 7: Save results to GCS
+        # Step 7: Save results to cloud storage
         result_count = result_saver.save_year_results_kepler_compatible(results_table, year)
 
         # Step 8: Clean up intermediate tables

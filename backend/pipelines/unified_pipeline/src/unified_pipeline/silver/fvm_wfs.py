@@ -71,7 +71,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
         dataset_marker (str): Name of the marker dataset
         dataset_smaabiotoper (str): Name of the smaabiotoper dataset
         dataset_organic_areas (str): Name of the organic areas dataset
-        bucket (str): GCS bucket name for storing processed data
+        bucket (str): storage bucket name for storing processed data
         storage_batch_size (int): Batch size for storage operations
         markblokke_years (List[int]): Years to process for Markblokke (2005-2026)
         marker_years (List[int]): Years to process for Marker (2008-2025)
@@ -374,13 +374,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     validates geometries, standardizes column names, and saves the processed data.
 
     The processing includes:
-    1. Reading raw WFS data from GCS
+    1. Reading raw WFS data from cloud storage
     2. Extracting GeoJSON features from each payload and converting to Geos
     3. Validating and transforming geometries
     4. Standardizing column names using the mapping from config
     5. NEW: Municipality assignment for marker data
        (spatial intersection + closest distance fallback)
-    6. Saving processed data to GCS for each year
+    6. Saving processed data to cloud storage for each year
     """
 
     def __init__(self, config: FVMWFSSilverConfig):
@@ -1485,7 +1485,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         f"Enriched {matches_updated:,} marker fields with organic data for {year}"
                     )
 
-                    # Save the enriched marker data back to GCS
+                    # Save the enriched marker data back to cloud storage
                     enriched_marker_table = f"enriched_marker_{year}"
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE {enriched_marker_table} AS
@@ -1944,7 +1944,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     def _apply_cvr_updates(
         self, marker_table: str, matches: list, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame
     ) -> int:
-        """Apply CVR updates to the marker table and save back to GCS"""
+        """Apply CVR updates to the marker table and save back to cloud storage"""
         fields_updated = 0
 
         try:
@@ -1995,7 +1995,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     FROM {temp_table}
                 """)
 
-                # Save the updated data back to GCS
+                # Save the updated data back to cloud storage
                 dataset_name = marker_table.replace("final_processed_", "")
                 self._save_data(
                     marker_table,
@@ -2211,7 +2211,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             f"with field_uuid for {year}"
                         )
 
-                        # Save the enriched subsidy data back to GCS
+                        # Save the enriched subsidy data back to cloud storage
                         enriched_subsidy_table = f"enriched_{dataset_name}_{year}"
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE {enriched_subsidy_table} AS
@@ -2599,9 +2599,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
     async def _discover_available_fields_years(self) -> list[int]:
         """
-        Discover available years from fields data in GCS.
+        Discover available years from fields data in cloud storage.
 
-        This method lists the fields data directory in GCS and extracts the years
+        This method lists the fields data directory in cloud storage and extracts the years
         from the MARKER_*.parquet filenames to determine which years have fields
         data available for CVR enrichment.
 
@@ -2609,7 +2609,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             List[int]: List of years for which fields data is available
         """
         try:
-            # Use GCS data access to list files in the fields directory (same pattern as others)
+            # Use cloud storage data access to list files in the fields directory (same pattern as others)
             fields_pattern = f"{self.config.bucket}/silver/fields/*/MARKER_*.parquet"
 
             # Find all MARKER files using StorageAccess
@@ -2640,19 +2640,19 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
     async def _get_fields_data_path(self, year: int) -> str:
         """
-        Get the GCS path for fields data for a specific year.
+        Get the storage path for fields data for a specific year.
 
         This method discovers the latest timestamp directory and constructs
-        the full GCS path to the MARKER_{year}.parquet file.
+        the full storage path to the MARKER_{year}.parquet file.
 
         Args:
             year: Year for which to get the fields data path
 
         Returns:
-            str: Full GCS path to the fields data file
+            str: Full storage path to the fields data file
         """
         try:
-            # Use GCS data access to find the latest file for this year (same pattern as others)
+            # Use cloud storage data access to find the latest file for this year (same pattern as others)
             fields_pattern = f"{self.config.bucket}/silver/fields/*/MARKER_{year}.parquet"
 
             # Find all files for this year using StorageAccess
@@ -2691,7 +2691,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             table_name: Name of the FVM marker table to enrich
             year: Year of the data being processed
         """
-        # Discover available years from fields data in GCS
+        # Discover available years from fields data in cloud storage
         fields_available_years = await self._discover_available_fields_years()
 
         if year not in fields_available_years:
@@ -2816,18 +2816,18 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
         This method orchestrates the processing of raw multi-year data from the bronze
         layer into structured Geos. It processes Markblokke, Marker, and
-        Smaabiotoper data for all available years and saves the results to Google Cloud Storage.
+        Smaabiotoper data for all available years and saves the results to cloud storage.
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
                         this data will be used instead of reading from storage.
 
         The processing workflow for each layer type and year:
-        1. Read raw data from GCS or use in-memory data
+        1. Read raw data from cloud storage or use in-memory data
         2. Process raw WFS data into Geos with standardized column names
         3. Add year and layer type information to the processed data
         4. Validate geometries and apply any needed transformations
-        5. Save processed data back to GCS with year information
+        5. Save processed data back to cloud storage with year information
 
         Returns:
             Optional[Dict[str, Any]]: Summary information about processed datasets

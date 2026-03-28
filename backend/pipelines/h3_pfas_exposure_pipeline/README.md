@@ -62,8 +62,8 @@ This pipeline processes agricultural data to create H3-based PFAS exposure analy
 - **Multi-year temporal analysis** (2015-2023)
 
 ### ☁️ Cloud-Native Architecture
-- **GCS integration** for data storage and retrieval
-- **Optimized data loading** with fsspec and gcsfs
+- **Cloud storage integration** for data storage and retrieval
+- **Optimized data loading with fsspec and s3fs
 - **Kepler.gl compatible outputs** for visualization
 - **Containerized deployment** with Docker
 
@@ -95,7 +95,7 @@ The pipeline integrates multiple data sources:
 ### Prerequisites
 - Python 3.11+
 - Docker and Docker Compose
-- GCS credentials (for cloud data access)
+- Cloud storage credentials (for cloud data access)
 
 ### Local Development Setup
 
@@ -186,7 +186,7 @@ python main.py --dry-run --verbose
 | `--memory-limit` | 12GB | DuckDB memory limit |
 | `--thread-count` | 4 | Number of processing threads |
 | `--chunk-size` | 25000 | H3 cells per processing chunk |
-| `--bucket` | landbruget-data | GCS bucket name |
+| `--bucket` | landbruget-data | Storage bucket name |
 | `--parallel` | false | Run H3 and kommune analyses in parallel (mode 'all' only) |
 
 ## Architecture
@@ -227,7 +227,7 @@ src/h3_pfas_exposure/
 4. **Output Generation**
    - Create Kepler.gl compatible visualizations
    - Generate CSV and Parquet outputs
-   - Upload results to GCS
+   - Upload results to cloud storage
 
 ## Output Data
 
@@ -279,8 +279,8 @@ Each municipality contains:
 ## Environment Variables
 
 ```bash
-# GCS Configuration
-GCS_BUCKET=landbruget-data
+# Cloud Storage Configuration
+STORAGE_BUCKET=landbruget-data
 
 # H3 Configuration
 H3_RESOLUTION=10
@@ -299,7 +299,7 @@ LOG_STAGE_TIMINGS=true
 
 ## Output Locations
 
-Results are stored in GCS with timestamped directories and resolution indicators:
+Results are stored in cloud storage with timestamped directories and resolution indicators:
 
 ```
 gs://landbruget-data/gold/
@@ -347,8 +347,8 @@ mypy src/
    - Increase `--memory-limit`
    - Process fewer years at once
 
-2. **GCS Access Issues**
-   - Verify GCS credentials
+2. **Cloud Storage Access Issues**
+   - Verify cloud storage credentials
    - Check bucket permissions
    - Ensure network connectivity
 

@@ -21,7 +21,7 @@ class TestDSTIntegration:
 
     @pytest.fixture
     def mock_storage_access(self):
-        """Mock GCS access for testing."""
+        """Mock cloud storage access for testing."""
         return MagicMock()
 
     @pytest.fixture
@@ -49,8 +49,8 @@ class TestDSTIntegration:
         """Test integration between DST bronze and silver layers.
 
         Note: This test mocks the _find_latest_bronze_data method to avoid
-        actual GCS access. In a real integration test, you would either:
-        1. Use a test GCS bucket with pre-loaded test data
+        actual cloud storage access. In a real integration test, you would either:
+        1. Use a test storage bucket with pre-loaded test data
         2. Run against the actual data sources
         """
 
@@ -117,7 +117,7 @@ class TestDMIIntegration:
 
     @pytest.fixture
     def mock_storage_access(self):
-        """Mock GCS access for testing."""
+        """Mock cloud storage access for testing."""
         return MagicMock()
 
     @pytest.fixture
@@ -146,7 +146,7 @@ class TestDMIIntegration:
     ):
         """Test DMI bronze-to-silver pipeline with in-memory data passing.
 
-        Note: This test processes real data from GCS for parameters not in bronze_data,
+        Note: This test processes real data from cloud storage for parameters not in bronze_data,
         so it may take several minutes to complete.
         """
         # Create bronze instance
@@ -173,7 +173,7 @@ class TestDMIIntegration:
             }
         )
 
-        # Mock GCS access for bronze
+        # Mock cloud storage access for bronze
         bronze.storage = MagicMock()
         bronze.storage.upload_json = MagicMock()
 
@@ -186,7 +186,7 @@ class TestDMIIntegration:
         # Create silver instance
         silver = DMISilver(dmi_silver_config)
 
-        # Mock GCS access for silver
+        # Mock cloud storage access for silver
         silver.storage = MagicMock()
         silver._save_data = MagicMock()
 
@@ -205,12 +205,12 @@ class TestDMIIntegration:
     async def test_dmi_silver_storage_fallback(self, mock_storage_access, dmi_silver_config):
         """Test DMI silver pipeline with storage fallback (no in-memory data).
 
-        Note: This test processes real data from GCS, so it may take several minutes.
+        Note: This test processes real data from cloud storage, so it may take several minutes.
         """
         # Create silver instance
         silver = DMISilver(dmi_silver_config)
 
-        # Mock GCS access to simulate storage fallback
+        # Mock cloud storage access to simulate storage fallback
         silver.storage = MagicMock()
         silver.storage.list_files = MagicMock(
             return_value=["bronze/dmi/20241201_120000/pot_evaporation_makkink_data.json"]
@@ -240,7 +240,7 @@ class TestDMIIntegration:
         assert silver_data is not None
         assert "pot_evaporation_makkink" in silver_data
 
-        # Verify that GCS was accessed for bronze data
+        # Verify that cloud storage was accessed for bronze data
         silver.storage.list_files.assert_called()
         silver.storage.download_json.assert_called()
 
@@ -250,7 +250,7 @@ class TestDMIIntegration:
     async def test_dmi_silver_handles_bronze_errors(self, mock_storage_access, dmi_silver_config):
         """Test DMI silver pipeline handles bronze data with errors gracefully.
 
-        Note: This test may process real data from GCS for parameters not in bronze_data.
+        Note: This test may process real data from cloud storage for parameters not in bronze_data.
         """
         # Create silver instance
         silver = DMISilver(dmi_silver_config)

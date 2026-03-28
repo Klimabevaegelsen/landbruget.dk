@@ -274,7 +274,7 @@ class BatchProcessor:
         self,
         year: int,
         batch_count: int,
-        gcs_output_path: str | None = None,
+        storage_output_path: str | None = None,
         cleanup: bool = True,
     ) -> dict:
         """
@@ -283,7 +283,7 @@ class BatchProcessor:
         Args:
             year: Year being processed
             batch_count: Number of batches to consolidate
-            gcs_output_path: Optional GCS path to upload consolidated file
+            storage_output_path: Optional storage path to upload consolidated file
             cleanup: Whether to delete batch files after consolidation
 
         Returns:
@@ -374,10 +374,10 @@ class BatchProcessor:
             json.dump(summary, f, indent=2)
         logger.info(f"Wrote summary: {summary_file}")
 
-        # Upload to GCS if path provided
-        if gcs_output_path:
-            self._upload_to_storage(consolidated_file, gcs_output_path, "data.parquet")
-            self._upload_to_storage(summary_file, gcs_output_path, "summary.json")
+        # Upload to cloud storage if path provided
+        if storage_output_path:
+            self._upload_to_storage(consolidated_file, storage_output_path, "data.parquet")
+            self._upload_to_storage(summary_file, storage_output_path, "summary.json")
 
         # Cleanup batch files
         if cleanup:
@@ -392,7 +392,7 @@ class BatchProcessor:
             "status": "completed",
             "summary": summary,
             "consolidated_file": str(consolidated_file),
-            "storage_path": gcs_output_path,
+            "storage_path": storage_output_path,
             "batches_consolidated": len(batch_files),
             "batches_missing": missing_batches,
         }
@@ -442,7 +442,7 @@ def consolidate_main():
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--batch-count", type=int, required=True)
     parser.add_argument("--output-dir", type=str, default="/tmp/climate_output")
-    parser.add_argument("--gcs-output", type=str, help="GCS output path")
+    parser.add_argument("--storage-output", type=str, help="cloud storage output path")
     parser.add_argument("--no-cleanup", action="store_true", help="Keep batch files")
 
     args = parser.parse_args()
@@ -451,7 +451,7 @@ def consolidate_main():
     result = processor.consolidate_batches(
         year=args.year,
         batch_count=args.batch_count,
-        gcs_output_path=args.gcs_output,
+        storage_output_path=args.storage_output,
         cleanup=not args.no_cleanup,
     )
 

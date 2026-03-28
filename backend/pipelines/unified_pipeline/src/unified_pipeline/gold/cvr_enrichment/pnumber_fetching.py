@@ -254,8 +254,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     # In GitHub Actions, we only need to process the artifact once
                     break
 
-                # Use GCS temp download for local development
-                self.log.info(f"Local development - downloading from GCS: {input_path}")
+                # Use cloud storage temp download for local development
+                self.log.info(f"Local development - downloading from cloud storage: {input_path}")
                 with self.storage._temp_download(input_path) as temp_file:
                     # Load company data from temp file
                     result = self.conn.execute(
@@ -492,7 +492,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
     @timed(name="Saving P-number data")
     def _save_pnumber_data(self, processed_data: dict[str, Any]) -> str:
         """
-        Save processed P-number data to GCS.
+        Save processed P-number data to cloud storage.
 
         Args:
             processed_data: Processed P-number data
@@ -597,7 +597,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             """)
             self.log.info(f"Created empty table {table_name}")
 
-        # Save to GCS
+        # Save to cloud storage
         self._save_data(
             data=table_name,
             dataset="cvr_enrichment_pnumbers",
@@ -932,7 +932,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         for emp_type, count in type_counts:
             self.log.info(f"  {emp_type}: {count} records")
 
-        # Save P-number employment table to GCS
+        # Save P-number employment table to cloud storage
         self._save_data(
             data=employment_table,
             dataset="cvr_pnumber_employment",

@@ -37,7 +37,7 @@ class DMISilverConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): Primary dataset name for silver data collection
-        bucket (str): GCS bucket name for storing processed data
+        bucket (str): storage bucket name for storing processed data
         parameters (List[str]): List of climate parameters to process
         target_crs (str): Target coordinate reference system
         source_crs (str): Source coordinate reference system from DMI
@@ -61,11 +61,11 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     parameters with CRS transformation and statistical aggregation.
 
     The processing includes:
-    1. Reading raw monthly data from GCS or in-memory bronze data
+    1. Reading raw monthly data from cloud storage or in-memory bronze data
     2. Extracting GeoJSON features from API responses
     3. Transforming CRS using DuckDB spatial functions
     4. Calculating statistical aggregations by month and parameter
-    5. Saving processed data to GCS
+    5. Saving processed data to cloud storage
     """
 
     def __init__(self, config: DMISilverConfig):
@@ -121,7 +121,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             bronze_files.sort(reverse=True)
             latest_file = bronze_files[0]
 
-            self.log.info(f"Loading latest bronze data from GCS: {latest_file}")
+            self.log.info(f"Loading latest bronze data from cloud storage: {latest_file}")
 
             # Load the data
             parameter_data = self.storage.download_json(latest_file)
@@ -141,7 +141,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             }
 
         except Exception as e:
-            self.log.error(f"Failed to load bronze data from GCS for {parameter_id}: {e}")
+            self.log.error(f"Failed to load bronze data from cloud storage for {parameter_id}: {e}")
             return None
 
     @timed(name="Transforming DMI climate data")

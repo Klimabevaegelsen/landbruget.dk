@@ -159,7 +159,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         # Only use verified DuckDB configuration parameters
 
         # Memory management optimizations
-        self.conn.execute("SET http_timeout = 120000")  # Increase timeout for large GCS files
+        self.conn.execute(
+            "SET http_timeout = 120000"
+        )  # Increase timeout for large cloud storage files
 
         # Spatial query optimization settings
         self.conn.execute("SET default_null_order = 'nulls_last'")
@@ -720,9 +722,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
     @timed(name="Saving NLES5 results to gold layer")
     def _save_results_to_gold(self) -> None:
-        """Save NLES5 results to the gold layer using shared GCS interface."""
+        """Save NLES5 results to the gold layer using shared cloud storage interface."""
         try:
-            self.log.info("Saving NLES5 results to gold layer using shared GCS interface")
+            self.log.info("Saving NLES5 results to gold layer using shared cloud storage interface")
 
             # Create unified results table first
             self._create_unified_results_table()
@@ -757,7 +759,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         fs_path = f"{self.config.bucket}/{storage_path}"
 
                         # Export to local file first to avoid DuckDB temp file issues
-                        # with GCS writes
+                        # with cloud storage writes
                         with tempfile.NamedTemporaryFile(
                             suffix=".parquet", delete=False
                         ) as tmp_file:
@@ -783,7 +785,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                 else:
                                     raise
 
-                            # Upload local file to GCS using streaming
+                            # Upload local file to cloud storage using streaming
                             import shutil
 
                             with (
@@ -807,14 +809,16 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     failed_uploads += 1
 
             if failed_uploads > 0:
-                raise RuntimeError(f"{failed_uploads} GCS uploads failed. Check logs for details.")
+                raise RuntimeError(
+                    f"{failed_uploads} cloud storage uploads failed. Check logs for details."
+                )
 
             # Log the standard path structure being used
             timestamp = self.date_pattern
             base_path = f"{self.config.bucket}/gold/{self.config.dataset}_*/{timestamp}/"
             unified_path = f"{self.config.bucket}/gold/{self.config.dataset}_unified_results/{timestamp}/data.parquet"
 
-            self.log.info("✅ NLES5 results saved using shared GCS interface")
+            self.log.info("✅ NLES5 results saved using shared cloud storage interface")
             self.log.info(f"🎯 PRIMARY TABLE: {unified_path}")
             self.log.info(f"📁 Base path structure: {base_path}")
             self.log.info(
@@ -1507,10 +1511,10 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     )
                     return
             except Exception:
-                # If check fails, fall through to GCS load
+                # If check fails, fall through to cloud storage load
                 pass
 
-            # Fallback to direct GCS load per year (validated, no synthetic defaults)
+            # Fallback to direct cloud storage load per year (validated, no synthetic defaults)
             union_parts = []
             for year in years:
                 dataset_name = f"fvm_marker_{year}"
@@ -2354,9 +2358,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         return self.memory_utils._aggressive_pipeline_cleanup()
 
     def _save_batched_results_to_gold(self) -> None:
-        """Save final batched results to gold layer using shared GCS interface."""
+        """Save final batched results to gold layer using shared cloud storage interface."""
         try:
-            self.log.info("💾 Saving batched results to gold layer using shared GCS interface...")
+            self.log.info(
+                "💾 Saving batched results to gold layer using shared cloud storage interface..."
+            )
 
             # Final validation
             final_count = self.conn.execute(
@@ -2451,14 +2457,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             self.log.info(f"✅ Created gold table with {final_count:,} NLES5 estimates")
             self.log.info(f"📅 Years processed: {[row[0] for row in final_years]}")
 
-            # Save to GCS using shared GCS interface - main results table
+            # Save to cloud storage using shared cloud storage interface - main results table
             timestamp = self.date_pattern
             dataset_name = f"{self.config.dataset}_nitrogen_estimates"
             storage_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
             full_storage_path = f"{self.config.bucket}/{storage_path}"
             fs_path = f"{self.config.bucket}/{storage_path}"
 
-            # Export to local file first to avoid DuckDB temp file issues with GCS writes
+            # Export to local file first to avoid DuckDB temp file issues with cloud storage writes
             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
                 local_parquet = tmp_file.name
 
@@ -2535,8 +2541,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     self.log.error("❌ Export failed: file not created")
                     raise RuntimeError("COPY command did not create output file")
 
-                # Upload local file to GCS using streaming
-                self.log.info(f"☁️ Uploading to GCS: {full_storage_path}")
+                # Upload local file to cloud storage using streaming
+                self.log.info(f"☁️ Uploading to cloud storage: {full_storage_path}")
                 import shutil
 
                 with (

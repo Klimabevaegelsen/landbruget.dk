@@ -55,9 +55,9 @@ cat schema_output/columns.md
 rm -rf test_data schema_output
 ```
 
-### 2. Generate Documentation from GCS
+### 2. Generate Documentation from Cloud Storage
 
-If you have access to the production GCS bucket:
+If you have access to the production storage bucket:
 
 ```bash
 # Set up environment
@@ -99,7 +99,7 @@ cat docs/schema/tables.md
 
 ### Multiple Data Sources
 
-Combine local cache with specific GCS tables:
+Combine local cache with specific cloud storage tables:
 
 ```bash
 python generate_schema_docs.py \
@@ -186,10 +186,10 @@ jobs:
 **Solution:** Check your paths and credentials
 
 ```bash
-# Verify GCS credentials
+# Verify cloud credentials
 gcloud auth application-default print-access-token
 
-# Test GCS access
+# Test cloud storage access
 gsutil ls gs://landbruget-data/gold/
 
 # Use local cache instead

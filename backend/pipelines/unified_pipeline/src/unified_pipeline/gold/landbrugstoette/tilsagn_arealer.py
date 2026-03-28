@@ -137,7 +137,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
             self.log.info(f"Using in-memory silver data for {dataset}")
             self.conn.register(table_name, silver_data[dataset])
         else:
-            # Load from GCS - FVM data is organized by year
+            # Load from cloud storage - FVM data is organized by year
             pattern = f"{self.config.bucket}/silver/{dataset}/**/*.parquet"
             self.log.info(f"Loading {dataset} from: {pattern}")
 
@@ -416,7 +416,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
         return validation
 
     async def _save_gold_data(self) -> dict[str, str]:
-        """Save gold tables to GCS."""
+        """Save gold tables to cloud storage."""
         self.log.info("Saving spatial subsidies gold data")
 
         output_paths = {}

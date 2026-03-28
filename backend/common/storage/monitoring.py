@@ -1,7 +1,7 @@
 """
-Resource monitoring for GCS operations.
+Resource monitoring for cloud storage operations.
 
-Tracks memory and disk usage during GCS operations,
+Tracks memory and disk usage during cloud storage operations,
 with special handling for GitHub Actions environments.
 """
 
@@ -15,7 +15,7 @@ except ImportError:
 
 
 class ResourceMonitor:
-    """Monitor runner resource usage during GCS operations."""
+    """Monitor runner resource usage during cloud storage operations."""
 
     def __init__(self):
         self.max_memory_usage = 0

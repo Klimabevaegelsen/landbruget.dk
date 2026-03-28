@@ -206,7 +206,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save both geometric intersection tables to GCS."""
+        """Save both geometric intersection tables to cloud storage."""
         # Save property × BNBO intersections
         self._save_stage_output("property_bnbo_intersections", "property_bnbo_intersections")
 

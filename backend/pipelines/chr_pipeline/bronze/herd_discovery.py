@@ -5,7 +5,7 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
-# Import GCS access for persistent storage
+# Import cloud storage access for persistent storage
 try:
     from common.storage import StorageAccess
 
@@ -320,7 +320,7 @@ def save_discovery_results(
             logger.info(f"💾 Saved discovery results to: {config_path}")
 
         except Exception as e:
-            logger.warning(f"Failed to save discovery results to GCS: {e}")
+            logger.warning(f"Failed to save discovery results to cloud storage: {e}")
 
     # Always save locally as backup
     try:
@@ -372,6 +372,6 @@ def load_previous_discovery_results(year: int) -> tuple[list[dict], list[int]] |
                 logger.info(f"📋 Discovery cache is {age_days} days old, will re-discover")
 
         except Exception as e:
-            logger.warning(f"Failed to load discovery results from GCS: {e}")
+            logger.warning(f"Failed to load discovery results from cloud storage: {e}")
 
     return None

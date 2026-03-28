@@ -64,7 +64,7 @@ class H3PMTilesGenerator:
                     os.remove(geojson_path)
                 return None
 
-            # Upload to GCS if available
+            # Upload to cloud storage if available
             if self.storage:
                 storage_path = self._upload_pmtiles_to_storage(pmtiles_path, year)
                 if storage_path:
@@ -132,7 +132,7 @@ class H3PMTilesGenerator:
                     os.remove(geojson_path)
                 return None
 
-            # Upload to GCS if available
+            # Upload to cloud storage if available
             if self.storage:
                 storage_path = self._upload_kommune_pmtiles_to_storage(pmtiles_path, year)
                 if storage_path:
@@ -434,7 +434,7 @@ class H3PMTilesGenerator:
             return None
 
     def _upload_pmtiles_to_storage(self, pmtiles_path: str, year: int | str) -> str | None:
-        """Upload PMTiles to GCS with public read access."""
+        """Upload PMTiles to cloud storage with public read access."""
         try:
             import shutil
             from datetime import datetime
@@ -445,7 +445,7 @@ class H3PMTilesGenerator:
 
             self.log.info(f"☁️ Uploading PMTiles to: {storage_path}")
 
-            # Upload using GCS access - use the correct streaming method
+            # Upload using cloud storage access - use the correct streaming method
             with open(pmtiles_path, "rb") as src, self.storage.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
@@ -469,7 +469,7 @@ class H3PMTilesGenerator:
     def _set_public_read_acl(self, storage_path: str) -> None:
         """Set public read ACL on a storage file.
 
-        Note: R2 does not support per-object ACLs in the same way as GCS.
+        Note: R2 does not support per-object ACLs in the same way as native cloud storage.
         Public access is controlled via R2 bucket settings or custom domains.
         This method is kept as a no-op for backward compatibility.
         """
@@ -716,7 +716,7 @@ class H3PMTilesGenerator:
             return None
 
     def _upload_kommune_pmtiles_to_storage(self, pmtiles_path: str, year: int | str) -> str | None:
-        """Upload kommune PMTiles to GCS with public read access."""
+        """Upload kommune PMTiles to cloud storage with public read access."""
         try:
             import shutil
             from datetime import datetime
@@ -727,7 +727,7 @@ class H3PMTilesGenerator:
 
             self.log.info(f"☁️ Uploading kommune PMTiles to: {storage_path}")
 
-            # Upload using GCS access - use the correct streaming method
+            # Upload using cloud storage access - use the correct streaming method
             with open(pmtiles_path, "rb") as src, self.storage.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
@@ -755,7 +755,7 @@ class H3PMTilesGenerator:
             years_data: Dict mapping year to results table name
 
         Returns:
-            Dict mapping year to PMTiles path (GCS or local)
+            Dict mapping year to PMTiles path (cloud storage or local)
         """
         results = {}
 

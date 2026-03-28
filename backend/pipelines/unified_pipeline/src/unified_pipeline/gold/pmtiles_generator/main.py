@@ -30,7 +30,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         """
         super().__init__(config)
 
-        # Use inherited DuckDB connection and GCS access from BaseSource
+        # Use inherited DuckDB connection and cloud storage access from BaseSource
         self.duckdb_conn = self.conn
         # self.storage is already available from BaseSource
         self.year_detector = None
@@ -69,7 +69,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
     def _ensure_storage_credentials(self):
         """Ensure cloud storage credentials are properly configured for DuckDB.
 
-        Uses the shared setup_duckdb_cloud_auth which tries R2 first, then GCS HMAC.
+        Uses the shared setup_duckdb_cloud_auth which tries R2 first, then HMAC fallback.
         """
         from common.storage.filesystem import setup_duckdb_cloud_auth
 
@@ -77,7 +77,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
             logger.info("DuckDB cloud storage authentication configured")
         else:
             logger.warning(
-                "No R2 or GCS credentials found — "
+                "No R2 or cloud storage credentials found — "
                 "set R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID"
             )
 
@@ -468,7 +468,7 @@ async def main():
                 successful = sum(1 for p in field_pmtiles.values() if p)
                 if successful == 0 and len(field_pmtiles) > 0:
                     logger.error(
-                        "No field analysis PMTiles were generated — check GCS data availability"
+                        "No field analysis PMTiles were generated — check cloud storage data availability"
                     )
                     sys.exit(1)
             elif field_pmtiles is None:

@@ -483,7 +483,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             f"🔧 Configuration: area_tolerance={self.config.area_tolerance_pct}%, "
             f"field_year_offset={self.config.field_year_offset}"
         )
-        self.log.info(f"☁️ GCS Bucket: {self.config.bucket}")
+        self.log.info(f"☁️ Storage Bucket: {self.config.bucket}")
 
         # STEP 1: DISCOVER AVAILABLE DATA
         # ===============================
@@ -497,8 +497,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         if not pesticide_field_pairs:
             self.log.warning("⚠️ No valid pesticide-field year pairs found")
             self.log.info("🔍 This might be due to:")
-            self.log.info("   - No pesticide data files in GCS")
-            self.log.info("   - No field data files in GCS")
+            self.log.info("   - No pesticide data files in cloud storage")
+            self.log.info("   - No field data files in cloud storage")
             self.log.info("   - Year offset mismatch between pesticide and field data")
             self.log.info("✅ Pesticide disaggregation completed - no data to process")
             return
@@ -749,7 +749,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         from datetime import datetime
 
         try:
-            # Create timestamp and GCS path
+            # Create timestamp and storage path
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{dataset}.parquet"
             storage_path = f"{stage}/{dataset}/{timestamp}/{filename}"
@@ -764,7 +764,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
             """)
 
-            # Upload to GCS
+            # Upload to cloud storage
             self._upload_file_with_storage_access(
                 self.config.bucket,
                 temp_path,
@@ -777,12 +777,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             full_storage_path = f"{self.config.bucket}/{storage_path}"
             self.log.info(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_storage_path}")
-            self.log.info(f"📁 GCS Path: {full_storage_path}")
+            self.log.info(f"📁 Storage Path: {full_storage_path}")
             print(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_storage_path}")
-            print(f"📁 GCS Path: {full_storage_path}")
+            print(f"📁 Storage Path: {full_storage_path}")
 
         except Exception as e:
-            self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
+            self.log.error(f"❌ Failed to save table {table_name} to cloud storage: {e}")
             # Clean up temp file on error
             if "temp_path" in locals() and os.path.exists(temp_path):
                 os.unlink(temp_path)
@@ -847,14 +847,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
             # ==========================================
             # Look through cloud storage for pesticide data files
-            self.log.info("📊 Scanning GCS for pesticide data...")
+            self.log.info("📊 Scanning cloud storage for pesticide data...")
             pesticide_years = self._get_available_pesticide_years()
             self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
 
         # STEP 2: DISCOVER AVAILABLE FIELD YEARS
         # ======================================
         # Look through cloud storage for field boundary data files
-        self.log.info("🌾 Scanning GCS for field data...")
+        self.log.info("🌾 Scanning cloud storage for field data...")
         field_years = self._get_available_field_years()
         self.log.info(f"✅ Found field years: {sorted(field_years)}")
 
@@ -878,7 +878,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         return sorted(pairs)
 
     def _get_available_pesticide_years(self) -> set[int]:
-        """Extract available pesticide years from GCS storage."""
+        """Extract available pesticide years from cloud storage."""
         try:
             # Use list_files with recursive pattern to find all parquet files
             pattern = f"{self.config.bucket}/silver/pesticides/*/*.parquet"
@@ -899,7 +899,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             return set()
 
     def _get_available_field_years(self) -> set[int]:
-        """Extract available field years from GCS storage."""
+        """Extract available field years from cloud storage."""
         return set(self._get_available_fvm_marker_years())
 
     def _get_available_fvm_marker_years(self) -> list[int]:
@@ -936,7 +936,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(f"💾 Using in-memory pesticide data for year {pesticide_year}")
             datasets["pesticides"] = silver_data["pesticides"]
         else:
-            self.log.info(f"☁️ Reading pesticide data for year {pesticide_year} from GCS storage")
+            self.log.info(f"☁️ Reading pesticide data for year {pesticide_year} from cloud storage")
             pesticide_path = self._read_pesticide_data_for_year(pesticide_year)
             if pesticide_path is not None:
                 datasets["pesticides"] = pesticide_path
@@ -954,7 +954,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             datasets["agricultural_fields"] = silver_data["agricultural_fields"]
         else:
             self.log.info(
-                f"☁️ Reading agricultural fields data for year {field_year} from GCS storage"
+                f"☁️ Reading agricultural fields data for year {field_year} from cloud storage"
             )
             fields_path = self._read_fields_data_for_year(field_year)
             if fields_path is not None:
@@ -983,7 +983,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _read_pesticide_data_for_year(self, year: int) -> str | None:
         """Read pesticide data for a specific year.
 
-        Uses GCS file modification timestamps for deterministic file selection,
+        Uses cloud storage file modification timestamps for deterministic file selection,
         avoiding issues with non-deterministic glob() ordering.
         """
         try:
@@ -1003,7 +1003,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 )
                 return None
 
-            # Sort by actual GCS modification time (deterministic) - newest first
+            # Sort by actual cloud storage modification time (deterministic) - newest first
             files_sorted = sorted(files_with_ts, key=lambda x: x[1], reverse=True)
             latest_path = files_sorted[0][0]
 
@@ -1017,7 +1017,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _read_fields_data_for_year(self, year: int) -> str | None:
         """Read agricultural fields data for a specific year.
 
-        Uses GCS file modification timestamps for deterministic file selection,
+        Uses cloud storage file modification timestamps for deterministic file selection,
         avoiding issues with non-deterministic glob() ordering.
         """
         try:
@@ -1034,7 +1034,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.warning(f"No FVM marker file found for year {year}")
                 return None
 
-            # Sort by actual GCS modification time (deterministic) - newest first
+            # Sort by actual cloud storage modification time (deterministic) - newest first
             files_sorted = sorted(files_with_ts, key=lambda x: x[1], reverse=True)
             latest_path = files_sorted[0][0]
 
@@ -1640,7 +1640,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         self.log.info(f"🏗️ Creating pesticide table from {pesticide_applications_path}")
 
-        # ✅ MIGRATION: Create pesticide table using optimized GCS access with temp download
+        # ✅ MIGRATION: Create pesticide table using optimized cloud storage access with temp download
         self.log.info("📥 Downloading pesticide data...")
         with self.storage._temp_download(pesticide_applications_path) as temp_file:
             self.log.info(f"✅ Downloaded to temporary file: {temp_file}")

@@ -2,7 +2,7 @@
 Climate Output Writer Module
 
 This module handles writing EmissionReport results to:
-1. GCS gold layer (primary storage)
+1. Cloud storage gold layer (primary storage)
 2. Supabase database (optional sync for web access)
 
 The writer uses the StorageAccess pattern for optimal performance and
@@ -35,11 +35,11 @@ logger = Logger.get_logger()
 
 class ClimateOutputWriter:
     """
-    Writes EmissionReport results to GCS gold layer and optionally syncs to Supabase.
+    Writes EmissionReport results to cloud storage gold layer and optionally syncs to Supabase.
 
     This writer:
     - Converts EmissionReport objects to parquet format
-    - Writes to GCS gold/carbon_emissions/<timestamp>/
+    - Writes to cloud storage gold/carbon_emissions/<timestamp>/
     - Includes comprehensive metadata
     - Optionally syncs to Supabase for web access
     """
@@ -49,7 +49,7 @@ class ClimateOutputWriter:
         Initialize the climate output writer.
 
         Args:
-            bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbruget-data'
+            bucket: storage bucket name. Defaults to cloud storage_BUCKET env var or 'landbruget-data'
         """
         self.bucket = (
             bucket
@@ -57,7 +57,7 @@ class ClimateOutputWriter:
             or os.getenv("R2_BUCKET")
             or os.getenv("GCS_BUCKET", "landbruget-data")
         )
-        self.gcs = StorageAccess()
+        self.storage = StorageAccess()
         self._duckdb_conn = duckdb.connect()
         logger.info(f"ClimateOutputWriter initialized with bucket: {self.bucket}")
 
@@ -68,7 +68,7 @@ class ClimateOutputWriter:
         run_metadata: dict[str, Any] | None = None,
     ) -> str:
         """
-        Write EmissionReport results to GCS gold layer.
+        Write EmissionReport results to cloud storage gold layer.
 
         This method:
         1. Converts EmissionReport objects to DuckDB tables
@@ -82,7 +82,7 @@ class ClimateOutputWriter:
             run_metadata: Optional metadata about the run (pipeline version, data sources, etc.)
 
         Returns:
-            GCS path to the output directory
+            storage path to the output directory
 
         Example:
             >>> writer = ClimateOutputWriter()
@@ -109,7 +109,7 @@ class ClimateOutputWriter:
 
             # Write emissions.parquet
             emissions_path = f"{output_dir}/emissions.parquet"
-            self.gcs.upload_from_duckdb_table(
+            self.storage.upload_from_duckdb_table(
                 "emissions_temp",
                 emissions_path,
                 compression="zstd",
@@ -122,7 +122,7 @@ class ClimateOutputWriter:
 
             # Write categories.parquet
             categories_path = f"{output_dir}/categories.parquet"
-            self.gcs.upload_from_duckdb_table(
+            self.storage.upload_from_duckdb_table(
                 "categories_temp",
                 categories_path,
                 compression="zstd",
@@ -136,7 +136,7 @@ class ClimateOutputWriter:
             # Write metadata.json
             metadata = self._build_metadata(reports, timestamp, run_metadata)
             metadata_path = f"{output_dir}/metadata.json"
-            self.gcs.upload_json(metadata, metadata_path)
+            self.storage.upload_json(metadata, metadata_path)
             logger.info(f"Wrote metadata to {metadata_path}")
 
             # Cleanup temporary tables
@@ -462,7 +462,7 @@ class ClimateOutputWriter:
                     (e.g., "20240101_*" for specific date)
 
         Returns:
-            List of GCS paths to report directories
+            List of storage paths to report directories
 
         Example:
             >>> writer = ClimateOutputWriter()
@@ -475,7 +475,7 @@ class ClimateOutputWriter:
             else:
                 search_pattern = f"{self.bucket}/gold/carbon_emissions/*/metadata.json"
 
-            metadata_files = self.gcs.list_files(search_pattern)
+            metadata_files = self.storage.list_files(search_pattern)
 
             # Extract directory paths
             report_dirs = ["/".join(path.split("/")[:-1]) for path in metadata_files]
@@ -504,7 +504,7 @@ class ClimateOutputWriter:
         """
         try:
             metadata_path = f"{report_path}/metadata.json"
-            return self.gcs.download_json(metadata_path)
+            return self.storage.download_json(metadata_path)
         except Exception as e:
             logger.error(f"Failed to read metadata from {report_path}: {e}")
             return None

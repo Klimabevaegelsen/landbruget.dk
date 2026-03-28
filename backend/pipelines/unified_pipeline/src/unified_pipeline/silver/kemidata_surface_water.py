@@ -16,7 +16,7 @@ embedded as "x, y" strings in the station data. The silver layer:
 3. Creates Point geometries in EPSG:25832
 4. Filters to surface water only (Vandløb, Sø)
 5. Validates coordinates within Denmark bounds
-6. Saves as parquet to GCS
+6. Saves as parquet to cloud storage
 """
 
 from datetime import datetime
@@ -35,7 +35,7 @@ class KemidataSurfaceWaterSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset: Name of the dataset in storage
-        bucket: GCS bucket name
+        bucket: storage bucket name
         source_crs: Source coordinate reference system
     """
 
@@ -292,7 +292,7 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
 
         Args:
             bronze_data: Optional manifest dict from bronze stage.
-                If None, looks for latest manifest in GCS.
+                If None, looks for latest manifest in cloud storage.
 
         Returns:
             Success info with statistics, or None on failure.
@@ -313,7 +313,7 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
                     stations_path = bronze_data.get("stations_path")
                 else:
                     # Find latest manifest
-                    self.log.info("No bronze data — reading from GCS")
+                    self.log.info("No bronze data — reading from cloud storage")
                     manifest_pattern = (
                         f"{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
                     )
@@ -355,7 +355,7 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
                     FROM {table_name}
                 """).fetchone()
 
-                # Save to GCS silver layer
+                # Save to cloud storage silver layer
                 self._save_data_with_metadata(
                     data=table_name,
                     dataset=self.config.dataset,

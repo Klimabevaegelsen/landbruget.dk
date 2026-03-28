@@ -223,7 +223,7 @@ Area validation (stages 1-4 only, ENABLED BY DEFAULT):
         help="Specific job to run within the stage (optional, runs all jobs if not specified)",
     )
 
-    parser.add_argument("--bucket", type=str, help="GCS bucket name (overrides default)")
+    parser.add_argument("--bucket", type=str, help="storage bucket name (overrides default)")
 
     parser.add_argument(
         "--max-memory-gb", type=int, default=14, help="Maximum memory limit in GB (default: 14)"

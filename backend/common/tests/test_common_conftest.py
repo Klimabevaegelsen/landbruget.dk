@@ -24,7 +24,7 @@ def test_temp_dir_fixture(temp_dir):
 
 def test_mock_cloud_filesystem(mock_cloud_filesystem):
     """Test that mock_cloud_filesystem provides expected interface."""
-    # Should have common GCS methods
+    # Should have common cloud storage methods
     assert hasattr(mock_cloud_filesystem, "ls")
     assert hasattr(mock_cloud_filesystem, "exists")
     assert hasattr(mock_cloud_filesystem, "open")

@@ -13,7 +13,7 @@ This directory contains shared pytest fixtures used across all backend pipeline 
 ### File System & Storage
 
 - **`temp_dir`** - Temporary directory for test data (function scope)
-- **`mock_gcs_filesystem`** - Mock GCS filesystem for isolated testing (function scope)
+- **`mock_cloud_filesystem`** - Mock cloud filesystem for isolated testing (function scope)
 
 ### Database
 
@@ -59,16 +59,16 @@ def test_cvr_processing(valid_cvr_numbers, cvr_validator):
         # Your test logic here
 ```
 
-### Using Mock GCS
+### Using Mock Cloud Storage
 
 ```python
-def test_gcs_upload(mock_gcs_filesystem, temp_dir):
-    """Test GCS upload logic without actual cloud storage."""
-    # Your code that uses GCS
-    mock_gcs_filesystem.put("local_file.txt", "gs://bucket/remote_file.txt")
+def test_cloud_upload(mock_cloud_filesystem, temp_dir):
+    """Test cloud upload logic without actual cloud storage."""
+    # Your code that uses cloud storage
+    mock_cloud_filesystem.put("local_file.txt", "bucket/remote_file.txt")
 
     # Verify upload was called
-    assert "gs://bucket/remote_file.txt" in mock_gcs_filesystem.uploaded_files
+    assert "bucket/remote_file.txt" in mock_cloud_filesystem.uploaded_files
 ```
 
 ### Using DuckDB

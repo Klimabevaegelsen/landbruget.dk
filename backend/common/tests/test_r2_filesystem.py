@@ -2,7 +2,7 @@
 
 TDD RED phase: These tests define the expected behavior of the R2 filesystem
 module BEFORE implementation. They should fail initially, then pass once
-filesystem.py is migrated from gcsfs to s3fs.
+filesystem.py is migrated to s3fs.
 
 Tests cover:
 - S3FileSystem creation with R2 endpoint
@@ -225,7 +225,7 @@ class TestGetDuckDBWithR2:
         clear=True,
     )
     def test_setup_duckdb_cloud_auth_fallback(self):
-        """Shared auth helper should keep legacy GCS HMAC fallback."""
+        """Shared auth helper should keep legacy cloud HMAC fallback."""
         from common.storage.filesystem import setup_duckdb_cloud_auth
 
         conn = duckdb.connect(":memory:")

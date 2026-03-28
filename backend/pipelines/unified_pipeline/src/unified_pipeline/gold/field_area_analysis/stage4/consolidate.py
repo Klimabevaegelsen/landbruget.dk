@@ -713,5 +713,5 @@ class ConsolidateResults(FieldAnalysisStageBase):
         return "field_environmental_analysis"
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save final consolidated analysis to GCS."""
+        """Save final consolidated analysis to cloud storage."""
         self._save_stage_output("field_area_analysis_final", "consolidated")

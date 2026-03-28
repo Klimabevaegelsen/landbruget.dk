@@ -3,7 +3,7 @@ Water Typology Silver Layer Implementation
 
 This module implements the silver layer data processing for Danish water typology data.
 It transforms raw water typology data from the bronze layer into structured geometries,
-validates geometries, and saves the processed data to Google Cloud Storage (GCS).
+validates geometries, and saves the processed data to cloud storage.
 
 IMPORTANT: Unlike water projects, this pipeline does NOT dissolve geometries.
 Water typology layers (lakes, coastal waters, watercourses) need to maintain
@@ -14,11 +14,11 @@ The module contains:
 - WaterTypologySilver: Implementation class for processing and transforming data
 
 The processing includes:
-1. Reading raw data from GCS
+1. Reading raw data from cloud storage
 2. Extracting features from XML payloads
 3. Parsing geometries and calculating areas
 4. Standardizing attribute names and types
-5. Saving processed data back to GCS (without dissolving)
+5. Saving processed data back to cloud storage (without dissolving)
 """
 
 import xml.etree.ElementTree as ET
@@ -48,7 +48,7 @@ class WaterTypologySilverConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): Name of the dataset being processed
-        bucket (str): GCS bucket name for data storage
+        bucket (str): storage bucket name for data storage
         storage_batch_size (int): Batch size for data storage operations
         namespaces (dict): XML namespace mappings for parsing WFS responses
         gml_ns (str): GML namespace string for geometry parsing
@@ -78,7 +78,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
     Silver layer processing for Water Typology data.
     This class transforms raw water typology data from the bronze layer into
     structured geometries, validates geometries, and saves the processed data
-    to Google Cloud Storage (GCS).
+    to cloud storage.
     It handles XML data formats, extracting features and converting
     them into geometries with appropriate attributes.
 
@@ -87,11 +87,11 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
     features to preserve their typological classification and analysis value.
 
     The processing includes:
-    1. Reading raw data from GCS
+    1. Reading raw data from cloud storage
     2. Extracting features from XML payloads
     3. Parsing geometries and calculating areas
     4. Standardizing attribute names and types
-    5. Saving processed data back to GCS (individual features preserved)
+    5. Saving processed data back to cloud storage (individual features preserved)
     """
 
     def __init__(self, config: WaterTypologySilverConfig):
@@ -106,7 +106,9 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
         # ✅ MIGRATION: BaseSource already created StorageAccess and configured DuckDB
         # No need to create another instance or setup DuckDB again
-        self.log.info("✅ WaterTypologySilver: Using unified GCS access and DuckDB connection")
+        self.log.info(
+            "✅ WaterTypologySilver: Using unified cloud storage access and DuckDB connection"
+        )
 
     def get_first_namespace(self, root: ET.Element) -> str | None:
         """
@@ -686,14 +688,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                         self.log.error("Bronze data format not supported")
                         return None
                 else:
-                    # Read from GCS storage
+                    # Read from cloud storage
                     raw_data_list = []
                     for layer in self.config.layers:
                         f"{layer.replace(':', '_')}_raw"
                         dataset_name = f"{self.config.dataset}_{layer.replace(':', '_')}"
 
                         try:
-                            # Load data from GCS using the correct method
+                            # Load data from cloud storage using the correct method
                             table_name = self._read_bronze_data(dataset_name, self.config.bucket)
 
                             if table_name:

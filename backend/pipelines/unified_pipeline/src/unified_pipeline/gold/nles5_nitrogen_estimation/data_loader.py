@@ -38,14 +38,14 @@ class NLES5DataLoader:
 
     def _get_available_fvm_marker_years(self) -> list[int]:
         """
-        Get all available fvm_marker years from GCS storage.
+        Get all available fvm_marker years from cloud storage.
 
         Returns:
             List of available years for fvm_marker datasets
         """
         years: set[int] = set()
 
-        # Primary: discover from GCS using the correct fvm_marker path pattern
+        # Primary: discover from cloud storage using the correct fvm_marker path pattern
         try:
             files = self.storage.list_files(
                 f"{self.config.bucket}/silver/{self.config.agricultural_fields_dataset}_*/*/*"
@@ -65,19 +65,19 @@ class NLES5DataLoader:
                     else:
                         years.add(year1)
         except Exception as e:
-            self.log.error(f"Error discovering FVM marker years from GCS: {e}")
+            self.log.error(f"Error discovering FVM marker years from cloud storage: {e}")
 
-        # Secondary: derive from hardcoded known years if GCS discovery failed
+        # Secondary: derive from hardcoded known years if cloud storage discovery failed
         if not years:
             self.log.info(
-                "GCS discovery returned empty, using hardcoded fallback "
-                "years based on GCS tree analysis"
+                "cloud storage discovery returned empty, using hardcoded fallback "
+                "years based on cloud storage tree analysis"
             )
 
-        # Tertiary: use hardcoded fallback if GCS discovery failed (network issues)
+        # Tertiary: use hardcoded fallback if cloud storage discovery failed (network issues)
         if not years:
-            self.log.warning("⚠️ GCS discovery failed - using hardcoded fallback years")
-            # Based on GCS tree analysis, these years are available:
+            self.log.warning("⚠️ cloud storage discovery failed - using hardcoded fallback years")
+            # Based on cloud storage tree analysis, these years are available:
             fallback_years = [
                 2005,
                 2006,
@@ -103,7 +103,9 @@ class NLES5DataLoader:
                 2026,
             ]
             years.update(fallback_years)
-            self.log.info(f"Using hardcoded fallback FVM years from GCS tree: {sorted(years)}")
+            self.log.info(
+                f"Using hardcoded fallback FVM years from cloud storage tree: {sorted(years)}"
+            )
 
         return sorted(years)
 
@@ -115,7 +117,7 @@ class NLES5DataLoader:
             year: The year to read data for
 
         Returns:
-            GCS path to the FVM marker data file, or None if not found
+            storage path to the FVM marker data file, or None if not found
         """
         try:
             # Use dynamic discovery to find the latest timestamped directory for this year
@@ -160,7 +162,7 @@ class NLES5DataLoader:
         self, base_path: str, dataset_name: str = "dataset"
     ) -> str | None:
         """
-        Get the latest timestamped directory from a base GCS path.
+        Get the latest timestamped directory from a base storage path.
 
         This method dynamically discovers timestamped directories (format: YYYYMMDD_HHMMSS)
         and returns the path to the most recent one.
@@ -263,7 +265,7 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to fertilizer data directory (contains GKEA and Efterafgrøder files)
+            storage path to fertilizer data directory (contains GKEA and Efterafgrøder files)
         """
         try:
             base_path = f"{self.config.bucket}/silver/{self.config.fertilizer_dataset}/"
@@ -297,7 +299,7 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to specific fertilizer accounts parquet file, or None if not found
+            storage path to specific fertilizer accounts parquet file, or None if not found
         """
         try:
             # Strategy 1: Try year-specific GR directory first (e.g., "gr 2019/", "gr 2023/")
@@ -409,7 +411,7 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to GKEA field plan data
+            storage path to GKEA field plan data
         """
         try:
             # Get the fertiliser base directory (will raise exception if not found)
@@ -486,7 +488,7 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to catch crops data
+            storage path to catch crops data
         """
         try:
             # Get the fertiliser base directory
@@ -542,11 +544,11 @@ class NLES5DataLoader:
         self, dataset_name: str, file_path: str, target_table: str
     ) -> bool:
         """
-        Read silver data from a specific GCS path into a DuckDB table.
+        Read silver data from a specific storage path into a DuckDB table.
 
         Args:
             dataset_name: Name of the dataset for logging
-            file_path: GCS path to the data file
+            file_path: storage path to the data file
             target_table: Name of the target DuckDB table
 
         Returns:
@@ -564,7 +566,7 @@ class NLES5DataLoader:
             if dataset_name == self.config.field_plan_dataset and "GKEA" in file_path:
                 return self._process_gkea_field_plan_data(file_path, target_table)
 
-            # Use the standard StorageAccess method to create table from GCS
+            # Use the standard StorageAccess method to create table from cloud storage
             self.storage.create_table_from_storage(target_table, file_path)
 
             # Verify the table was created and has data
@@ -586,7 +588,7 @@ class NLES5DataLoader:
         2. CSV-like with headers in row 2 (legacy format)
 
         Args:
-            file_path: GCS path to the GKEA field plan file
+            file_path: storage path to the GKEA field plan file
             target_table: Target table name (should be 'field_plan')
 
         Returns:
@@ -644,7 +646,7 @@ class NLES5DataLoader:
         Process GKEA data that already has proper Danish column names.
 
         Args:
-            file_path: GCS path to the GKEA field plan file
+            file_path: storage path to the GKEA field plan file
             target_table: Target table name
             gkea_year: Year extracted from filename
             column_names: List of column names from the parquet file
@@ -738,7 +740,7 @@ class NLES5DataLoader:
         Process GKEA data with legacy format (headers in row 2).
 
         Args:
-            file_path: GCS path to the GKEA field plan file
+            file_path: storage path to the GKEA field plan file
             target_table: Target table name
             gkea_year: Year extracted from filename
             column_names: List of column names from the parquet file
@@ -1090,7 +1092,7 @@ class NLES5DataLoader:
                             )
                             continue
 
-                    # Load from GCS using modern pattern
+                    # Load from cloud storage using modern pattern
                     else:
                         # Special handling for fertilizer and catch crops datasets
                         # (they don't follow standard patterns)
@@ -1570,7 +1572,7 @@ class NLES5DataLoader:
 
     def _load_farm_data_for_year(self, year: int) -> str | None:
         """
-        Load farm data for a specific year from GCS bucket into DuckDB.
+        Load farm data for a specific year from storage bucket into DuckDB.
 
         Args:
             year: Year to load data for
@@ -1579,7 +1581,7 @@ class NLES5DataLoader:
             Table name with farm data or None if not available
         """
         try:
-            # Load gødningsregnskab from GCS bucket
+            # Load gødningsregnskab from storage bucket
             # Dynamically find the latest timestamped directory for this year
             base_path = f"{self.config.bucket}/silver/gr {year}/"
             latest_dir = self._get_latest_timestamped_directory(base_path, f"farm data {year}")
@@ -1595,7 +1597,9 @@ class NLES5DataLoader:
             files = self.storage.list_files(pattern)
 
             if not files:
-                self.log.warning(f"No farm data files found for year {year} in GCS: {pattern}")
+                self.log.warning(
+                    f"No farm data files found for year {year} in cloud storage: {pattern}"
+                )
                 return None
 
             # Create temporary table name for this year
@@ -1700,38 +1704,40 @@ class NLES5DataLoader:
 
     def _find_main_farm_file(self, base_path: Path) -> Path | None:
         """
-        Legacy method for finding main farm data file - no longer used with GCS implementation.
+        Legacy method for finding main farm data file - no longer used with cloud storage implementation.
 
         This method is kept for backward compatibility but should not be called
-        in the GCS-based farm data loading.
+        in the cloud storage-based farm data loading.
         """
-        self.log.warning("_find_main_farm_file called but farm data is now loaded from GCS")
+        self.log.warning(
+            "_find_main_farm_file called but farm data is now loaded from cloud storage"
+        )
         return None
 
     def _load_file_to_duckdb(self, file_path: Path, table_name: str) -> bool:
         """
         Legacy method for loading CSV/Excel files to DuckDB
-        - no longer used with GCS implementation.
+        - no longer used with cloud storage implementation.
 
         This method is kept for backward compatibility but should not be called
-        in the GCS-based farm data loading where parquet files are used directly.
+        in the cloud storage-based farm data loading where parquet files are used directly.
         """
         self.log.warning(
-            "_load_file_to_duckdb called but farm data is now loaded from GCS parquet files"
+            "_load_file_to_duckdb called but farm data is now loaded from cloud storage parquet files"
         )
         return False
 
     def _load_and_combine_animal_data(self, animal_files: list[Path], animal_table: str) -> None:
         """
         Legacy method for loading and combining animal data files
-        - no longer used with GCS implementation.
+        - no longer used with cloud storage implementation.
 
         This method is kept for backward compatibility but should not be called
-        in the GCS-based farm data loading where animal data is handled directly
+        in the cloud storage-based farm data loading where animal data is handled directly
         in _load_farm_data_for_year.
         """
         self.log.warning(
-            "_load_and_combine_animal_data called but farm data is now loaded from GCS"
+            "_load_and_combine_animal_data called but farm data is now loaded from cloud storage"
         )
         return
 
@@ -1845,7 +1851,7 @@ class NLES5DataLoader:
                     yearly_tables.append((year, silver_data[year_dataset]))
                     continue
 
-                # Read from GCS
+                # Read from cloud storage
                 fvm_path = self._read_fvm_marker_data_for_year(year)
                 if not fvm_path:
                     self.log.warning(f"⚠️ No FVM marker data found for year {year}, skipping")
@@ -2046,7 +2052,7 @@ class NLES5DataLoader:
         Add year column to fertilizer data by extracting it from the filename.
 
         Args:
-            file_path: GCS path to the fertilizer file (e.g., "Gødningsregnskaber 2023.parquet")
+            file_path: storage path to the fertilizer file (e.g., "Gødningsregnskaber 2023.parquet")
             table_name: Name of the table to update (e.g., "fertilizer_accounts")
         """
         import re

@@ -1,7 +1,7 @@
 """
 Export work permits data enriched with CVR company details and CHR registry data.
 
-Reads all data from GCS/R2 parquet files, joins them, and exports
+Reads all data from cloud storage parquet files, joins them, and exports
 as CSV and parquet. Includes: company info, owners, CHR production sites,
 and animal production details.
 
@@ -28,20 +28,20 @@ BUCKET = os.getenv("GCS_BUCKET", "landbruget-data")
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 
 
-def find_latest(gcs: StorageAccess, pattern: str) -> str | None:
+def find_latest(storage: StorageAccess, pattern: str) -> str | None:
     """Find the most recent file matching a glob pattern."""
-    files = gcs.list_files(pattern)
+    files = storage.list_files(pattern)
     if not files:
         return None
     files.sort()
     return files[-1]
 
 
-def load_table(gcs: StorageAccess, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) -> bool:
+def load_table(storage: StorageAccess, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) -> bool:
     """Download a parquet file and load into DuckDB table."""
     log.info(f"Loading {table_name} from .../{'/'.join(path.split('/')[-3:])}")
     try:
-        with gcs._temp_download(path) as tmp:
+        with storage._temp_download(path) as tmp:
             conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{tmp}')")
         count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         log.info(f"  -> {count:,} rows")
@@ -54,44 +54,44 @@ def load_table(gcs: StorageAccess, conn: duckdb.DuckDBPyConnection, table_name: 
 def main():
     log.info("Starting work permits enriched export")
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
     conn = duckdb.connect()
 
     # 1. Find latest files for each dataset
     log.info("Finding latest data files...")
 
     work_permits_path = find_latest(
-        gcs,
+        storage,
         f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet",
     )
     if not work_permits_path:
         work_permits_path = find_latest(
-            gcs,
+            storage,
             f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet",
         )
     if not work_permits_path:
         log.error("No work permits files found")
         return
 
-    cvr_companies_path = find_latest(gcs, f"{BUCKET}/silver/cvr_companies/*/data.parquet")
-    cvr_persons_path = find_latest(gcs, f"{BUCKET}/silver/cvr_persons/*/data.parquet")
-    chr_properties_path = find_latest(gcs, f"{BUCKET}/silver/chr/*/properties.parquet")
-    chr_property_owners_path = find_latest(gcs, f"{BUCKET}/silver/chr/*/property_owners.parquet")
-    chr_herds_path = find_latest(gcs, f"{BUCKET}/silver/chr/*/herds.parquet")
+    cvr_companies_path = find_latest(storage, f"{BUCKET}/silver/cvr_companies/*/data.parquet")
+    cvr_persons_path = find_latest(storage, f"{BUCKET}/silver/cvr_persons/*/data.parquet")
+    chr_properties_path = find_latest(storage, f"{BUCKET}/silver/chr/*/properties.parquet")
+    chr_property_owners_path = find_latest(storage, f"{BUCKET}/silver/chr/*/property_owners.parquet")
+    chr_herds_path = find_latest(storage, f"{BUCKET}/silver/chr/*/herds.parquet")
 
     # 2. Load all datasets
     log.info("Loading datasets...")
 
-    if not load_table(gcs, conn, "work_permits", work_permits_path):
+    if not load_table(storage, conn, "work_permits", work_permits_path):
         return
 
-    has_companies = cvr_companies_path and load_table(gcs, conn, "cvr_companies", cvr_companies_path)
-    has_persons = cvr_persons_path and load_table(gcs, conn, "cvr_persons", cvr_persons_path)
-    has_properties = chr_properties_path and load_table(gcs, conn, "chr_properties", chr_properties_path)
+    has_companies = cvr_companies_path and load_table(storage, conn, "cvr_companies", cvr_companies_path)
+    has_persons = cvr_persons_path and load_table(storage, conn, "cvr_persons", cvr_persons_path)
+    has_properties = chr_properties_path and load_table(storage, conn, "chr_properties", chr_properties_path)
     has_property_owners = chr_property_owners_path and load_table(
-        gcs, conn, "chr_property_owners", chr_property_owners_path
+        storage, conn, "chr_property_owners", chr_property_owners_path
     )
-    has_herds = chr_herds_path and load_table(gcs, conn, "chr_herds", chr_herds_path)
+    has_herds = chr_herds_path and load_table(storage, conn, "chr_herds", chr_herds_path)
 
     # 3. Pre-aggregate CVR leadership/owners (one row per CVR with comma-separated names)
     # The cvr_persons silver parquet stores person details as JSON in person_data_json

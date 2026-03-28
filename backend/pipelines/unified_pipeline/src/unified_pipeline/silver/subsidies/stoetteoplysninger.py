@@ -58,7 +58,7 @@ class StoetteoplysningerSilverConfig(BaseJobConfig):
     # Bronze source
     bronze_path: str = Field(
         default="bronze/subsidies/stoetteoplysninger.naturerhverv.dk_*.parquet",
-        description="GCS path pattern for bronze data",
+        description="Storage path pattern for bronze data",
     )
 
     # Column mappings (source → standardized)
@@ -143,7 +143,7 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
             raise
 
     async def _load_bronze_data(self, bronze_data: Any | None = None) -> None:
-        """Load bronze data from GCS or memory."""
+        """Load bronze data from cloud storage or memory."""
         if bronze_data is not None:
             self.log.info("Using in-memory bronze data")
             if hasattr(bronze_data, "to_pandas"):
@@ -153,7 +153,7 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
                 # DataFrame or dict
                 self.conn.register("raw_stoetteoplysninger", bronze_data)
         else:
-            # Load from GCS
+            # Load from cloud storage
             self.log.info(f"Loading bronze data from: {self.config.bronze_path}")
             pattern = f"{self.config.bucket}/{self.config.bronze_path}"
 
@@ -355,7 +355,7 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
         return summary
 
     async def _save_silver_data(self) -> str:
-        """Save silver data to GCS."""
+        """Save silver data to cloud storage."""
         output_path = f"silver/{self.config.dataset}"
 
         self.log.info(f"Saving silver data to: {self.config.bucket}/{output_path}")

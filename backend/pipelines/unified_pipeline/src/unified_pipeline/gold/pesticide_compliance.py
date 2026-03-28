@@ -310,7 +310,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         Main execution method for pesticide compliance analysis.
 
         Args:
-            silver_data: Optional silver layer data (not used, loads from GCS)
+            silver_data: Optional silver layer data (not used, loads from cloud storage)
 
         Returns:
             Dict with analysis statistics and results
@@ -363,7 +363,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 all_results, total_issues, len(total_companies)
             )
 
-            # Save results to GCS
+            # Save results to cloud storage
             await self._save_results(all_results, summary_stats)
 
             self.logger.info(
@@ -528,7 +528,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     f"✅ Successfully loaded expected agricultural year {expected_ag_year}"
                 )
 
-        # Load disaggregated pesticide data using proper GCS access pattern
+        # Load disaggregated pesticide data using proper cloud storage access pattern
         with self.storage._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pesticide_applications AS
@@ -640,7 +640,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 f"📄 Loading FVM marker data from: {latest_path} (fallback - latest available)"
             )
 
-        # Load FVM marker data using proper GCS access pattern
+        # Load FVM marker data using proper cloud storage access pattern
         with self.storage._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE agricultural_fields AS
@@ -1396,7 +1396,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         }
 
     async def _save_results(self, all_results: dict, summary_stats: dict) -> None:
-        """Save analysis results to GCS."""
+        """Save analysis results to cloud storage."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         base_path = f"gold/{self.config.dataset}/{timestamp}"
 
@@ -1482,7 +1482,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     self.logger.info(
                         f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}"
                     )
-                    self.logger.info(f"📁 Compliance GCS Path: {compliance_path}")
+                    self.logger.info(f"📁 Compliance Storage Path: {compliance_path}")
                 else:
                     self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
 
@@ -1494,7 +1494,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Generate human-readable report
         report_path = f"{self.config.bucket}/{base_path}/compliance_report.md"
         report_content = self._generate_markdown_report(summary_stats, all_results)
-        # Upload text content using gcsfs filesystem
+        # Upload text content using s3fs filesystem
         with self.storage.fs.open(report_path, "w", encoding="utf-8") as f:
             f.write(report_content)
 
@@ -1505,7 +1505,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 self.conn.execute(f"DROP TABLE IF EXISTS {compliance_table_name}")
                 self.logger.debug(f"🧹 Cleaned up temporary table: {compliance_table_name}")
 
-        self.logger.info(f"✅ Results saved to GCS: {base_path}")
+        self.logger.info(f"✅ Results saved to cloud storage: {base_path}")
 
     def _generate_markdown_report(self, summary: dict, all_results: dict) -> str:
         """Generate human-readable markdown compliance report."""

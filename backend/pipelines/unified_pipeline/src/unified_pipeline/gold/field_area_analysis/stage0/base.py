@@ -36,7 +36,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
         self.conn.execute("SET max_temp_directory_size='12GB'")
 
     def _get_stage0_output_path(self, dataset_name: str) -> str:
-        """Get GCS path for Stage 0 pre-filtered output with year suffix for isolation."""
+        """Get storage path for Stage 0 pre-filtered output with year suffix for isolation."""
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -45,18 +45,18 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
 
     def _save_prefiltered_dataset(self, table_name: str, output_dataset_name: str):
         """
-        Save pre-filtered dataset to GCS using optimized export.
+        Save pre-filtered dataset to cloud storage using optimized export.
 
         Args:
             table_name: DuckDB table name to export
-            output_dataset_name: Name for the output dataset in GCS
+            output_dataset_name: Name for the output dataset in cloud storage
         """
         import os
         import tempfile
         from datetime import datetime
 
         try:
-            # Create timestamp and GCS path following the standard pattern
+            # Create timestamp and storage path following the standard pattern
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{output_dataset_name}.parquet"
             storage_path = f"gold/{output_dataset_name}/{timestamp}/{filename}"
@@ -71,7 +71,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
                 (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
             """)
 
-            # Upload to GCS using storage_access
+            # Upload to cloud storage using storage_access
             full_storage_path = f"{CONFIG.bucket}/{storage_path}"
             fs_path = f"{CONFIG.bucket}/{storage_path}"
 

@@ -144,7 +144,7 @@ class TestDSTBronze:
 
     @pytest.fixture
     def mock_storage_access(self):
-        """Mock GCS access for testing."""
+        """Mock cloud storage access for testing."""
         return Mock()
 
     @pytest.fixture
@@ -166,7 +166,7 @@ class TestDSTBronze:
         dst_bronze.api_client.get_table_info = MagicMock(return_value={"table": "HST77"})
         dst_bronze.api_client.get_table_data = MagicMock(return_value={"value": [1, 2, 3]})
 
-        # Mock GCS access
+        # Mock cloud storage access
         dst_bronze.storage = MagicMock()
         dst_bronze.storage.upload_json = MagicMock()
 
@@ -218,8 +218,8 @@ class TestDSTBronze:
         assert result is None
 
     def test_save_table_data(self, dst_bronze):
-        """Test table data saving to GCS."""
-        # Mock GCS access
+        """Test table data saving to cloud storage."""
+        # Mock cloud storage access
         dst_bronze.storage = MagicMock()
         dst_bronze.storage.upload_json = MagicMock()
 

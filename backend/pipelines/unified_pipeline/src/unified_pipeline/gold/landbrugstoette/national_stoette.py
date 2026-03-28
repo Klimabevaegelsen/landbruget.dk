@@ -316,7 +316,7 @@ class LandbrugstoetteNationalGold(BaseSource[LandbrugstoetteNationalGoldConfig],
         return validation
 
     async def _save_gold_data(self) -> dict[str, str]:
-        """Save gold tables to GCS."""
+        """Save gold tables to cloud storage."""
         self.log.info("Saving national subsidies gold data")
 
         output_paths = {}

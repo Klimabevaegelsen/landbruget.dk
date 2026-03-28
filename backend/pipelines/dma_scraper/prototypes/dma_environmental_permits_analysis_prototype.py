@@ -278,7 +278,7 @@ class DMAPermitAnalyzer:
                 return f.read()
 
     def download_pdf_temporarily(self, storage_path: str) -> str:
-        """Download a PDF from GCS to a temporary file"""
+        """Download a PDF from cloud storage to a temporary file"""
         try:
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
                 temp_path = temp_file.name

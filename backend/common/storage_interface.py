@@ -16,7 +16,7 @@ try:
 except ImportError as e:
     raise ImportError("DuckDB is required for storage operations") from e
 
-# google.cloud.storage no longer needed — using s3fs via StorageAccess (R2)
+# Legacy google.cloud.storage no longer needed — using s3fs via StorageAccess (R2)
 storage = None
 
 DEFAULT_BUCKET = "landbruget-data"
@@ -154,18 +154,18 @@ class CloudStorage(StorageInterface):
     def __init__(self, bucket_name: str) -> None:
         self.bucket_name = bucket_name
 
-        # Use optimized GCS access layer if available
+        # Use optimized cloud storage access layer if available
         if StorageAccess:
             self.storage = StorageAccess()
             self.optimized = True
         else:
-            # Fallback to legacy Google Cloud Storage client
+            # Fallback to legacy cloud storage client
             if storage:
                 self.client = storage.Client()
                 self.bucket = self.client.bucket(bucket_name)
                 self.optimized = False
             else:
-                raise ImportError("Neither StorageAccess nor google.cloud.storage is available")
+                raise ImportError("Neither StorageAccess nor a legacy cloud storage client is available")
 
     def save_json(self, data: Any, dst_path: str) -> None:
         """Save JSON data using optimized streaming approach."""
@@ -238,9 +238,7 @@ class CloudStorage(StorageInterface):
                 # Note: This approach would need modification for actual buffer writing
                 conn.execute(f"COPY {data} TO 'buffer' (FORMAT PARQUET)")
                 # For now, raise an error suggesting the optimized path
-                raise ValueError(
-                    "Non-optimized GCS storage requires optimized GCS access layer for DuckDB table uploads"
-                )
+                raise ValueError("Non-optimized cloud storage requires StorageAccess layer for DuckDB table uploads")
             if isinstance(data, dict | list):
                 # Convert to table first
                 if isinstance(data, dict):
@@ -249,7 +247,7 @@ class CloudStorage(StorageInterface):
                     conn.register("temp_data", data)
 
                 # Same limitation as above
-                raise ValueError("Non-optimized GCS storage requires optimized GCS access layer for DuckDB operations")
+                raise ValueError("Non-optimized cloud storage requires StorageAccess layer for DuckDB operations")
             raise ValueError(
                 f"Unsupported data type for parquet export: {type(data)}. "
                 f"Only DuckDB tables, dicts, and lists are supported."

@@ -213,7 +213,7 @@ class TestDMIBronze:
 
     @pytest.fixture
     def mock_storage_access(self):
-        """Mock GCS access for testing."""
+        """Mock cloud storage access for testing."""
         return Mock()
 
     @pytest.fixture
@@ -260,7 +260,7 @@ class TestDMIBronze:
             }
         )
 
-        # Mock GCS access
+        # Mock cloud storage access
         dmi_bronze.storage = MagicMock()
         dmi_bronze.storage.upload_json = MagicMock()
 
@@ -326,8 +326,8 @@ class TestDMIBronze:
 
     @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     def test_save_parameter_data(self, dmi_bronze):
-        """Test parameter data saving to GCS."""
-        # Mock GCS access
+        """Test parameter data saving to cloud storage."""
+        # Mock cloud storage access
         dmi_bronze.storage = MagicMock()
         dmi_bronze.storage.upload_json = MagicMock()
 

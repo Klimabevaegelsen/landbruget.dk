@@ -27,10 +27,10 @@ from playwright.async_api import async_playwright
 load_dotenv()
 
 
-# Try to import optimized GCS access with fallback
+# Try to import optimized cloud storage access with fallback
 def _get_optimized_storage_access() -> Any | None:
     """
-    Get optimized GCS access with robust import handling.
+    Get optimized cloud storage access with robust import handling.
 
     Returns StorageAccess if available, otherwise None for fallback.
     """
@@ -48,11 +48,11 @@ def _get_optimized_storage_access() -> Any | None:
         return None
 
 
-# Get optimized GCS access class or None if not available
+# Get optimized cloud storage access class or None if not available
 OptimizedStorageAccess = _get_optimized_storage_access()
 
 
-class GCSStorage:
+class CloudStorage:
     """Google Cloud Storage backend for arbejdstilsynet_inspections files - OPTIMIZED VERSION."""
 
     def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections") -> None:
@@ -60,7 +60,7 @@ class GCSStorage:
         self.prefix = prefix
         self.is_available = self._check_storage_available()
 
-        # ✅ OPTIMIZED: Initialize optimized GCS access
+        # Initialize optimized cloud storage access
         self.storage = None
         self.use_optimized = False
 
@@ -68,9 +68,11 @@ class GCSStorage:
             try:
                 self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
-                logging.info("✅ Arbejdstilsynet GCSStorage: Initialized optimized GCS access")
+                logging.info(
+                    "✅ Arbejdstilsynet CloudStorage: Initialized optimized cloud storage access"
+                )
             except Exception as e:
-                logging.warning(f"Failed to initialize optimized GCS access: {e}")
+                logging.warning(f"Failed to initialize optimized cloud storage access: {e}")
                 self.storage = None
                 self.use_optimized = False
 
@@ -85,9 +87,9 @@ class GCSStorage:
             return False
 
     def upload_file(self, local_path, storage_path=None) -> bool:
-        """Upload a file to GCS bucket using optimized streaming."""
+        """Upload a file to storage bucket using optimized streaming."""
         if not self.is_available:
-            logging.warning("GCS not available, skipping upload")
+            logging.warning("Cloud storage not available, skipping upload")
             return False
 
         if storage_path is None:
@@ -107,9 +109,9 @@ class GCSStorage:
 
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.storage.fs.open(fs_path, "wb") as gcs_file,
+                    self.storage.fs.open(fs_path, "wb") as cloud_file,
                 ):
-                    shutil.copyfileobj(file_obj, gcs_file)
+                    shutil.copyfileobj(file_obj, cloud_file)
 
                 logging.info(
                     f"✅ Uploaded {local_path} to {full_storage_path} (optimized streaming)"
@@ -197,7 +199,7 @@ class GCSStorage:
             return True
 
         except Exception as e:
-            logging.error(f"Failed to upload to GCS: {e}")
+            logging.error(f"Failed to upload to cloud storage: {e}")
             return False
 
 
@@ -230,10 +232,10 @@ class BronzePipeline:
             )
             raise ValueError(f"SOURCE_CSV_URL for {self.pipeline_name} is missing.")
 
-        # Initialize GCS storage if bucket is provided
-        self.gcs = None
+        # Initialize cloud storage if bucket is provided
+        self.cloud_storage = None
         if self.storage_bucket:
-            self.gcs = GCSStorage(
+            self.cloud_storage = CloudStorage(
                 bucket_name=self.storage_bucket, prefix=f"bronze/{self.pipeline_name}"
             )
             logging.info(f"Storage initialized with bucket: {self.storage_bucket}")
@@ -595,11 +597,11 @@ class BronzePipeline:
         # Create metadata
         self.create_metadata_file(timestamp_str, merged_file_path)
 
-        # Upload merged file to GCS if available
-        if self.gcs:
-            upload_success = self.gcs.upload_file(local_path=str(merged_file_path))
+        # Upload merged file to cloud storage if available
+        if self.cloud_storage:
+            upload_success = self.cloud_storage.upload_file(local_path=str(merged_file_path))
             if not upload_success:
-                raise RuntimeError(f"Bronze pipeline: Failed to upload {merged_file_path} to GCS.")
+                raise RuntimeError("Bronze pipeline: Failed to upload to cloud storage.")
 
         # Delete the temp directory and all its contents
         import shutil

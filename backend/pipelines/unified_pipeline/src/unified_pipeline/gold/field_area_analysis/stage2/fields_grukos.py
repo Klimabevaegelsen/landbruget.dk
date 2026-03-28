@@ -139,7 +139,7 @@ class FieldsGrukosCoverage(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save field × grukos intersection table to GCS."""
+        """Save field × grukos intersection table to cloud storage."""
         self._save_stage_output("field_grukos_intersections", "field_grukos_intersections")
 
     def _validate_geometric_output(self):

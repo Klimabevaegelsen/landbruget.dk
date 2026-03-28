@@ -2,7 +2,7 @@
 Tests for the base classes in the unified pipeline.
 
 This module tests the core functionality of BaseJobConfig and BaseSource
-classes to ensure they work correctly with the unified GCS access architecture
+classes to ensure they work correctly with the unified cloud storage access architecture
 and DuckDB-based data processing.
 """
 
@@ -48,7 +48,7 @@ class MockSource(BaseSource[MockJobConfig]):
 # Fixtures
 @pytest.fixture
 def mock_storage_access():
-    """Create a mock GCS access layer for testing."""
+    """Create a mock cloud storage access layer for testing."""
     with patch("unified_pipeline.common.base.StorageAccess") as mock_class:
         mock_instance = MagicMock(spec=StorageAccess)
         mock_class.return_value = mock_instance
@@ -76,7 +76,7 @@ def test_config() -> MockJobConfig:
 
 @pytest.fixture
 def test_source(test_config: MockJobConfig, mock_storage_access) -> MockSource:
-    """Create a test source for testing with mocked GCS access."""
+    """Create a test source for testing with mocked cloud storage access."""
     with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
         # Replace storage with mock after initialization

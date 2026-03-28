@@ -3,7 +3,7 @@ Bronze layer data ingestion for Water Projects data.
 
 This module handles the extraction of water projects data from Danish environmental services.
 It supports fetching data from WFS (Web Feature Service) and ArcGIS REST API services.
-It fetches raw data in chunks, processes it, and saves it to Google Cloud Storage
+It fetches raw data in chunks, processes it, and saves it to cloud storage
 for further processing in the silver layer.
 
 The module contains:
@@ -44,7 +44,7 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
         description: Brief description of the data source
         url: Default WFS service URL
         frequency: How often the job should run
-        bucket: GCS bucket name for storing raw data
+        bucket: storage bucket name for storing raw data
         batch_size: Number of features to fetch per request
         max_concurrent: Maximum number of concurrent HTTP requests
         request_timeout: HTTP request timeout in seconds
@@ -485,7 +485,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
         1. Fetches raw data from all configured layers and services
         2. Validates that data was successfully retrieved
         3. Creates a standardized  with metadata
-        4. Saves the raw data to Google Cloud Storage
+        4. Saves the raw data to cloud storage
         5. Returns the raw data for in-memory passing to silver stage
 
         The method includes comprehensive timing and logging to track job

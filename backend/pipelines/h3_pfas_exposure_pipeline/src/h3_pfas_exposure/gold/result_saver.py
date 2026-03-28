@@ -12,7 +12,7 @@ from .pmtiles_generator import H3PMTilesGenerator
 
 
 class H3ResultSaver:
-    """Handles saving analysis results to GCS."""
+    """Handles saving analysis results to cloud storage."""
 
     def __init__(
         self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, storage_access=None
@@ -26,10 +26,10 @@ class H3ResultSaver:
         self.pmtiles_generator = H3PMTilesGenerator(conn, config, storage_access)
 
     def save_year_results_kepler_compatible(self, results_table: str, year: int) -> int:
-        """Save results to GCS with Kepler.gl compatibility fixes."""
+        """Save results to cloud storage with Kepler.gl compatibility fixes."""
         self.log.info(
             f"💾 Saving Kepler.gl-compatible H3 pesticide exposure results for year {year} "
-            f"(resolution {self.config.h3_resolution}) to GCS"
+            f"(resolution {self.config.h3_resolution}) to cloud storage"
         )
 
         # Create Kepler.gl compatible version by converting BigInt columns to regular numbers
@@ -128,8 +128,10 @@ class H3ResultSaver:
     def save_kommune_results(
         self, results_table: str, year: int, kommune_boundaries_table: str = "kommune_boundaries"
     ) -> int:
-        """Save kommune-level results to GCS."""
-        self.log.info(f"💾 Saving kommune-level pesticide exposure results for year {year} to GCS")
+        """Save kommune-level results to cloud storage."""
+        self.log.info(
+            f"💾 Saving kommune-level pesticide exposure results for year {year} to cloud storage"
+        )
 
         # Create final results table
         self.conn.execute(f"""
@@ -194,7 +196,7 @@ class H3ResultSaver:
         output_path_parquet = f"{self.config.bucket}/gold/kommune_pesticide_{year}/{timestamp}/kommune_pesticide_{year}.parquet"
         output_path_csv = f"{self.config.bucket}/gold/kommune_pesticide_{year}/{timestamp}/kommune_pesticide_{year}.csv"
 
-        # Upload to GCS in both formats
+        # Upload to cloud storage in both formats
         self.storage.upload_from_duckdb_table(f"final_kommune_results_{year}", output_path_parquet)
         self.storage.upload_from_duckdb_table(f"final_kommune_results_{year}", output_path_csv)
 
@@ -307,9 +309,9 @@ class H3ResultSaver:
             self.log.info("   🎯 Use the *_kepler.parquet file for Kepler.gl visualization")
 
     def save_cumulative_results(self, results_table: str, resolution: int, years: list[int]) -> int:
-        """Save cumulative H3 results to GCS with special 'total' year identifier."""
+        """Save cumulative H3 results to cloud storage with special 'total' year identifier."""
         self.log.info(
-            f"💾 Saving cumulative H3 pesticide exposure results (resolution {resolution}) to GCS"
+            f"💾 Saving cumulative H3 pesticide exposure results (resolution {resolution}) to cloud storage"
         )
         self.log.info(f"   📅 Years included: {years}")
 
@@ -417,8 +419,10 @@ class H3ResultSaver:
         years: list[int],
         kommune_boundaries_table: str = "kommune_boundaries",
     ) -> int:
-        """Save cumulative kommune-level results to GCS with special 'total' year identifier."""
-        self.log.info("💾 Saving cumulative kommune-level pesticide exposure results to GCS")
+        """Save cumulative kommune-level results to cloud storage with special 'total' year identifier."""
+        self.log.info(
+            "💾 Saving cumulative kommune-level pesticide exposure results to cloud storage"
+        )
         self.log.info(f"   📅 Years included: {years}")
 
         # Create final results table
@@ -484,7 +488,7 @@ class H3ResultSaver:
         output_path_parquet = f"{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.parquet"
         output_path_csv = f"{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.csv"
 
-        # Upload to GCS in both formats
+        # Upload to cloud storage in both formats
         self.storage.upload_from_duckdb_table(
             "final_cumulative_kommune_results", output_path_parquet
         )

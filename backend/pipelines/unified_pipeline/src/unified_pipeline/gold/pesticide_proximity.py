@@ -248,7 +248,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info(f"📁 Disaggregation Data Path: {file_path}")
 
         try:
-            # Load the parquet file into a table using proper GCS access
+            # Load the parquet file into a table using proper cloud storage access
             table_name = "current_disaggregation"
             self.storage.create_table_from_storage(table_name, file_path)
 
@@ -708,11 +708,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         self.log.info(f"💾 Saving {record_count:,} proximity records to: {output_path}")
 
-        # Export results to GCS
+        # Export results to cloud storage
         self.storage.upload_from_duckdb_table("proximity_results", output_path)
 
         self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
-        self.log.info(f"📁 Proximity GCS Path: {output_path}")
+        self.log.info(f"📁 Proximity Storage Path: {output_path}")
 
     def get_schema_info(self) -> dict[str, Any]:
         """Return schema information for the proximity analysis output."""

@@ -43,7 +43,7 @@ class DAGISilverConfig(BaseJobConfig):
         type: Type of the data source
         description: Brief description of the data
         dataset: Name of the dataset in storage
-        bucket: GCS bucket name for data storage
+        bucket: storage bucket name for data storage
         target_crs: Target coordinate reference system for geometries
         endpoints: Dictionary mapping layer names to API endpoints (should match bronze)
         required_columns: Mapping of layer types to their required columns
@@ -315,7 +315,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                             self.log.info(f"Using bronze data from memory for {layer_name}")
                             raw_geojson = bronze_data[layer_name]
                         else:
-                            # Fallback to reading from storage using direct GCS access
+                            # Fallback to reading from storage using direct cloud storage access
                             self.log.info(f"Reading bronze data from storage for {layer_name}")
                             try:
                                 # Find the latest bronze data file for this layer
@@ -330,7 +330,9 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                                 bronze_files.sort(reverse=True)
                                 latest_file = bronze_files[0]
 
-                                self.log.info(f"Loading latest bronze data from GCS: {latest_file}")
+                                self.log.info(
+                                    f"Loading latest bronze data from cloud storage: {latest_file}"
+                                )
 
                                 # ✅ FIXED: Use direct JSON download instead of DuckDB extraction
                                 # This avoids the maximum_object_size issue and JSON parsing errors

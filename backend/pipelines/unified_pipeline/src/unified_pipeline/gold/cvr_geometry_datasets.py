@@ -328,7 +328,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
         }
 
     async def _save_results(self, results: dict[str, Any]) -> None:
-        """Save processing results to GCS."""
+        """Save processing results to cloud storage."""
 
         timestamp = self.date_pattern
 

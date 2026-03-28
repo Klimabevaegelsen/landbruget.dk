@@ -21,9 +21,9 @@ async def main():
     parser = argparse.ArgumentParser(description="H3 PFAS Processor - Refactored Version")
     parser.add_argument(
         "--mode",
-        choices=["test", "gcs", "years", "kommune"],
+        choices=["test", "cloud", "years", "kommune"],
         default="test",
-        help="Mode: 'test' for local test data, 'gcs' for all years from GCS, 'years' for specific years, 'kommune' for kommune-level analysis",
+        help="Mode: 'test' for local test data, 'cloud' for all years from cloud storage, 'years' for specific years, 'kommune' for kommune-level analysis",
     )
     parser.add_argument(
         "--years",
@@ -46,14 +46,14 @@ async def main():
     if args.mode == "test":
         logger.info("🧪 Running local test mode")
         success = await test_refactored_processor()
-    elif args.mode == "gcs":
-        logger.info("☁️ Running H3 GCS mode for all available years")
+    elif args.mode == "cloud":
+        logger.info("☁️ Running H3 cloud storage mode for all available years")
         success = await run_multi_year_analysis()
     elif args.mode == "years":
         if not args.years:
             logger.error("❌ --years must be specified when using 'years' mode")
             sys.exit(1)
-        logger.info(f"☁️ Running H3 GCS mode for years: {args.years}")
+        logger.info(f"☁️ Running H3 cloud storage mode for years: {args.years}")
         success = await run_multi_year_analysis(args.years)
     elif args.mode == "kommune":
         if args.years:

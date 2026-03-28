@@ -364,7 +364,7 @@ def generate_metrics_for_dataset(
 
 
 def save_metrics(metrics: dict, output_path: str) -> str:
-    """Save metrics to local or GCS path."""
+    """Save metrics to local or cloud storage path."""
     dataset_name = metrics["dataset_name"]
 
     # Detect cloud paths: protocol prefix or bare bucket/path (not local filesystem)

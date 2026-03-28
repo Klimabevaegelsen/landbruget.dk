@@ -517,7 +517,7 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         1. Reads data from the bronze layer (either in-memory or from storage)
         2. Validates and transforms the data using DuckDB
         3. Creates a dissolved version of the data
-        4. Saves both the original and dissolved data to GCS
+        4. Saves both the original and dissolved data to cloud storage
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,

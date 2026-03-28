@@ -3,13 +3,13 @@ Geocoding Cache System
 ======================
 
 A persistent caching system for geocoding results to avoid redundant API calls
-in the CVR enrichment pipeline. Stores address->coordinates mappings in GCS
+in the CVR enrichment pipeline. Stores address->coordinates mappings in cloud storage
 and loads them into DuckDB for fast lookups during pipeline execution.
 
 Cache Strategy:
 - DAWA ID Cache: adresse_id -> coordinates (primary)
 - Address Text Cache: normalized address text -> coordinates (fallback)
-- Persistent storage in GCS as Parquet files
+- Persistent storage in cloud storage as Parquet files
 - Fast in-memory lookups via DuckDB during pipeline execution
 """
 
@@ -38,7 +38,7 @@ class GeocodingCache:
         Initialize the geocoding cache.
 
         Args:
-            bucket: GCS bucket for cache storage
+            bucket: storage bucket for cache storage
             cache_version: Cache version for invalidation purposes
         """
         self.log = Logger.get_logger()
@@ -48,10 +48,10 @@ class GeocodingCache:
         # Create DuckDB connection first
         self.conn = duckdb.connect()
 
-        # Initialize GCS access with the same connection
+        # Initialize cloud storage access with the same connection
         self.storage = StorageAccess(connection=self.conn)
 
-        # Cache paths in GCS
+        # Cache paths in cloud storage
         self.dawa_cache_path = f"{bucket}/cache/geocoding/dawa_id_cache_v{cache_version}.parquet"
         self.address_cache_path = (
             f"{bucket}/cache/geocoding/address_text_cache_v{cache_version}.parquet"
@@ -104,12 +104,12 @@ class GeocodingCache:
         """)
 
     def _load_existing_cache(self) -> None:
-        """Load existing cache data from GCS into DuckDB tables."""
+        """Load existing cache data from cloud storage into DuckDB tables."""
 
         # Load DAWA ID cache
         try:
             if self.storage.file_exists(self.dawa_cache_path):
-                self.log.info("Loading existing DAWA ID cache from GCS")
+                self.log.info("Loading existing DAWA ID cache from cloud storage")
                 with self.storage._temp_download(self.dawa_cache_path) as temp_file:
                     self.conn.execute(f"""
                         INSERT INTO dawa_id_cache
@@ -126,7 +126,7 @@ class GeocodingCache:
         # Load address text cache
         try:
             if self.storage.file_exists(self.address_cache_path):
-                self.log.info("Loading existing address text cache from GCS")
+                self.log.info("Loading existing address text cache from cloud storage")
                 with self.storage._temp_download(self.address_cache_path) as temp_file:
                     self.conn.execute(f"""
                         INSERT INTO address_text_cache
@@ -388,9 +388,9 @@ class GeocodingCache:
             # Save DAWA ID cache
             dawa_count = self.conn.execute("SELECT COUNT(*) FROM dawa_id_cache").fetchone()[0]
             if dawa_count > 0:
-                self.log.info(f"Saving {dawa_count:,} DAWA ID cache entries to GCS")
+                self.log.info(f"Saving {dawa_count:,} DAWA ID cache entries to cloud storage")
 
-                # Upload directly from DuckDB table to GCS
+                # Upload directly from DuckDB table to cloud storage
                 self.storage.upload_from_duckdb_table("dawa_id_cache", self.dawa_cache_path)
                 self.log.info(f"DAWA ID cache saved to {self.dawa_cache_path}")
 
@@ -399,14 +399,16 @@ class GeocodingCache:
                 0
             ]
             if address_count > 0:
-                self.log.info(f"Saving {address_count:,} address text cache entries to GCS")
+                self.log.info(
+                    f"Saving {address_count:,} address text cache entries to cloud storage"
+                )
 
-                # Upload directly from DuckDB table to GCS
+                # Upload directly from DuckDB table to cloud storage
                 self.storage.upload_from_duckdb_table("address_text_cache", self.address_cache_path)
                 self.log.info(f"Address text cache saved to {self.address_cache_path}")
 
         except Exception as e:
-            self.log.error(f"Error saving cache to GCS: {e}")
+            self.log.error(f"Error saving cache to cloud storage: {e}")
             raise
 
     def clear_cache(self) -> None:
@@ -419,7 +421,7 @@ class GeocodingCache:
             self.log.warning(f"Error clearing cache: {e}")
 
     def cleanup(self) -> None:
-        """Clean up resources and save cache to GCS."""
+        """Clean up resources and save cache to cloud storage."""
         try:
             self.save_cache_to_storage()
             self.conn.close()

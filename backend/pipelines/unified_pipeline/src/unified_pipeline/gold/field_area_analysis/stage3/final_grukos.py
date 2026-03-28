@@ -146,7 +146,7 @@ class FinalGrukosAnalysis(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save property × grukos intersection table to GCS."""
+        """Save property × grukos intersection table to cloud storage."""
         self._save_stage_output("property_grukos_intersections", "property_grukos_intersections")
 
     def _validate_geometric_output(self):

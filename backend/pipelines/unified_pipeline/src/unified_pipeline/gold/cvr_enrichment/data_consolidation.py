@@ -110,7 +110,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.info("Using silver data passed from previous step")
                 silver_tables = silver_data
             else:
-                self.log.info("Loading silver data from GCS")
+                self.log.info("Loading silver data from cloud storage")
                 silver_tables = self._load_silver_data()
 
             # Step 2: Consolidate into Gold layer format

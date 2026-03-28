@@ -766,5 +766,5 @@ if __name__ == "__main__":
         logger.info("ℹ️  This will:")
         logger.info("   - Fetch companies from DMA API")
         logger.info("   - Download PDFs and company data")
-        logger.info("   - Upload results to GCS")
+        logger.info("   - Upload results to cloud storage")
         logger.info("   - Auto-shutdown the VM when complete (unless disabled)")

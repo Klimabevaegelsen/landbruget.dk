@@ -4,7 +4,7 @@ Grukos Silver Layer Implementation
 This module implements the silver layer data processing for Danish groundwater
 mapping data (Grundvandskortlægning). It transforms raw grukos data from the
 bronze layer into structured geometries, validates geometries, and saves the
-processed data to Google Cloud Storage (GCS).
+processed data to cloud storage.
 
 This pipeline outputs BOTH:
 1. Individual features (grukos) - preserves all individual indsatsområder
@@ -15,11 +15,11 @@ The module contains:
 - GrukosSilver: Implementation class for processing and transforming data
 
 The processing includes:
-1. Reading raw data from GCS
+1. Reading raw data from cloud storage
 2. Extracting features from XML payloads
 3. Parsing geometries and calculating areas
 4. Standardizing attribute names and types
-5. Saving BOTH individual features and dissolved geometries to GCS
+5. Saving BOTH individual features and dissolved geometries to cloud storage
 """
 
 import xml.etree.ElementTree as ET
@@ -49,7 +49,7 @@ class GrukosSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): Name of the dataset being processed
-        bucket (str): GCS bucket name for data storage
+        bucket (str): storage bucket name for data storage
         storage_batch_size (int): Batch size for data storage operations
         namespaces (dict): XML namespace mappings for parsing WFS responses
         gml_ns (str): GML namespace string for geometry parsing
@@ -79,7 +79,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
 
     This class transforms raw grukos data from the bronze layer into
     structured geometries, validates geometries, and saves the processed data
-    to Google Cloud Storage (GCS).
+    to cloud storage.
     It handles XML data formats, extracting features and converting
     them into geometries with appropriate attributes.
 
@@ -89,11 +89,11 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
     2. Dissolved geometry (grukos_dissolved) - single geometry combining all areas
 
     The processing includes:
-    1. Reading raw data from GCS
+    1. Reading raw data from cloud storage
     2. Extracting features from XML payloads
     3. Parsing geometries and calculating areas
     4. Standardizing attribute names and types
-    5. Saving BOTH individual features and dissolved geometries to GCS
+    5. Saving BOTH individual features and dissolved geometries to cloud storage
     """
 
     def __init__(self, config: GrukosSilverConfig):
@@ -105,7 +105,7 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
                                          for the processor.
         """
         super().__init__(config)
-        self.log.info("✅ GrukosSilver: Using unified GCS access and DuckDB connection")
+        self.log.info("✅ GrukosSilver: Using unified cloud storage access and DuckDB connection")
 
     def get_first_namespace(self, root: ET.Element) -> str | None:
         """
@@ -760,14 +760,14 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
                         self.log.error("Bronze data format not supported")
                         return None
                 else:
-                    # Read from GCS storage
+                    # Read from cloud storage
                     raw_data_list = []
                     for layer in self.config.layers:
                         f"{layer.replace(':', '_')}_raw"
                         dataset_name = f"{self.config.dataset}_{layer.replace(':', '_')}"
 
                         try:
-                            # Load data from GCS using the correct method
+                            # Load data from cloud storage using the correct method
                             table_name = self._read_bronze_data(dataset_name, self.config.bucket)
 
                             if table_name:

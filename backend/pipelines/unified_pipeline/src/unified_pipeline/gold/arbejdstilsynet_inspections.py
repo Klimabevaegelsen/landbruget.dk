@@ -82,7 +82,7 @@ class ArbjdstilsynetInspectionsGold(
             return False
 
     async def _load_silver_data(self, silver_data: dict[str, Any] | None) -> str | None:
-        """Load silver data from in-memory cache or GCS storage.
+        """Load silver data from in-memory cache or cloud storage.
 
         Returns:
             Table name in DuckDB containing the silver data, or None if not found.
@@ -99,8 +99,8 @@ class ArbjdstilsynetInspectionsGold(
                 self.conn.register("silver_inspections_raw", in_memory_data)
                 return "silver_inspections_raw"
 
-            # Fallback to GCS storage
-            self.logger.info("Loading silver data from GCS storage")
+            # Fallback to cloud storage
+            self.logger.info("Loading silver data from cloud storage")
 
             # Find latest silver data using pattern matching
             pattern = f"{self.config.bucket}/silver/{self.config.silver_dataset}/*/workplace_inspections.parquet"
@@ -439,7 +439,7 @@ class ArbjdstilsynetInspectionsGold(
             return table_name
 
     async def _save_data(self, table_name: str, stage: str) -> str:
-        """Save the gold data to GCS using DuckDB's COPY command."""
+        """Save the gold data to cloud storage using DuckDB's COPY command."""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -454,7 +454,7 @@ class ArbjdstilsynetInspectionsGold(
             # Get record count before saving
             row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
-            # Save to GCS using the base class method
+            # Save to cloud storage using the base class method
             self.storage.upload_from_duckdb_table(table_name, full_storage_path)
 
             self.logger.info(f"Successfully saved {row_count} records to gold layer")

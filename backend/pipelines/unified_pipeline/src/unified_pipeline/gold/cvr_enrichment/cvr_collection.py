@@ -281,7 +281,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
     @timed(name="Saving collection data")
     def _save_collection_data(self, batch_data: dict[str, Any]) -> str:
         """
-        Save collection data to GCS.
+        Save collection data to cloud storage.
 
         Args:
             batch_data: Collection data with batches
@@ -330,7 +330,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
                 )
             """)
 
-        # Save to GCS
+        # Save to cloud storage
         self._save_data(
             data=table_name, dataset=self.config.dataset, bucket=self.config.bucket, stage="gold"
         )

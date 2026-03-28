@@ -11,7 +11,7 @@ from ..config import H3SpatialConfig
 
 
 class H3DataLoader:
-    """Handles data loading from GCS and local sources."""
+    """Handles data loading from cloud storage and local sources."""
 
     def __init__(
         self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, storage_access=None
@@ -22,7 +22,7 @@ class H3DataLoader:
         self.log = logger.bind(component="H3DataLoader")
 
     def _load_table_from_storage(self, storage_path: str, table_name: str):
-        """Load data from GCS into a DuckDB table using optimized GCS access - WITH CLEANUP."""
+        """Load data from cloud storage into a DuckDB table using optimized cloud storage access - WITH CLEANUP."""
         try:
             # 🚀 ENHANCED: Use native HMAC acceleration for faster H3 PFAS data loading
             try:
@@ -138,11 +138,11 @@ class H3DataLoader:
         return sorted(files)[-1]  # Latest by timestamp
 
     def _check_storage_path_exists(self, path: str) -> bool:
-        """Check if a GCS path exists and has data."""
+        """Check if a cloud storage path exists and has data."""
         try:
             return self.storage.file_exists(path)
         except Exception as e:
-            self.log.debug(f"Error checking GCS path {path}: {e}")
+            self.log.debug(f"Error checking cloud storage path {path}: {e}")
             return False
 
     def _check_year_data_availability(self, year: int) -> bool:
@@ -180,8 +180,8 @@ class H3DataLoader:
         return available_years
 
     def load_bmd_data_from_storage(self) -> str:
-        """Load BMD data from GCS - CACHED to avoid reloading."""
-        self.log.info("🧪 Loading BMD pesticide data from GCS")
+        """Load BMD data from cloud storage - CACHED to avoid reloading."""
+        self.log.info("🧪 Loading BMD pesticide data from cloud storage")
 
         # Get the latest BMD data from silver layer
         bmd_path = self._get_latest_silver_path("bmd")
@@ -190,7 +190,7 @@ class H3DataLoader:
 
         self.log.info(f"📄 Loading BMD data from: {bmd_path}")
 
-        # Load BMD data directly from GCS
+        # Load BMD data directly from cloud storage
         temp_bmd_table = "temp_bmd_raw"
         self._load_table_from_storage(bmd_path, temp_bmd_table)
 
@@ -251,8 +251,8 @@ class H3DataLoader:
         return "bmd_pfas_lookup"
 
     def load_and_prepare_fields_from_storage(self, field_year: int, pesticide_year: int) -> str:
-        """Load FVM field data from GCS and prepare for spatial intersection."""
-        self.log.info(f"📄 Loading FVM field data for year {field_year} from GCS")
+        """Load FVM field data from cloud storage and prepare for spatial intersection."""
+        self.log.info("📄 Loading FVM field data from cloud storage")
 
         # Get FVM data path
         silver_path = self._get_latest_silver_path(f"fvm_marker_{field_year}")
@@ -414,10 +414,10 @@ class H3DataLoader:
         return "prepared_fields"
 
     def load_pesticide_disaggregation_from_storage(self, year: int) -> str:
-        """Load pesticide disaggregation data from GCS for a specific year."""
+        """Load pesticide disaggregation data from cloud storage for a specific year."""
         table_name = f"pesticides_{year}"
 
-        self.log.info(f"🧪 Loading pesticide disaggregation for year {year} from GCS")
+        self.log.info("🧪 Loading pesticide disaggregation from cloud storage")
 
         # Get the latest pesticide disaggregation file for the year
         full_path = self._get_latest_gold_path("pesticide_disaggregation", year)
@@ -427,7 +427,7 @@ class H3DataLoader:
 
         self.log.info(f"📄 Loading pesticides from: {full_path}")
 
-        # Load pesticide data directly from GCS
+        # Load pesticide data directly from cloud storage
         temp_pesticides_table = "temp_pesticides_raw"
         self._load_table_from_storage(full_path, temp_pesticides_table)
 

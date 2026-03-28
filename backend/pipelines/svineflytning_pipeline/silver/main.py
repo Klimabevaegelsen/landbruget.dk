@@ -3,7 +3,7 @@ Main silver processing module for Svineflytning pipeline.
 
 This module provides the main entry point for silver layer processing,
 integrating with the existing pipeline architecture and handling both
-local and GCS data sources.
+local and cloud storage data sources.
 """
 
 import logging
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def get_latest_bronze_data_path() -> str | None:
     """
-    Get the path to the latest bronze data from GCS.
+    Get the path to the latest bronze data from cloud storage.
 
     Returns:
         String path to the latest bronze data or None if not found

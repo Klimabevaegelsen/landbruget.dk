@@ -158,7 +158,7 @@ self._protected_tables = {
 
 ## Output Structure
 
-### GCS Organization
+### Cloud Storage Organization
 ```
 gs://landbruget-data/gold/
 ├── h3_pesticide_2022_res10/
@@ -218,7 +218,7 @@ logs-h3-res9-year2023-{run_id}/
 ### Debugging Steps
 1. **Check logs**: Download log artifacts for failed jobs
 2. **Monitor resources**: Look for memory/disk warnings in logs
-3. **Verify outputs**: Check GCS for partial outputs
+3. **Verify outputs**: Check cloud storage for partial outputs
 4. **Retry individual years**: Re-run specific year combinations
 
 ## Migration from Previous Version
@@ -250,7 +250,7 @@ matrix:
 ### For Production
 1. **Use matrix jobs**: Always prefer year-based matrix over sequential processing
 2. **Monitor resources**: Check memory/disk usage in logs
-3. **Limit concurrency**: Use `max-parallel: 4` to avoid overwhelming GCS
+3. **Limit concurrency**: Use `max-parallel: 4` to avoid overwhelming cloud storage
 4. **Regular cleanup**: Enhanced cleanup runs automatically
 
 ### For Development
@@ -261,7 +261,7 @@ matrix:
 ### For Debugging
 1. **Isolate failures**: Run individual year/resolution combinations
 2. **Check resource usage**: Monitor memory and disk warnings
-3. **Verify data**: Check GCS outputs for completeness
+3. **Verify data**: Check cloud storage outputs for completeness
 4. **Use log artifacts**: Download and analyze detailed logs
 
 ## Future Improvements

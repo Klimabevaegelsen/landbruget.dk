@@ -47,8 +47,8 @@ class SoilTypesSilverConfig(BaseJobConfig):
         type (str): Type of the data source (wfs)
         description (str): Brief description of the data
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for processed data storage
-        save_local (bool): Whether to save data locally instead of uploading to GCS
+        bucket (str): storage bucket name for processed data storage
+        save_local (bool): Whether to save data locally instead of uploading to cloud storage
     """
 
     name: str = "Danish Soil Types"

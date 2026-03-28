@@ -1,7 +1,7 @@
 """Shared pytest fixtures for backend testing.
 
 This module provides common fixtures used across all backend pipeline tests,
-including mocks for GCS, DuckDB, and Danish data validation helpers.
+including mocks for cloud storage, DuckDB, and Danish data validation helpers.
 """
 
 import contextlib
@@ -30,19 +30,19 @@ def temp_dir() -> Generator[Path, None, None]:
 
 @pytest.fixture(scope="function")
 def mock_cloud_filesystem() -> Generator[MagicMock, None, None]:
-    """Mock gcsfs.GCSFileSystem for isolated testing.
+    """Mock cloud filesystem (s3fs.S3FileSystem) for isolated testing.
 
-    Provides a mock GCS filesystem that simulates file operations without
+    Provides a mock cloud filesystem that simulates file operations without
     actual cloud storage interaction. Useful for testing upload/download logic.
 
     Scope: function - Each test gets its own mock to avoid state pollution.
 
     Yields:
-        MagicMock: Mocked GCSFileSystem with common methods configured.
+        MagicMock: Mocked S3FileSystem with common methods configured.
     """
     mock_fs = MagicMock()
 
-    # Mock common GCS operations
+    # Mock common cloud storage operations
     mock_fs.ls.return_value = []
     mock_fs.exists.return_value = False
     mock_fs.info.return_value = {"size": 0, "type": "file"}

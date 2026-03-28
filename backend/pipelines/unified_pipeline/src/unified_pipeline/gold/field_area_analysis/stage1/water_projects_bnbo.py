@@ -121,7 +121,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save water project-BNBO intersection data to GCS."""
+        """Save water project-BNBO intersection data to cloud storage."""
         self._save_stage_output(
             "water_projects_bnbo_intersections", "water_projects_bnbo_intersections"
         )

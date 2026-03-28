@@ -152,11 +152,11 @@ class TestDataLoading:
     """Test bronze data loading into silver layer."""
 
     def test_download_bronze_data_from_storage_success(self, tmp_path):
-        """Test successful download of bronze data from GCS."""
+        """Test successful download of bronze data from cloud storage."""
         local_bronze_dir = tmp_path / "bronze"
         bronze_timestamp = "20240101_120000"
 
-        # Mock GCS access
+        # Mock cloud storage access
         with (
             patch("chr_pipeline.silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
             patch("chr_pipeline.silver.chr_silver_processing.StorageAccess") as mock_gcs_class,
@@ -184,7 +184,7 @@ class TestDataLoading:
             assert local_bronze_dir.exists()
 
     def test_download_bronze_data_missing_bucket(self, tmp_path):
-        """Test that missing GCS_BUCKET environment variable causes failure."""
+        """Test that missing storage bucket environment variable causes failure."""
         local_bronze_dir = tmp_path / "bronze"
         bronze_timestamp = "20240101_120000"
 

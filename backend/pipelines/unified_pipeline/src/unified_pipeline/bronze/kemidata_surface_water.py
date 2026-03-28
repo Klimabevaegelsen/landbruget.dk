@@ -97,13 +97,13 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
     Bronze layer processing for Kemidata surface water pesticide data.
 
     Downloads raw CSV data and station metadata from the Kemidata API
-    and stores them in GCS for silver layer processing.
+    and stores them in cloud storage for silver layer processing.
 
     Processing flow:
     1. Fetch metadata (parameter catalogue)
     2. POST /search to discover stations with pesticide data
     3. POST /download to get full CSV export of measurements
-    4. Save raw CSV + station JSON + metadata to GCS bronze layer
+    4. Save raw CSV + station JSON + metadata to cloud storage bronze layer
     5. Return manifest for silver layer
     """
 
@@ -222,9 +222,9 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                 raise Exception(f"Download failed: HTTP {resp.status} — {err_text[:500]}")
 
             total_bytes = 0
-            with self.storage.fs.open(storage_path, "wb") as gcs_file:
+            with self.storage.fs.open(storage_path, "wb") as cloud_file:
                 async for chunk in resp.content.iter_chunked(8 * 1024 * 1024):
-                    gcs_file.write(chunk)
+                    cloud_file.write(chunk)
                     total_bytes += len(chunk)
 
         size_mb = total_bytes / (1024 * 1024)
@@ -232,7 +232,7 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         return relative_path, total_bytes
 
     def _storage_path(self, filename: str) -> str:
-        """Build a relative GCS path for a bronze artifact."""
+        """Build a relative storage path for a bronze artifact."""
         return f"bronze/{self.config.dataset}/{self.date_pattern}/{filename}"
 
     def _save_json_to_storage(self, data: Any, filename: str) -> str:
@@ -250,7 +250,7 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         1. Fetch metadata catalogue
         2. Search for surface water stations
         3. Download full CSV export
-        4. Save everything to GCS
+        4. Save everything to cloud storage
         5. Return manifest for silver layer
         """
         async with AsyncTimer("Running Kemidata Surface Water bronze job"):

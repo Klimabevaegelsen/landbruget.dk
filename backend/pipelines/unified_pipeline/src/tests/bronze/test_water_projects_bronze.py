@@ -772,7 +772,7 @@ async def test_url_construction_for_different_services(
             "service_types": {"Klima_lavbund_demarkation___offentlige_projekter:0": "arcgis"},
         }
     )
-    # Create a new instance with our test config, using the same GCS util
+    # Create a new instance with our test config, using the same cloud storage util
     water_projects_test = WaterProjectsBronze(test_config)
 
     # Create mock results for each service type

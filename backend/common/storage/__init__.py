@@ -3,7 +3,7 @@ Cloud Object Storage Access Module (Cloudflare R2 via s3fs).
 
 This module is THE single source of truth for all cloud storage operations across
 the codebase. All pipelines should import from here instead of using s3fs or
-google-cloud-storage directly.
+cloud storage libraries directly.
 
 Usage:
     from common.storage import StorageAccess

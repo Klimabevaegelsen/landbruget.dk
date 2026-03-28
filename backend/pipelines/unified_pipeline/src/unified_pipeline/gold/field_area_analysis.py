@@ -812,7 +812,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("=" * 80)
 
     def _get_available_fvm_marker_years(self) -> list[int]:
-        """Get list of available FVM marker years from GCS."""
+        """Get list of available FVM marker years from cloud storage."""
         return super()._get_available_fvm_marker_years()
 
     def _get_latest_silver_path_for_dataset(self, dataset_name: str) -> str | None:

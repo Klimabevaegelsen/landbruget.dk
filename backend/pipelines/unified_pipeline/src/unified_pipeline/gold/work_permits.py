@@ -66,7 +66,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
         self.conn.execute("SET threads = 2")
         self.conn.execute("SET temp_directory = '/tmp'")
 
-        # Ensure correct GCS region is set (may be reset by local config)
+        # Ensure correct cloud storage region is set (may be reset by local config)
         self.conn.execute("SET s3_region = 'europe-west1'")
 
     @timed

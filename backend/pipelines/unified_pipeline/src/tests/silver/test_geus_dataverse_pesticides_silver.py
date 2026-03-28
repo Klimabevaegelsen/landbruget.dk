@@ -356,8 +356,8 @@ async def test_run_missing_rds_path(
 async def test_run_no_manifest_found(
     silver_source: GEUSDataversePesticidesSilver,
 ) -> None:
-    """Test running silver processing when no manifest is found in GCS."""
-    # Mock GCS access methods to return empty list (no manifests)
+    """Test running silver processing when no manifest is found in cloud storage."""
+    # Mock cloud storage access methods to return empty list (no manifests)
     silver_source.storage = MagicMock()
     silver_source.storage.list_files.return_value = []
 

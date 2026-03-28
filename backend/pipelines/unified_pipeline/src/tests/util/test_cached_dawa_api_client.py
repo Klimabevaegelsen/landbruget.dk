@@ -387,7 +387,7 @@ class TestCleanup:
     @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
     @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
     def test_cleanup_saves_cache(self, mock_cache_class, mock_dawa):
-        """Test cleanup saves cache to GCS."""
+        """Test cleanup saves cache to cloud storage."""
         mock_cache = Mock()
         mock_cache.get_cache_stats.return_value = {
             "dawa_id_cache_entries": 0,
@@ -399,7 +399,7 @@ class TestCleanup:
         client = CachedDAWAAPIClient()
         client.cleanup()
 
-        # Cache cleanup should be called (which saves to GCS)
+        # Cache cleanup should be called (which saves to cloud storage)
         mock_cache.cleanup.assert_called_once()
 
 

@@ -1,7 +1,7 @@
 """
-Data Transformer Module - Bridge GCS Danish Schema to Calculator Input
+Data Transformer Module - Bridge Cloud Storage Danish Schema to Calculator Input
 
-This module transforms raw data from GCS (with Danish field names and values)
+This module transforms raw data from cloud storage (with Danish field names and values)
 into the structured format expected by the climate calculator.
 
 Data Sources:
@@ -152,7 +152,7 @@ class GreenAccountsTransformer:
     """
     Transform Green Accounts (gr) livestock data from Danish schema to calculator input.
 
-    Input Schema (GCS):
+    Input Schema (cloud storage):
     - cvr_number: Company CVR (8 digits)
     - c_2001: Species name (Danish, e.g., "Kvæg", "Svin")
     - c_2004: Type detail (Danish, e.g., "Malkekøer", "Søer")
@@ -329,7 +329,7 @@ class GKEATransformer:
     """
     Transform GKEA fertilizer data from Danish schema to calculator input.
 
-    Input Schema (GCS):
+    Input Schema (cloud storage):
     - cvr_number: Company CVR (8 digits)
     - total_n_kvote: Total N applied (kg) - PRIMARY FIELD for N2O calculation
     - faktisk_areal_ha: Actual field area (hectares)
@@ -441,7 +441,7 @@ class FVMTransformer:
     """
     Transform FVM field data from Danish schema to calculator input.
 
-    Input Schema (GCS):
+    Input Schema (cloud storage):
     - cvr: Company CVR (8 digits)
     - bfe_nummer: Cadastral field ID
     - afgroede: Crop type (Danish)
@@ -787,7 +787,7 @@ if __name__ == "__main__":
     print(f"{'=' * 60}\n")
 
     # Load raw data (returns DuckDB relations)
-    print("1. Loading raw data from GCS...")
+    print("1. Loading raw data from cloud storage...")
     livestock_rel = loader.load_livestock(cvr=cvr, year=year)
     field_rel = loader.load_fields(cvr=cvr, year=2024)  # Use 2024 for fields
     fertilizer_rel = loader.load_fertilizer(cvr=cvr, year=2024)

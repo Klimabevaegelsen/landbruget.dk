@@ -41,7 +41,7 @@ def test_config(temp_dir):
 
 @pytest.fixture
 def mock_storage_access():
-    """Create mock GCS access."""
+    """Create mock cloud storage access."""
     mock_gcs = Mock(spec=StorageAccess)
     mock_gcs.path_exists = AsyncMock(return_value=True)
     mock_gcs.list_paths = AsyncMock(return_value=[])
@@ -69,7 +69,7 @@ class TestDataSourceYearDetector:
     @pytest.mark.asyncio
     async def test_detect_years_for_pattern(self, test_config, mock_storage_access):
         """Test year detection for simple patterns."""
-        # Mock GCS paths
+        # Mock storage paths
         # Paths without trailing slash so split("/")[-1] yields the directory name
         mock_storage_access.list_files = Mock(
             return_value=[

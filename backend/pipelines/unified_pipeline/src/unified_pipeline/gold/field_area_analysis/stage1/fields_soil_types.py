@@ -307,7 +307,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save simplified areas to GCS for Stage 4 compatibility."""
+        """Save simplified areas to cloud storage for Stage 4 compatibility."""
         # Save simplified areas - this is what Stage 4 expects
         self.log.info("Saving field soil areas for Stage 4 compatibility...")
         self._save_stage_output("field_soil_areas", "field_soil_intersections")

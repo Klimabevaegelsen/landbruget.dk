@@ -46,7 +46,7 @@ class FieldAreaAnalysisRedesigned:
             or os.getenv("GCS_BUCKET", "landbruget-data")
         )
 
-        # Initialize single GCS connection for all operations
+        # Initialize single cloud storage connection for all operations
         self.storage = StorageAccess()
         self.conn = self.storage.duckdb_conn
 
@@ -358,7 +358,7 @@ class FieldAreaAnalysisRedesigned:
                 f"{chunk_properties:,} properties"
             )
 
-            # Create current properties chunk (build side) - stream directly from GCS
+            # Create current properties chunk (build side) - stream directly from cloud storage
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE properties_chunk AS
                 SELECT

@@ -309,7 +309,7 @@ SPATIAL_JOIN_BUILD_SIDE_MEMORY_LIMIT=8GB
 ENABLE_SPATIAL_JOIN_OPERATOR=true
 
 # Storage Configuration
-GCS_BUCKET=landbruget-data
+STORAGE_BUCKET=landbruget-data
 GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
 ```
 

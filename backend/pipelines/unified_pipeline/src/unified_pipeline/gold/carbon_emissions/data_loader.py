@@ -1,10 +1,10 @@
 """
-GCS Data Loader for Climate Tool
+Cloud Storage Data Loader for Climate Tool
 
-This module loads data from GCS silver/gold layers for climate calculations.
+This module loads data from cloud storage silver/gold layers for climate calculations.
 Uses the StorageAccess pattern from unified_pipeline for optimal performance.
 
-Data Sources (ACTUAL GCS structure from exploration):
+Data Sources (ACTUAL cloud storage structure from exploration):
 - Livestock data: silver/gr {year}/ (Green Accounts with space in path!)
   Fields: cvr_number, c_2001 (species), c_2006 (animal count), c_2016 (total N)
   Years: 2018-2023, 64,999 farm records per year
@@ -33,7 +33,7 @@ logger = Logger.get_logger()
 
 class ClimateDataLoader:
     """
-    Loads agricultural data from GCS silver/gold layers for climate calculations.
+    Loads agricultural data from cloud storage silver/gold layers for climate calculations.
 
     This loader provides convenient access to:
     - CHR livestock data (herds, animal counts, movements)
@@ -52,7 +52,7 @@ class ClimateDataLoader:
         Args:
             storage: Optional StorageAccess instance to reuse from parent pipeline.
                      If None, creates a new StorageAccess().
-            bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbruget-data'
+            bucket: storage bucket name. Defaults to cloud storage_BUCKET env var or 'landbruget-data'
         """
         self.bucket = (
             bucket
@@ -60,12 +60,12 @@ class ClimateDataLoader:
             or os.getenv("R2_BUCKET")
             or os.getenv("GCS_BUCKET", "landbruget-data")
         )
-        self.gcs = storage if storage is not None else StorageAccess()
+        self.storage = storage if storage is not None else StorageAccess()
         logger.info(f"ClimateDataLoader initialized with bucket: {self.bucket}")
 
     def _empty_relation(self) -> duckdb.DuckDBPyRelation:
         """Return an empty DuckDB relation."""
-        return self.gcs.duckdb_conn.sql("SELECT 1 WHERE FALSE")
+        return self.storage.duckdb_conn.sql("SELECT 1 WHERE FALSE")
 
     def load_livestock(self, cvr: str, year: int | None = None) -> duckdb.DuckDBPyRelation | None:
         """
@@ -104,7 +104,7 @@ class ClimateDataLoader:
             # Green Accounts path - NOTE: has space in folder name!
             # DYRERK = Animal records (Dyre Regnskab)
             pattern = f"{self.bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet"
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.warning(f"No Green Accounts livestock data found in {pattern}")
@@ -116,7 +116,7 @@ class ClimateDataLoader:
 
             # Create table in DuckDB
             table_name = "gr_livestock_temp"
-            self.gcs.create_table_from_storage(table_name, latest_file)
+            self.storage.create_table_from_storage(table_name, latest_file)
 
             # Query for specific CVR - use cvr_number column (not cvr)
             query = f"""
@@ -125,11 +125,11 @@ class ClimateDataLoader:
                 WHERE cvr_number = '{cvr_str}'
             """
 
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             logger.info(f"Loaded {row_count} livestock records for CVR {cvr_str}, year {year}")
             return result_rel
@@ -168,7 +168,7 @@ class ClimateDataLoader:
 
             # Find FVM data for specific year
             pattern = f"{self.bucket}/silver/fvm_marker_{year}/*/data.parquet"
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.warning(f"No field data found for year {year} in {pattern}")
@@ -180,7 +180,7 @@ class ClimateDataLoader:
 
             # Create table in DuckDB
             table_name = "fvm_fields_temp"
-            self.gcs.create_table_from_storage(table_name, latest_file)
+            self.storage.create_table_from_storage(table_name, latest_file)
 
             # Query for specific CVR - FVM data uses cvr_number column
             query = f"""
@@ -189,11 +189,11 @@ class ClimateDataLoader:
                 WHERE cvr_number = '{cvr_str}'
             """
 
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             logger.info(f"Loaded {row_count} field records for CVR {cvr_str}, year {year}")
             return result_rel
@@ -235,7 +235,7 @@ class ClimateDataLoader:
             # GKEA fertilizer data - files named like GKEA2024_Markplan_med_Gødningsoplysninger.parquet
             # Located in: silver/fertiliser/{timestamp}/GKEA{year}_*.parquet
             pattern = f"{self.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.warning(
@@ -243,7 +243,7 @@ class ClimateDataLoader:
                 )
                 # Try without year filter
                 pattern_fallback = f"{self.bucket}/silver/fertiliser/*/GKEA*.parquet"
-                files = self.gcs.list_files(pattern_fallback)
+                files = self.storage.list_files(pattern_fallback)
                 if files:
                     logger.info(f"Found {len(files)} GKEA files without year filter")
 
@@ -263,10 +263,10 @@ class ClimateDataLoader:
 
             # Create table in DuckDB
             table_name = "fertilizer_temp"
-            self.gcs.create_table_from_storage(table_name, target_file)
+            self.storage.create_table_from_storage(table_name, target_file)
 
             # Get column names to check for year column
-            columns_rel = self.gcs.duckdb_conn.sql(f"SELECT * FROM {table_name} LIMIT 0")
+            columns_rel = self.storage.duckdb_conn.sql(f"SELECT * FROM {table_name} LIMIT 0")
             columns = columns_rel.columns
 
             # Build query for specific CVR - GKEA uses cvr_number column
@@ -281,11 +281,11 @@ class ClimateDataLoader:
             elif "aar" in columns:
                 query += f" AND aar = {year}"
 
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             logger.info(f"Loaded {row_count} fertilizer records for CVR {cvr_str}, year {year}")
             return result_rel
@@ -306,7 +306,7 @@ class ClimateDataLoader:
         """
         try:
             pattern = f"{self.bucket}/silver/soil_types/*/data.parquet"
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.warning("No soil types data found")
@@ -317,7 +317,7 @@ class ClimateDataLoader:
             logger.info(f"Loading soil types from: {latest_file}")
 
             table_name = "soil_types_temp"
-            self.gcs.create_table_from_storage(table_name, latest_file)
+            self.storage.create_table_from_storage(table_name, latest_file)
 
             # Select all columns
             query = f"""
@@ -329,11 +329,11 @@ class ClimateDataLoader:
                     data_quality
                 FROM {table_name}
             """
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             logger.info(f"Loaded {row_count} soil type polygons")
             return result_rel
@@ -367,7 +367,7 @@ class ClimateDataLoader:
 
             # Use pre-computed field-wetland intersections from gold layer
             pattern = f"{self.bucket}/gold/field_analysis_field_wetland_intersections_{year}/*/data.parquet"
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.warning(f"No field-wetland intersection data found for year {year}")
@@ -378,11 +378,11 @@ class ClimateDataLoader:
             logger.info(f"Loading field-wetland intersections from: {latest_file}")
 
             table_name = "field_wetland_temp"
-            self.gcs.create_table_from_storage(table_name, latest_file)
+            self.storage.create_table_from_storage(table_name, latest_file)
 
             # Query for this CVR with carbon percentage mapping
             # First check what columns are available
-            columns_rel = self.gcs.duckdb_conn.sql(f"SELECT * FROM {table_name} LIMIT 0")
+            columns_rel = self.storage.duckdb_conn.sql(f"SELECT * FROM {table_name} LIMIT 0")
             columns = columns_rel.columns
             logger.debug(f"Available columns in field_wetland_intersections: {columns}")
 
@@ -420,11 +420,11 @@ class ClimateDataLoader:
                 WHERE {" AND ".join(where_clauses)}
                 ORDER BY field_id
             """
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             logger.info(f"Loaded {row_count} lavbundsjord records for CVR {cvr_padded}")
 
@@ -442,9 +442,9 @@ class ClimateDataLoader:
                     FROM data
                 """
                 # Re-create table for stats query since we dropped it
-                self.gcs.create_table_from_storage(table_name, latest_file)
-                stats = self.gcs.duckdb_conn.sql(stats_query).fetchone()
-                self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                self.storage.create_table_from_storage(table_name, latest_file)
+                stats = self.storage.duckdb_conn.sql(stats_query).fetchone()
+                self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
                 total_wetland_area_ha = stats[0] or 0
                 area_6_12 = stats[1] or 0
@@ -553,7 +553,7 @@ class ClimateDataLoader:
 
             # Load organic areas for the year
             pattern = f"{self.bucket}/silver/fvm_organic_areas_{year}/*/data.parquet"
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.info(f"No organic areas data found for year {year}")
@@ -571,7 +571,7 @@ class ClimateDataLoader:
 
             # Create table
             table_name = "organic_areas_temp"
-            self.gcs.create_table_from_storage(table_name, latest_file)
+            self.storage.create_table_from_storage(table_name, latest_file)
 
             # Query for fields with organic certification
             # Check if conversion_status = 1 (fully converted to organic)
@@ -585,10 +585,10 @@ class ClimateDataLoader:
                     AND (deregistration_date IS NULL OR deregistration_date > '{year}-12-31')
             """
 
-            organic_result = self.gcs.duckdb_conn.sql(query).fetchone()
+            organic_result = self.storage.duckdb_conn.sql(query).fetchone()
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             organic_area_ha = organic_result[0] if organic_result[0] else 0.0
 
@@ -658,7 +658,7 @@ class ClimateDataLoader:
             pattern = (
                 f"{self.bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/*/data.parquet"
             )
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.warning("No NLES5 nitrogen data found")
@@ -669,7 +669,7 @@ class ClimateDataLoader:
             logger.info(f"Loading NLES5 nitrogen data from: {latest_file}")
 
             table_name = "nles5_nitrogen_temp"
-            self.gcs.create_table_from_storage(table_name, latest_file)
+            self.storage.create_table_from_storage(table_name, latest_file)
 
             # Query for this CVR
             query = f"""
@@ -690,24 +690,24 @@ class ClimateDataLoader:
                     AND year = {year}
                 ORDER BY field_id
             """
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             logger.info(f"Loaded {row_count} NLES5 nitrogen records for CVR {cvr_padded}")
 
             if row_count > 0:
                 # Calculate average using DuckDB - need to recreate table
-                self.gcs.create_table_from_storage(table_name, latest_file)
+                self.storage.create_table_from_storage(table_name, latest_file)
                 avg_query = f"""
                     SELECT AVG(nitrogen_washout_kg_ha) as avg_n
                     FROM {table_name}
                     WHERE cvr_number = '{cvr_padded}' AND year = {year}
                 """
-                avg_result = self.gcs.duckdb_conn.sql(avg_query).fetchone()
-                self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                avg_result = self.storage.duckdb_conn.sql(avg_query).fetchone()
+                self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                 avg_n_washout = avg_result[0] if avg_result[0] else 0.0
                 logger.info(f"   Average nitrogen washout: {avg_n_washout:.1f} kg N/ha")
 
@@ -733,7 +733,7 @@ class ClimateDataLoader:
         try:
             # DMI climate data might be structured by location/year
             pattern = f"{self.bucket}/silver/dmi/*/data.parquet"
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 logger.info("No DMI climate data found (optional)")
@@ -745,14 +745,14 @@ class ClimateDataLoader:
 
             # Create table and query (implementation depends on DMI data structure)
             table_name = "dmi_climate_temp"
-            self.gcs.create_table_from_storage(table_name, latest_file)
+            self.storage.create_table_from_storage(table_name, latest_file)
 
             query = f"SELECT * FROM {table_name} WHERE year = {year}"
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.storage.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
             logger.info(f"Loaded {row_count} climate records for year {year}")
             return result_rel
@@ -790,7 +790,7 @@ class ClimateDataLoader:
 
             # Load herd owners mapping (CVR -> herd_number)
             herd_owners_pattern = f"{self.bucket}/silver/chr_herd_owners*.parquet"
-            herd_owners_files = self.gcs.list_files(herd_owners_pattern)
+            herd_owners_files = self.storage.list_files(herd_owners_pattern)
 
             if not herd_owners_files:
                 logger.debug("No CHR herd_owners data found (breed detection unavailable)")
@@ -798,17 +798,17 @@ class ClimateDataLoader:
 
             # Load animal movements (herd_number -> breed)
             animal_movements_pattern = f"{self.bucket}/silver/chr_dyr_animal_movements*.parquet"
-            animal_movements_files = self.gcs.list_files(animal_movements_pattern)
+            animal_movements_files = self.storage.list_files(animal_movements_pattern)
 
             if not animal_movements_files:
                 logger.debug("No CHR animal movements data found (breed detection unavailable)")
                 return None
 
             # Create tables
-            self.gcs.create_table_from_storage(
+            self.storage.create_table_from_storage(
                 "chr_herd_owners_temp", sorted(herd_owners_files)[-1]
             )
-            self.gcs.create_table_from_storage(
+            self.storage.create_table_from_storage(
                 "chr_animal_movements_temp", sorted(animal_movements_files)[-1]
             )
 
@@ -828,12 +828,12 @@ class ClimateDataLoader:
             ORDER BY animal_count DESC
             """
 
-            result_rel = self.gcs.duckdb_conn.sql(query)
+            result_rel = self.storage.duckdb_conn.sql(query)
             row_count = result_rel.count("*").fetchone()[0]
 
             # Cleanup
-            self.gcs.duckdb_conn.execute("DROP TABLE IF EXISTS chr_herd_owners_temp")
-            self.gcs.duckdb_conn.execute("DROP TABLE IF EXISTS chr_animal_movements_temp")
+            self.storage.duckdb_conn.execute("DROP TABLE IF EXISTS chr_herd_owners_temp")
+            self.storage.duckdb_conn.execute("DROP TABLE IF EXISTS chr_animal_movements_temp")
 
             if row_count > 0:
                 logger.info(f"Loaded breed data for CVR {cvr}: {row_count} breeds found")
@@ -859,7 +859,7 @@ class ClimateDataLoader:
         try:
             if dataset == "fvm_marker":
                 pattern = f"{self.bucket}/silver/fvm_marker_*/*/*.parquet"
-                files = self.gcs.list_files(pattern)
+                files = self.storage.list_files(pattern)
                 years = set()
 
                 import re
@@ -900,7 +900,7 @@ class ClimateDataLoader:
             else:
                 pattern = f"{self.bucket}/silver/{dataset}/*/*.parquet"
 
-            files = self.gcs.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 return None
@@ -923,7 +923,7 @@ class ClimateDataLoader:
     def __del__(self):
         """Cleanup DuckDB connection on deletion."""
         try:
-            if hasattr(self, "gcs") and self.gcs:
+            if hasattr(self, "storage") and self.storage:
                 # StorageAccess handles its own cleanup
                 pass
         except Exception:

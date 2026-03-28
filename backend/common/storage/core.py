@@ -117,9 +117,9 @@ class StorageAccess:
 
     def _configure_duckdb(self):
         """
-        Configure DuckDB with optimal settings and gcsfs integration.
+        Configure DuckDB with optimal settings and s3fs integration.
 
-        VERIFIED APPROACH: Uses fsspec + gcsfs instead of httpfs for 5x performance gain.
+        VERIFIED APPROACH: Uses fsspec + s3fs instead of httpfs for 5x performance gain.
         Reference: DuckDB GitHub issue #15140
         """
         try:
@@ -132,15 +132,15 @@ class StorageAccess:
             # Install spatial extension
             self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
 
-            # Register gcsfs filesystem for optimal GCS performance
+            # Register cloud filesystem for optimal storage performance
             self._register_filesystem()
 
-            self.log.info("DuckDB configured with spatial and gcsfs filesystem integration")
+            self.log.info("DuckDB configured with spatial and s3fs filesystem integration")
         except Exception as e:
             self.log.warning(f"DuckDB configuration warning: {e}")
 
     def _check_native_cloud_support(self) -> bool:
-        """Check if native cloud storage access is available (R2 or GCS)."""
+        """Check if native cloud storage access is available."""
         try:
             # Check if httpfs extension is loaded
             result = self.duckdb_conn.execute(
@@ -149,7 +149,7 @@ class StorageAccess:
             if not result:
                 return False
 
-            # Check if R2 or GCS secret exists
+            # Check if a cloud storage secret exists
             try:
                 secrets = self.duckdb_conn.execute("SELECT name FROM duckdb_secrets()").fetchall()
                 return any("r2" in s[0].lower() or "gcs" in s[0].lower() for s in secrets)
@@ -204,7 +204,7 @@ class StorageAccess:
 
                     self.log.debug(f"Downloading {storage_path} to {temp_file}")
 
-                    # Fast download with gcsfs (5x faster than HTTPFS)
+                    # Fast download with s3fs (5x faster than HTTPFS)
                     with (
                         self.fs.open(storage_path, "rb") as src,
                         Path(temp_file).open("wb") as dst,
@@ -231,7 +231,7 @@ class StorageAccess:
     # For DuckDB + Parquet - Hybrid approach (still faster than current)
     def query_parquet_with_duckdb(self, storage_path: str, query: str = "1=1") -> str:
         """
-        Query parquet from GCS using optimized download + DuckDB read.
+        Query parquet from cloud storage using optimized download + DuckDB read.
 
         WARNING: This method returns table name for DuckDB compatibility.
         Use query_parquet_direct() for maximum performance without DataFrame conversion.
@@ -262,7 +262,7 @@ class StorageAccess:
         - Can be used for further DuckDB operations
 
         Args:
-            storage_path: GCS path to parquet file
+            storage_path: Storage path to parquet file
             query: SQL query to execute (default: SELECT *)
             table_name: Name for the created DuckDB table
 
@@ -288,16 +288,16 @@ class StorageAccess:
 
     def export_table_to_storage_direct(self, table_name: str, storage_path: str, *, connection=None, **parquet_options):
         """
-        OPTIMAL: Export DuckDB table directly to GCS without DataFrame conversion.
+        OPTIMAL: Export DuckDB table directly to cloud storage without DataFrame conversion.
 
         This provides maximum performance:
         - No DataFrame conversion bottleneck
         - Direct DuckDB COPY with optimized Parquet settings
-        - Streaming upload to GCS
+        - Streaming upload to cloud storage
 
         Args:
             table_name: Name of the table to export
-            storage_path: GCS destination path
+            storage_path: Cloud storage destination path
             connection: Optional external DuckDB connection (uses self.duckdb_conn if None)
             **parquet_options: Parquet export options
         """
@@ -325,7 +325,7 @@ class StorageAccess:
             # Get row count for logging
             count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
-            # Stream copy to GCS without loading into memory
+            # Stream copy to cloud storage without loading into memory
             with Path(tmp.name).open("rb") as src, self.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
@@ -340,12 +340,12 @@ class StorageAccess:
         **parquet_options,
     ):
         """
-        ULTIMATE PERFORMANCE: Process GCS file to GCS file with ZERO DataFrame conversions.
+        ULTIMATE PERFORMANCE: Process cloud storage file to cloud storage file with ZERO DataFrame conversions.
 
         This is the fastest possible pattern:
         - Download input file once
         - Process entirely in DuckDB
-        - Export directly to GCS
+        - Export directly to cloud storage
         - No intermediate DataFrames
         - No memory bottlenecks
 
@@ -388,9 +388,9 @@ class StorageAccess:
         self, storage_path: str, query: str = "SELECT *", table_name: str = "native_result"
     ) -> str:
         """
-        ULTIMATE PERFORMANCE: Query GCS parquet directly using native DuckDB HMAC access.
+        ULTIMATE PERFORMANCE: Query cloud storage parquet directly using native DuckDB access.
 
-        This bypasses all temporary files and streams directly from GCS.
+        This bypasses all temporary files and streams directly from cloud storage.
         Falls back to current method if native access is unavailable.
 
         Args:
@@ -402,7 +402,7 @@ class StorageAccess:
             Table name containing the results
         """
         if self._native_cloud_available:
-            self.log.info(f"Using native GCS access for {storage_path}")
+            self.log.info(f"Using native cloud access for {storage_path}")
             self.monitor.check_resources("start_native_query")
 
             try:
@@ -458,7 +458,7 @@ class StorageAccess:
                 return table_name
 
             except Exception as e:
-                self.log.warning(f"Native GCS access failed, falling back to temp file method: {e}")
+                self.log.warning(f"Native cloud access failed, falling back to temp file method: {e}")
                 # Fall through to existing method
 
         # Fallback to existing temp file method
@@ -469,9 +469,9 @@ class StorageAccess:
         self, table_name: str, storage_path: str, *, connection=None, **parquet_options
     ) -> bool:
         """
-        ULTIMATE PERFORMANCE: Export table directly to GCS using native DuckDB HMAC access.
+        ULTIMATE PERFORMANCE: Export table directly to cloud storage using native DuckDB access.
 
-        This bypasses all temporary files and streams directly to GCS.
+        This bypasses all temporary files and streams directly to cloud storage.
         Falls back to current method if native access is unavailable.
 
         Args:
@@ -493,7 +493,7 @@ class StorageAccess:
             except Exception as e:
                 self.log.debug(f"Could not configure R2 auth on external connection: {e}")
         if self._native_cloud_available:
-            self.log.info(f"Using native GCS export to {storage_path}")
+            self.log.info(f"Using native cloud export to {storage_path}")
             self.monitor.check_resources("start_native_export")
 
             try:
@@ -517,7 +517,7 @@ class StorageAccess:
                 return True
 
             except Exception as e:
-                self.log.warning(f"Native GCS export failed, falling back to temp file method: {e}")
+                self.log.warning(f"Native cloud export failed, falling back to temp file method: {e}")
                 # Fall through to existing method
 
         # Fallback to existing method
@@ -593,9 +593,9 @@ class StorageAccess:
                 except Exception as e:
                     self.log.warning(f"Failed to cleanup {tmp_file}: {e}")
 
-    # For Pandas/GeoPandas - Direct gcsfs streaming
+    # For Pandas/GeoPandas - Direct s3fs streaming
     def read_parquet_streaming(self, storage_path: str) -> str:
-        """Read parquet with streaming via gcsfs."""
+        """Read parquet with streaming via s3fs."""
         self.monitor.check_resources("start_streaming_read")
 
         # Create table from streaming read and return table name
@@ -609,9 +609,9 @@ class StorageAccess:
         self.monitor.check_resources("post_streaming_read")
         return table_name
 
-    # For uploads - gcsfs streaming (DuckDB cannot write to GCS)
+    # For uploads - s3fs streaming (DuckDB cannot write to cloud storage directly)
     def upload_dataframe(self, df: Any, storage_path: str, **kwargs):
-        """Upload dataframe with streaming via gcsfs."""
+        """Upload dataframe with streaming via s3fs."""
         self.monitor.check_resources("start_upload")
 
         # This method is deprecated - use upload_from_duckdb_table instead
@@ -640,11 +640,11 @@ class StorageAccess:
     )
     def upload_json(self, data: dict[str, Any] | list[Any], storage_path: str, **kwargs):
         """
-        OPTIMIZED: Upload JSON data with streaming via gcsfs with retry logic.
+        OPTIMIZED: Upload JSON data with streaming via s3fs with retry logic.
 
         Uses streaming approach for optimal performance:
         - No temp file creation
-        - Direct streaming to GCS
+        - Direct streaming to cloud storage
         - Memory efficient for large JSON objects
         - Robust retry logic for network failures
 
@@ -715,11 +715,11 @@ class StorageAccess:
 
     def download_json(self, storage_path: str) -> dict[str, Any] | list[Any]:
         """
-        OPTIMIZED: Download JSON data with streaming via gcsfs.
+        OPTIMIZED: Download JSON data with streaming via s3fs.
 
         Uses streaming approach for optimal performance:
         - No temp file creation
-        - Direct streaming from GCS
+        - Direct streaming from cloud storage
         - Memory efficient for large JSON objects
         """
         self.monitor.check_resources("start_json_download")
@@ -737,7 +737,7 @@ class StorageAccess:
             raise
 
     def upload_from_duckdb_table(self, table_name: str, storage_path: str, **format_options):
-        """Upload DuckDB table directly to GCS without DataFrame conversion.
+        """Upload DuckDB table directly to cloud storage without DataFrame conversion.
 
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
@@ -787,16 +787,16 @@ class StorageAccess:
             local_size = Path(tmp_path).stat().st_size
             self.log.info(f"Created local temp file: {local_size:,} bytes")
 
-            # Stream copy to GCS without loading into memory
+            # Stream copy to cloud storage without loading into memory
             with Path(tmp_path).open("rb") as src, self.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
-            self.log.info(f"Uploaded {local_size:,} bytes to GCS")
+            self.log.info(f"Uploaded {local_size:,} bytes to cloud storage")
 
             # Verify upload by checking if file exists
-            # CRITICAL: Invalidate gcsfs cache before verification to ensure fresh check
+            # CRITICAL: Invalidate s3fs cache before verification to ensure fresh check
             try:
-                # Invalidate cache for this path to force fresh GCS check
+                # Invalidate cache for this path to force fresh storage check
                 self.fs.invalidate_cache(storage_path)
 
                 if self.fs.exists(storage_path):
@@ -852,7 +852,7 @@ class StorageAccess:
             raise
 
     def upload_from_duckdb_query(self, query: str, storage_path: str, **format_options):
-        """Execute query and upload result directly to GCS without DataFrame conversion.
+        """Execute query and upload result directly to cloud storage without DataFrame conversion.
 
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
@@ -895,7 +895,7 @@ class StorageAccess:
             # DuckDB writes query result directly to the specified format
             self.duckdb_conn.execute(f"COPY ({query}) TO '{tmp.name}' ({options_str})")
 
-            # Stream copy to GCS
+            # Stream copy to cloud storage
             with Path(tmp.name).open("rb") as src, self.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
@@ -938,7 +938,7 @@ class StorageAccess:
                 file_info = self.fs.info(file_path)
                 mtime = file_info.get("mtime", 0)
 
-                # Handle different mtime types from gcsfs
+                # Handle different mtime types from s3fs
                 if isinstance(mtime, datetime.datetime):
                     # mtime is already a datetime object, normalize to timezone-naive
                     timestamp = mtime.replace(tzinfo=None) if mtime.tzinfo else mtime
@@ -974,20 +974,20 @@ class StorageAccess:
 
     def list_files_with_metadata(self, bucket_name: str, prefix: str = "") -> list[Any]:
         """
-        List files with metadata in GCS bucket with optional prefix.
+        List files with metadata in a storage bucket with optional prefix.
 
-        Returns list of file objects with metadata compatible with Google Cloud Storage client.
+        Returns list of file objects with metadata.
         Each file object has a 'name' attribute with the full path.
 
         Args:
-            bucket_name: GCS bucket name
+            bucket_name: Storage bucket name
             prefix: Optional prefix to filter files
 
         Returns:
             List of file objects with metadata
         """
         try:
-            # Build the pattern for gcsfs
+            # Build the pattern for s3fs
             pattern = f"{bucket_name}/{prefix}*" if prefix else f"{bucket_name}/*"
 
             # Get file paths

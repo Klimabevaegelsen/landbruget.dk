@@ -8,7 +8,7 @@ Auto-generates schema documentation from Parquet files for Gemini File Search an
 
 ### Purpose
 
-This script reads Parquet files from GCS or local cache and generates comprehensive markdown documentation including:
+This script reads Parquet files from cloud storage or local cache and generates comprehensive markdown documentation including:
 
 - **schema/tables.md**: List of all tables with row counts, columns, and metadata
 - **schema/columns.md**: Detailed column-level information with types, nullable status, and statistics
@@ -21,13 +21,13 @@ pip install pyarrow duckdb
 
 ### Usage
 
-**From GCS (requires authentication):**
+**From cloud storage (requires authentication):**
 
 ```bash
 # Generate docs from default gold/silver layers
 python generate_schema_docs.py
 
-# Specify custom GCS paths
+# Specify custom cloud storage paths
 python generate_schema_docs.py --gcs-path "gs://landbruget-data/gold/**" --gcs-path "gs://landbruget-data/silver/**"
 
 # Custom output directory
@@ -47,7 +47,7 @@ python generate_schema_docs.py --local-path /path/to/gold --local-path /path/to/
 ### Environment Variables
 
 ```bash
-# GCS authentication (HMAC preferred)
+# Cloud storage authentication (HMAC preferred)
 export GCS_BUCKET=landbruget-data
 export GCS_ACCESS_KEY_ID=<your-access-key>
 export GCS_SECRET_ACCESS_KEY=<your-secret-key>
@@ -61,9 +61,9 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--local-cache PATH` | Local cache directory with Parquet files | None |
-| `--bucket BUCKET` | GCS bucket name | `GCS_BUCKET` env var |
+| `--bucket BUCKET` | Storage bucket name | `GCS_BUCKET` env var |
 | `--output-dir DIR` | Output directory for markdown files | `schema` |
-| `--gcs-path PATTERN` | GCS path pattern to search (can be repeated) | `gs://{bucket}/gold`, `gs://{bucket}/silver` |
+| `--gcs-path PATTERN` | Cloud storage path pattern to search (can be repeated) | `gs://{bucket}/gold`, `gs://{bucket}/silver` |
 | `--local-path PATH` | Local path to search (can be repeated) | None |
 
 ### Output Format
@@ -107,7 +107,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 
 This script follows the patterns established in:
 - `/backend/common/duckdb_processor.py` - DuckDB setup and operations
-- `/backend/common/storage_interface.py` - GCS access patterns
+- `/backend/common/storage_interface.py` - Cloud storage access patterns
 - `/backend/common/schema_documentation.py` - Schema documentation utilities
 
 ### Examples
@@ -140,7 +140,7 @@ python generate_schema_docs.py \
 
 The script handles common errors gracefully:
 
-- **No GCS credentials**: Falls back to local-only mode
+- **No cloud credentials**: Falls back to local-only mode
 - **Missing files**: Skips with warning and continues
 - **Invalid Parquet files**: Logs error but continues processing other files
 - **DuckDB statistics failure**: Skips statistics but includes basic schema
@@ -157,12 +157,12 @@ The script handles common errors gracefully:
 **To update script:**
 1. Edit `backend/scripts/generate_schema_docs.py`
 2. Test with local cache first
-3. Run full test with GCS access
+3. Run full test with cloud storage access
 4. Update this README if CLI options change
 
 **Common issues:**
 
-- **"No Parquet files found"**: Check GCS path and credentials
+- **"No Parquet files found"**: Check cloud storage path and credentials
 - **"Could not load httpfs extension"**: Install DuckDB with extensions
 - **Memory errors**: Process fewer files at once or use local cache
 

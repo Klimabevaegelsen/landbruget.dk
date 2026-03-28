@@ -79,7 +79,7 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             )
             return None, None
         # Get file paths for streaming processing
-        self.log.info("Setting up streaming data processing from GCS storage")
+        self.log.info("Setting up streaming data processing from cloud storage")
 
         # Get property owners data path
         self.log.info(
@@ -114,13 +114,13 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
         """
 
         try:
-            self.log.info("Creating property_owners table from GCS parquet file...")
+            self.log.info("Creating property_owners table from cloud storage parquet file...")
             self.storage.create_table_from_storage("property_owners", property_path)
 
             prop_count = self.conn.execute("SELECT COUNT(*) FROM property_owners").fetchone()[0]
             self.log.info(f"Property owners table created with {prop_count:,} records")
 
-            self.log.info("Creating cadastral table from GCS parquet file...")
+            self.log.info("Creating cadastral table from cloud storage parquet file...")
             self.storage.create_table_from_storage("cadastral", cadastral_path)
 
             cadastral_count = self.conn.execute("SELECT COUNT(*) FROM cadastral").fetchone()[0]
@@ -333,17 +333,17 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             else:
                 self.log.info("ℹ️ CVR collection utility not available - skipping CVR extraction")
 
-            # Upload the parquet file directly to GCS
+            # Upload the parquet file directly to cloud storage
             storage_path = f"gold/{self.config.dataset}/{timestamp}/{self.config.dataset}.parquet"
             full_storage_path = f"{self.config.bucket}/{storage_path}"
 
-            self.log.info(f"Uploading merged data to GCS: {full_storage_path}")
+            self.log.info(f"Uploading merged data to cloud storage: {full_storage_path}")
 
             # Use storage_access to upload the file
             self.storage.upload_from_duckdb_table("merged_properties", full_storage_path)
 
             self.log.info(
-                f"Successfully uploaded merged dataset to GCS with {merged_count:,} records"
+                f"Successfully uploaded merged dataset to cloud storage with {merged_count:,} records"
             )
 
             return quality_stats
@@ -376,7 +376,7 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
         self.log.info("Starting Property-Cadastral Merge Gold processing")
 
         try:
-            # Load silver data from GCS storage or in-memory
+            # Load silver data from cloud storage or in-memory
             property_path, cadastral_path = self._load_silver_data_streaming(silver_data)
 
             # Check if we have the required data

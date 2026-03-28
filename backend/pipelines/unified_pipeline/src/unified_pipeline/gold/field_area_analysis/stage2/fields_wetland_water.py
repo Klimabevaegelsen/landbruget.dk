@@ -206,7 +206,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save both geometric intersection tables to GCS."""
+        """Save both geometric intersection tables to cloud storage."""
         # Save 2-way field × wetland intersections
         self._save_stage_output("field_wetland_intersections", "field_wetland_intersections")
 

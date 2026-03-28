@@ -183,7 +183,7 @@ def validate_pipeline_dependencies(source: cli_models.Source) -> bool:
     log = Logger.get_logger()
 
     # For now, we assume dependencies are satisfied if this function is called
-    # In a more sophisticated implementation, we could check GCS for recent data
+    # In a more sophisticated implementation, we could check cloud storage for recent data
     log.info(
         f"Pipeline {source.value} depends on: {[dep.value for dep in schedule_config.depends_on]}"
     )

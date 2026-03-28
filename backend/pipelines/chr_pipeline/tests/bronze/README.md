@@ -21,7 +21,7 @@ This directory contains comprehensive tests for the CHR pipeline's bronze layer 
 
 2. **test_export.py** (20 tests)
    - Data buffering
-   - GCS export functionality
+   - Cloud storage export functionality
    - Context data serialization
    - Batch operations
    - Error recovery
@@ -184,7 +184,7 @@ response.Response.BesaetningsnummerListe = Mock()
 response.Response.BesaetningsnummerListe.BesNrListe = ["123456", "654321"]
 ```
 
-### Mock GCS Access
+### Mock Cloud Storage Access
 
 ```python
 mock_gcs = MagicMock()

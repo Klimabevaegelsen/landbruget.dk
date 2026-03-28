@@ -2,7 +2,7 @@
 
 This test module provides unit tests for the export functionality using mock
 implementations since the actual bronze.export module may have dependencies
-on GCS and other external services.
+on cloud storage and other external services.
 """
 
 import contextlib
@@ -93,7 +93,7 @@ class MockBronzeExport:
             return
 
         if MockBronzeExport.USE_CLOUD_STORAGE:
-            # Write to GCS
+            # Write to cloud storage
             for data_type, data_dict in buffer.items():
                 if data_dict["json"]:
                     storage_path = f"{MockBronzeExport.GCS_BUCKET}/bronze/{MockBronzeExport.EXPORT_TIMESTAMP}/{data_type}.json"
@@ -261,7 +261,7 @@ class TestSaveDataImmediately:
     """Tests for save_data_immediately function."""
 
     def test_save_data_immediately_json(self, mock_storage_access):
-        """Test immediate save of JSON data to GCS."""
+        """Test immediate save of JSON data to cloud storage."""
         from bronze.export import save_data_immediately
 
         # Configure mock
@@ -280,7 +280,7 @@ class TestSaveDataImmediately:
         assert "chr_herds_test_123.json" in call_args[0][1]
 
     def test_save_data_immediately_xml(self, mock_storage_access):
-        """Test immediate save of XML data to GCS."""
+        """Test immediate save of XML data to cloud storage."""
         from bronze.export import save_data_immediately
 
         MockBronzeExport.USE_CLOUD_STORAGE = True
@@ -301,7 +301,7 @@ class TestSaveDataImmediately:
         assert "vetstat_raw_test_xml.xml" in call_args[0][0]
 
     def test_save_data_immediately_no_cloud(self):
-        """Test immediate save fails gracefully when GCS not available."""
+        """Test immediate save fails gracefully when cloud storage not available."""
         from bronze.export import save_data_immediately
 
         MockBronzeExport.USE_CLOUD_STORAGE = False
@@ -317,7 +317,7 @@ class TestSaveDataImmediately:
 
         MockBronzeExport.USE_CLOUD_STORAGE = True
         MockBronzeExport.storage_access = mock_storage_access
-        mock_storage_access.upload_json.side_effect = Exception("GCS error")
+        mock_storage_access.upload_json.side_effect = Exception("Cloud storage error")
 
         data = {"chr_number": "123456"}
         result = save_data_immediately("chr_herds", data, "test")
@@ -393,7 +393,7 @@ class TestFinalizeExport:
     """Tests for finalize_export function."""
 
     def test_finalize_export_local(self):
-        """Test finalize_export writes to local filesystem when GCS unavailable."""
+        """Test finalize_export writes to local filesystem when cloud storage unavailable."""
         from bronze.export import finalize_export, save_raw_data
 
         MockBronzeExport.USE_CLOUD_STORAGE = False
@@ -406,7 +406,7 @@ class TestFinalizeExport:
         mock_file.assert_called()
 
     def test_finalize_export_cloud(self, mock_storage_access):
-        """Test finalize_export writes to GCS."""
+        """Test finalize_export writes to cloud storage."""
         from bronze.export import finalize_export, save_raw_data
 
         MockBronzeExport.USE_CLOUD_STORAGE = True
@@ -418,7 +418,7 @@ class TestFinalizeExport:
         save_raw_data({"chr_number": "123456"}, "chr_herds", "test")
         finalize_export()
 
-        # Verify GCS write was called
+        # Verify cloud storage write was called
         mock_storage_access.fs.open.assert_called()
 
     def test_finalize_export_clears_buffer(self):

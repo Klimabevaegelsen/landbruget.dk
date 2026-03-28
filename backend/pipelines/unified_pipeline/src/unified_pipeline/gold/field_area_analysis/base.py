@@ -71,7 +71,7 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
     def _save_stage_output(self, table_name: str, output_key: str):
         """
-        Save stage output to GCS using optimized export.
+        Save stage output to cloud storage using optimized export.
 
         Args:
             table_name: DuckDB table name to export

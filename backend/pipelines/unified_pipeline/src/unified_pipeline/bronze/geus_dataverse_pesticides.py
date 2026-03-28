@@ -3,7 +3,7 @@ Bronze layer data ingestion for GEUS Dataverse Pesticides and PFAS data.
 
 This module handles the download of pesticide and PFAS groundwater data from the GEUS
 Dataverse repository for the River Basin Management Plan (Vandområdeplan 4). It downloads
-raw .rds files and stores them in GCS for processing in the silver layer.
+raw .rds files and stores them in cloud storage for processing in the silver layer.
 
 Data source:
 - Dataset: "Groundwater chemistry data for the fourth River Basin Management Plan"
@@ -48,7 +48,7 @@ class GEUSDataversePesticidesBronzeConfig(BaseJobConfig):
         pest_url: Direct download URL for the AM_pest.rds file
         pfas_url: Direct download URL for the AM_pfas.rds file
         frequency: How often the data is updated (annual for VP4 dataset)
-        bucket: GCS bucket name for raw data storage
+        bucket: storage bucket name for raw data storage
         source_crs: Coordinate reference system of source data
         request_timeout: Timeout for download requests in seconds
     """
@@ -80,12 +80,12 @@ class GEUSDataversePesticidesBronze(
     Bronze layer processing for GEUS Dataverse pesticides and PFAS data.
 
     This class downloads the raw AM_pest.rds and AM_pfas.rds files from GEUS
-    Dataverse and stores them in GCS. The silver layer will then read and
+    Dataverse and stores them in cloud storage. The silver layer will then read and
     convert these to parquet format.
 
     Processing flow:
     1. Download AM_pest.rds and AM_pfas.rds from GEUS Dataverse API
-    2. Store raw .rds files in GCS bronze layer
+    2. Store raw .rds files in cloud storage bronze layer
     3. Save metadata manifest for silver layer
     """
 
@@ -165,7 +165,7 @@ class GEUSDataversePesticidesBronze(
         Run the bronze layer processing pipeline.
 
         Downloads the raw AM_pest.rds and AM_pfas.rds files from GEUS Dataverse
-        and stores them in GCS for the silver layer to process.
+        and stores them in cloud storage for the silver layer to process.
 
         Returns:
             Manifest dictionary with paths and metadata for silver layer,
@@ -195,7 +195,7 @@ class GEUSDataversePesticidesBronze(
                         session, self.config.pfas_url, "AM_pfas.rds"
                     )
 
-                    # Save to GCS
+                    # Save to cloud storage
                     pest_path = self._save_rds_to_storage(pest_content, "AM_pest.rds")
                     pfas_path = self._save_rds_to_storage(pfas_content, "AM_pfas.rds")
 
@@ -220,7 +220,7 @@ class GEUSDataversePesticidesBronze(
                         "pfas_rds_path": pfas_path,
                     }
 
-                    # Save manifest to GCS
+                    # Save manifest to cloud storage
                     manifest_path = (
                         f"{self.config.bucket}/bronze/{self.config.dataset}/"
                         f"{run_timestamp}/manifest.json"

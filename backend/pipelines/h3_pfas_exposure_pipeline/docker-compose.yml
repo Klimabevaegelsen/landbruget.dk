@@ -13,15 +13,15 @@ services:
       - ./main.py:/app/main.py
       # Mount data directories for persistence between runs
       - ../../data/gold/h3_pfas_exposure:/data/gold/h3_pfas_exposure
-      # Mount GCS credentials if using local authentication
+      # Mount cloud storage credentials if using local authentication
       - ~/.config/gcloud:/root/.config/gcloud:ro
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app/src
       - PYTHONUNBUFFERED=1
 
-      # GCS Configuration
-      - GCS_BUCKET=landbruget-data
+      # Cloud Storage Configuration
+      - STORAGE_BUCKET=landbruget-data
 
       # H3 Configuration - Updated for refactored structure
       - H3_RESOLUTION=10

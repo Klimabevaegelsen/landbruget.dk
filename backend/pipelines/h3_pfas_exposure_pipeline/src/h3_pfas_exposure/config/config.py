@@ -48,7 +48,7 @@ class H3SpatialConfig:
     max_h3_area_ha: float = 3.0  # Maximum H3 cell area in hectares
     max_intersection_ratio: float = 1.1  # Allow 10% tolerance for intersection calculations
 
-    # GCS Configuration
+    # Cloud Storage Configuration
     bucket: str = field(
         default_factory=lambda: (
             os.getenv("STORAGE_BUCKET")
@@ -121,7 +121,7 @@ class H3SpatialConfig:
     log_chunk_details: bool = False  # Reduced logging for performance - only essential progress
     log_stage_timings: bool = False  # Reduced logging for performance - only major stages
 
-    # GCS Configuration
+    # Cloud Storage Configuration
     available_years: list[int] = field(
         default_factory=lambda: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
     )

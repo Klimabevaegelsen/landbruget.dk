@@ -2,7 +2,7 @@
 R2/S3-compatible filesystem utilities using s3fs.
 
 Provides cached filesystem access and DuckDB integration for optimal performance.
-Uses Cloudflare R2 as primary storage backend, with GCS HMAC as fallback.
+Uses Cloudflare R2 as primary storage backend, with legacy cloud HMAC as fallback.
 """
 
 import logging
@@ -84,7 +84,7 @@ def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
 def setup_duckdb_cloud_auth(conn: duckdb.DuckDBPyConnection) -> bool:
     """Setup cloud storage authentication for a DuckDB connection.
 
-    Tries R2 credentials first (TYPE r2), falls back to GCS HMAC (TYPE GCS).
+    Tries R2 credentials first (TYPE r2), falls back to legacy cloud HMAC (TYPE GCS).
     Installs and loads the httpfs extension as a prerequisite.
 
     Reference: https://duckdb.org/docs/stable/guides/network_cloud_storage/cloudflare_r2_import
@@ -122,7 +122,7 @@ def setup_duckdb_cloud_auth(conn: duckdb.DuckDBPyConnection) -> bool:
         except Exception as e:
             logger.warning(f"Could not setup R2 authentication: {e}")
 
-    # Fallback to GCS HMAC credentials
+    # Legacy cloud HMAC fallback
     storage_access_key = os.getenv("GCS_ACCESS_KEY_ID")
     gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
@@ -137,12 +137,12 @@ def setup_duckdb_cloud_auth(conn: duckdb.DuckDBPyConnection) -> bool:
                     SECRET '{escaped_secret}'
                 );
             """)
-            logger.info("DuckDB GCS HMAC authentication configured (legacy)")
+            logger.info("DuckDB cloud HMAC authentication configured (legacy)")
             return True
         except Exception as e:
-            logger.warning(f"Could not setup GCS authentication: {e}")
+            logger.warning(f"Could not setup legacy cloud HMAC authentication: {e}")
 
-    logger.info("No R2 or GCS HMAC credentials found for DuckDB")
+    logger.info("No R2 or cloud HMAC credentials found for DuckDB")
     return False
 
 

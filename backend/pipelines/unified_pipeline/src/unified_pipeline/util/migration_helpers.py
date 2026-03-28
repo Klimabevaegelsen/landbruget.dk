@@ -160,7 +160,7 @@ class GCSMigrationHelper:
             conn.execute("SET max_memory = '12GB'")
             conn.execute("SET threads = 4")
 
-            # Register gcsfs filesystem
+            # Register s3fs filesystem
             import os
 
             from fsspec import filesystem

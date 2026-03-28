@@ -214,7 +214,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save both geometric intersection tables to GCS."""
+        """Save both geometric intersection tables to cloud storage."""
         # Save 2-way field × BNBO intersections
         self._save_stage_output("field_bnbo_intersections", "field_bnbo_intersections")
 

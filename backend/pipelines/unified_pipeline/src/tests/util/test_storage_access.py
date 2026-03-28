@@ -50,7 +50,7 @@ from common.storage import (  # noqa: E402
 )
 
 # =============================================================================
-# GCS Filesystem Tests
+# Cloud storage Filesystem Tests
 # =============================================================================
 
 
@@ -350,22 +350,22 @@ def test_query_parquet_with_duckdb(mock_get_fs):
             mock_temp_download.return_value = temp_file_context()
 
             # Create StorageAccess instance
-            gcs = StorageAccess()
+            storage = StorageAccess()
 
             # Query the data
-            table_name = gcs.query_parquet_with_duckdb(
+            table_name = storage.query_parquet_with_duckdb(
                 "test-bucket/test.parquet", query="cvr LIKE '31%'"
             )
 
             # Verify table was created
-            result = gcs.duckdb_conn.execute(f"SELECT * FROM {table_name}").fetchall()
+            result = storage.duckdb_conn.execute(f"SELECT * FROM {table_name}").fetchall()
 
             # Should only have filtered row
             assert len(result) == 1
             assert result[0][0] == "31373077"
 
             # Cleanup
-            gcs.duckdb_conn.close()
+            storage.duckdb_conn.close()
     finally:
         # Cleanup temp file
         if os.path.exists(tmp_path):
@@ -380,18 +380,18 @@ def test_query_parquet_native(mock_get_fs):
 
     # Create StorageAccess with native support
     with patch.object(StorageAccess, "_check_native_cloud_support", return_value=True):
-        gcs = StorageAccess()
+        storage = StorageAccess()
 
         # Use a real DuckDB connection to verify the method runs and returns table name
         # The native query uses CREATE TABLE ... AS SELECT from a parquet URL,
         # which will fail without real storage — patch _native_cloud_available and
         # test with a local fallback by verifying the method signature only.
         # Since we can't mock duckdb_conn.execute (read-only), verify the object exists.
-        assert gcs._native_cloud_available is True
-        assert hasattr(gcs, "query_parquet_native")
+        assert storage._native_cloud_available is True
+        assert hasattr(storage, "query_parquet_native")
 
         # Cleanup
-        gcs.duckdb_conn.close()
+        storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -426,21 +426,21 @@ def test_query_parquet_with_filters(mock_get_fs):
 
             mock_temp_download.return_value = temp_file_context()
 
-            gcs = StorageAccess()
+            storage = StorageAccess()
 
             # Query with filter
-            table_name = gcs.query_parquet_with_duckdb(
+            table_name = storage.query_parquet_with_duckdb(
                 "test-bucket/data.parquet", query="year = 2024 AND cvr = '31373077'"
             )
 
-            result = gcs.duckdb_conn.execute(f"SELECT * FROM {table_name}").fetchall()
+            result = storage.duckdb_conn.execute(f"SELECT * FROM {table_name}").fetchall()
 
             # Should only have 1 filtered row
             assert len(result) == 1
             assert result[0][0] == "31373077"
             assert result[0][1] == 2024
 
-            gcs.duckdb_conn.close()
+            storage.duckdb_conn.close()
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -466,12 +466,12 @@ def test_upload_json_with_retry(mock_get_fs):
 
     mock_fs.open.side_effect = mock_open
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     test_data = {"cvr": "31373077", "name": "Arla Foods", "location": "København"}
 
     # Upload JSON
-    gcs.upload_json(test_data, "test-bucket/data.json")
+    storage.upload_json(test_data, "test-bucket/data.json")
 
     # Verify open was called with correct path (protocol prefix is stripped internally)
     mock_fs.open.assert_called_once_with("test-bucket/data.json", "w", encoding="utf-8")
@@ -479,7 +479,7 @@ def test_upload_json_with_retry(mock_get_fs):
     # Verify json.dump was called
     assert mock_file.method_calls  # File operations happened
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -498,10 +498,10 @@ def test_upload_from_duckdb_table_parquet(mock_get_fs):
 
     mock_fs.open.side_effect = mock_open
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     # Create test table
-    gcs.duckdb_conn.execute("""
+    storage.duckdb_conn.execute("""
         CREATE TABLE test_table AS
         SELECT * FROM (VALUES
             ('31373077', 'Arla Foods'),
@@ -510,12 +510,12 @@ def test_upload_from_duckdb_table_parquet(mock_get_fs):
     """)
 
     # Upload table as parquet
-    gcs.upload_from_duckdb_table("test_table", "test-bucket/output.parquet")
+    storage.upload_from_duckdb_table("test_table", "test-bucket/output.parquet")
 
     # Verify file operations happened
     assert mock_fs.open.called
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -534,10 +534,10 @@ def test_upload_from_duckdb_table_csv(mock_get_fs):
 
     mock_fs.open.side_effect = mock_open
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     # Create test table
-    gcs.duckdb_conn.execute("""
+    storage.duckdb_conn.execute("""
         CREATE TABLE csv_table AS
         SELECT * FROM (VALUES
             ('31373077', 'Arla'),
@@ -546,12 +546,12 @@ def test_upload_from_duckdb_table_csv(mock_get_fs):
     """)
 
     # Upload as CSV
-    gcs.upload_from_duckdb_table("csv_table", "test-bucket/output.csv")
+    storage.upload_from_duckdb_table("csv_table", "test-bucket/output.csv")
 
     # Verify upload happened
     assert mock_fs.open.called
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -568,17 +568,17 @@ def test_upload_batch_operations(mock_get_fs):
 
     mock_fs.open.side_effect = mock_open
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     # Upload multiple JSON files
     for i in range(5):
         test_data = {"id": i, "cvr": f"3137307{i}"}
-        gcs.upload_json(test_data, f"test-bucket/batch_{i}.json")
+        storage.upload_json(test_data, f"test-bucket/batch_{i}.json")
 
     # Verify all uploads were called
     assert mock_fs.open.call_count == 5
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 # =============================================================================
@@ -588,7 +588,7 @@ def test_upload_batch_operations(mock_get_fs):
 
 @patch("common.storage.core.get_r2_filesystem")
 def test_process_storage_to_storage_direct(mock_get_fs):
-    """Test direct GCS-to-GCS processing (no DataFrame conversion)."""
+    """Test direct cloud-to-cloud processing (no DataFrame conversion)."""
     mock_fs = MagicMock()
     mock_get_fs.return_value = mock_fs
     mock_fs.info.return_value = {"size": 1024 * 1024}
@@ -627,7 +627,7 @@ def test_process_storage_to_storage_direct(mock_get_fs):
 
             mock_fs.open.side_effect = mock_open
 
-            gcs = StorageAccess()
+            storage = StorageAccess()
 
             # Process with transformation
             processing_query = """
@@ -637,7 +637,7 @@ def test_process_storage_to_storage_direct(mock_get_fs):
                 GROUP BY cvr
             """
 
-            gcs.process_storage_to_storage_direct(
+            storage.process_storage_to_storage_direct(
                 "test-bucket/input.parquet",
                 "test-bucket/output.parquet",
                 processing_query,
@@ -646,7 +646,7 @@ def test_process_storage_to_storage_direct(mock_get_fs):
             # Verify operations happened
             assert mock_fs.open.called
 
-            gcs.duckdb_conn.close()
+            storage.duckdb_conn.close()
     finally:
         if os.path.exists(tmp_input_path):
             os.unlink(tmp_input_path)
@@ -691,7 +691,7 @@ def test_process_storage_to_storage_with_transformation(mock_get_fs):
 
             mock_fs.open.side_effect = mock_open
 
-            gcs = StorageAccess()
+            storage = StorageAccess()
 
             # Transform: calculate nitrogen per hectare
             transform_query = """
@@ -703,7 +703,7 @@ def test_process_storage_to_storage_with_transformation(mock_get_fs):
                 FROM input_table
             """
 
-            gcs.process_storage_to_storage_direct(
+            storage.process_storage_to_storage_direct(
                 "test-bucket/raw.parquet",
                 "test-bucket/processed.parquet",
                 transform_query,
@@ -712,7 +712,7 @@ def test_process_storage_to_storage_with_transformation(mock_get_fs):
             # Verify upload was attempted
             assert mock_fs.open.called
 
-            gcs.duckdb_conn.close()
+            storage.duckdb_conn.close()
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
@@ -727,15 +727,15 @@ def test_file_size_limits_enforcement(mock_get_fs):
     # Mock file info with size > 8 GB
     mock_fs.info.return_value = {"size": 9 * (1024**3)}  # 9 GB
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     # check_file_size_limits catches all exceptions internally and logs a warning,
     # returning True (proceed with caution) rather than re-raising.
     # Verify it returns True and doesn't propagate the ValueError.
-    result = gcs.check_file_size_limits("test-bucket/huge_file.parquet")
+    result = storage.check_file_size_limits("test-bucket/huge_file.parquet")
     assert result is True  # Proceeds with caution even for oversized files
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 # =============================================================================
@@ -753,13 +753,13 @@ def test_storage_access_authentication_failure(mock_get_fs):
     mock_fs.open.side_effect = PermissionError("Authentication failed")
     mock_get_fs.return_value = mock_fs
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     # upload_json uses tenacity retry, so the error is wrapped in RetryError after exhausting retries
     with pytest.raises(RetryError):
-        gcs.upload_json({"test": "data"}, "test-bucket/data.json")
+        storage.upload_json({"test": "data"}, "test-bucket/data.json")
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -773,13 +773,13 @@ def test_storage_access_network_failure(mock_get_fs):
     # Mock network failure
     mock_fs.open.side_effect = ConnectionError("Network unreachable")
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     # upload_json uses tenacity retry, so the error is wrapped in RetryError after exhausting retries
     with pytest.raises(RetryError):
-        gcs.upload_json({"test": "data"}, "test-bucket/data.json")
+        storage.upload_json({"test": "data"}, "test-bucket/data.json")
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -791,13 +791,13 @@ def test_storage_access_missing_bucket(mock_get_fs):
     # Mock bucket not found error
     mock_fs.open.side_effect = FileNotFoundError("Bucket not found")
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
     # Should propagate bucket not found error
     with pytest.raises(FileNotFoundError, match="Bucket not found"):
-        gcs.download_json("nonexistent-bucket/data.json")
+        storage.download_json("nonexistent-bucket/data.json")
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 # =============================================================================
@@ -818,16 +818,16 @@ def test_list_files_with_pattern(mock_get_fs):
         "test-bucket/bronze/2024/file3.parquet",
     ]
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
-    files = gcs.list_files("test-bucket/bronze/2024/*.parquet")
+    files = storage.list_files("test-bucket/bronze/2024/*.parquet")
 
     # Verify results are bare paths
     assert len(files) == 3
     assert all(not f.startswith("r2://") for f in files)
     assert "test-bucket/bronze/2024/file1.parquet" in files
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -838,12 +838,12 @@ def test_file_exists_check(mock_get_fs):
 
     mock_fs.exists.side_effect = lambda path: path == "test-bucket/existing.json"
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
-    assert gcs.file_exists("test-bucket/existing.json") is True
-    assert gcs.file_exists("test-bucket/nonexistent.json") is False
+    assert storage.file_exists("test-bucket/existing.json") is True
+    assert storage.file_exists("test-bucket/nonexistent.json") is False
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -854,13 +854,13 @@ def test_get_file_size(mock_get_fs):
 
     mock_fs.size.return_value = 1024 * 1024  # 1 MB
 
-    gcs = StorageAccess()
+    storage = StorageAccess()
 
-    size = gcs.get_file_size("test-bucket/data.parquet")
+    size = storage.get_file_size("test-bucket/data.parquet")
 
     assert size == 1024 * 1024
 
-    gcs.duckdb_conn.close()
+    storage.duckdb_conn.close()
 
 
 @patch("common.storage.core.get_r2_filesystem")
@@ -874,13 +874,13 @@ def test_connection_reuse(mock_get_fs):
     external_conn.execute("CREATE TABLE test_table AS SELECT 1 as id")
 
     # Pass to StorageAccess
-    gcs = StorageAccess(connection=external_conn)
+    storage = StorageAccess(connection=external_conn)
 
     # Verify same connection is used
-    assert gcs.duckdb_conn is external_conn
+    assert storage.duckdb_conn is external_conn
 
     # Verify table from external connection is accessible
-    result = gcs.duckdb_conn.execute("SELECT * FROM test_table").fetchone()
+    result = storage.duckdb_conn.execute("SELECT * FROM test_table").fetchone()
     assert result[0] == 1
 
     # Don't close external connection in StorageAccess

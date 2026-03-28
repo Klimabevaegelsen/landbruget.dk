@@ -637,7 +637,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 pba.property_bnbo_latest_created,"""
 
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
-        # NOTE: fp.intersection_geometry is stored as native GEOMETRY type (verified in GCS)
+        # NOTE: fp.intersection_geometry is stored as native GEOMETRY type (verified in cloud storage)
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT
@@ -762,9 +762,9 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         return stats
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save both redesigned output tables to GCS."""
+        """Save both redesigned output tables to cloud storage."""
 
-        self.log.info("Saving redesigned output tables to GCS...")
+        self.log.info("Saving redesigned output tables to cloud storage...")
 
         # Save field-level table
         self._save_stage_output(
@@ -776,7 +776,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             "field_environmental_analysis_properties", "field_environmental_analysis_properties"
         )
 
-        self.log.info("✅ Both redesigned output tables saved to GCS")
+        self.log.info("✅ Both redesigned output tables saved to cloud storage")
 
         # Perform comprehensive validations after saving
         self._validate_comprehensive_output()

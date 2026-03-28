@@ -11,8 +11,10 @@ from .processor import H3PFASProcessorRefactored
 
 
 async def run_multi_year_analysis(years: list[int] | None = None, h3_resolution: int = 10) -> bool:
-    """Run multi-year H3 PFAS analysis from GCS data."""
-    logger.info("🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from GCS")
+    """Run multi-year H3 PFAS analysis from cloud storage data."""
+    logger.info(
+        "🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from cloud storage"
+    )
 
     # Create configuration optimized for GitHub Actions free tier (16GB RAM, 4 CPUs)
     config = H3SpatialConfig(
@@ -506,7 +508,7 @@ async def run_cumulative_analysis_optimized(
     include_kommune: bool = False,
 ) -> bool:
     """
-    Run optimized cumulative analysis that loads existing year-specific results from GCS
+    Run optimized cumulative analysis that loads existing year-specific results from cloud storage
     and aggregates them, instead of reprocessing all the raw data.
 
     This is much faster and more efficient than the original cumulative analysis,
@@ -666,9 +668,9 @@ async def run_cumulative_analysis_optimized(
 
             # Load and aggregate each year's results
             for year, file_path in available_year_results:
-                logger.info(f"   📅 Loading results for year {year} from GCS")
+                logger.info("   📅 Loading results from cloud storage")
 
-                # Load year results from GCS
+                # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
                     processor.storage_access.create_table_from_storage(year_table, file_path)
@@ -938,9 +940,9 @@ async def run_cumulative_analysis_optimized(
 
                 # Load and aggregate each year's results
                 for year, file_path in available_kommune_results:
-                    logger.info(f"   📅 Loading kommune results for year {year} from GCS")
+                    logger.info("   📅 Loading kommune results from cloud storage")
 
-                    # Load year results from GCS
+                    # Load year results from cloud storage
                     year_table = f"year_kommune_results_{year}"
                     try:
                         processor.storage_access.create_table_from_storage(year_table, file_path)
@@ -1261,9 +1263,9 @@ async def run_cumulative_analysis_github_actions_optimized(
 
             # Load and aggregate each year's results
             for year, file_path in available_year_results:
-                logger.info(f"   📅 Loading fresh results for year {year} from GCS")
+                logger.info("   📅 Loading fresh results from cloud storage")
 
-                # Load year results from GCS
+                # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
                     processor.storage_access.create_table_from_storage(year_table, file_path)
@@ -1522,9 +1524,9 @@ async def run_cumulative_analysis_github_actions_optimized(
 
                 # Load and aggregate each year's kommune results
                 for year, file_path in available_kommune_results:
-                    logger.info(f"   📅 Loading fresh kommune results for year {year} from GCS")
+                    logger.info("   📅 Loading fresh kommune results from cloud storage")
 
-                    # Load year kommune results from GCS
+                    # Load year kommune results from cloud storage
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
                         processor.storage_access.create_table_from_storage(
@@ -1822,8 +1824,8 @@ async def run_combined_analysis(
 
 
 async def run_multi_year_kommune_analysis(years: list[int] | None = None) -> bool:
-    """Run multi-year kommune-level PFAS analysis from GCS data."""
-    logger.info("🚀 Starting multi-year kommune-level PFAS analysis from GCS")
+    """Run multi-year kommune-level PFAS analysis from cloud storage data."""
+    logger.info("🚀 Starting multi-year kommune-level PFAS analysis from cloud storage")
 
     # Create configuration optimized for GitHub Actions free tier (16GB RAM, 4 CPUs)
     config = H3SpatialConfig(
@@ -1900,12 +1902,12 @@ async def run_cumulative_analysis_from_artifacts(
     artifacts_dir: str = "downloaded-artifacts",
 ) -> bool:
     """
-    Run cumulative analysis using GCS paths from GitHub Actions artifacts.
+    Run cumulative analysis using cloud storage paths from GitHub Actions artifacts.
 
     This is the most efficient approach for GitHub Actions workflows:
-    1. Individual year jobs save GCS paths as artifacts
+    1. Individual year jobs save cloud storage paths as artifacts
     2. Cumulative job downloads artifacts and reads exact paths
-    3. No GCS searching or pattern matching needed
+    3. No cloud storage searching or pattern matching needed
 
     Args:
         years: List of years to include in cumulative analysis (None = all available)
@@ -1917,7 +1919,7 @@ async def run_cumulative_analysis_from_artifacts(
         bool: True if successful, False otherwise
     """
     logger.info("🚀 Starting GitHub Actions artifact-based cumulative H3 PFAS analysis")
-    logger.info("   📦 Reading GCS paths from workflow artifacts (no searching needed)")
+    logger.info("   📦 Reading cloud storage paths from workflow artifacts (no searching needed)")
 
     if h3_resolutions is None:
         h3_resolutions = [10]
@@ -1961,7 +1963,7 @@ async def run_cumulative_analysis_from_artifacts(
         H3DataLoader(processor.conn, processor.config, processor.storage_access)
         result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
-        # Read artifacts to get GCS paths
+        # Read artifacts to get cloud storage paths
         artifacts_path = Path(artifacts_dir)
         if not artifacts_path.exists():
             logger.error(f"❌ Artifacts directory not found: {artifacts_dir}")
@@ -2094,7 +2096,7 @@ async def run_cumulative_analysis_from_artifacts(
             for year, file_path in available_year_results:
                 logger.info(f"   📅 Loading results for year {year} from artifact path")
 
-                # Load year results from GCS
+                # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
                     processor.storage_access.create_table_from_storage(year_table, file_path)
@@ -2341,7 +2343,7 @@ async def run_cumulative_analysis_from_artifacts(
                 for year, file_path in available_kommune_results:
                     logger.info(f"   📅 Loading kommune results for year {year} from artifact path")
 
-                    # Load year kommune results from GCS
+                    # Load year kommune results from cloud storage
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
                         processor.storage_access.create_table_from_storage(

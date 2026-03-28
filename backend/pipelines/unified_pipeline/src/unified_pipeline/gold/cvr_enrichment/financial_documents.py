@@ -244,8 +244,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     # In GitHub Actions, we only need to process the artifact once
                     break
 
-                # Use GCS temp download for local development
-                self.log.info(f"Local development - downloading from GCS: {input_path}")
+                # Use cloud storage temp download for local development
+                self.log.info(f"Local development - downloading from cloud storage: {input_path}")
                 with self.storage._temp_download(input_path) as temp_file:
                     # Load company data from temp file
                     result = self.conn.execute(
@@ -751,7 +751,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     @timed(name="Saving financial data")
     def _save_financial_data(self, processed_data: dict[str, Any]) -> str:
         """
-        Save processed financial documents data to GCS using batch processing to avoid memory
+        Save processed financial documents data to cloud storage using batch processing to avoid memory
         issues. Now creates both document metadata table AND comprehensive financial table.
 
         Args:
@@ -1379,7 +1379,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             """)
             self.log.info(f"Created empty tables {metadata_table} and {financial_table}")
 
-        # Save both tables to GCS
+        # Save both tables to cloud storage
         # Save document metadata table (for compatibility)
         self._save_data(
             data=metadata_table,
@@ -1680,7 +1680,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         """Save employment table to storage."""
         self.log.info(f"💾 Saving {total_records} {table_suffix} employment records to storage")
 
-        # Save to GCS
+        # Save to cloud storage
         self._save_data(
             data=table_name,
             dataset=f"cvr_financial_employment_{table_suffix}",

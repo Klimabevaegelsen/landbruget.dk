@@ -19,7 +19,7 @@ class H3PFASConfig:
     memory_limit: str = "12GB"
     thread_count: int = 4
 
-    # GCS Configuration
+    # Cloud Storage Configuration
     bucket: str = "landbruget-data"
     available_years: list[int] = field(
         default_factory=lambda: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]

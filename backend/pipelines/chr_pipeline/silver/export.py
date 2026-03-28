@@ -6,7 +6,7 @@ from pathlib import Path
 
 import duckdb
 
-# Try to import GCS utilities
+# Try to import cloud storage utilities
 try:
     from common.storage import StorageAccess
 
@@ -125,7 +125,7 @@ def save_table_with_connection(
 
 def upload_silver_data_to_storage(silver_dir: Path, export_timestamp: str) -> bool:
     """
-    Upload all silver parquet files to GCS.
+    Upload all silver parquet files to cloud storage.
 
     Args:
         silver_dir: Local directory containing silver parquet files
@@ -135,12 +135,12 @@ def upload_silver_data_to_storage(silver_dir: Path, export_timestamp: str) -> bo
         True if upload successful, False otherwise
     """
     if not STORAGE_AVAILABLE:
-        logging.warning("GCS utilities not available - skipping silver data upload")
+        logging.warning("Cloud storage utilities not available - skipping silver data upload")
         return False
 
     bucket_name = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
     if not bucket_name:
-        logging.warning("GCS_BUCKET not set - skipping silver data upload")
+        logging.warning("Storage bucket not set - skipping silver data upload")
         return False
 
     try:
@@ -153,12 +153,14 @@ def upload_silver_data_to_storage(silver_dir: Path, export_timestamp: str) -> bo
             logging.warning(f"No parquet files found in {silver_dir}")
             return False
 
-        logging.info(f"Uploading {len(parquet_files)} silver files to GCS bucket '{bucket_name}'")
+        logging.info(
+            f"Uploading {len(parquet_files)} silver files to storage bucket '{bucket_name}'"
+        )
 
         uploaded_count = 0
         for parquet_file in parquet_files:
             try:
-                # Create GCS path: silver/chr/{timestamp}/{filename}
+                # Create cloud storage path: silver/chr/{timestamp}/{filename}
                 storage_path = f"{bucket_name}/silver/chr/{export_timestamp}/{parquet_file.name}"
 
                 # Upload file using streaming
@@ -175,13 +177,13 @@ def upload_silver_data_to_storage(silver_dir: Path, export_timestamp: str) -> bo
                 logging.error(f"Failed to upload {parquet_file.name}: {e}")
 
         if uploaded_count == len(parquet_files):
-            logging.info(f"Successfully uploaded all {uploaded_count} silver files to GCS")
+            logging.info("Successfully uploaded all silver files to cloud storage")
             return True
         logging.warning(f"Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
         return False
 
     except Exception as e:
-        logging.error(f"Error uploading silver data to GCS: {e}")
+        logging.error(f"Error uploading silver data to cloud storage: {e}")
         return False
 
 

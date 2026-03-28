@@ -122,7 +122,7 @@ class CVREnrichmentSharedConfig(BaseModel):
     enable_independent_execution: bool = Field(
         default=False,
         description="Whether to enable independent step execution by fetching "
-        "latest files from GCS. MUST be False for CVR enrichment to ensure "
+        "latest files from cloud storage. MUST be False for CVR enrichment to ensure "
         "referential integrity and prevent UUID consistency issues. When True, "
         "related datasets (companies, financial, persons) may reference different "
         "company sets instead of the same company set, causing foreign key "
@@ -131,7 +131,7 @@ class CVREnrichmentSharedConfig(BaseModel):
 
     max_days_back_for_inputs: int = Field(
         default=30,
-        description="Maximum number of days to look back when fetching latest input files from GCS",
+        description="Maximum number of days to look back when fetching latest input files from cloud storage",
     )
 
     fallback_to_pipeline_dependencies: bool = Field(
@@ -149,16 +149,16 @@ def get_step_output_path(
     bucket: str = "landbruget-data",
 ) -> str:
     """
-    Get the GCS output path for a specific pipeline step.
+    Get the cloud storage output path for a specific pipeline step.
 
     Args:
         step: Pipeline step
         date_pattern: Date pattern for the pipeline run
         batch_number: Optional batch number for parallel processing
-        bucket: GCS bucket name
+        bucket: storage bucket name
 
     Returns:
-        GCS path for the step output
+        storage path for the step output
     """
     base_path = f"{bucket}/gold/cvr_enrichment/{date_pattern}"
 
@@ -176,16 +176,16 @@ def get_step_input_paths(
     max_days_back: int = 30,
 ) -> list[str]:
     """
-    Get the GCS input paths for a specific pipeline step.
+    Get the cloud storage input paths for a specific pipeline step.
 
     This function intelligently determines whether to use pipeline dependencies
     or independent execution based on data availability:
 
     1. If independent_execution is disabled, always use pipeline dependencies
     2. If independent_execution is enabled:
-       - First check if pipeline dependencies exist (artifacts or GCS files)
+       - First check if pipeline dependencies exist (artifacts or cloud storage files)
        - If they exist, use them (pipeline mode)
-       - If they don't exist, fetch latest files from GCS (independent mode)
+       - If they don't exist, fetch latest files from cloud storage (independent mode)
 
     This ensures that steps running as part of a pipeline workflow use artifacts,
     while steps running independently fetch the latest available data.
@@ -194,12 +194,12 @@ def get_step_input_paths(
         step: Pipeline step
         date_pattern: Date pattern for the pipeline run
         total_batches: Total number of batches (for batch-dependent steps)
-        bucket: GCS bucket name
+        bucket: storage bucket name
         enable_independent_execution: Whether to enable smart independent execution
         max_days_back: Maximum days to look back for latest files (independent mode)
 
     Returns:
-        List of GCS paths for the step inputs
+        List of storage paths for the step inputs
     """
     # If independent execution is disabled, use traditional pipeline dependencies
     if not enable_independent_execution:
@@ -216,7 +216,7 @@ def get_step_input_paths(
         # We're running as part of a pipeline - use pipeline dependencies (artifacts)
         return pipeline_paths
 
-    # We're running independently - fetch latest available files from GCS using existing utility
+    # We're running independently - fetch latest available files from cloud storage using existing utility
     return _get_latest_input_paths_from_storage(step, bucket, max_days_back)
 
 
@@ -228,11 +228,11 @@ def _get_latest_input_paths_from_storage(
 
     Args:
         step: Pipeline step
-        bucket: GCS bucket name
+        bucket: storage bucket name
         max_days_back: Maximum days to look back
 
     Returns:
-        List of GCS paths for the latest available inputs
+        List of storage paths for the latest available inputs
     """
     from common.storage import StorageAccess
 
@@ -311,7 +311,7 @@ def _get_latest_input_paths_from_storage(
         from unified_pipeline.util.log_util import Logger
 
         logger = Logger.get_logger()
-        logger.warning(f"Error finding latest files from GCS: {e}")
+        logger.warning(f"Error finding latest files from cloud storage: {e}")
         return []
 
 
@@ -322,7 +322,7 @@ def _find_latest_company_data_file(storage_access, pattern: str, max_days_back: 
 
     Args:
         storage_access: StorageAccess instance
-        pattern: GCS file pattern to search
+        pattern: cloud storage file pattern to search
         max_days_back: Maximum days to look back
 
     Returns:
@@ -421,11 +421,11 @@ def _has_company_data(storage_access, filepath: str) -> bool:
 
 def _find_latest_file_with_pattern(storage_access, pattern: str, max_days_back: int) -> str | None:
     """
-    Find the latest file matching a pattern using the existing GCS utility.
+    Find the latest file matching a pattern using the existing cloud storage utility.
 
     Args:
         storage_access: StorageAccess instance
-        pattern: GCS file pattern to search
+        pattern: cloud storage file pattern to search
         max_days_back: Maximum days to look back
 
     Returns:
@@ -485,7 +485,7 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
     """
     Check if pipeline dependencies exist, indicating we're part of a pipeline run.
 
-    This function checks for both local artifacts (GitHub Actions) and GCS files.
+    This function checks for both local artifacts (GitHub Actions) and cloud storage files.
 
     Args:
         pipeline_paths: List of expected pipeline dependency paths
@@ -510,7 +510,7 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
     # If running in GitHub Actions, check for local artifacts
     if os.getenv("GITHUB_ACTIONS") == "true":
         # For address geocoding, we need BOTH company and pnumber artifacts to exist
-        # Otherwise, we should use independent execution to fetch from GCS
+        # Otherwise, we should use independent execution to fetch from cloud storage
         if any("address_geocoding" in path for path in pipeline_paths):
             company_artifact_exists = os.path.exists("/tmp/cvr_company_data.parquet")
             pnumber_artifact_exists = os.path.exists("/tmp/cvr_pnumber_data.parquet")
@@ -555,10 +555,10 @@ def _get_traditional_input_paths(
     Args:
         step: Pipeline step
         date_pattern: Date pattern for the pipeline run
-        bucket: GCS bucket name
+        bucket: storage bucket name
 
     Returns:
-        List of GCS paths for the step inputs
+        List of storage paths for the step inputs
     """
     base_path = f"{bucket}/gold/cvr_enrichment/{date_pattern}"
 

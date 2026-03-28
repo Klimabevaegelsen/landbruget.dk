@@ -24,11 +24,11 @@ class PMTilesDataLoader:
 
         Args:
             config: PMTiles generator configuration
-            storage_access: GCS data access instance
+            storage_access: cloud storage data access instance
             duckdb_conn: DuckDB connection for data processing
         """
         self.config = config
-        self.gcs = storage_access
+        self.storage = storage_access
         self.conn = duckdb_conn
 
     async def load_and_integrate_field_data(self, year: int) -> str | None:
@@ -350,7 +350,7 @@ class PMTilesDataLoader:
 
             logger.info(f"Loading NLES5 data from {storage_path}")
 
-            if not await asyncio.to_thread(self.gcs.file_exists, storage_path):
+            if not await asyncio.to_thread(self.storage.file_exists, storage_path):
                 logger.warning(f"NLES5 data not found: {storage_path}")
                 return None
 
@@ -1130,9 +1130,9 @@ class PMTilesDataLoader:
 
             for pattern in patterns_to_try:
                 try:
-                    # Get files with timestamps using the standard GCS utility
+                    # Get files with timestamps using the standard cloud storage utility
                     pattern_files = await asyncio.to_thread(
-                        self.gcs.list_files_with_timestamps, pattern
+                        self.storage.list_files_with_timestamps, pattern
                     )
                     files_with_timestamps.extend(pattern_files)
                 except Exception:

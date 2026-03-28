@@ -564,7 +564,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
         This is the main entry point that orchestrates the entire process:
         1. Fetches raw data from the WFS service
-        2. Saves the raw data to Google Cloud Storage
+        2. Saves the raw data to cloud storage
         3. Returns the processed data for in-memory passing to silver stage
 
         Returns:
