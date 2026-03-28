@@ -223,13 +223,13 @@ export function MobileFieldMenu({
 
         {filterState.visualizationMode === 'glyphosate_belastning' && (
           <div className="border-muted bg-muted/50 space-y-1 rounded-lg border px-4 py-3">
-            <div className="text-sm font-medium text-green-800">
+            <div className="text-primary text-sm font-medium">
               Glyphosate Pesticider
             </div>
-            <div className="text-xs text-green-700">
+            <div className="text-primary/80 text-xs">
               105.511 marker med glyphosate
             </div>
-            <div className="text-xs text-green-700">
+            <div className="text-primary/80 text-xs">
               Mest anvendte ukrudtsmiddel
             </div>
           </div>

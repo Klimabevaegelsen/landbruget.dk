@@ -84,6 +84,7 @@ These rules are enforced by `npm run lint` via the custom plugin in `oxlint-plug
 - **Absolute imports only** — use `@/components/X` not `../../components/X`. Agents navigate absolute paths better.
 - **No inline styles** — use Tailwind classes instead of `style={{...}}`. `style={variable}` is allowed for computed values.
 - **No hardcoded API URLs** — no `supabase.co` or `localhost` strings. Use `@/lib/env.ts`.
+- **No hardcoded gray-scale colors** — no `zinc-*`, `slate-*`, `gray-*`, `neutral-*`, `stone-*` in className. Use semantic tokens (`text-foreground`, `text-muted-foreground`, `bg-card`, `bg-muted`, `border-border`, etc.) so dark/light mode works.
 
 Config: `frontend/.oxlintrc.json` | Plugin: `frontend/oxlint-plugin-landbruget/plugin.js`
 

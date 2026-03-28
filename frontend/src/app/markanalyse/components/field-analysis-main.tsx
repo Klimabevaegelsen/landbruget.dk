@@ -22,7 +22,7 @@ import {
   downloadCSV,
   generateCSVFilename,
 } from '@/utils/csv-export';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 // Dynamically import the map component to avoid SSR issues
 const FieldAnalysisMap = dynamic(
@@ -37,7 +37,6 @@ export function FieldAnalysisMain() {
   const [isClient, setIsClient] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { isMobile } = useMobileDetection();
-  const { addToast } = useToast();
 
   // State management
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
@@ -124,10 +123,8 @@ export function FieldAnalysisMain() {
         );
       } catch (error) {
         console.error('PMTiles URL loading failed:', error);
-        addToast({
-          title: 'Kortdata fejl',
+        toast.error('Kortdata fejl', {
           description: 'Kunne ikke indlæse kortlag. Prøv at genindlæse siden.',
-          variant: 'error',
         });
       }
     };
@@ -135,7 +132,7 @@ export function FieldAnalysisMain() {
     if (isClient) {
       loadPMTilesUrls();
     }
-  }, [yearSelection.selectedYear, availableYears, isClient, addToast]);
+  }, [yearSelection.selectedYear, availableYears, isClient]);
 
   // Handle loading state when PMTiles URLs change
   useEffect(() => {
@@ -244,13 +241,11 @@ export function FieldAnalysisMain() {
       downloadCSV(csvContent, filename);
     } catch (error) {
       console.error('CSV download failed:', error);
-      addToast({
-        title: 'Eksport fejl',
+      toast.error('Eksport fejl', {
         description: 'Kunne ikke downloade CSV. Prøv igen.',
-        variant: 'error',
       });
     }
-  }, [yearSelection.selectedYear, addToast]);
+  }, [yearSelection.selectedYear]);
 
   // Handle escape key
   useEffect(() => {

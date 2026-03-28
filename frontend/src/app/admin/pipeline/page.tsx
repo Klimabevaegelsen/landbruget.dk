@@ -51,7 +51,7 @@ export default function PipelinePage() {
                   href="https://github.com/Klimabevaegelsen/landbruget.dk/actions/workflows/h3-pfas-analysis.yml"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                  className="text-primary hover:text-primary/80 text-sm font-medium"
                 >
                   View on GitHub →
                 </a>

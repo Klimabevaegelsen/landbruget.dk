@@ -60,10 +60,10 @@ export function RiskSummaryCard({ field }: RiskSummaryCardProps) {
         </div>
 
         {hasPfas && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 dark:border-amber-800 dark:bg-amber-950/20">
+          <div className="border-warning/30 bg-warning/5 dark:bg-warning/10 rounded-lg border p-2.5">
             <div className="flex items-center gap-1">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-              <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="text-warning h-3.5 w-3.5" />
+              <span className="text-warning-foreground text-xs font-medium">
                 PFAS ({field.pfas_applications})
               </span>
             </div>
@@ -79,9 +79,9 @@ export function RiskSummaryCard({ field }: RiskSummaryCardProps) {
         )}
 
         {proximityWarnings > 0 && (
-          <div className="col-span-2 flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 p-2.5 dark:border-orange-800 dark:bg-orange-950/20">
-            <Home className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />
-            <span className="text-xs text-orange-700 dark:text-orange-300">
+          <div className="border-warning/30 bg-warning/5 dark:bg-warning/10 col-span-2 flex items-center gap-2 rounded-lg border p-2.5">
+            <Home className="text-warning h-3.5 w-3.5" />
+            <span className="text-warning-foreground text-xs">
               {proximityWarnings} nærhedsadvarsel
               {proximityWarnings > 1 ? 'er' : ''}
             </span>

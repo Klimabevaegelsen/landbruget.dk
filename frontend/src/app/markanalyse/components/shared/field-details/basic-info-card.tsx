@@ -42,7 +42,10 @@ export function BasicInfoCard({ field }: BasicInfoCardProps) {
           <span className="text-muted-foreground">Økologisk:</span>
           <div className="flex items-center gap-2">
             {field.is_organic ? (
-              <Badge variant="default" className="bg-organic text-white">
+              <Badge
+                variant="default"
+                className="bg-organic text-primary-foreground"
+              >
                 <Leaf className="mr-1 h-3 w-3" />
                 Ja
               </Badge>

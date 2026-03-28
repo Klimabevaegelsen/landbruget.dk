@@ -253,7 +253,7 @@ export function LayerControlPanelEnhanced({
               htmlFor="organic-only"
               className="flex cursor-pointer items-center gap-2"
             >
-              <Leaf className="h-4 w-4 text-green-600" />
+              <Leaf className="text-primary h-4 w-4" />
               Kun økologiske marker
             </Label>
           </div>
@@ -305,8 +305,8 @@ export function LayerControlPanelEnhanced({
           </div>
 
           {filterState.organicOnly && (
-            <div className="mt-3 rounded-md bg-green-50 p-2 dark:bg-green-950/20">
-              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300">
+            <div className="bg-primary/5 dark:bg-primary/10 mt-3 rounded-md p-2">
+              <div className="text-primary dark:text-primary flex items-center gap-2 text-sm">
                 <Leaf className="h-4 w-4" />
                 Kun økologiske marker vises
               </div>
