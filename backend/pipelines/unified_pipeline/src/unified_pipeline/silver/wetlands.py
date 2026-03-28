@@ -445,7 +445,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
 
         # ✅ COORDINATE FIX: Apply geometry validation
         # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
-        from unified_pipeline.common.geometry_validator import (
+        from common.geometry_validator import (
             validate_and_normalize_to_utm,
             validate_and_transform_geometries_duckdb,
         )
@@ -638,7 +638,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             """
 
             # Verify SPATIAL_JOIN is being used
-            from unified_pipeline.common.geometry_validator import verify_spatial_join_usage
+            from common.geometry_validator import verify_spatial_join_usage
 
             spatial_join_detected = verify_spatial_join_usage(conn, adjacency_query)
             if spatial_join_detected:

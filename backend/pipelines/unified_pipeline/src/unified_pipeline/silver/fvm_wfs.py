@@ -25,13 +25,13 @@ import json
 from typing import Any, ClassVar
 
 import pandas as pd
-from pydantic import ConfigDict
-
-from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import (
+from common.geometry_validator import (
     validate_and_normalize_to_utm,
     validate_and_transform_geometries_duckdb,
 )
+from pydantic import ConfigDict
+
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 # CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
@@ -819,7 +819,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 )
 
                 # Verify SPATIAL_JOIN operator is being used for optimal performance
-                from unified_pipeline.common.geometry_validator import verify_spatial_join_usage
+                from common.geometry_validator import verify_spatial_join_usage
 
                 spatial_join_detected = verify_spatial_join_usage(self.conn, spatial_join_query)
                 if spatial_join_detected:

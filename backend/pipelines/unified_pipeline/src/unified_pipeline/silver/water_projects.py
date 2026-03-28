@@ -19,6 +19,11 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, ClassVar
 
+from common.geometry_validator import (
+    validate_and_normalize_to_utm,
+    validate_and_transform_geometries_duckdb,
+)
+
 #   # MIGRATED: Replaced with DuckDB-spatial operations
 #   # MIGRATED: Replaced with DuckDB operations
 # from shapely import MultiPolygon, Polygon, unary_union, wkt
@@ -26,10 +31,6 @@ from typing import Any, ClassVar
 # from shapely.validation import explain_validity
 # MIGRATED: Using DuckDB ST_IsValid instead
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import (
-    validate_and_normalize_to_utm,
-    validate_and_transform_geometries_duckdb,
-)
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 # CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload

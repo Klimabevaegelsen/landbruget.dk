@@ -17,13 +17,14 @@ validates geometries, and stores the processed data in GCS.
 import xml.etree.ElementTree as ET
 from typing import Any, ClassVar
 
-# ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
-# ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
-from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import (
+from common.geometry_validator import (
     validate_and_normalize_to_utm,
     validate_and_transform_geometries_duckdb,
 )
+
+# ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
+# ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import AsyncTimer, timed
 
 # CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload

@@ -26,7 +26,7 @@ except ImportError:
 def _get_geo_validator() -> Callable | None:
     """Get comprehensive geo validator with robust import handling."""
     try:
-        from unified_pipeline.common.geometry_validator import (
+        from common.geometry_validator import (
             validate_and_transform_geometries_duckdb,
         )
 

@@ -36,6 +36,7 @@ pipelines:
       - silver/dst_halm1
       - silver/dmi
       - silver/jordbrugsanalyser
+      - silver/kemidata_surface_water_pesticides
       - cvr_collections/agricultural_fields
 
   bmd_scraper:
