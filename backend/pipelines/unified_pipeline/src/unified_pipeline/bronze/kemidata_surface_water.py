@@ -263,21 +263,47 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
 
         return batch_bytes
 
+    async def _download_batch_with_retry(
+        self,
+        session: aiohttp.ClientSession,
+        body: dict,
+        cloud_file: Any,
+        batch_counter: int,
+        max_retries: int,
+    ) -> int:
+        """Try downloading a batch with retries on transient errors."""
+        for attempt in range(1, max_retries + 1):
+            try:
+                return await self._download_single_batch(
+                    session, body, cloud_file, batch_counter, attempt
+                )
+            except Exception:
+                if attempt == max_retries:
+                    raise
+                wait = 10 * attempt
+                self.log.warning(
+                    f"  Download batch {batch_counter} attempt {attempt} failed, "
+                    f"retrying in {wait}s..."
+                )
+                await asyncio.sleep(wait)
+        return 0  # unreachable, but satisfies type checker
+
     async def _download_csv_to_storage(
         self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
     ) -> tuple[str, int]:
         """
         Download the full CSV export from Kemidata and stream directly to storage.
 
-        Batches parameters in chunks of 50 to avoid server-side timeouts
-        (download is much slower than search — generates full CSV exports).
+        Batches parameters in small chunks to stay under the API's 200k record
+        download limit. Uses adaptive sizing: starts at 10 params per batch,
+        falls back to 1 param if a batch exceeds the limit.
         Concatenates CSV output, skipping duplicate headers after the first batch.
         Streams each response in chunks to avoid holding 100MB+ in memory.
 
         Returns:
             Tuple of (relative storage path, total bytes written).
         """
-        batch_size = 50
+        batch_size = 10
         batches = [
             search_parameters[i : i + batch_size]
             for i in range(0, len(search_parameters), batch_size)
@@ -293,27 +319,36 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
 
         total_bytes = 0
         max_retries = 3
+        batch_counter = 0
         with self.storage.fs.open(storage_path, "wb") as cloud_file:
             for idx, batch in enumerate(batches, 1):
+                batch_counter += 1
                 self.log.info(f"  Download batch {idx}/{len(batches)} ({len(batch)} parameters)")
                 body = self._build_download_body(session_id, batch)
 
-                for attempt in range(1, max_retries + 1):
-                    try:
-                        batch_bytes = await self._download_single_batch(
-                            session, body, cloud_file, idx, attempt
+                try:
+                    batch_bytes = await self._download_batch_with_retry(
+                        session, body, cloud_file, batch_counter, max_retries
+                    )
+                    total_bytes += batch_bytes
+                except Exception as exc:
+                    if "200000 records" not in str(exc) or len(batch) <= 1:
+                        raise
+                    # Batch exceeds 200k record limit — split into individual params
+                    self.log.warning(
+                        f"  Batch {idx} exceeds 200k record limit, "
+                        f"splitting {len(batch)} params into individual downloads..."
+                    )
+                    for sub_idx, param in enumerate(batch, 1):
+                        batch_counter += 1
+                        sub_body = self._build_download_body(session_id, [param])
+                        self.log.info(
+                            f"    Sub-batch {sub_idx}/{len(batch)}: {param.get('name', 'unknown')}"
                         )
-                        total_bytes += batch_bytes
-                        break
-                    except Exception:
-                        if attempt == max_retries:
-                            raise
-                        wait = 10 * attempt
-                        self.log.warning(
-                            f"  Download batch {idx} attempt {attempt} failed, "
-                            f"retrying in {wait}s..."
+                        sub_bytes = await self._download_batch_with_retry(
+                            session, sub_body, cloud_file, batch_counter, max_retries
                         )
-                        await asyncio.sleep(wait)
+                        total_bytes += sub_bytes
 
         size_mb = total_bytes / (1024 * 1024)
         self.log.info(f"Streamed CSV to storage: {size_mb:.1f} MB → {storage_path}")
