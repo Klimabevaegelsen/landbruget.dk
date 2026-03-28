@@ -44,7 +44,7 @@ jobs:
         id: parse
         run: |
           # Convert comma-separated years into JSON array
-          years_json=$(echo "${{ inputs.years }}" | tr ',' '\n' | sed 's/ //g' | jq -R 'tonumber' | jq -s '.')
+          years_json=$(echo "${{ inputs.years }}" | tr ',' '\n' | sed 's/ //g' | jq -R 'tonumber' | jq -sc '.')
           year_count=$(echo "$years_json" | jq '. | length')
 
           echo "years=$years_json" >> $GITHUB_OUTPUT
