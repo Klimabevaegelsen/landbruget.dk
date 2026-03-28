@@ -298,6 +298,23 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         display_name="Pesticidanvendelse (Mark-niveau)",
         display_description="Detaljeret pesticidanvendelse pr. mark med risikovurdering og virksomhedstilknytning",
     ),
+    "kemidata_surface_water_pesticides": DataSourceInfo(
+        source_authority="Danmarks Miljøportal",
+        source_contact=None,
+        data_acquisition_date=None,  # API - always current
+        data_acquisition_method="REST API",
+        data_description="Pesticide detections in surface water (rivers, lakes) from Kemidata/VanDa discrete sampling",
+        update_frequency="Quarterly",
+        pipeline_name="unified_pipeline",
+        data_format="CSV",
+        data_source_type=DataSourceType.API_REST,
+        display_name="Overfladevand Pesticider (Kemidata)",
+        display_description="Laboratorieanalyser af pesticidkoncentrationer i danske vandløb og søer",
+        custom_fields={
+            "api_base_url": "https://kemidata.miljoeportal.dk/api/",
+            "media_types": ["Vandløb", "Sø"],
+        },
+    ),
     # ========================================
     # CHR PIPELINE SOURCES
     # ========================================

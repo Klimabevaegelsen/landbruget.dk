@@ -21,7 +21,7 @@ dependencies = [
 [tool.uv]
 
 [tool.uv.sources]
-landbruget-common = { path = "../../common", editable = true }
+landbruget-common = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

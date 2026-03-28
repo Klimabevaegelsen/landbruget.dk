@@ -26,13 +26,13 @@ import os
 from typing import Any, ClassVar
 
 import psutil
-
-# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
-from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import (
+from common.geometry_validator import (
     validate_and_normalize_to_utm,
     validate_and_transform_geometries_duckdb,
 )
+
+# ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
+from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
 # CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload

@@ -550,12 +550,33 @@ class GCSDataAccess:
 
         temp_files = []
         try:
-            for gcs_path in gcs_paths:
-                with self._temp_download(gcs_path) as temp_file:
-                    with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as persistent_temp:
-                        persistent_temp_path = persistent_temp.name
-                    shutil.copy2(temp_file, persistent_temp_path)
-                    temp_files.append(persistent_temp_path)
+            # Retry loop for R2/S3 stale Etag errors (s3fs FileExpired, errno 16).
+            # After writing batch files, the client cache may hold stale metadata
+            # that triggers "The remote file... no longer exists" on immediate re-read.
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    for gcs_path in gcs_paths:
+                        with self._temp_download(gcs_path) as temp_file:
+                            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as persistent_temp:
+                                persistent_temp_path = persistent_temp.name
+                            shutil.copy2(temp_file, persistent_temp_path)
+                            temp_files.append(persistent_temp_path)
+                    break  # All files downloaded successfully
+                except OSError as e:
+                    if e.errno == 16 and attempt < max_retries - 1:
+                        self.log.warning(
+                            f"Stale file metadata (attempt {attempt + 1}/{max_retries}), "
+                            f"clearing cache and retrying: {e}"
+                        )
+                        for tmp_file in temp_files:
+                            with suppress(Exception):
+                                Path(tmp_file).unlink(missing_ok=True)
+                        temp_files = []
+                        self.fs.invalidate_cache()
+                        time.sleep(2 * (attempt + 1))
+                    else:
+                        raise
 
             # Create combined table directly in DuckDB
             file_list = "', '".join(temp_files)

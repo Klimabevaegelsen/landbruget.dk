@@ -53,7 +53,7 @@ artifacts = ["*.py"]
 managed = true
 
 [tool.uv.sources]
-landbruget-common = { path = "../../common", editable = true }
+landbruget-common = { workspace = true }
 
 [dependency-groups]
 dev = [

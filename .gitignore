@@ -254,7 +254,6 @@ data_samples/
 /save_dma_cvrs_result.py
 /setup_env.sh
 /test_dma_cvr_one.py
-/uv.lock
 /veterinary_timeline_analysis.txt
 
 # Root level directories that shouldn't be committed
@@ -269,3 +268,9 @@ data_samples/
 
 # Vercel
 .vercel
+
+# Cloudflare Wrangler
+.wrangler/
+
+# Pipeline output
+backend/output/

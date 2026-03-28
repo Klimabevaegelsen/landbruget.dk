@@ -135,7 +135,7 @@ export function AgriculturalDashboard({
 
   return (
     <div className={className}>
-      <ResizablePanelGroup direction="horizontal" className="min-h-screen">
+      <ResizablePanelGroup orientation="horizontal" className="min-h-screen">
         {/* Left Panel - Companies List */}
         <ResizablePanel
           defaultSize={defaultLayout[0]}
