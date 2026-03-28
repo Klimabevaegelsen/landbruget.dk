@@ -61,10 +61,10 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
 
         Returns list of station dicts with id, name, x, y, mediaName.
         """
-        gcs_uri = f"{self.config.bucket}/{stations_path}"
-        self.log.info(f"Loading station data from {gcs_uri}")
+        storage_uri = f"{self.config.bucket}/{stations_path}"
+        self.log.info(f"Loading station data from {storage_uri}")
 
-        search_result = self.storage.download_json(gcs_uri)
+        search_result = self.storage.download_json(storage_uri)
 
         stations = search_result.get("stations", [])
         parsed = []
@@ -103,12 +103,12 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
 
         Returns the table name.
         """
-        gcs_uri = f"{self.config.bucket}/{csv_path}"
-        self.log.info(f"Loading CSV from {gcs_uri}")
+        storage_uri = f"{self.config.bucket}/{csv_path}"
+        self.log.info(f"Loading CSV from {storage_uri}")
 
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE raw_kemidata AS
-            SELECT * FROM read_csv_auto('{gcs_uri}',
+            SELECT * FROM read_csv_auto('{storage_uri}',
                 header=true,
                 all_varchar=true,
                 ignore_errors=true

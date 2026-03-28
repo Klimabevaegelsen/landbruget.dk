@@ -110,18 +110,18 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
     def __init__(self, config: KemidataSurfaceWaterBronzeConfig):
         super().__init__(config)
 
-    def _build_search_body(self, session_id: str) -> dict:
+    def _build_search_body(self, session_id: str, search_parameters: list[dict]) -> dict:
         """
         Build the request body for the Kemidata search API.
 
-        Uses no searchParameters filter to get ALL chemistry data,
-        then filters by surface water media type in post-processing.
-        This makes the pipeline easily expandable to non-pesticide parameters.
+        Passes all substance parameters from the metadata catalogue to get ALL
+        chemistry data, then filters by surface water media type in post-processing.
+        The API requires at least one searchParameter (empty list returns HTTP 500).
         """
         return {
             "language": "da",
             "searchBy": "Chemistry",
-            "searchParameters": [],
+            "searchParameters": search_parameters,
             "period": {"showLastResult": False, "fromDate": None, "toDate": None},
             "area": {
                 "type": "Rectangle",
@@ -136,9 +136,9 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
             "sessionId": session_id,
         }
 
-    def _build_download_body(self, session_id: str) -> dict:
+    def _build_download_body(self, session_id: str, search_parameters: list[dict]) -> dict:
         """Build the request body for the Kemidata download (CSV) API."""
-        body = self._build_search_body(session_id)
+        body = self._build_search_body(session_id, search_parameters)
         body["isDownloadAll"] = True
         return body
 
@@ -162,13 +162,15 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         wait=wait_exponential(multiplier=2, min=5, max=60),
         stop=stop_after_attempt(3),
     )
-    async def _search_stations(self, session: aiohttp.ClientSession, session_id: str) -> dict:
+    async def _search_stations(
+        self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
+    ) -> dict:
         """
         Search for stations with chemistry data in surface water.
 
         Returns the full search response including station list and result counts.
         """
-        body = self._build_search_body(session_id)
+        body = self._build_search_body(session_id, search_parameters)
         self.log.info("Searching Kemidata for surface water chemistry stations...")
 
         async with session.post(
@@ -195,7 +197,7 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         stop=stop_after_attempt(3),
     )
     async def _download_csv_to_storage(
-        self, session: aiohttp.ClientSession, session_id: str
+        self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
     ) -> tuple[str, int]:
         """
         Download the full CSV export from Kemidata and stream directly to storage.
@@ -205,7 +207,7 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         Returns:
             Tuple of (relative storage path, total bytes written).
         """
-        body = self._build_download_body(session_id)
+        body = self._build_download_body(session_id, search_parameters)
         self.log.info("Downloading CSV from Kemidata (this may take a while)...")
 
         run_timestamp = self.date_pattern
@@ -238,9 +240,9 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
     def _save_json_to_storage(self, data: Any, filename: str) -> str:
         """Save JSON data to storage bronze layer using the high-level upload_json."""
         relative_path = self._storage_path(filename)
-        gcs_uri = f"{self.config.bucket}/{relative_path}"
-        self.storage.upload_json(data, gcs_uri, ensure_ascii=False)
-        self.log.info(f"Saved {filename} to {gcs_uri}")
+        storage_uri = f"{self.config.bucket}/{relative_path}"
+        self.storage.upload_json(data, storage_uri, ensure_ascii=False)
+        self.log.info(f"Saved {filename} to {storage_uri}")
         return relative_path
 
     async def run(self) -> dict[str, Any] | None:
@@ -266,12 +268,16 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
 
             async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
                 try:
-                    # 1. Fetch metadata
+                    # 1. Fetch metadata (needed for search parameters)
                     metadata = await self._fetch_metadata(session)
+                    search_parameters = metadata.get("substanceParameters", [])
+                    self.log.info(
+                        f"Loaded {len(search_parameters)} substance parameters from metadata"
+                    )
 
                     # 2. Search for stations
                     search_result, total_result_count = await self._search_stations(
-                        session, session_id
+                        session, session_id, search_parameters
                     )
 
                     stations = search_result.get("stations", [])
@@ -286,7 +292,7 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
 
                     # 3. Download CSV (streamed directly to storage)
                     csv_path, csv_size_bytes = await self._download_csv_to_storage(
-                        session, session_id
+                        session, session_id, search_parameters
                     )
 
                     # 4. Save metadata to storage
