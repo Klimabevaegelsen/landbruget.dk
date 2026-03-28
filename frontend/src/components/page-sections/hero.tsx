@@ -171,7 +171,7 @@ export function Hero() {
       </div>
       <div className="mx-auto max-w-4xl py-18 sm:py-28 lg:py-40">
         <div className="flex flex-col gap-6 text-center">
-          <h1 className="text-5xl font-bold tracking-tight text-balance text-white sm:text-5xl">
+          <h1 className="text-primary-foreground text-5xl font-bold tracking-tight text-balance sm:text-5xl">
             Dansk landbrugsdata - samlet ét sted
           </h1>
           <div className="md:mx-auto">
@@ -188,7 +188,7 @@ export function Hero() {
             </div>
           </div>
 
-          <p className="text-sm font-medium text-pretty text-white sm:text-xl/8">
+          <p className="text-primary-foreground text-sm font-medium text-pretty sm:text-xl/8">
             <span className="font-bold">{displayDataPoints} datapunkter</span>{' '}
             fordelt på{' '}
             <span className="font-bold">
@@ -207,7 +207,7 @@ export function Hero() {
           </p>
 
           {usingCache && !loading && (
-            <p className="mt-2 text-xs text-white/70">
+            <p className="text-primary-foreground/70 mt-2 text-xs">
               <BarChart3 className="mr-1 inline h-3 w-3" /> Data fra cache •
               Opdateres hver tirsdag
             </p>

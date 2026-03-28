@@ -34,7 +34,7 @@ export function YearSelector({
           onChange={(e) => onYearChange(parseInt(e.target.value))}
           disabled={isLoading}
           data-testid="year-selector-select"
-          className={`border-border bg-background block min-h-[44px] w-full rounded-md py-3 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
+          className={`border-border bg-background focus:border-primary focus:ring-primary block min-h-[44px] w-full rounded-md py-3 pr-10 pl-3 text-sm shadow-sm focus:ring-1 focus:outline-none ${
             isLoading ? 'cursor-not-allowed opacity-50' : ''
           }`}
         >
@@ -52,7 +52,7 @@ export function YearSelector({
         </div>
         {isLoading && (
           <div className="absolute inset-y-0 right-8 flex items-center">
-            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
+            <div className="border-primary h-4 w-4 animate-spin rounded-full border-b-2"></div>
           </div>
         )}
       </div>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Search, Filter, BarChart3 } from 'lucide-react';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import { CompanyFilterPanel } from './CompanyFilterPanel';
 import { CompanyListView } from './CompanyListView';
 import { CompanyDetailsPanel } from './CompanyDetailsPanel';
@@ -35,8 +35,6 @@ export function PesticideAnalysisVisualization() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { addToast, removeToast } = useToast();
-
   // Fetch data from API
   const fetchData = useCallback(async () => {
     if (!SUPABASE_URL) {
@@ -48,10 +46,8 @@ export function PesticideAnalysisVisualization() {
     setError(null);
 
     // Show loading toast for data fetch
-    const toastId = addToast({
-      title: 'Indlæser pesticiddata',
+    const toastId = toast.loading('Indlæser pesticiddata', {
       description: 'Henter analysedata...',
-      variant: 'loading',
     });
 
     try {
@@ -86,9 +82,9 @@ export function PesticideAnalysisVisualization() {
     } finally {
       setLoading(false);
       // Remove loading toast when data fetch completes
-      removeToast(toastId);
+      toast.dismiss(toastId);
     }
-  }, [filters, addToast, removeToast]);
+  }, [filters]);
 
   // Fetch data when filters change
   useEffect(() => {

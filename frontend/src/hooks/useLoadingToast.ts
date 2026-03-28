@@ -1,14 +1,15 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 
 /**
  * Custom hook for managing loading toasts with automatic cleanup
  * Ensures only one loading toast is active at a time and properly removes it when done
  */
 export function useLoadingToast() {
-  const { addToast, removeToast } = useToast();
-  const [currentToastId, setCurrentToastId] = useState<string | null>(null);
-  const toastIdRef = useRef<string | null>(null);
+  const [currentToastId, setCurrentToastId] = useState<string | number | null>(
+    null
+  );
+  const toastIdRef = useRef<string | number | null>(null);
 
   // Sync ref with state to ensure cleanup works in async contexts
   useEffect(() => {
@@ -19,40 +20,36 @@ export function useLoadingToast() {
     (title: string, description?: string) => {
       // Remove any existing loading toast first
       if (toastIdRef.current) {
-        removeToast(toastIdRef.current);
+        toast.dismiss(toastIdRef.current);
       }
 
       // Show new loading toast
-      const toastId = addToast({
-        title,
-        description,
-        variant: 'loading',
-      });
+      const toastId = toast.loading(title, { description });
 
       setCurrentToastId(toastId);
       toastIdRef.current = toastId;
 
       return toastId;
     },
-    [addToast, removeToast]
+    []
   );
 
   const hideLoadingToast = useCallback(() => {
     if (toastIdRef.current) {
-      removeToast(toastIdRef.current);
+      toast.dismiss(toastIdRef.current);
       setCurrentToastId(null);
       toastIdRef.current = null;
     }
-  }, [removeToast]);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (toastIdRef.current) {
-        removeToast(toastIdRef.current);
+        toast.dismiss(toastIdRef.current);
       }
     };
-  }, [removeToast]);
+  }, []);
 
   return {
     showLoadingToast,

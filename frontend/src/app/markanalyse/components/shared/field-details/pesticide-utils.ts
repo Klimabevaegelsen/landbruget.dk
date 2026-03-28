@@ -2,4 +2,5 @@ export {
   parsePesticideDetail,
   parsePesticideDetailWithUnit,
 } from './pesticide-parsers';
-export { getRiskIcon, getPesticideRiskLevel } from './pesticide-risk';
+export { classifyRisk, getRiskIcon } from './pesticide-risk';
+export { getPesticideRiskLevel } from './pesticide-risk-level';

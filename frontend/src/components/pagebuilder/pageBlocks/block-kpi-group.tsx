@@ -33,7 +33,7 @@ export function BlockKpiGroup({ kpiGroup }: { kpiGroup: KPIGroup }) {
             className="bg-primary-foreground flex flex-col gap-2 rounded p-4"
           >
             <label className="text-sm font-medium">{kpi.label}</label>
-            <p className="text-xl font-bold text-green-900 md:text-2xl">
+            <p className="text-primary text-xl font-bold md:text-2xl">
               {kpi.value}
             </p>
           </div>

@@ -155,7 +155,7 @@ export function EnvironmentalComplianceOverview({
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Håndterede områder</span>
-            <span className="font-medium text-green-600">
+            <span className="text-primary font-medium">
               {data.totalDealtWithHa.toLocaleString('da-DK', {
                 maximumFractionDigits: 1,
               })}{' '}

@@ -178,7 +178,7 @@ export function H3PfasTrigger() {
       >
         {isLoading ? (
           <>
-            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white"></div>
+            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-current"></div>
             Triggering Pipeline...
           </>
         ) : (

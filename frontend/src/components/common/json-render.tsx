@@ -24,15 +24,15 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
   }
 
   if (typeof value === 'boolean') {
-    return <span className="text-blue-500">{value.toString()}</span>;
+    return <span className="text-info">{value.toString()}</span>;
   }
 
   if (typeof value === 'number') {
-    return <span className="text-green-500">{value}</span>;
+    return <span className="text-success">{value}</span>;
   }
 
   if (typeof value === 'string') {
-    return <span className="text-orange-500">&quot;{value}&quot;</span>;
+    return <span className="text-warning">&quot;{value}&quot;</span>;
   }
 
   if (Array.isArray(value)) {
@@ -45,7 +45,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           data-testid="toggle-json-array-button"
-          className="hover:text-muted-foreground text-muted-foreground"
+          className="text-muted-foreground hover:text-foreground"
         >
           {isExpanded ? '▼' : '▶'} [
         </button>
@@ -77,7 +77,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           data-testid="toggle-json-object-button"
-          className="hover:text-muted-foreground text-muted-foreground"
+          className="text-muted-foreground hover:text-foreground"
         >
           {isExpanded ? '▼' : '▶'} {'{'}
         </button>
@@ -86,7 +86,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
             {entries.map(([key, val], index) => (
               <div key={key} className="ml-6">
                 {indent}
-                <span className="text-purple-500">&quot;{key}&quot;</span>:{' '}
+                <span className="text-info">&quot;{key}&quot;</span>:{' '}
                 <JsonNode value={val} level={level + 1} />
                 {index < entries.length - 1 && ','}
               </div>

@@ -69,9 +69,9 @@ export function CompanyHoverCard({ company, children }: CompanyHoverCardProps) {
   };
 
   const getComplianceColor = (score: number) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 70) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 90) return 'text-primary';
+    if (score >= 70) return 'text-warning';
+    return 'text-destructive';
   };
 
   return (
@@ -145,10 +145,10 @@ export function CompanyHoverCard({ company, children }: CompanyHoverCardProps) {
 
             <div className="space-y-1">
               <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Sprout className="h-4 w-4 text-green-600" />
+                <Sprout className="text-primary h-4 w-4" />
                 <span>Økologisk</span>
               </div>
-              <div className="text-lg font-semibold text-green-600">
+              <div className="text-primary text-lg font-semibold">
                 {company.organicFields}
               </div>
             </div>
@@ -198,7 +198,7 @@ export function CompanyHoverCard({ company, children }: CompanyHoverCardProps) {
                 value={(company.organicFields / company.fieldCount) * 100}
                 className="h-2 w-16"
               />
-              <span className="font-medium text-green-600">
+              <span className="text-primary font-medium">
                 {Math.round((company.organicFields / company.fieldCount) * 100)}
                 %
               </span>

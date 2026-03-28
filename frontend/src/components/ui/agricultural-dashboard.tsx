@@ -200,7 +200,7 @@ export function AgriculturalDashboard({
                             {company.totalArea} ha
                           </div>
                           <div className="col-span-2 flex items-center gap-1">
-                            <Sprout className="h-3 w-3 text-green-600" />
+                            <Sprout className="text-primary h-3 w-3" />
                             {company.organicFields} økologiske marker
                           </div>
                         </div>

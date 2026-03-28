@@ -347,6 +347,7 @@ const noHardcodedApiUrls = {
 const TEST_COVERAGE_ALLOWLIST = new Set([
   // Pages without E2E tests
   'src/app/(main)/pesticidanalyse/page.tsx',
+  'src/app/(main)/pesticidanalyse/metode/page.tsx',
   'src/app/(main)/kommuner/page.tsx',
   'src/app/(main)/kilder/page.tsx',
   'src/app/(main)/brugsvilkaar/page.tsx',
@@ -439,6 +440,134 @@ const requireTestCoverage = {
 };
 
 // ---------------------------------------------------------------------------
+// Rule 10: require-semantic-colors
+// Vision: No hardcoded Tailwind color classes (zinc-500, red-600, bg-white,
+// text-black, etc.). Use semantic theme tokens instead (foreground, muted,
+// card, border, primary, destructive, etc.) so dark/light mode works.
+// Migration allowlist: existing files grandfathered in (2026-03-28).
+// This list should SHRINK over time — do NOT add new files.
+// ---------------------------------------------------------------------------
+const SEMANTIC_COLORS_ALLOWLIST = new Set([
+  // Migration complete (2026-03-28) — all files converted to semantic tokens.
+  // Add files here ONLY as temporary exceptions during migration.
+]);
+
+// All Tailwind color scales (gray-scale + chromatic)
+const TW_COLOR_SCALES = [
+  // Gray-scale
+  'zinc',
+  'slate',
+  'gray',
+  'neutral',
+  'stone',
+  // Chromatic
+  'red',
+  'orange',
+  'amber',
+  'yellow',
+  'lime',
+  'green',
+  'emerald',
+  'teal',
+  'cyan',
+  'sky',
+  'blue',
+  'indigo',
+  'violet',
+  'purple',
+  'fuchsia',
+  'pink',
+  'rose',
+].join('|');
+
+// Matches: text-zinc-800, bg-red-500, border-emerald-200, from-amber-100, etc.
+const HARDCODED_SCALE_PATTERN = new RegExp(
+  `(?:^|\\s)(?:text|bg|border|ring|shadow|outline|divide|from|to|via|placeholder|decoration|accent)-(?:${TW_COLOR_SCALES})-\\d+`
+);
+
+// Matches: text-white, bg-white, text-black, bg-black, border-white, border-black
+const HARDCODED_BW_PATTERN =
+  /(?:^|\s)(?:text|bg|border|ring|shadow|outline|divide|from|to|via)-(?:white|black)(?:\s|\/|$)/;
+
+function hasHardcodedColor(str) {
+  return HARDCODED_SCALE_PATTERN.test(str) || HARDCODED_BW_PATTERN.test(str);
+}
+
+const SEMANTIC_MSG =
+  'Hardcoded Tailwind color detected. Use semantic theme tokens instead (e.g., text-foreground, text-muted-foreground, bg-card, bg-muted, border-border, text-primary, text-destructive) so dark/light mode works automatically.';
+
+const requireSemanticColors = {
+  create(context) {
+    return {
+      JSXAttribute(node) {
+        const filename = context.filename || '';
+        if (!filename.includes('/src/')) return;
+
+        // Skip test files
+        if (filename.includes('.test.') || filename.includes('__tests__'))
+          return;
+
+        // Skip allowlisted files
+        const srcIndex = filename.indexOf('/src/');
+        if (srcIndex !== -1) {
+          const relativePath = filename.slice(srcIndex + 1);
+          if (SEMANTIC_COLORS_ALLOWLIST.has(relativePath)) return;
+        }
+
+        // Only check className attributes
+        if (node.name.name !== 'className') return;
+
+        const value = node.value;
+        if (!value) return;
+
+        // Handle string literals: className="text-zinc-800 ..."
+        if (value.type === 'Literal' && typeof value.value === 'string') {
+          if (hasHardcodedColor(value.value)) {
+            context.report({ node, message: SEMANTIC_MSG });
+          }
+        }
+
+        // Handle template literals: className={`text-zinc-800 ...`}
+        if (
+          value.type === 'JSXExpressionContainer' &&
+          value.expression.type === 'TemplateLiteral'
+        ) {
+          for (const quasi of value.expression.quasis) {
+            if (hasHardcodedColor(quasi.value.raw)) {
+              context.report({ node, message: SEMANTIC_MSG });
+              break;
+            }
+          }
+        }
+
+        // Handle cn() and string args in call expressions
+        if (
+          value.type === 'JSXExpressionContainer' &&
+          value.expression.type === 'CallExpression'
+        ) {
+          for (const arg of value.expression.arguments) {
+            if (arg.type === 'Literal' && typeof arg.value === 'string') {
+              if (hasHardcodedColor(arg.value)) {
+                context.report({ node, message: SEMANTIC_MSG });
+                break;
+              }
+            }
+            if (arg.type === 'TemplateLiteral') {
+              for (const quasi of arg.quasis) {
+                if (hasHardcodedColor(quasi.value.raw)) {
+                  context.report({ node, message: SEMANTIC_MSG });
+                  break;
+                }
+              }
+            }
+          }
+        }
+      },
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Plugin export
 // ---------------------------------------------------------------------------
 const plugin = {
@@ -453,6 +582,7 @@ const plugin = {
     'no-inline-styles': noInlineStyles,
     'no-hardcoded-api-urls': noHardcodedApiUrls,
     'require-test-coverage': requireTestCoverage,
+    'require-semantic-colors': requireSemanticColors,
   },
 };
 

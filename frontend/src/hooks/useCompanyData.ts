@@ -5,7 +5,10 @@ import {
 } from '@/services/supabase/company-basic';
 import { getCompanyById } from '@/services/supabase/company';
 import { CompanyResponse } from '@/services/supabase/types';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
+
+const COMPANY_NAVIGATION_LOADING_TOAST_ID = 'company-navigation-loading';
+const COMPANY_DETAILS_LOADING_TOAST_ID = 'company-details-loading';
 
 interface UseCompanyDataReturn {
   basicCompanyInfo: BasicCompanyInfo | null;
@@ -24,8 +27,6 @@ export function useCompanyData(companyId: string): UseCompanyDataReturn {
   const [fullLoading, setFullLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { clearLoadingToasts, addToast, removeToast } = useToast();
-
   useEffect(() => {
     const loadBasicInfo = async () => {
       try {
@@ -34,13 +35,12 @@ export function useCompanyData(companyId: string): UseCompanyDataReturn {
         setBasicLoading(false);
 
         // Clear navigation loading toast
-        clearLoadingToasts();
+        toast.dismiss(COMPANY_NAVIGATION_LOADING_TOAST_ID);
 
         // Show loading toast for detailed data
-        const toastId = addToast({
-          title: 'Indlæser detaljeret data',
+        const toastId = toast.loading('Indlæser detaljeret data', {
+          id: COMPANY_DETAILS_LOADING_TOAST_ID,
           description: 'Henter grafer, tabeller og kort...',
-          variant: 'loading',
         });
 
         // Load full data
@@ -49,7 +49,7 @@ export function useCompanyData(companyId: string): UseCompanyDataReturn {
         setFullLoading(false);
 
         // Remove detailed loading toast
-        removeToast(toastId);
+        toast.dismiss(toastId);
       } catch (err) {
         console.error('Error loading company data:', err);
         setError(
@@ -57,12 +57,13 @@ export function useCompanyData(companyId: string): UseCompanyDataReturn {
         );
         setBasicLoading(false);
         setFullLoading(false);
-        clearLoadingToasts();
+        toast.dismiss(COMPANY_NAVIGATION_LOADING_TOAST_ID);
+        toast.dismiss(COMPANY_DETAILS_LOADING_TOAST_ID);
       }
     };
 
     loadBasicInfo();
-  }, [companyId, clearLoadingToasts, addToast, removeToast]);
+  }, [companyId]);
 
   return {
     basicCompanyInfo,

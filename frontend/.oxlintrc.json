@@ -11,6 +11,7 @@
     "landbruget/no-inline-styles": "warn",
     "landbruget/no-hardcoded-api-urls": "warn",
     "landbruget/require-test-coverage": "warn",
+    "landbruget/require-semantic-colors": "warn",
     "typescript/no-explicit-any": "warn"
   },
   "ignorePatterns": [

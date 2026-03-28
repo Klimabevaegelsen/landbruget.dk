@@ -328,7 +328,7 @@ export default function MunicipalityRankingsPage() {
       <div className="container mx-auto py-8">
         <div className="flex min-h-[400px] items-center justify-center">
           <div className="text-center">
-            <Loader2 className="mx-auto h-12 w-12 animate-spin text-green-600" />
+            <Loader2 className="text-primary mx-auto h-12 w-12 animate-spin" />
             <p className="text-muted-foreground mt-4">
               Indlæser kommuneranglister...
             </p>

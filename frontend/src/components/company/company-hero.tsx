@@ -57,7 +57,7 @@ export function CompanyHero({
             <Button variant="secondary" onClick={() => router.push('/')}>
               <ArrowLeftIcon
                 strokeWidth={2.5}
-                className="size-3 text-green-900"
+                className="text-primary size-3"
               />
               Tilbage til oversigt
             </Button>

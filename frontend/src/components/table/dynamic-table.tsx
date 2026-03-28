@@ -73,7 +73,7 @@ export function DynamicDataTable<TData, TValue>({
             href={String(value)}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center text-blue-600 underline hover:text-blue-800"
+            className="text-primary hover:text-primary/80 inline-flex items-center underline"
           >
             Se luftfoto
             <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" />
@@ -165,7 +165,7 @@ export function DynamicDataTable<TData, TValue>({
       )}
       <div
         className={cn(
-          'rounded border border-slate-300',
+          'rounded border border-border',
           rowCount > 10 && 'min-h-[575px]'
         )}
         data-testid="table-container"

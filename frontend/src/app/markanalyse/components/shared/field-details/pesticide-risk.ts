@@ -6,81 +6,78 @@ import {
   Trees,
   OctagonAlert,
 } from 'lucide-react';
-import type { RiskIconResult, PesticideRiskLevel } from './field-details-types';
+import type { RiskClassification, RiskIconResult } from './field-details-types';
 
-export function getRiskIcon(
+/**
+ * Classify pesticide risk based on health/env risk strings and signal word.
+ * Returns icon-agnostic classification data (colors, level, GHS code).
+ * Use this when you need the classification without a specific icon set.
+ */
+export function classifyRisk(
   healthRisk?: string,
   envRisk?: string,
   signalWord?: string
-): RiskIconResult | null {
+): RiskClassification | null {
   if (healthRisk?.includes('Meget giftig') || healthRisk?.includes('Tx')) {
     return {
-      Icon: Skull,
-      color: 'text-red-700',
-      bgColor: 'bg-red-100',
+      color: 'text-destructive',
+      bgColor: 'bg-destructive/10',
       level: 'Meget giftig',
       ghs: 'GHS06',
     };
   }
   if (healthRisk?.includes('Giftig') || healthRisk?.includes('T')) {
     return {
-      Icon: Skull,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50',
+      color: 'text-destructive',
+      bgColor: 'bg-destructive/5',
       level: 'Giftig',
       ghs: 'GHS06',
     };
   }
   if (healthRisk?.includes('Ætsende') || healthRisk?.includes('C')) {
     return {
-      Icon: ShieldAlert,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50',
+      color: 'text-destructive',
+      bgColor: 'bg-destructive/5',
       level: 'Ætsende',
       ghs: 'GHS05',
     };
   }
   if (healthRisk?.includes('Sundhedsskadelig') || healthRisk?.includes('Xn')) {
     return {
-      Icon: AlertTriangle,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
+      color: 'text-warning',
+      bgColor: 'bg-warning/5',
       level: 'Sundhedsskadelig',
       ghs: 'GHS08',
     };
   }
   if (healthRisk?.includes('Lokalirriterende') || healthRisk?.includes('Xi')) {
     return {
-      Icon: TriangleAlert,
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-50',
+      color: 'text-warning',
+      bgColor: 'bg-warning/5',
       level: 'Lokalirriterende',
       ghs: 'GHS07',
     };
   }
   if (envRisk?.includes('Miljøfarlig') || envRisk?.includes('N')) {
     return {
-      Icon: Trees,
-      color: 'text-green-700',
-      bgColor: 'bg-green-50',
+      color: 'text-primary/80',
+      bgColor: 'bg-primary/5',
       level: 'Miljøfarlig',
       ghs: 'GHS09',
     };
   }
   if (signalWord === 'Fare') {
     return {
-      Icon: OctagonAlert,
-      color: 'text-red-600',
-      bgColor: 'bg-red-50',
+      color: 'text-destructive',
+      bgColor: 'bg-destructive/5',
       level: 'Fare',
       ghs: 'SIGNAL',
     };
   }
   if (signalWord === 'Advarsel') {
     return {
-      Icon: TriangleAlert,
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-50',
+      color: 'text-warning',
+      bgColor: 'bg-warning/5',
       level: 'Advarsel',
       ghs: 'SIGNAL',
     };
@@ -88,32 +85,39 @@ export function getRiskIcon(
   return null;
 }
 
-export function getPesticideRiskLevel(belastning: number): PesticideRiskLevel {
-  if (belastning === 0)
-    return {
-      level: 'Ingen',
-      color: 'text-green-600',
-      description: 'Ingen registreret pesticidanvendelse',
-      variant: 'secondary',
-    };
-  if (belastning < 10)
-    return {
-      level: 'Lav',
-      color: 'text-conventional',
-      description: 'Lav pesticidbelastning',
-      variant: 'default',
-    };
-  if (belastning < 50)
-    return {
-      level: 'Moderat',
-      color: 'text-conventional',
-      description: 'Moderat pesticidbelastning',
-      variant: 'secondary',
-    };
+/** Lucide icon mapping keyed by GHS code + level */
+const LUCIDE_ICON_MAP: Record<string, RiskIconResult['Icon']> = {
+  GHS06: Skull,
+  GHS05: ShieldAlert,
+  GHS08: AlertTriangle,
+  GHS07: TriangleAlert,
+  GHS09: Trees,
+  'SIGNAL-Fare': OctagonAlert,
+  'SIGNAL-Advarsel': TriangleAlert,
+};
+
+function lucideIconForClassification(
+  c: RiskClassification
+): RiskIconResult['Icon'] {
+  if (c.ghs === 'SIGNAL') {
+    return LUCIDE_ICON_MAP[`SIGNAL-${c.level}`] ?? TriangleAlert;
+  }
+  return LUCIDE_ICON_MAP[c.ghs] ?? TriangleAlert;
+}
+
+/**
+ * Classify risk and attach a Lucide icon.
+ * For GHS pictogram icons, use `classifyRisk` directly instead.
+ */
+export function getRiskIcon(
+  healthRisk?: string,
+  envRisk?: string,
+  signalWord?: string
+): RiskIconResult | null {
+  const classification = classifyRisk(healthRisk, envRisk, signalWord);
+  if (!classification) return null;
   return {
-    level: 'Høj',
-    color: 'text-destructive',
-    description: 'Høj pesticidbelastning',
-    variant: 'destructive',
+    ...classification,
+    Icon: lucideIconForClassification(classification),
   };
 }

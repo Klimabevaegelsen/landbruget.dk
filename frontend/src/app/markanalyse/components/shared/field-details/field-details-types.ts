@@ -14,12 +14,17 @@ export interface ParsedEnhancedPesticide {
   signalWord?: string;
 }
 
-export interface RiskIconResult {
-  Icon: LucideIcon;
+/** Icon-agnostic risk classification data */
+export interface RiskClassification {
   color: string;
   bgColor: string;
   level: string;
   ghs: string;
+}
+
+/** Risk classification with a Lucide icon attached */
+export interface RiskIconResult extends RiskClassification {
+  Icon: LucideIcon;
 }
 
 export interface PesticideRiskLevel {

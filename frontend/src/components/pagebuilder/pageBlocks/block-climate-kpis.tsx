@@ -8,7 +8,7 @@ export async function BlockClimateKPIs({ block }: { block: ClimateKPIs }) {
 
     if (!emissions || emissions.length === 0) {
       return (
-        <div className="rounded bg-gray-50 p-4 text-gray-600">
+        <div className="bg-muted text-muted-foreground rounded p-4">
           Ingen klimadata tilgængelig for dette år
         </div>
       );
@@ -21,7 +21,7 @@ export async function BlockClimateKPIs({ block }: { block: ClimateKPIs }) {
   } catch (error) {
     console.error('Error loading climate KPIs:', error);
     return (
-      <div className="rounded bg-red-50 p-4 text-red-600">
+      <div className="bg-destructive/5 text-destructive rounded p-4">
         Fejl ved indlæsning af klimadata
       </div>
     );

@@ -19,7 +19,7 @@ export function CustomTooltip({
   }
 
   return (
-    <div className="bg-background rounded-lg border border-gray-200 p-4 shadow-md">
+    <div className="bg-background border-border rounded-lg border p-4 shadow-md">
       <p className="text-base font-semibold">{label}</p>
       {payload.map((entry, index) => {
         const colorStyle = { color: entry.color };

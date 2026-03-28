@@ -1,37 +1,35 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useToast } from '@/components/ui/toast';
+import { toast } from 'sonner';
 import { useCallback } from 'react';
+
+const COMPANY_NAVIGATION_LOADING_TOAST_ID = 'company-navigation-loading';
+const COMPANY_DETAILS_LOADING_TOAST_ID = 'company-details-loading';
 
 /**
  * Custom hook for handling company navigation with loading indicators
  */
 export function useCompanyNavigation() {
   const router = useRouter();
-  const { addToast, clearLoadingToasts } = useToast();
 
   const navigateToCompany = useCallback(
     (companyId: string, companyName?: string) => {
-      // Clear any existing loading toasts
-      clearLoadingToasts();
+      toast.dismiss(COMPANY_NAVIGATION_LOADING_TOAST_ID);
+      toast.dismiss(COMPANY_DETAILS_LOADING_TOAST_ID);
 
-      // Show loading toast
-      const toastId = addToast({
-        title: 'Indlæser virksomhed',
+      const toastId = toast.loading('Indlæser virksomhed', {
+        id: COMPANY_NAVIGATION_LOADING_TOAST_ID,
         description: companyName
           ? `Henter data for ${companyName}...`
           : 'Henter virksomhedsdata...',
-        variant: 'loading',
       });
 
-      // Navigate to company page
       router.push(`/virksomhed/${companyId}`);
 
-      // Return toast ID in case caller wants to manage it
       return toastId;
     },
-    [router, addToast, clearLoadingToasts]
+    [router]
   );
 
   return { navigateToCompany };

@@ -128,6 +128,14 @@
   --color-destructive: oklch(65% 0.15 25);
   --color-destructive-foreground: oklch(98% 0.01 25);
 
+  /* Status Colors */
+  --color-warning: oklch(75% 0.15 75);
+  --color-warning-foreground: oklch(35% 0.1 75);
+  --color-info: oklch(60% 0.12 270);
+  --color-info-foreground: oklch(98% 0.01 270);
+  --color-success: oklch(60% 0.15 142);
+  --color-success-foreground: oklch(98% 0.01 142);
+
   /* Agricultural Domain Colors */
   --color-organic: oklch(60% 0.15 142);
   --color-conventional: oklch(70% 0.12 85);
@@ -200,6 +208,14 @@
   --color-ring: oklch(65% 0.12 142);
   --color-destructive: oklch(70% 0.12 25);
   --color-destructive-foreground: oklch(10% 0.01 25);
+
+  /* Status Colors - Dark */
+  --color-warning: oklch(80% 0.12 75);
+  --color-warning-foreground: oklch(20% 0.08 75);
+  --color-info: oklch(70% 0.1 270);
+  --color-info-foreground: oklch(10% 0.01 270);
+  --color-success: oklch(70% 0.12 142);
+  --color-success-foreground: oklch(10% 0.01 142);
 
   /* Agricultural Domain Colors - Dark */
   --color-organic: oklch(70% 0.12 142);

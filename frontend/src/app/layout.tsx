@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
-import { ToastProvider_ } from '@/components/ui/toast';
+import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme/theme-provider';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -30,7 +30,8 @@ export default function RootLayout({
     <html lang="da" suppressHydrationWarning>
       <body className={`${plusJakartaSans.variable} antialiased`}>
         <ThemeProvider defaultTheme="system" storageKey="landbruget-theme">
-          <ToastProvider_>{children}</ToastProvider_>
+          {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
