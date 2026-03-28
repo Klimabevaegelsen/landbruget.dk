@@ -157,22 +157,11 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
             self.log.info(f"Fetched metadata with {len(data)} top-level keys")
             return data
 
-    @retry(
-        retry=retry_if_exception_type((aiohttp.ClientError, TimeoutError)),
-        wait=wait_exponential(multiplier=2, min=5, max=60),
-        stop=stop_after_attempt(3),
-    )
-    async def _search_stations(
-        self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
+    async def _search_batch(
+        self, session: aiohttp.ClientSession, session_id: str, params_batch: list[dict]
     ) -> dict:
-        """
-        Search for stations with chemistry data in surface water.
-
-        Returns the full search response including station list and result counts.
-        """
-        body = self._build_search_body(session_id, search_parameters)
-        self.log.info("Searching Kemidata for surface water chemistry stations...")
-
+        """Search a single batch of parameters. Retries on transient errors."""
+        body = self._build_search_body(session_id, params_batch)
         async with session.post(
             self.config.search_url,
             json=body,
@@ -181,53 +170,117 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
             if resp.status != 200:
                 err_text = await resp.text()
                 raise Exception(f"Search failed: HTTP {resp.status} — {err_text[:500]}")
-            data = await resp.json()
+            return await resp.json()
 
-        station_count = len(data.get("stations", []))
-        result_summary = data.get("results", [])
-        total_results = sum(r.get("resultCount", 0) for r in result_summary)
+    async def _search_stations(
+        self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
+    ) -> dict:
+        """
+        Search for stations with chemistry data in surface water.
 
-        self.log.info(f"Search returned {station_count} stations, {total_results:,} total results")
+        Batches parameters in chunks of 200 to avoid server-side timeouts,
+        then merges the deduplicated station results.
 
-        return data, total_results
+        Returns the full search response including station list and result counts.
+        """
+        batch_size = 200
+        all_stations: dict[str, dict] = {}
+        total_results = 0
 
-    @retry(
-        retry=retry_if_exception_type((aiohttp.ClientError, TimeoutError)),
-        wait=wait_exponential(multiplier=2, min=10, max=120),
-        stop=stop_after_attempt(3),
-    )
+        batches = [
+            search_parameters[i : i + batch_size]
+            for i in range(0, len(search_parameters), batch_size)
+        ]
+        self.log.info(
+            f"Searching Kemidata in {len(batches)} batches "
+            f"({len(search_parameters)} parameters, batch size {batch_size})..."
+        )
+
+        for idx, batch in enumerate(batches, 1):
+            self.log.info(f"  Batch {idx}/{len(batches)} ({len(batch)} parameters)")
+            data = await self._search_batch(session, session_id, batch)
+
+            for station in data.get("stations", []):
+                sid = station.get("id", "")
+                if sid and sid not in all_stations:
+                    all_stations[sid] = station
+
+            batch_results = sum(r.get("resultCount", 0) for r in data.get("results", []))
+            total_results += batch_results
+
+        merged = {
+            "stations": list(all_stations.values()),
+            "results": [{"resultCount": total_results}],
+            "exceedMaxStation": False,
+            "canDownloadAll": True,
+            "errors": [],
+        }
+
+        self.log.info(
+            f"Search returned {len(all_stations)} unique stations, "
+            f"{total_results:,} total results across all batches"
+        )
+
+        return merged, total_results
+
     async def _download_csv_to_storage(
         self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
     ) -> tuple[str, int]:
         """
         Download the full CSV export from Kemidata and stream directly to storage.
 
-        Streams the response in chunks to avoid holding 100MB+ in memory.
+        Batches parameters in chunks of 200 to avoid server-side timeouts,
+        concatenating CSV output (skipping duplicate headers after the first batch).
+        Streams each response in chunks to avoid holding 100MB+ in memory.
 
         Returns:
             Tuple of (relative storage path, total bytes written).
         """
-        body = self._build_download_body(session_id, search_parameters)
-        self.log.info("Downloading CSV from Kemidata (this may take a while)...")
+        batch_size = 200
+        batches = [
+            search_parameters[i : i + batch_size]
+            for i in range(0, len(search_parameters), batch_size)
+        ]
 
         run_timestamp = self.date_pattern
         relative_path = f"bronze/{self.config.dataset}/{run_timestamp}/kemidata_export.csv"
         storage_path = f"{self.config.bucket}/{relative_path}"
 
-        async with session.post(
-            self.config.download_url,
-            json=body,
-            headers={"Content-Type": "application/json"},
-        ) as resp:
-            if resp.status != 200:
-                err_text = await resp.text()
-                raise Exception(f"Download failed: HTTP {resp.status} — {err_text[:500]}")
+        self.log.info(
+            f"Downloading CSV from Kemidata in {len(batches)} batches (this may take a while)..."
+        )
 
-            total_bytes = 0
-            with self.storage.fs.open(storage_path, "wb") as cloud_file:
-                async for chunk in resp.content.iter_chunked(8 * 1024 * 1024):
-                    cloud_file.write(chunk)
-                    total_bytes += len(chunk)
+        total_bytes = 0
+        with self.storage.fs.open(storage_path, "wb") as cloud_file:
+            for idx, batch in enumerate(batches, 1):
+                self.log.info(f"  Download batch {idx}/{len(batches)} ({len(batch)} parameters)")
+                body = self._build_download_body(session_id, batch)
+
+                async with session.post(
+                    self.config.download_url,
+                    json=body,
+                    headers={"Content-Type": "application/json"},
+                ) as resp:
+                    if resp.status != 200:
+                        err_text = await resp.text()
+                        raise Exception(
+                            f"Download batch {idx} failed: HTTP {resp.status} — {err_text[:500]}"
+                        )
+
+                    is_first_line = True
+                    async for chunk in resp.content.iter_chunked(8 * 1024 * 1024):
+                        # Skip CSV header line for batches after the first
+                        if idx > 1 and is_first_line:
+                            newline_pos = chunk.find(b"\n")
+                            if newline_pos >= 0:
+                                chunk = chunk[newline_pos + 1 :]
+                            is_first_line = False
+                        else:
+                            is_first_line = False
+
+                        if chunk:
+                            cloud_file.write(chunk)
+                            total_bytes += len(chunk)
 
         size_mb = total_bytes / (1024 * 1024)
         self.log.info(f"Streamed CSV to storage: {size_mb:.1f} MB → {storage_path}")
