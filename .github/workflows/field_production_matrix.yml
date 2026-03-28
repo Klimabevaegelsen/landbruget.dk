@@ -91,7 +91,7 @@ jobs:
 
               try:
                   # Get files with timestamps to find latest for each year
-                  files_with_timestamps = storage_access.list_files_with_timestamps(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
+                  files_with_timestamps = storage_access.list_files_with_timestamps(f"{bucket}/silver/fvm_marker_*/*/*.parquet")
 
                   # Group by year and find latest timestamp for each
                   year_latest_files = {}

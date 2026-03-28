@@ -180,14 +180,14 @@ jobs:
 
           # Check Green Accounts
           try:
-              gr_files = storage.list_files(f'gs://{bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet')
+              gr_files = storage.list_files(f'{bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet')
               logger.info(f'Green Accounts files for {year}: {len(gr_files or [])}')
           except Exception as e:
               logger.warning(f'Green Accounts query failed: {e}')
 
           # Check FVM
           try:
-              fvm_files = storage.list_files(f'gs://{bucket}/silver/fvm_marker_{year}/*/data.parquet')
+              fvm_files = storage.list_files(f'{bucket}/silver/fvm_marker_{year}/*/data.parquet')
               logger.info(f'FVM marker files for {year}: {len(fvm_files or [])}')
           except Exception as e:
               logger.warning(f'FVM query failed: {e}')
