@@ -33,6 +33,10 @@ from unified_pipeline.bronze.jordbrugsanalyser import (
     JordbrugsanalyserBronze,
     JordbrugsanalyserBronzeConfig,
 )
+from unified_pipeline.bronze.kemidata_surface_water import (
+    KemidataSurfaceWaterBronze,
+    KemidataSurfaceWaterBronzeConfig,
+)
 from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
@@ -133,6 +137,10 @@ from unified_pipeline.silver.grukos import GrukosSilver, GrukosSilverConfig
 from unified_pipeline.silver.jordbrugsanalyser import (
     JordbrugsanalyserSilver,
     JordbrugsanalyserSilverConfig,
+)
+from unified_pipeline.silver.kemidata_surface_water import (
+    KemidataSurfaceWaterSilver,
+    KemidataSurfaceWaterSilverConfig,
 )
 from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
@@ -510,6 +518,18 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             cli_models.Stage.all: [
                 (GEUSDataversePesticidesBronze, GEUSDataversePesticidesBronzeConfig),
                 (GEUSDataversePesticidesSilver, GEUSDataversePesticidesSilverConfig),
+            ],
+        },
+        cli_models.Source.kemidata_surface_water_pesticides: {
+            cli_models.Stage.bronze: [
+                (KemidataSurfaceWaterBronze, KemidataSurfaceWaterBronzeConfig)
+            ],
+            cli_models.Stage.silver: [
+                (KemidataSurfaceWaterSilver, KemidataSurfaceWaterSilverConfig)
+            ],
+            cli_models.Stage.all: [
+                (KemidataSurfaceWaterBronze, KemidataSurfaceWaterBronzeConfig),
+                (KemidataSurfaceWaterSilver, KemidataSurfaceWaterSilverConfig),
             ],
         },
         cli_models.Source.property_cadastral_merge: {
