@@ -2,7 +2,7 @@
 # Read by: Claude rules, GitHub Actions cascade dispatcher
 # When upstream runs, all downstream pipelines must also run.
 #
-# Traced from actual GCS/R2 read paths in pipeline code.
+# Traced from actual R2 read paths in pipeline code.
 # See .claude/rules/pipelines.md for cascade chain summary.
 
 pipelines:
