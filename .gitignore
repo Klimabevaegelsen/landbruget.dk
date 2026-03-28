@@ -269,3 +269,9 @@ data_samples/
 
 # Vercel
 .vercel
+
+# Cloudflare Wrangler
+.wrangler/
+
+# Pipeline output
+backend/output/
