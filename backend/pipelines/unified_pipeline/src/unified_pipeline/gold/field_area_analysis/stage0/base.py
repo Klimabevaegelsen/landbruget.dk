@@ -41,7 +41,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         year_suffixed_dataset = f"{dataset_name}_{CONFIG.agricultural_fields_year}"
-        return f"gs://{CONFIG.bucket}/gold/{year_suffixed_dataset}/{timestamp}/data.parquet"
+        return f"{CONFIG.bucket}/gold/{year_suffixed_dataset}/{timestamp}/data.parquet"
 
     def _save_prefiltered_dataset(self, table_name: str, output_dataset_name: str):
         """
@@ -59,7 +59,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
             # Create timestamp and GCS path following the standard pattern
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{output_dataset_name}.parquet"
-            gcs_path = f"gold/{output_dataset_name}/{timestamp}/{filename}"
+            storage_path = f"gold/{output_dataset_name}/{timestamp}/{filename}"
 
             # Create temporary file for export
             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
@@ -71,14 +71,14 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
                 (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
             """)
 
-            # Upload to GCS using gcs_access
-            full_gcs_path = f"gs://{CONFIG.bucket}/{gcs_path}"
-            fs_path = f"{CONFIG.bucket}/{gcs_path}"
+            # Upload to GCS using storage_access
+            full_storage_path = f"{CONFIG.bucket}/{storage_path}"
+            fs_path = f"{CONFIG.bucket}/{storage_path}"
 
-            # Use gcs_access fs to upload
+            # Use storage_access fs to upload
             import shutil
 
-            with open(temp_path, "rb") as src, self.gcs_access.fs.open(fs_path, "wb") as dst:
+            with open(temp_path, "rb") as src, self.storage.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             # Clean up temporary file
@@ -87,7 +87,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
 
             # Log export statistics
             count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            self.log.info(f"✅ Saved {count:,} rows to {full_gcs_path}")
+            self.log.info(f"✅ Saved {count:,} rows to {full_storage_path}")
 
         except Exception as e:
             self.log.error(f"❌ Failed to save pre-filtered dataset {output_dataset_name}: {e}")

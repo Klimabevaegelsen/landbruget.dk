@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-from common.gcs.filesystem import setup_duckdb_cloud_auth
+from common.storage.filesystem import setup_duckdb_cloud_auth
 
 
 class DuckDBProcessor:
@@ -76,33 +76,35 @@ class DuckDBProcessor:
             COPY {table_name} TO '{output_path}' (FORMAT CSV, HEADER)
         """)
 
-    def create_table_from_gcs_parquet(self, gcs_path: str, table_name: str | None = None) -> str:
+    def create_table_from_storage_parquet(
+        self, storage_path: str, table_name: str | None = None
+    ) -> str:
         """
-        Create a table directly from GCS parquet file using native DuckDB access.
+        Create a table directly from storage parquet file using native DuckDB access.
 
         Args:
-            gcs_path: GCS path (gs://bucket/path/file.parquet)
+            storage_path: Storage path (bucket/path/file.parquet)
             table_name: Optional table name
 
         Returns:
             Table name
         """
         if table_name is None:
-            table_name = f"{self.dataset_name}_gcs_{int(time.time())}"
+            table_name = f"{self.dataset_name}_storage_{int(time.time())}"
 
         self.conn.execute(f"""
             CREATE TABLE {table_name} AS
-            SELECT * FROM read_parquet('{gcs_path}')
+            SELECT * FROM read_parquet('{storage_path}')
         """)
         return table_name
 
-    def save_table_to_gcs_parquet(self, table_name: str, gcs_path: str, **options):
+    def save_table_to_storage_parquet(self, table_name: str, storage_path: str, **options):
         """
-        Save table directly to GCS parquet file using native DuckDB access.
+        Save table directly to storage parquet file using native DuckDB access.
 
         Args:
             table_name: Name of the table to save
-            gcs_path: GCS path (gs://bucket/path/file.parquet)
+            storage_path: Storage path (bucket/path/file.parquet)
             **options: Additional parquet options (compression, etc.)
         """
         copy_options = ["FORMAT PARQUET"]
@@ -118,17 +120,17 @@ class DuckDBProcessor:
         options_str = ", ".join(copy_options)
 
         self.conn.execute(f"""
-            COPY {table_name} TO '{gcs_path}' ({options_str})
+            COPY {table_name} TO '{storage_path}' ({options_str})
         """)
 
-    def query_gcs_parquet(
-        self, gcs_path: str, query: str = "SELECT *", table_name: str | None = None
+    def query_storage_parquet(
+        self, storage_path: str, query: str = "SELECT *", table_name: str | None = None
     ) -> str:
         """
-        Query GCS parquet file directly and create a table.
+        Query storage parquet file directly and create a table.
 
         Args:
-            gcs_path: GCS path (gs://bucket/path/file.parquet)
+            storage_path: Storage path (bucket/path/file.parquet)
             query: SQL query to apply (default: SELECT *)
             table_name: Optional table name for result
 
@@ -141,7 +143,7 @@ class DuckDBProcessor:
         self.conn.execute(f"""
             CREATE TABLE {table_name} AS
             {query}
-            FROM read_parquet('{gcs_path}')
+            FROM read_parquet('{storage_path}')
         """)
         return table_name
 

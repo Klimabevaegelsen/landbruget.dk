@@ -56,7 +56,7 @@ from typing import Any
 
 import duckdb
 import requests
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 from pydantic import ConfigDict, Field
 from requests.auth import HTTPBasicAuth
 
@@ -182,7 +182,11 @@ class PesticideComplianceGoldConfig(BaseJobConfig):
         "Identifies regulatory violations in pesticide applications using BMD restrictions"
     )
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Agricultural year to analyze (e.g., 2023 = Aug 2023 - Jul 2024 season)
     pesticide_year: int | None = Field(
@@ -239,7 +243,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         super().__init__(config)
         self.logger = Logger.get_logger()
         self.conn = duckdb.connect()
-        self.gcs_access = GCSDataAccess(connection=self.conn)
+        self.storage = StorageAccess(connection=self.conn)
 
         # Initialize API client for dosage compliance checking
         self.api_client = PlanteITAPI() if config.enable_dosage_compliance else None
@@ -383,8 +387,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info("📥 Loading BMD pesticide database")
 
         # Find latest BMD silver data using pattern matching
-        pattern = f"gs://{self.config.bucket}/silver/bmd/*/pesticide_products.parquet"
-        files = self.gcs_access.list_files_with_timestamps(pattern)
+        pattern = f"{self.config.bucket}/silver/bmd/*/pesticide_products.parquet"
+        files = self.storage.list_files_with_timestamps(pattern)
 
         if not files:
             raise Exception("BMD pesticide database not found in silver layer")
@@ -398,7 +402,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # 🚀 ENHANCED: Load BMD data using native HMAC acceleration for faster processing
         try:
             # Use enhanced loading with server-side processing and filtering
-            self.gcs_access.query_parquet_native(
+            self.storage.query_parquet_native(
                 latest_path,
                 """
                 SELECT
@@ -425,7 +429,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         except Exception as e:
             self.logger.warning(f"Native loading failed, using fallback: {e}")
             # Fallback to original temp file method
-            with self.gcs_access._temp_download(latest_path) as temp_file:
+            with self.storage._temp_download(latest_path) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE bmd_data AS
                     SELECT
@@ -470,16 +474,16 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             target_agricultural_year = (
                 f"{self.config.pesticide_year}_{self.config.pesticide_year + 1}"
             )
-            pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{target_agricultural_year}/*/pesticide_disaggregation_{target_agricultural_year}.parquet"
+            pattern = f"{self.config.bucket}/gold/pesticide_disaggregation_{target_agricultural_year}/*/pesticide_disaggregation_{target_agricultural_year}.parquet"
             self.logger.info(
                 f"🎯 Matrix job mode: Loading data for agricultural year {target_agricultural_year}"
             )
         else:
             # Single job mode: load most recent data
-            pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+            pattern = f"{self.config.bucket}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
             self.logger.info("📊 Single job mode: Loading most recent pesticide data")
 
-        files = self.gcs_access.list_files_with_timestamps(pattern)
+        files = self.storage.list_files_with_timestamps(pattern)
 
         if not files:
             if self.config.pesticide_year is not None:
@@ -525,7 +529,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 )
 
         # Load disaggregated pesticide data using proper GCS access pattern
-        with self.gcs_access._temp_download(latest_path) as temp_file:
+        with self.storage._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pesticide_applications AS
                 SELECT
@@ -603,8 +607,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         agricultural_fields_loaded = False
 
         for field_year in sorted(field_years, reverse=True):  # Try newest first
-            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{field_year}/*/data.parquet"
-            files = self.gcs_access.list_files_with_timestamps(pattern)
+            pattern = f"{self.config.bucket}/silver/fvm_marker_{field_year}/*/data.parquet"
+            files = self.storage.list_files_with_timestamps(pattern)
 
             if files:
                 # Sort by timestamp to get the most recent file for this year
@@ -623,8 +627,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 f"⚠️ No FVM marker data found for field years {field_years}, "
                 "falling back to latest available"
             )
-            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/data.parquet"
-            files = self.gcs_access.list_files_with_timestamps(pattern)
+            pattern = f"{self.config.bucket}/silver/fvm_marker_*/*/data.parquet"
+            files = self.storage.list_files_with_timestamps(pattern)
 
             if not files:
                 self.logger.warning("⚠️ FVM marker data not found - crop mapping will be limited")
@@ -637,7 +641,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             )
 
         # Load FVM marker data using proper GCS access pattern
-        with self.gcs_access._temp_download(latest_path) as temp_file:
+        with self.storage._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE agricultural_fields AS
                 SELECT
@@ -1399,15 +1403,15 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"💾 Saving compliance analysis results to: {base_path}")
 
         # Save summary statistics
-        summary_path = f"gs://{self.config.bucket}/{base_path}/compliance_summary.json"
-        self.gcs_access.upload_json(summary_stats, summary_path)
+        summary_path = f"{self.config.bucket}/{base_path}/compliance_summary.json"
+        self.storage.upload_json(summary_stats, summary_path)
 
         # Save detailed results by year
         for ag_year, year_results in all_results.items():
             # Save compliance issues data as parquet - this is the main usable dataset
             if year_results.get("compliance_table_name"):
                 compliance_path = (
-                    f"gs://{self.config.bucket}/{base_path}/compliance_analysis_{ag_year}.parquet"
+                    f"{self.config.bucket}/{base_path}/compliance_analysis_{ag_year}.parquet"
                 )
                 compliance_table_name = year_results["compliance_table_name"]
 
@@ -1463,7 +1467,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
                 if record_count > 0:
                     # 🚀 ENHANCED: Save using native HMAC acceleration for faster uploads
-                    native_used = self.gcs_access.export_to_gcs_native(
+                    native_used = self.storage.export_to_storage_native(
                         compliance_table_name,
                         compliance_path,
                         compression="zstd",  # Optimal compression
@@ -1471,7 +1475,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     )
                     if not native_used:
                         # Fallback to existing method
-                        self.gcs_access.upload_from_duckdb_table(
+                        self.storage.upload_from_duckdb_table(
                             compliance_table_name, compliance_path
                         )
 
@@ -1483,15 +1487,15 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
 
             # Save year summary
-            year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
+            year_summary_path = f"{self.config.bucket}/{base_path}/summary_{ag_year}.json"
             year_summary = {k: v for k, v in year_results.items() if k != "issues_data"}
-            self.gcs_access.upload_json(year_summary, year_summary_path)
+            self.storage.upload_json(year_summary, year_summary_path)
 
         # Generate human-readable report
-        report_path = f"gs://{self.config.bucket}/{base_path}/compliance_report.md"
+        report_path = f"{self.config.bucket}/{base_path}/compliance_report.md"
         report_content = self._generate_markdown_report(summary_stats, all_results)
         # Upload text content using gcsfs filesystem
-        with self.gcs_access.fs.open(report_path, "w", encoding="utf-8") as f:
+        with self.storage.fs.open(report_path, "w", encoding="utf-8") as f:
             f.write(report_content)
 
         # Clean up temporary tables after all exports are complete

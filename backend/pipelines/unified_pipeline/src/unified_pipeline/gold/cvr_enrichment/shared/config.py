@@ -160,7 +160,7 @@ def get_step_output_path(
     Returns:
         GCS path for the step output
     """
-    base_path = f"gs://{bucket}/gold/cvr_enrichment/{date_pattern}"
+    base_path = f"{bucket}/gold/cvr_enrichment/{date_pattern}"
 
     if batch_number is not None:
         return f"{base_path}/{step.value}_batch_{batch_number:03d}.parquet"
@@ -217,14 +217,14 @@ def get_step_input_paths(
         return pipeline_paths
 
     # We're running independently - fetch latest available files from GCS using existing utility
-    return _get_latest_input_paths_from_gcs(step, bucket, max_days_back)
+    return _get_latest_input_paths_from_storage(step, bucket, max_days_back)
 
 
-def _get_latest_input_paths_from_gcs(
+def _get_latest_input_paths_from_storage(
     step: CVREnrichmentStep, bucket: str, max_days_back: int
 ) -> list[str]:
     """
-    Get the latest available input files for a step from GCS using existing utility.
+    Get the latest available input files for a step from storage using existing utility.
 
     Args:
         step: Pipeline step
@@ -234,11 +234,11 @@ def _get_latest_input_paths_from_gcs(
     Returns:
         List of GCS paths for the latest available inputs
     """
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
     try:
-        gcs_access = GCSDataAccess()
-        base_pattern = f"gs://{bucket}/gold/cvr_enrichment"
+        storage_access = StorageAccess()
+        base_pattern = f"{bucket}/gold/cvr_enrichment"
 
         # Step-specific input logic with latest file fetching using existing utility
         if step == CVREnrichmentStep.COLLECTION:
@@ -247,38 +247,38 @@ def _get_latest_input_paths_from_gcs(
 
         if step == CVREnrichmentStep.COMPANY_FETCHING:
             # Company fetching depends on collection step
-            pattern = f"gs://{bucket}/gold/cvr_enrichment_collection/*/data.parquet"
-            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            pattern = f"{bucket}/gold/cvr_enrichment_collection/*/data.parquet"
+            latest_file = _find_latest_file_with_pattern(storage_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         if step == CVREnrichmentStep.DATA_PARSING:
             # Data parsing depends on raw company fetching (Bronze layer)
-            pattern = f"gs://{bucket}/bronze/cvr_raw_companies/*/consolidated.parquet"
-            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            pattern = f"{bucket}/bronze/cvr_raw_companies/*/consolidated.parquet"
+            latest_file = _find_latest_file_with_pattern(storage_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         if step == CVREnrichmentStep.PNUMBER_FETCHING:
             # P-number fetching depends on parsed company data (Silver layer)
-            pattern = f"gs://{bucket}/silver/cvr_companies/*/data.parquet"
-            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            pattern = f"{bucket}/silver/cvr_companies/*/data.parquet"
+            latest_file = _find_latest_file_with_pattern(storage_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         if step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
             # Financial documents depend on company fetching
-            pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
-            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            pattern = f"{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+            latest_file = _find_latest_file_with_pattern(storage_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         if step == CVREnrichmentStep.ADDRESS_GEOCODING:
             # Address geocoding depends on both company and P-number data
-            company_pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
-            pnumber_pattern = f"gs://{bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
+            company_pattern = f"{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+            pnumber_pattern = f"{bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
 
             latest_company = _find_latest_file_with_pattern(
-                gcs_access, company_pattern, max_days_back
+                storage_access, company_pattern, max_days_back
             )
             latest_pnumber = _find_latest_file_with_pattern(
-                gcs_access, pnumber_pattern, max_days_back
+                storage_access, pnumber_pattern, max_days_back
             )
 
             inputs = []
@@ -294,13 +294,13 @@ def _get_latest_input_paths_from_gcs(
                 f"{base_pattern}/*/company_fetching.parquet",
                 f"{base_pattern}/*/pnumber_fetching.parquet",
                 # Financial docs use different dataset
-                f"gs://{bucket}/gold/cvr_enrichment_financial/*/financial_documents.parquet",
+                f"{bucket}/gold/cvr_enrichment_financial/*/financial_documents.parquet",
                 f"{base_pattern}/*/address_geocoding.parquet",
             ]
 
             inputs = []
             for pattern in patterns:
-                latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+                latest_file = _find_latest_file_with_pattern(storage_access, pattern, max_days_back)
                 if latest_file:
                     inputs.append(latest_file)
             return inputs
@@ -315,13 +315,13 @@ def _get_latest_input_paths_from_gcs(
         return []
 
 
-def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int) -> str | None:
+def _find_latest_company_data_file(storage_access, pattern: str, max_days_back: int) -> str | None:
     """
     Find the latest file matching a pattern that contains company data
     (has company_data_json column).
 
     Args:
-        gcs_access: GCSDataAccess instance
+        storage_access: StorageAccess instance
         pattern: GCS file pattern to search
         max_days_back: Maximum days to look back
 
@@ -332,7 +332,7 @@ def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int)
 
     try:
         # Get files with timestamps using existing utility
-        files_with_timestamps = gcs_access.list_files_with_timestamps(pattern)
+        files_with_timestamps = storage_access.list_files_with_timestamps(pattern)
 
         if not files_with_timestamps:
             return None
@@ -354,7 +354,7 @@ def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int)
                     if cutoff_date.tzinfo is not None:
                         cutoff_date = cutoff_date.replace(tzinfo=None)
 
-                if timestamp >= cutoff_date and _has_company_data(gcs_access, filepath):
+                if timestamp >= cutoff_date and _has_company_data(storage_access, filepath):
                     company_files.append((filepath, timestamp))
             except Exception as e:
                 from unified_pipeline.util.log_util import Logger
@@ -378,12 +378,12 @@ def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int)
         return None
 
 
-def _has_company_data(gcs_access, filepath: str) -> bool:
+def _has_company_data(storage_access, filepath: str) -> bool:
     """
     Check if a file contains company data by looking for company_data_json column.
 
     Args:
-        gcs_access: GCSDataAccess instance
+        storage_access: StorageAccess instance
         filepath: Path to the file
 
     Returns:
@@ -391,7 +391,7 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
     """
     try:
         import duckdb
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
         # Create a temporary connection for checking file structure
         temp_conn = duckdb.connect()
@@ -400,12 +400,12 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
         fs = get_r2_filesystem()
         temp_conn.register_filesystem(fs)
 
-        # Strip gs:// prefix for s3fs compatibility
+        # Strip protocol prefix for s3fs compatibility
         stripped_path = filepath
-        if stripped_path.startswith("gs://"):
-            stripped_path = stripped_path[len("gs://") :]
         if stripped_path.startswith("r2://"):
             stripped_path = stripped_path[len("r2://") :]
+        if stripped_path.startswith("s3://"):
+            stripped_path = stripped_path[len("s3://") :]
 
         columns_result = temp_conn.execute(f"""
             DESCRIBE (SELECT * FROM read_parquet('s3://{stripped_path}') LIMIT 1)
@@ -419,12 +419,12 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
         return False
 
 
-def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int) -> str | None:
+def _find_latest_file_with_pattern(storage_access, pattern: str, max_days_back: int) -> str | None:
     """
     Find the latest file matching a pattern using the existing GCS utility.
 
     Args:
-        gcs_access: GCSDataAccess instance
+        storage_access: StorageAccess instance
         pattern: GCS file pattern to search
         max_days_back: Maximum days to look back
 
@@ -435,7 +435,7 @@ def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int)
 
     try:
         # Get files with timestamps using existing utility
-        files_with_timestamps = gcs_access.list_files_with_timestamps(pattern)
+        files_with_timestamps = storage_access.list_files_with_timestamps(pattern)
 
         if not files_with_timestamps:
             return None
@@ -528,17 +528,16 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
 
     # Check storage files existence (for non-GitHub Actions environments)
     try:
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
         fs = get_r2_filesystem()
 
-        # Parse bucket and path from gs:// URLs
+        # Check if pipeline files exist in storage
         for pipeline_path in pipeline_paths[:1]:  # Check just the first one for efficiency
-            if pipeline_path.startswith("gs://"):
-                # Strip gs:// prefix for s3fs compatibility
-                r2_path = pipeline_path[5:]
-                if fs.exists(r2_path):
-                    return True  # Found at least one pipeline file
+            # Strip any protocol prefix for s3fs compatibility
+            r2_path = pipeline_path.removeprefix("r2://").removeprefix("s3://")
+            if fs.exists(r2_path):
+                return True  # Found at least one pipeline file
 
         return False  # No pipeline files found
 
@@ -561,7 +560,7 @@ def _get_traditional_input_paths(
     Returns:
         List of GCS paths for the step inputs
     """
-    base_path = f"gs://{bucket}/gold/cvr_enrichment/{date_pattern}"
+    base_path = f"{bucket}/gold/cvr_enrichment/{date_pattern}"
 
     # Step-specific input logic
     if step == CVREnrichmentStep.COLLECTION:
@@ -596,7 +595,7 @@ def _get_traditional_input_paths(
             f"{base_path}/company_fetching.parquet",
             f"{base_path}/pnumber_fetching.parquet",
             # Financial docs use different dataset
-            f"gs://{bucket}/gold/cvr_enrichment_financial/{date_pattern}/financial_documents.parquet",
+            f"{bucket}/gold/cvr_enrichment_financial/{date_pattern}/financial_documents.parquet",
             f"{base_path}/address_geocoding.parquet",
         ]
 

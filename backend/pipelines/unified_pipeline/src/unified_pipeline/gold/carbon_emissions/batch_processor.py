@@ -7,7 +7,6 @@ Processes a subset of CVRs and writes results to parquet files.
 
 import json
 import logging
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -15,11 +14,6 @@ import duckdb
 
 # Setup logging
 logger = logging.getLogger(__name__)
-
-# Add current directory to path for local imports
-current_dir = Path(__file__).parent
-if str(current_dir) not in sys.path:
-    sys.path.insert(0, str(current_dir))
 
 
 class BatchProcessor:
@@ -51,7 +45,7 @@ class BatchProcessor:
     def loader(self):
         """Lazy-load the data loader."""
         if self._loader is None:
-            from data_loader import ClimateDataLoader
+            from .data_loader import ClimateDataLoader
 
             self._loader = ClimateDataLoader()
         return self._loader
@@ -60,7 +54,7 @@ class BatchProcessor:
     def calculator(self):
         """Lazy-load the calculator."""
         if self._calculator is None:
-            from climate_calculator import FarmClimateCalculator
+            from .climate_calculator import FarmClimateCalculator
 
             self._calculator = FarmClimateCalculator(self.loader)
         return self._calculator
@@ -382,8 +376,8 @@ class BatchProcessor:
 
         # Upload to GCS if path provided
         if gcs_output_path:
-            self._upload_to_gcs(consolidated_file, gcs_output_path, "data.parquet")
-            self._upload_to_gcs(summary_file, gcs_output_path, "summary.json")
+            self._upload_to_storage(consolidated_file, gcs_output_path, "data.parquet")
+            self._upload_to_storage(summary_file, gcs_output_path, "summary.json")
 
         # Cleanup batch files
         if cleanup:
@@ -398,31 +392,32 @@ class BatchProcessor:
             "status": "completed",
             "summary": summary,
             "consolidated_file": str(consolidated_file),
-            "gcs_path": gcs_output_path,
+            "storage_path": gcs_output_path,
             "batches_consolidated": len(batch_files),
             "batches_missing": missing_batches,
         }
 
-    def _upload_to_gcs(self, local_file: Path, gcs_base_path: str, filename: str):
+    def _upload_to_storage(self, local_file: Path, storage_base_path: str, filename: str):
         """
-        Upload a file to GCS.
+        Upload a file to cloud storage using StorageAccess.
 
         Args:
             local_file: Local file path
-            gcs_base_path: GCS path (gs://bucket/prefix)
+            storage_base_path: Storage path (bucket/prefix)
             filename: Target filename
         """
-        try:
-            # Use gcloud for upload
-            import subprocess
+        from common.storage import StorageAccess
 
-            gcs_path = f"{gcs_base_path.rstrip('/')}/{filename}"
-            cmd = ["gcloud", "storage", "cp", str(local_file), gcs_path]
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-            logger.info(f"Uploaded {local_file} to {gcs_path}")
-        except Exception as e:
-            logger.error(f"Failed to upload {local_file} to GCS: {e}")
-            raise
+        storage = StorageAccess()
+        storage_path = f"{storage_base_path.rstrip('/')}/{filename}"
+        # Strip protocol prefix for s3fs
+        clean_path = storage_path
+        for prefix in ("r2://", "s3://"):
+            if clean_path.startswith(prefix):
+                clean_path = clean_path[len(prefix) :]
+                break
+        storage.fs.put(str(local_file), clean_path)
+        logger.info(f"Uploaded {local_file} to {storage_path}")
 
     def __del__(self):
         """Cleanup DuckDB connection on deletion."""
@@ -439,7 +434,7 @@ def consolidate_main():
 
     Usage:
         python -c "from batch_processor import consolidate_main; consolidate_main()" \
-            --year 2023 --batch-count 150 --gcs-output gs://bucket/gold/carbon_emissions_2023/timestamp/
+            --year 2023 --batch-count 150 --output bucket/gold/carbon_emissions_2023/timestamp/
     """
     import argparse
 

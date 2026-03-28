@@ -42,7 +42,7 @@ class BronzeStorageManager:
 
         Args:
             storage_manager: Storage manager for file operations
-            base_path: Base path for Bronze layer storage (ignored for GCS, used for local)
+            base_path: Base path for Bronze layer storage (ignored for R2, used for local)
         """
         self.storage_manager = storage_manager
         self.base_path = base_path
@@ -65,8 +65,8 @@ class BronzeStorageManager:
 
         # Store timestamp for use in create_folder_structure
         # The actual directory creation happens in create_folder_structure based on subfolder
-        if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
-            # GCS storage - use bronze as base
+        if self.storage_manager.storage_type.lower() == "r2":
+            # R2 storage - use bronze as base
             run_dir = Path("bronze")
         else:
             # Local storage - use base_path/bronze
@@ -194,7 +194,7 @@ class BronzeStorageManager:
             # Save the file
             self.storage_manager.save_file(content, file_path)
 
-            # Verify file was saved - add better error handling for GCS
+            # Verify file was saved - add better error handling for cloud storage
             try:
                 file_exists = self.storage_manager.file_exists(file_path)
                 if not file_exists:
@@ -202,11 +202,11 @@ class BronzeStorageManager:
                         f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage "
                         f"backend at {file_path}"
                     )
-                    # For GCS, try a brief retry since there might be eventual consistency issues
-                    if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
+                    # For cloud storage, try a brief retry since there might be eventual consistency issues
+                    if self.storage_manager.storage_type.lower() == "r2":
                         import time
 
-                        time.sleep(0.5)  # Brief wait for GCS consistency
+                        time.sleep(0.5)  # Brief wait for R2 consistency
                         file_exists = self.storage_manager.file_exists(file_path)
                         if file_exists:
                             logger.info(f"File verified after retry: {file_path}")
@@ -330,7 +330,7 @@ class BronzeStorageManager:
                 files[file_path.name] = file_path
 
             # For local storage, also check subdirectories
-            if self.storage_manager.storage_type.lower() != "gcs":
+            if self.storage_manager.storage_type.lower() != "r2":
                 for root, _, _ in os.walk(run_dir):
                     root_path = Path(root)
                     if root_path != run_dir:

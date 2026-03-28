@@ -2,7 +2,7 @@
 """
 Generate schema documentation from Parquet files.
 
-This script reads Parquet files from GCS (or local cache) and generates
+This script reads Parquet files from cloud storage (or local cache) and generates
 comprehensive schema documentation in Markdown format, suitable for
 Gemini File Search and human consumption.
 
@@ -10,9 +10,9 @@ Usage:
     python generate_schema_docs.py [--local-cache PATH] [--bucket BUCKET] [--output-dir DIR]
 
 Environment Variables:
-    GCS_BUCKET: Google Cloud Storage bucket name (default: landbruget-data)
-    GCS_ACCESS_KEY_ID: HMAC access key for GCS
-    GCS_SECRET_ACCESS_KEY: HMAC secret key for GCS
+    STORAGE_BUCKET: Cloud storage bucket name (default: landbruget-data)
+    R2_ACCESS_KEY_ID: HMAC access key for R2
+    R2_SECRET_ACCESS_KEY: HMAC secret key for R2
 """
 
 import argparse
@@ -44,13 +44,18 @@ class SchemaDocumentationGenerator:
 
         Args:
             output_dir: Directory for output markdown files
-            bucket_name: GCS bucket name (uses GCS_BUCKET env var if not provided)
+            bucket_name: Cloud storage bucket name (uses STORAGE_BUCKET env var if not provided)
             local_cache: Local cache directory for Parquet files
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.bucket_name = bucket_name or os.getenv("GCS_BUCKET", "landbruget-data")
+        self.bucket_name = (
+            bucket_name
+            or os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
         self.local_cache = Path(local_cache) if local_cache else None
 
         # Initialize DuckDB connection
@@ -58,34 +63,39 @@ class SchemaDocumentationGenerator:
         self._setup_duckdb()
 
     def _setup_duckdb(self) -> None:
-        """Setup DuckDB extensions and GCS authentication."""
+        """Setup DuckDB extensions and cloud storage authentication."""
         # Install required extensions
         with contextlib.suppress(Exception):
             self.conn.execute("INSTALL httpfs")
             self.conn.execute("LOAD httpfs")
 
-        # Setup GCS authentication if credentials available
-        gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-        gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+        # Setup R2 authentication if credentials available
+        try:
+            from common.storage.filesystem import setup_duckdb_cloud_auth
 
-        if gcs_access_key and gcs_secret_key:
-            with contextlib.suppress(Exception):
-                self.conn.execute(f"""
-                    CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
-                        TYPE GCS,
-                        KEY_ID '{gcs_access_key}',
-                        SECRET '{gcs_secret_key}'
-                    );
-                """)
-        else:
-            pass
+            setup_duckdb_cloud_auth(self.conn)
+        except ImportError:
+            # Fallback: try R2 credentials directly
+            r2_access_key = os.getenv("R2_ACCESS_KEY_ID")
+            r2_secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+            r2_account_id = os.getenv("R2_ACCOUNT_ID")
+            if r2_access_key and r2_secret_key and r2_account_id:
+                with contextlib.suppress(Exception):
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE SECRET r2_secret (
+                            TYPE r2,
+                            KEY_ID '{r2_access_key}',
+                            SECRET '{r2_secret_key}',
+                            ACCOUNT_ID '{r2_account_id}'
+                        );
+                    """)
 
     def discover_parquet_files(self, search_paths: list[str]) -> list[tuple[str, str]]:
         """
-        Discover Parquet files from GCS or local cache.
+        Discover Parquet files from cloud storage or local cache.
 
         Args:
-            search_paths: List of GCS paths or local directories to search
+            search_paths: List of cloud storage paths or local directories to search
 
         Returns:
             List of tuples (table_name, file_path)
@@ -93,35 +103,36 @@ class SchemaDocumentationGenerator:
         discovered_files = []
 
         for search_path in search_paths:
-            if search_path.startswith("gs://"):
-                # GCS path
-                discovered_files.extend(self._discover_gcs_files(search_path))
+            # Detect cloud paths: r2:// / s3:// prefix or bare bucket/path (not local filesystem)
+            _is_local = search_path.startswith(("/", "."))
+            _has_protocol = search_path.startswith(("r2://", "s3://"))
+            if _has_protocol or (not _is_local and "/" in search_path):
+                # Cloud storage path (bare bucket/path or protocol prefix)
+                discovered_files.extend(self._discover_storage_files(search_path))
             else:
                 # Local path
                 discovered_files.extend(self._discover_local_files(search_path))
 
         return discovered_files
 
-    def _discover_gcs_files(self, gcs_path: str) -> list[tuple[str, str]]:
-        """Discover Parquet files from GCS."""
+    def _discover_storage_files(self, storage_path: str) -> list[tuple[str, str]]:
+        """Discover Parquet files from cloud storage."""
         files = []
 
         try:
-            # Use DuckDB to list files in GCS
             query = f"""
                 SELECT DISTINCT file_path
-                FROM glob('{gcs_path}/**/*.parquet')
+                FROM glob('{storage_path}/**/*.parquet')
             """
             result = self.conn.execute(query).fetchall()
 
             for row in result:
                 file_path = row[0]
-                # Extract table name from path
                 table_name = self._extract_table_name(file_path)
                 files.append((table_name, file_path))
 
         except Exception:
-            log.debug("Could not discover GCS files")
+            log.debug("Could not discover cloud storage files")
 
         return files
 
@@ -141,8 +152,11 @@ class SchemaDocumentationGenerator:
 
     def _extract_table_name(self, file_path: str) -> str:
         """Extract a meaningful table name from file path."""
-        # Remove GCS prefix if present
-        path = file_path.replace("gs://", "").replace(self.bucket_name + "/", "")
+        # Strip protocol prefixes and bucket name
+        path = file_path
+        for prefix in ("r2://", "s3://"):
+            path = path.removeprefix(prefix)
+        path = path.removeprefix(self.bucket_name + "/")
 
         # Get the filename without extension
         filename = Path(path).stem
@@ -509,7 +523,7 @@ def main():
     )
     parser.add_argument(
         "--gcs-path",
-        help="GCS path pattern to search (e.g., gs://bucket/gold/**)",
+        help="GCS path pattern to search (e.g., bucket/gold/**)",
         action="append",
     )
     parser.add_argument(
@@ -530,18 +544,23 @@ def main():
     # Build search paths
     search_paths = []
 
-    if args.gcs_path:
-        search_paths.extend(args.gcs_path)
+    if args.storage_path:
+        search_paths.extend(args.storage_path)
     elif args.local_cache:
         search_paths.append(args.local_cache)
     elif args.local_path:
         search_paths.extend(args.local_path)
     else:
         # Default: search in common locations
-        bucket = args.bucket or os.getenv("GCS_BUCKET", "landbruget-data")
+        bucket = (
+            args.bucket
+            or os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
         default_paths = [
-            f"gs://{bucket}/gold",
-            f"gs://{bucket}/silver",
+            f"{bucket}/gold",
+            f"{bucket}/silver",
         ]
         search_paths.extend(default_paths)
 

@@ -44,7 +44,7 @@ cd pipelines/chr_pipeline && python main.py --step bronze
 - **DuckDB** (>= 1.5.0) — primary processing engine, not Pandas
 - **ibis-framework** — SQL abstraction
 - **Pydantic** — data validation
-- **Cloudflare R2** — cloud storage (S3-compatible, accessed via gcsfs)
+- **Cloudflare R2** — cloud storage (S3-compatible, accessed via s3fs)
 - **GitHub Actions** — pipeline orchestration
 
 ## Medallion Architecture
@@ -67,8 +67,8 @@ All pipelines depend on `common/` as an editable package (`pip install -e`).
 |--------|---------|
 | `duckdb_processor.py` | `SharedDuckDBProcessor` base class with spatial extension |
 | `crs_utils.py` | CRS constants (`DANISH_UTM`, `WGS84`), transform helpers |
-| `gcs/core.py` | `GCSDataAccess` class — R2 storage (read/write Parquet, CSV) |
-| `gcs/filesystem.py` | gcsfs setup + DuckDB fsspec registration |
+| `storage/core.py` | `StorageAccess` class — R2 storage (read/write Parquet, CSV) |
+| `storage/filesystem.py` | s3fs setup + DuckDB fsspec registration |
 | `storage_interface.py` | `StoragePath` class (supports `gs://` and `r2://`) |
 | `logging_utils.py` | `setup_pipeline_logger()` |
 | `retry_utils.py` | Retry logic for transient failures |
@@ -136,7 +136,7 @@ python -m pytest -v -k test_name      # Specific test
 
 - Each pipeline has its own `tests/` and `conftest.py`
 - Common fixtures in `common/tests/conftest.py`: `mock_duckdb_connection`, `mock_gcs_filesystem`, `sample_danish_geometries`
-- Markers: `pre_merge` (blocking), `gcs_required` (needs credentials)
+- Markers: `pre_merge` (blocking), `cloud_required` (needs credentials)
 
 ## Linting
 
@@ -160,8 +160,8 @@ Each pipeline loads its own env vars — no global config:
 ```python
 from dotenv import load_dotenv
 load_dotenv()
-# StoragePath checks R2_BUCKET first, then GCS_BUCKET as fallback
-bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbrugsdata")
+# StoragePath checks STORAGE_BUCKET first, then R2_BUCKET, then GCS_BUCKET as fallback
+bucket = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 ```
 
 ## Guidelines

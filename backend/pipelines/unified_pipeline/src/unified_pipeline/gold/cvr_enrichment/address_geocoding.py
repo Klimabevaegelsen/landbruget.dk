@@ -235,7 +235,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 else:
                     # Use GCS temp download for local development
                     self.log.info(f"Local development - downloading from GCS: {input_path}")
-                    with self.gcs_access._temp_download(input_path) as temp_file:
+                    with self.storage._temp_download(input_path) as temp_file:
                         local_path = temp_file
 
                         if is_company_data:
@@ -899,9 +899,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         # Save addresses table to GCS using standard CVR enrichment pattern
         timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
-        gcs_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}/{timestamp}/address_geocoding.parquet"
-        self.gcs_access.upload_from_duckdb_table(table_name, gcs_path)
-        self.log.info(f"✅ Saved to GCS: {gcs_path}")
+        storage_path = (
+            f"{self.config.bucket}/gold/{self.config.dataset}/{timestamp}/address_geocoding.parquet"
+        )
+        self.storage.upload_from_duckdb_table(table_name, storage_path)
+        self.log.info(f"✅ Saved to GCS: {storage_path}")
 
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
@@ -918,16 +920,16 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         company_table = "cvr_companies_with_geocoding"
 
         # Get the company data path - find most recent company data
-        from common.gcs import GCSDataAccess
+        from common.storage import StorageAccess
 
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
             _find_latest_file_with_pattern,
         )
 
-        gcs_access = GCSDataAccess()
-        company_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+        storage_access = StorageAccess()
+        company_pattern = f"{self.config.bucket}/gold/cvr_enrichment_companies/*/data.parquet"
         company_input_path = _find_latest_file_with_pattern(
-            gcs_access, company_pattern, self.config.shared_config.max_days_back_for_inputs
+            storage_access, company_pattern, self.config.shared_config.max_days_back_for_inputs
         )
 
         if not company_input_path:
@@ -939,7 +941,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         try:
             # Create table from GCS company data
-            self.gcs_access.create_table_from_gcs("existing_companies", company_input_path)
+            self.storage.create_table_from_storage("existing_companies", company_input_path)
 
             # 🐛 DEBUG: Check what columns we loaded
             columns_loaded = self.conn.execute("DESCRIBE existing_companies").fetchall()
@@ -1163,14 +1165,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
             # Save updated company table back to GCS
             timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
-            gcs_path = (
-                f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
+            storage_path = (
+                f"{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
             )
 
             # 🔧 FIX: Ensure the companies table is actually saved after geocoding updates
             try:
-                self.gcs_access.upload_from_duckdb_table(company_table, gcs_path)
-                self.log.info(f"✅ Saved updated companies table to GCS: {gcs_path}")
+                self.storage.upload_from_duckdb_table(company_table, storage_path)
+                self.log.info(f"✅ Saved updated companies table to GCS: {storage_path}")
 
                 # Verify the upload worked by checking table count
                 table_count = self.conn.execute(f"SELECT COUNT(*) FROM {company_table}").fetchone()[
@@ -1205,16 +1207,16 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         pnumber_table = "cvr_pnumbers_with_geocoding"
 
         # Get the pnumber data path - find most recent pnumber data
-        from common.gcs import GCSDataAccess
+        from common.storage import StorageAccess
 
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
             _find_latest_file_with_pattern,
         )
 
-        gcs_access = GCSDataAccess()
-        pnumber_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
+        storage_access = StorageAccess()
+        pnumber_pattern = f"{self.config.bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
         pnumber_input_path = _find_latest_file_with_pattern(
-            gcs_access, pnumber_pattern, self.config.shared_config.max_days_back_for_inputs
+            storage_access, pnumber_pattern, self.config.shared_config.max_days_back_for_inputs
         )
 
         if not pnumber_input_path:
@@ -1226,7 +1228,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         try:
             # Create table from GCS pnumber data
-            self.gcs_access.create_table_from_gcs("existing_pnumbers", pnumber_input_path)
+            self.storage.create_table_from_storage("existing_pnumbers", pnumber_input_path)
 
             # 🐛 DEBUG: Check what columns we loaded
             columns_loaded = self.conn.execute("DESCRIBE existing_pnumbers").fetchall()
@@ -1319,11 +1321,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
             # Save updated pnumber table back to GCS
             timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
-            gcs_path = (
-                f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/{timestamp}/data.parquet"
+            storage_path = (
+                f"{self.config.bucket}/gold/cvr_enrichment_pnumbers/{timestamp}/data.parquet"
             )
-            self.gcs_access.upload_from_duckdb_table(pnumber_table, gcs_path)
-            self.log.info(f"✅ Saved to GCS: {gcs_path}")
+            self.storage.upload_from_duckdb_table(pnumber_table, storage_path)
+            self.log.info(f"✅ Saved to GCS: {storage_path}")
 
             self.log.info("Updated pnumber table with geocoding data")
 
@@ -1335,8 +1337,6 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # No batching - single summary file
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/address_summary.json"
 
-        self.gcs_access.upload_json(
-            data=summary, gcs_path=f"gs://{self.config.bucket}/{summary_path}"
-        )
+        self.storage.upload_json(data=summary, storage_path=f"{self.config.bucket}/{summary_path}")
 
         self.log.info(f"Saved processing summary to {summary_path}")

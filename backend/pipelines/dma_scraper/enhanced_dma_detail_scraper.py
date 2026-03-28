@@ -627,7 +627,7 @@ class FullDMAPipeline:
             logger.info("📤 Uploading data to storage...")
             r2_path = f"landbruget-data/bronze/dma/{self.timestamp}/"
             try:
-                from common.gcs.filesystem import get_r2_filesystem
+                from common.storage.filesystem import get_r2_filesystem
 
                 fs = get_r2_filesystem()
                 fs.put(str(self.session_dir), r2_path, recursive=True)

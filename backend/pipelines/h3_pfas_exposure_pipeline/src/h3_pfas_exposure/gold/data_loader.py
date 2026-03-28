@@ -13,46 +13,48 @@ from ..config import H3SpatialConfig
 class H3DataLoader:
     """Handles data loading from GCS and local sources."""
 
-    def __init__(self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, gcs_access=None):
+    def __init__(
+        self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, storage_access=None
+    ):
         self.conn = conn
         self.config = config
-        self.gcs_access = gcs_access
+        self.storage = storage_access
         self.log = logger.bind(component="H3DataLoader")
 
-    def _load_table_from_gcs(self, gcs_path: str, table_name: str):
+    def _load_table_from_storage(self, storage_path: str, table_name: str):
         """Load data from GCS into a DuckDB table using optimized GCS access - WITH CLEANUP."""
         try:
             # 🚀 ENHANCED: Use native HMAC acceleration for faster H3 PFAS data loading
             try:
-                self.gcs_access.query_parquet_native(gcs_path, "SELECT *", table_name)
+                self.storage.query_parquet_native(storage_path, "SELECT *", table_name)
             except Exception as e:
                 self.log.warning(f"Native loading failed for {table_name}, using fallback: {e}")
                 # Fallback to existing temp file method
-                with self.gcs_access._temp_download(gcs_path) as temp_file:
+                with self.storage._temp_download(storage_path) as temp_file:
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE {table_name} AS
                         SELECT * FROM read_parquet('{temp_file}')
                     """)
-            self.log.debug(f"✅ Loaded {table_name} from {gcs_path}")
+            self.log.debug(f"✅ Loaded {table_name} from {storage_path}")
 
             # Force garbage collection after loading large files
             gc.collect()
 
         except Exception as e:
-            self.log.error(f"❌ Failed to load {table_name} from {gcs_path}: {e}")
+            self.log.error(f"❌ Failed to load {table_name} from {storage_path}: {e}")
             raise
 
     def _get_latest_silver_path(self, dataset: str) -> str:
         """Get path to latest silver data file."""
         # Try new standardized format first
-        pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
-        files = self.gcs_access.list_files(pattern)
+        pattern = f"{self.config.bucket}/silver/{dataset}/*/data.parquet"
+        files = self.storage.list_files(pattern)
 
         if not files:
             # Fallback to legacy format for backward compatibility
             self.log.warning(f"No new format files found for {dataset}, trying legacy format")
-            legacy_pattern = f"gs://{self.config.bucket}/silver/{dataset}/*.parquet"
-            files = self.gcs_access.list_files(legacy_pattern)
+            legacy_pattern = f"{self.config.bucket}/silver/{dataset}/*.parquet"
+            files = self.storage.list_files(legacy_pattern)
 
             if files:
                 self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
@@ -65,12 +67,12 @@ class H3DataLoader:
             )
             # Try BMD-specific patterns
             bmd_patterns = [
-                f"gs://{self.config.bucket}/silver/{dataset}/*/pesticide_products.parquet",
-                f"gs://{self.config.bucket}/silver/{dataset}/*/bmd_data_*.parquet",
+                f"{self.config.bucket}/silver/{dataset}/*/pesticide_products.parquet",
+                f"{self.config.bucket}/silver/{dataset}/*/bmd_data_*.parquet",
             ]
 
             for pattern in bmd_patterns:
-                files = self.gcs_access.list_files(pattern)
+                files = self.storage.list_files(pattern)
                 if files:
                     self.log.info(f"Found BMD files with pattern {pattern}: {len(files)} files")
                     return sorted(files)[-1]  # Latest by timestamp
@@ -83,8 +85,8 @@ class H3DataLoader:
     def _get_latest_gold_path(self, dataset: str, year: int) -> str:
         """Get path to latest gold data file for a specific year."""
         # Try new standardized format first
-        pattern = f"gs://{self.config.bucket}/gold/{dataset}/{year}/*/data.parquet"
-        files = self.gcs_access.list_files(pattern)
+        pattern = f"{self.config.bucket}/gold/{dataset}/{year}/*/data.parquet"
+        files = self.storage.list_files(pattern)
 
         if not files:
             # Try the actual unified pipeline format: dataset_year/timestamp/dataset_year.parquet
@@ -92,9 +94,9 @@ class H3DataLoader:
                 f"No new format files found for {dataset} {year}, trying unified pipeline format"
             )
             unified_pattern = (
-                f"gs://{self.config.bucket}/gold/{dataset}_{year}/*/{dataset}_{year}.parquet"
+                f"{self.config.bucket}/gold/{dataset}_{year}/*/{dataset}_{year}.parquet"
             )
-            files = self.gcs_access.list_files(unified_pattern)
+            files = self.storage.list_files(unified_pattern)
 
             if files:
                 self.log.info(
@@ -108,8 +110,8 @@ class H3DataLoader:
             self.log.warning(
                 f"No unified format files found for {dataset} {year}, trying Y+1 pattern format"
             )
-            y_plus_1_pattern = f"gs://{self.config.bucket}/gold/{dataset}_{year}_{year + 1}/*/{dataset}_{year}_{year + 1}.parquet"
-            files = self.gcs_access.list_files(y_plus_1_pattern)
+            y_plus_1_pattern = f"{self.config.bucket}/gold/{dataset}_{year}_{year + 1}/*/{dataset}_{year}_{year + 1}.parquet"
+            files = self.storage.list_files(y_plus_1_pattern)
 
             if files:
                 self.log.info(
@@ -122,8 +124,8 @@ class H3DataLoader:
             self.log.warning(
                 f"No unified format files found for {dataset} {year}, trying legacy format"
             )
-            legacy_pattern = f"gs://{self.config.bucket}/gold/{dataset}/*{year}*.parquet"
-            files = self.gcs_access.list_files(legacy_pattern)
+            legacy_pattern = f"{self.config.bucket}/gold/{dataset}/*{year}*.parquet"
+            files = self.storage.list_files(legacy_pattern)
 
             if files:
                 self.log.info(f"Found legacy format files for {dataset} {year}: {len(files)} files")
@@ -135,10 +137,10 @@ class H3DataLoader:
 
         return sorted(files)[-1]  # Latest by timestamp
 
-    def _check_gcs_path_exists(self, path: str) -> bool:
+    def _check_storage_path_exists(self, path: str) -> bool:
         """Check if a GCS path exists and has data."""
         try:
-            return self.gcs_access.file_exists(path)
+            return self.storage.file_exists(path)
         except Exception as e:
             self.log.debug(f"Error checking GCS path {path}: {e}")
             return False
@@ -146,15 +148,13 @@ class H3DataLoader:
     def _check_year_data_availability(self, year: int) -> bool:
         """Check if required data is available for a given year."""
         # Check pesticide disaggregation data for year Y
-        pesticide_path = (
-            f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
-        )
-        pesticide_available = self._check_gcs_path_exists(pesticide_path)
+        pesticide_path = f"{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
+        pesticide_available = self._check_storage_path_exists(pesticide_path)
 
         # Check FVM marker data for year Y+1 (Y+1 pattern)
         field_year = year + 1
-        field_path = f"gs://{self.config.bucket}/silver/fvm_marker_{field_year}/"
-        field_available = self._check_gcs_path_exists(field_path)
+        field_path = f"{self.config.bucket}/silver/fvm_marker_{field_year}/"
+        field_available = self._check_storage_path_exists(field_path)
 
         self.log.info(f"📊 Year {year} data availability (Y+1 pattern):")
         self.log.info(
@@ -179,7 +179,7 @@ class H3DataLoader:
 
         return available_years
 
-    def load_bmd_data_from_gcs(self) -> str:
+    def load_bmd_data_from_storage(self) -> str:
         """Load BMD data from GCS - CACHED to avoid reloading."""
         self.log.info("🧪 Loading BMD pesticide data from GCS")
 
@@ -192,7 +192,7 @@ class H3DataLoader:
 
         # Load BMD data directly from GCS
         temp_bmd_table = "temp_bmd_raw"
-        self._load_table_from_gcs(bmd_path, temp_bmd_table)
+        self._load_table_from_storage(bmd_path, temp_bmd_table)
 
         # Process BMD data - use existing PFAS, diquat, and glyphosate detection from BMD pipeline
         self.conn.execute("""
@@ -250,7 +250,7 @@ class H3DataLoader:
 
         return "bmd_pfas_lookup"
 
-    def load_and_prepare_fields_from_gcs(self, field_year: int, pesticide_year: int) -> str:
+    def load_and_prepare_fields_from_storage(self, field_year: int, pesticide_year: int) -> str:
         """Load FVM field data from GCS and prepare for spatial intersection."""
         self.log.info(f"📄 Loading FVM field data for year {field_year} from GCS")
 
@@ -261,7 +261,7 @@ class H3DataLoader:
 
         # Load into temporary table
         temp_table = f"temp_fvm_{field_year}"
-        self._load_table_from_gcs(silver_path, temp_table)
+        self._load_table_from_storage(silver_path, temp_table)
 
         # Get pesticide field lookup for filtering
         pesticide_path = self._get_latest_gold_path("pesticide_disaggregation", pesticide_year)
@@ -270,7 +270,7 @@ class H3DataLoader:
                 f"🔗 Filtering FVM fields to only those with pesticide data from {pesticide_year}"
             )
             temp_pesticide_table = f"temp_pesticide_lookup_{pesticide_year}"
-            self._load_table_from_gcs(pesticide_path, temp_pesticide_table)
+            self._load_table_from_storage(pesticide_path, temp_pesticide_table)
 
             # Check what CVR column exists in pesticide data
             pest_lookup_columns = self.conn.execute(
@@ -413,7 +413,7 @@ class H3DataLoader:
 
         return "prepared_fields"
 
-    def load_pesticide_disaggregation_from_gcs(self, year: int) -> str:
+    def load_pesticide_disaggregation_from_storage(self, year: int) -> str:
         """Load pesticide disaggregation data from GCS for a specific year."""
         table_name = f"pesticides_{year}"
 
@@ -429,7 +429,7 @@ class H3DataLoader:
 
         # Load pesticide data directly from GCS
         temp_pesticides_table = "temp_pesticides_raw"
-        self._load_table_from_gcs(full_path, temp_pesticides_table)
+        self._load_table_from_storage(full_path, temp_pesticides_table)
 
         # Check available columns and handle both old and new standardized names
         pest_columns = self.conn.execute("PRAGMA table_info(temp_pesticides_raw)").fetchall()

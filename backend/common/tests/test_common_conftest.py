@@ -22,17 +22,17 @@ def test_temp_dir_fixture(temp_dir):
     assert test_file.read_text() == "test content"
 
 
-def test_mock_gcs_filesystem(mock_gcs_filesystem):
-    """Test that mock_gcs_filesystem provides expected interface."""
+def test_mock_cloud_filesystem(mock_cloud_filesystem):
+    """Test that mock_cloud_filesystem provides expected interface."""
     # Should have common GCS methods
-    assert hasattr(mock_gcs_filesystem, "ls")
-    assert hasattr(mock_gcs_filesystem, "exists")
-    assert hasattr(mock_gcs_filesystem, "open")
-    assert hasattr(mock_gcs_filesystem, "put")
+    assert hasattr(mock_cloud_filesystem, "ls")
+    assert hasattr(mock_cloud_filesystem, "exists")
+    assert hasattr(mock_cloud_filesystem, "open")
+    assert hasattr(mock_cloud_filesystem, "put")
 
     # Should track uploaded files
-    assert hasattr(mock_gcs_filesystem, "uploaded_files")
-    assert isinstance(mock_gcs_filesystem.uploaded_files, dict)
+    assert hasattr(mock_cloud_filesystem, "uploaded_files")
+    assert isinstance(mock_cloud_filesystem.uploaded_files, dict)
 
 
 def test_mock_duckdb_connection(mock_duckdb_connection):

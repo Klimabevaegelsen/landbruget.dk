@@ -343,7 +343,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 """).fetchall()
             else:
                 # Load CVR numbers directly from R2 using DuckDB (fallback)
-                duckdb_collection_path = collection_path.replace("gs://", "r2://", 1)
+                duckdb_collection_path = "r2://" + collection_path
                 result = self.conn.execute(f"""
                     SELECT cvr_number, collection_metadata
                     FROM read_parquet('{duckdb_collection_path}')
@@ -596,8 +596,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Fetch company data for this batch
         company_data = await self._fetch_company_data(cvr_batch)
 
-        # Save raw data immediately to GCS (minimal processing, maximum memory efficiency)
-        self._save_raw_batch_to_gcs(company_data, batch_idx, total_batches)
+        # Save raw data immediately to storage (minimal processing, maximum memory efficiency)
+        self._save_raw_batch_to_storage(company_data, batch_idx, total_batches)
 
         # Return batch stats
         return {
@@ -777,12 +777,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         self.log.debug(f"Appended {len(companies_data)} companies to output tables")
 
-    @timed(name="Saving raw batch to GCS")
-    def _save_raw_batch_to_gcs(
+    @timed(name="Saving raw batch to storage")
+    def _save_raw_batch_to_storage(
         self, company_data: dict[str, Any], batch_idx: int, total_batches: int
     ) -> None:
         """
-        Save raw API response data immediately to GCS with minimal processing.
+        Save raw API response data immediately to storage with minimal processing.
 
         This approach saves raw JSON responses directly, keeping memory usage minimal
         and deferring all processing to separate parsing/enrichment steps.
@@ -841,14 +841,14 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Running as part of split GitHub Actions job - use part subdirectory
-                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
                 else:
                     # Running as single job - use flat structure
-                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
-                self.gcs_access.upload_from_duckdb_table(
+                self.storage.upload_from_duckdb_table(
                     batch_table_name,
-                    raw_gcs_path,
+                    raw_storage_path,
                     compression="zstd",
                     row_group_size=100000,
                 )
@@ -1056,12 +1056,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Running as part of split job - use part subdirectory
-                    raw_gcs_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
                 else:
                     # Running as single job - use flat structure
-                    raw_gcs_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
-                raw_batch_patterns.append(raw_gcs_path)
+                raw_batch_patterns.append(raw_storage_path)
 
             if raw_batch_patterns:
                 # Create consolidated raw data table
@@ -1081,8 +1081,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Save part-specific consolidated file
-                    raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/consolidated.parquet"
-                    self.gcs_access.upload_from_duckdb_table(
+                    raw_final_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/consolidated.parquet"
+                    self.storage.upload_from_duckdb_table(
                         consolidated_table,
                         raw_final_path,
                         compression="zstd",
@@ -1101,8 +1101,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                         self.log.info(f"💾 Saved part {ga_batch} data to artifact: {local_path}")
                 else:
                     # Save to standard bronze location (single job mode)
-                    raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
-                    self.gcs_access.upload_from_duckdb_table(
+                    raw_final_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
+                    self.storage.upload_from_duckdb_table(
                         consolidated_table,
                         raw_final_path,
                         compression="zstd",
@@ -1227,13 +1227,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Running as part of split job - use part subdirectory
-                    raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                    raw_batch_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
                 else:
                     # Running as single job - use flat structure
-                    raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                    raw_batch_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
                 try:
-                    self.gcs_access.delete_file(raw_batch_path)
+                    self.storage.delete_file(raw_batch_path)
                     deleted_count += 1
                 except Exception:
                     pass  # Ignore deletion errors
@@ -1806,10 +1806,10 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
     def _load_batch_details(self) -> dict[str, Any]:
         """Load batch details from collection step."""
-        batch_details_path = f"gs://{self.config.bucket}/gold/cvr_enrichment_collection/{self.date_pattern}/batch_details.json"
+        batch_details_path = f"{self.config.bucket}/gold/cvr_enrichment_collection/{self.date_pattern}/batch_details.json"
 
         try:
-            return self.gcs_access.download_json(batch_details_path)
+            return self.storage.download_json(batch_details_path)
         except Exception as e:
             self.log.error(f"Failed to load batch details from {batch_details_path}: {e}")
             raise
@@ -1916,8 +1916,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         """Save processing summary data."""
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/company_summary.json"
 
-        self.gcs_access.upload_json(
-            data=total_stats, gcs_path=f"gs://{self.config.bucket}/{summary_path}"
+        self.storage.upload_json(
+            data=total_stats, storage_path=f"{self.config.bucket}/{summary_path}"
         )
 
         self.log.info(f"Saved processing summary to {summary_path}")

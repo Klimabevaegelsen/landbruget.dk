@@ -2,7 +2,7 @@
 GCS Data Loader for Climate Tool
 
 This module loads data from GCS silver/gold layers for climate calculations.
-Uses the GCSDataAccess pattern from unified_pipeline for optimal performance.
+Uses the StorageAccess pattern from unified_pipeline for optimal performance.
 
 Data Sources (ACTUAL GCS structure from exploration):
 - Livestock data: silver/gr {year}/ (Green Accounts with space in path!)
@@ -24,7 +24,8 @@ Usage:
 import os
 
 import duckdb
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
+
 from unified_pipeline.util.log_util import Logger
 
 logger = Logger.get_logger()
@@ -44,15 +45,22 @@ class ClimateDataLoader:
     lazy evaluation and chaining of operations.
     """
 
-    def __init__(self, bucket: str | None = None):
+    def __init__(self, storage: StorageAccess | None = None, bucket: str | None = None):
         """
         Initialize the climate data loader.
 
         Args:
+            storage: Optional StorageAccess instance to reuse from parent pipeline.
+                     If None, creates a new StorageAccess().
             bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbruget-data'
         """
-        self.bucket = bucket or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-        self.gcs = GCSDataAccess()
+        self.bucket = (
+            bucket
+            or os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
+        self.gcs = storage if storage is not None else StorageAccess()
         logger.info(f"ClimateDataLoader initialized with bucket: {self.bucket}")
 
     def _empty_relation(self) -> duckdb.DuckDBPyRelation:
@@ -95,9 +103,7 @@ class ClimateDataLoader:
 
             # Green Accounts path - NOTE: has space in folder name!
             # DYRERK = Animal records (Dyre Regnskab)
-            pattern = (
-                f"gs://{self.bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet"
-            )
+            pattern = f"{self.bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -110,7 +116,7 @@ class ClimateDataLoader:
 
             # Create table in DuckDB
             table_name = "gr_livestock_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_storage(table_name, latest_file)
 
             # Query for specific CVR - use cvr_number column (not cvr)
             query = f"""
@@ -161,7 +167,7 @@ class ClimateDataLoader:
                 return None
 
             # Find FVM data for specific year
-            pattern = f"gs://{self.bucket}/silver/fvm_marker_{year}/*/data.parquet"
+            pattern = f"{self.bucket}/silver/fvm_marker_{year}/*/data.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -174,7 +180,7 @@ class ClimateDataLoader:
 
             # Create table in DuckDB
             table_name = "fvm_fields_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_storage(table_name, latest_file)
 
             # Query for specific CVR - FVM data uses cvr_number column
             query = f"""
@@ -228,7 +234,7 @@ class ClimateDataLoader:
 
             # GKEA fertilizer data - files named like GKEA2024_Markplan_med_Gødningsoplysninger.parquet
             # Located in: silver/fertiliser/{timestamp}/GKEA{year}_*.parquet
-            pattern = f"gs://{self.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
+            pattern = f"{self.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -236,7 +242,7 @@ class ClimateDataLoader:
                     f"No GKEA fertilizer data found for year {year} in pattern: {pattern}"
                 )
                 # Try without year filter
-                pattern_fallback = f"gs://{self.bucket}/silver/fertiliser/*/GKEA*.parquet"
+                pattern_fallback = f"{self.bucket}/silver/fertiliser/*/GKEA*.parquet"
                 files = self.gcs.list_files(pattern_fallback)
                 if files:
                     logger.info(f"Found {len(files)} GKEA files without year filter")
@@ -257,7 +263,7 @@ class ClimateDataLoader:
 
             # Create table in DuckDB
             table_name = "fertilizer_temp"
-            self.gcs.create_table_from_gcs(table_name, target_file)
+            self.gcs.create_table_from_storage(table_name, target_file)
 
             # Get column names to check for year column
             columns_rel = self.gcs.duckdb_conn.sql(f"SELECT * FROM {table_name} LIMIT 0")
@@ -299,7 +305,7 @@ class ClimateDataLoader:
             DuckDB relation with soil type polygons and geometries, or None if not found
         """
         try:
-            pattern = f"gs://{self.bucket}/silver/soil_types/*/data.parquet"
+            pattern = f"{self.bucket}/silver/soil_types/*/data.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -311,7 +317,7 @@ class ClimateDataLoader:
             logger.info(f"Loading soil types from: {latest_file}")
 
             table_name = "soil_types_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_storage(table_name, latest_file)
 
             # Select all columns
             query = f"""
@@ -360,7 +366,7 @@ class ClimateDataLoader:
             cvr_padded = str(cvr).zfill(8)
 
             # Use pre-computed field-wetland intersections from gold layer
-            pattern = f"gs://{self.bucket}/gold/field_analysis_field_wetland_intersections_{year}/*/data.parquet"
+            pattern = f"{self.bucket}/gold/field_analysis_field_wetland_intersections_{year}/*/data.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -372,7 +378,7 @@ class ClimateDataLoader:
             logger.info(f"Loading field-wetland intersections from: {latest_file}")
 
             table_name = "field_wetland_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_storage(table_name, latest_file)
 
             # Query for this CVR with carbon percentage mapping
             # First check what columns are available
@@ -436,7 +442,7 @@ class ClimateDataLoader:
                     FROM data
                 """
                 # Re-create table for stats query since we dropped it
-                self.gcs.create_table_from_gcs(table_name, latest_file)
+                self.gcs.create_table_from_storage(table_name, latest_file)
                 stats = self.gcs.duckdb_conn.sql(stats_query).fetchone()
                 self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
@@ -546,7 +552,7 @@ class ClimateDataLoader:
                 }
 
             # Load organic areas for the year
-            pattern = f"gs://{self.bucket}/silver/fvm_organic_areas_{year}/*/data.parquet"
+            pattern = f"{self.bucket}/silver/fvm_organic_areas_{year}/*/data.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -565,7 +571,7 @@ class ClimateDataLoader:
 
             # Create table
             table_name = "organic_areas_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_storage(table_name, latest_file)
 
             # Query for fields with organic certification
             # Check if conversion_status = 1 (fully converted to organic)
@@ -649,7 +655,9 @@ class ClimateDataLoader:
             cvr_padded = str(cvr).zfill(8)
 
             # Use NLES5 nitrogen estimation from gold layer
-            pattern = f"gs://{self.bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/*/data.parquet"
+            pattern = (
+                f"{self.bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/*/data.parquet"
+            )
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -661,7 +669,7 @@ class ClimateDataLoader:
             logger.info(f"Loading NLES5 nitrogen data from: {latest_file}")
 
             table_name = "nles5_nitrogen_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_storage(table_name, latest_file)
 
             # Query for this CVR
             query = f"""
@@ -692,7 +700,7 @@ class ClimateDataLoader:
 
             if row_count > 0:
                 # Calculate average using DuckDB - need to recreate table
-                self.gcs.create_table_from_gcs(table_name, latest_file)
+                self.gcs.create_table_from_storage(table_name, latest_file)
                 avg_query = f"""
                     SELECT AVG(nitrogen_washout_kg_ha) as avg_n
                     FROM {table_name}
@@ -724,7 +732,7 @@ class ClimateDataLoader:
         """
         try:
             # DMI climate data might be structured by location/year
-            pattern = f"gs://{self.bucket}/silver/dmi/*/data.parquet"
+            pattern = f"{self.bucket}/silver/dmi/*/data.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -737,7 +745,7 @@ class ClimateDataLoader:
 
             # Create table and query (implementation depends on DMI data structure)
             table_name = "dmi_climate_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_storage(table_name, latest_file)
 
             query = f"SELECT * FROM {table_name} WHERE year = {year}"
             result_rel = self.gcs.duckdb_conn.sql(query)
@@ -781,7 +789,7 @@ class ClimateDataLoader:
             cvr_str = str(cvr).zfill(8)
 
             # Load herd owners mapping (CVR -> herd_number)
-            herd_owners_pattern = f"gs://{self.bucket}/silver/chr_herd_owners*.parquet"
+            herd_owners_pattern = f"{self.bucket}/silver/chr_herd_owners*.parquet"
             herd_owners_files = self.gcs.list_files(herd_owners_pattern)
 
             if not herd_owners_files:
@@ -789,9 +797,7 @@ class ClimateDataLoader:
                 return None
 
             # Load animal movements (herd_number -> breed)
-            animal_movements_pattern = (
-                f"gs://{self.bucket}/silver/chr_dyr_animal_movements*.parquet"
-            )
+            animal_movements_pattern = f"{self.bucket}/silver/chr_dyr_animal_movements*.parquet"
             animal_movements_files = self.gcs.list_files(animal_movements_pattern)
 
             if not animal_movements_files:
@@ -799,8 +805,10 @@ class ClimateDataLoader:
                 return None
 
             # Create tables
-            self.gcs.create_table_from_gcs("chr_herd_owners_temp", sorted(herd_owners_files)[-1])
-            self.gcs.create_table_from_gcs(
+            self.gcs.create_table_from_storage(
+                "chr_herd_owners_temp", sorted(herd_owners_files)[-1]
+            )
+            self.gcs.create_table_from_storage(
                 "chr_animal_movements_temp", sorted(animal_movements_files)[-1]
             )
 
@@ -850,7 +858,7 @@ class ClimateDataLoader:
         """
         try:
             if dataset == "fvm_marker":
-                pattern = f"gs://{self.bucket}/silver/fvm_marker_*/*/*.parquet"
+                pattern = f"{self.bucket}/silver/fvm_marker_*/*/*.parquet"
                 files = self.gcs.list_files(pattern)
                 years = set()
 
@@ -888,9 +896,9 @@ class ClimateDataLoader:
         """
         try:
             if dataset.startswith("fvm_marker_"):
-                pattern = f"gs://{self.bucket}/silver/{dataset}/*/data.parquet"
+                pattern = f"{self.bucket}/silver/{dataset}/*/data.parquet"
             else:
-                pattern = f"gs://{self.bucket}/silver/{dataset}/*/*.parquet"
+                pattern = f"{self.bucket}/silver/{dataset}/*/*.parquet"
 
             files = self.gcs.list_files(pattern)
 
@@ -916,7 +924,7 @@ class ClimateDataLoader:
         """Cleanup DuckDB connection on deletion."""
         try:
             if hasattr(self, "gcs") and self.gcs:
-                # GCSDataAccess handles its own cleanup
+                # StorageAccess handles its own cleanup
                 pass
         except Exception:
             pass

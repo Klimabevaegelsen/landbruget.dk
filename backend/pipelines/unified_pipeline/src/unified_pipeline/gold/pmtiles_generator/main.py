@@ -32,7 +32,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
 
         # Use inherited DuckDB connection and GCS access from BaseSource
         self.duckdb_conn = self.conn
-        # self.gcs_access is already available from BaseSource
+        # self.storage is already available from BaseSource
         self.year_detector = None
         self.data_loader = None
         self.field_generator = None
@@ -44,12 +44,12 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         """Setup pipeline components."""
         logger.info("Setting up PMTiles generator pipeline")
 
-        # Ensure GCS credentials are properly configured for DuckDB
-        self._ensure_gcs_credentials()
+        # Ensure storage credentials are properly configured for DuckDB
+        self._ensure_storage_credentials()
 
         # Initialize components
-        self.year_detector = DataSourceYearDetector(self.config, self.gcs_access)
-        self.data_loader = PMTilesDataLoader(self.config, self.gcs_access, self.duckdb_conn)
+        self.year_detector = DataSourceYearDetector(self.config, self.storage)
+        self.data_loader = PMTilesDataLoader(self.config, self.storage, self.duckdb_conn)
         self.field_generator = FieldAnalysisPMTilesGenerator(
             self.config, self.data_loader, self.duckdb_conn
         )
@@ -66,12 +66,12 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
 
         logger.info("Pipeline setup completed")
 
-    def _ensure_gcs_credentials(self):
+    def _ensure_storage_credentials(self):
         """Ensure cloud storage credentials are properly configured for DuckDB.
 
         Uses the shared setup_duckdb_cloud_auth which tries R2 first, then GCS HMAC.
         """
-        from common.gcs.filesystem import setup_duckdb_cloud_auth
+        from common.storage.filesystem import setup_duckdb_cloud_auth
 
         if setup_duckdb_cloud_auth(self.duckdb_conn):
             logger.info("DuckDB cloud storage authentication configured")

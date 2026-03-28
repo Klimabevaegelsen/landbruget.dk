@@ -3,17 +3,10 @@ Beregning af afgrøderester på marken (N og CO2e).
 """
 
 import json
-import sys
 from pathlib import Path
-from pathlib import Path as SysPath
 from typing import Any
 
-# Add climate root to path for imports
-_climate_root = SysPath(__file__).resolve().parent.parent.parent
-if str(_climate_root) not in sys.path:
-    sys.path.insert(0, str(_climate_root))
-
-from crop_parameters import get_crop_params  # noqa: E402
+from ...crop_parameters import get_crop_params
 
 
 # Utility function to load data from JSON files

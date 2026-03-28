@@ -93,6 +93,7 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      STORAGE_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
@@ -316,6 +317,7 @@ jobs:
     name: Pesticide Processing Year ${{ matrix.year }}
     env:
       ENVIRONMENT: production
+      STORAGE_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}

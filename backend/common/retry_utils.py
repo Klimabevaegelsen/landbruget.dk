@@ -17,7 +17,7 @@ Example Usage:
 ```python
 from common.retry_utils import (
     retry_api_call,
-    retry_gcs_operation,
+    retry_storage_operation,
     create_custom_retry,
     is_retryable_error,
 )
@@ -29,9 +29,9 @@ def fetch_from_api(url: str) -> dict:
     response.raise_for_status()
     return response.json()
 
-# For GCS operations
-@retry_gcs_operation
-def upload_to_gcs(bucket, blob_name, data):
+# For storage operations
+@retry_storage_operation
+def upload_to_storage(bucket, blob_name, data):
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
 
@@ -54,7 +54,7 @@ Retry Strategy Guidelines:
 | Operation Type      | Max Attempts | Initial Wait | Max Wait | Retry On              |
 |---------------------|--------------|--------------|----------|-----------------------|
 | External API        | 3            | 1s           | 30s      | 5xx, network errors   |
-| GCS Operations      | 5            | 1s           | 60s      | 5xx, network, timeout |
+| Storage Operations  | 5            | 1s           | 60s      | 5xx, network, timeout |
 | Database Operations | 3            | 0.5s         | 10s      | Connection errors     |
 | Rate Limited APIs   | 5            | 5s           | 120s     | 429 only              |
 
@@ -175,8 +175,8 @@ Usage:
 """
 
 
-# Retry for GCS operations (more patient)
-retry_gcs_operation = retry(
+# Retry for storage operations (more patient)
+retry_storage_operation = retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=1, max=60),
     retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
@@ -184,7 +184,7 @@ retry_gcs_operation = retry(
     after=after_log(logger, logging.DEBUG),
     reraise=True,
 )
-"""Retry decorator for Google Cloud Storage operations.
+"""Retry decorator for cloud storage operations.
 
 Configuration:
 - Max attempts: 5
@@ -192,7 +192,7 @@ Configuration:
 - Retries on: Network errors
 
 Usage:
-    @retry_gcs_operation
+    @retry_storage_operation
     def upload_file(bucket, blob_name, data):
         blob = bucket.blob(blob_name)
         blob.upload_from_string(data)

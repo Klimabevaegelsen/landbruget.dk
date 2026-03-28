@@ -7,6 +7,8 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+
+pytest.importorskip("google.auth", reason="google-auth not installed")
 from drive_data_pipeline.bronze.drive.auth import get_drive_service
 from googleapiclient.discovery import Resource
 

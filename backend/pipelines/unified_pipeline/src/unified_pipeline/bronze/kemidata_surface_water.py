@@ -194,16 +194,16 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         wait=wait_exponential(multiplier=2, min=10, max=120),
         stop=stop_after_attempt(3),
     )
-    async def _download_csv_to_gcs(
+    async def _download_csv_to_storage(
         self, session: aiohttp.ClientSession, session_id: str
     ) -> tuple[str, int]:
         """
-        Download the full CSV export from Kemidata and stream directly to GCS.
+        Download the full CSV export from Kemidata and stream directly to storage.
 
         Streams the response in chunks to avoid holding 100MB+ in memory.
 
         Returns:
-            Tuple of (relative GCS path, total bytes written).
+            Tuple of (relative storage path, total bytes written).
         """
         body = self._build_download_body(session_id)
         self.log.info("Downloading CSV from Kemidata (this may take a while)...")
@@ -222,24 +222,24 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                 raise Exception(f"Download failed: HTTP {resp.status} — {err_text[:500]}")
 
             total_bytes = 0
-            with self.gcs_access.fs.open(storage_path, "wb") as gcs_file:
+            with self.storage.fs.open(storage_path, "wb") as gcs_file:
                 async for chunk in resp.content.iter_chunked(8 * 1024 * 1024):
                     gcs_file.write(chunk)
                     total_bytes += len(chunk)
 
         size_mb = total_bytes / (1024 * 1024)
-        self.log.info(f"Streamed CSV to GCS: {size_mb:.1f} MB → {storage_path}")
+        self.log.info(f"Streamed CSV to storage: {size_mb:.1f} MB → {storage_path}")
         return relative_path, total_bytes
 
-    def _gcs_path(self, filename: str) -> str:
+    def _storage_path(self, filename: str) -> str:
         """Build a relative GCS path for a bronze artifact."""
         return f"bronze/{self.config.dataset}/{self.date_pattern}/{filename}"
 
-    def _save_json_to_gcs(self, data: Any, filename: str) -> str:
-        """Save JSON data to GCS bronze layer using the high-level upload_json."""
-        relative_path = self._gcs_path(filename)
-        gcs_uri = f"gs://{self.config.bucket}/{relative_path}"
-        self.gcs_access.upload_json(data, gcs_uri, ensure_ascii=False)
+    def _save_json_to_storage(self, data: Any, filename: str) -> str:
+        """Save JSON data to storage bronze layer using the high-level upload_json."""
+        relative_path = self._storage_path(filename)
+        gcs_uri = f"{self.config.bucket}/{relative_path}"
+        self.storage.upload_json(data, gcs_uri, ensure_ascii=False)
         self.log.info(f"Saved {filename} to {gcs_uri}")
         return relative_path
 
@@ -284,12 +284,14 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                         f"(from {len(stations)} total)"
                     )
 
-                    # 3. Download CSV (streamed directly to GCS)
-                    csv_path, csv_size_bytes = await self._download_csv_to_gcs(session, session_id)
+                    # 3. Download CSV (streamed directly to storage)
+                    csv_path, csv_size_bytes = await self._download_csv_to_storage(
+                        session, session_id
+                    )
 
-                    # 4. Save metadata to GCS
-                    stations_path = self._save_json_to_gcs(search_result, "search_result.json")
-                    metadata_path = self._save_json_to_gcs(metadata, "metadata.json")
+                    # 4. Save metadata to storage
+                    stations_path = self._save_json_to_storage(search_result, "search_result.json")
+                    metadata_path = self._save_json_to_storage(metadata, "metadata.json")
 
                     # 5. Build manifest
                     run_timestamp = self.date_pattern
@@ -312,11 +314,11 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                     }
 
                     # Save manifest
-                    manifest_gcs_path = (
-                        f"gs://{self.config.bucket}/bronze/{self.config.dataset}/"
+                    manifest_storage_path = (
+                        f"{self.config.bucket}/bronze/{self.config.dataset}/"
                         f"{run_timestamp}/manifest.json"
                     )
-                    self.gcs_access.upload_json(manifest, manifest_gcs_path)
+                    self.storage.upload_json(manifest, manifest_storage_path)
 
                     # Pipeline metadata
                     if self.pipeline_metadata_manager and self.processing_start_time:
@@ -328,11 +330,11 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                                 processing_duration=processing_duration,
                             )
                             pm_path = (
-                                f"gs://{self.config.bucket}/bronze/"
+                                f"{self.config.bucket}/bronze/"
                                 f"{self.config.dataset}/{run_timestamp}/"
                                 f"pipeline_metadata.json"
                             )
-                            self.gcs_access.upload_json(pipeline_metadata.model_dump(), pm_path)
+                            self.storage.upload_json(pipeline_metadata.model_dump(), pm_path)
                             self.log.info(f"Pipeline metadata saved to {pm_path}")
                         except Exception as e:
                             self.log.warning(f"Failed to create pipeline metadata: {e}")

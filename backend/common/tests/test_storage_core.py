@@ -1,4 +1,4 @@
-"""Comprehensive tests for GCS core streaming functionality.
+"""Comprehensive tests for storage core streaming functionality.
 
 This module tests the core.py module, which is CRITICAL as it protects all pipelines.
 Tests cover:
@@ -30,9 +30,9 @@ class MockRetryError(Exception):
 RetryError = MockRetryError
 
 
-# Create a mock GCSDataAccess class
-class MockGCSDataAccess:
-    """Mock GCSDataAccess for testing."""
+# Create a mock StorageAccess class
+class MockStorageAccess:
+    """Mock StorageAccess for testing."""
 
     def __init__(self, connection=None):
         self.fs = MagicMock()
@@ -71,7 +71,7 @@ class MockGCSDataAccess:
     def list_files(self, pattern):
         """Mock list files."""
         files = self.fs.glob(pattern)
-        return [f"gs://{f}" for f in files]
+        return list(files)
 
     def check_file_size_limits(self, path):
         """Mock check file size limits."""
@@ -81,7 +81,7 @@ class MockGCSDataAccess:
         """Mock temp download."""
 
 
-GCSDataAccess = MockGCSDataAccess
+StorageAccess = MockStorageAccess
 
 
 # =============================================================================
@@ -90,11 +90,11 @@ GCSDataAccess = MockGCSDataAccess
 
 
 @pytest.fixture
-def mock_gcs_filesystem():
-    """Mock gcsfs.GCSFileSystem for isolated testing."""
+def mock_cloud_filesystem():
+    """Mock cloud filesystem for isolated testing."""
     mock_fs = MagicMock()
 
-    # Mock common GCS operations
+    # Mock common cloud storage operations
     mock_fs.glob.return_value = []
     mock_fs.exists.return_value = True
     mock_fs.size.return_value = 1024
@@ -155,11 +155,11 @@ def mock_duckdb_connection():
 
 
 @pytest.fixture
-def gcs_data_access(mock_gcs_filesystem, mock_duckdb_connection):
-    """GCSDataAccess instance with mocked filesystem."""
+def storage_data_access(mock_cloud_filesystem, mock_duckdb_connection):
+    """StorageAccess instance with mocked filesystem."""
     with (
-        patch("common.gcs.core.get_gcs_filesystem", return_value=mock_gcs_filesystem),
-        patch("common.gcs.core.ResourceMonitor") as mock_monitor,
+        patch("common.storage.core.get_r2_filesystem", return_value=mock_cloud_filesystem),
+        patch("common.storage.core.ResourceMonitor") as mock_monitor,
     ):
         # Mock monitor to avoid psutil dependencies in tests
         mock_monitor_instance = MagicMock()
@@ -171,9 +171,9 @@ def gcs_data_access(mock_gcs_filesystem, mock_duckdb_connection):
         }
         mock_monitor.return_value = mock_monitor_instance
 
-        gcs = GCSDataAccess(connection=mock_duckdb_connection)
-        gcs.fs = mock_gcs_filesystem
-        yield gcs
+        storage = StorageAccess(connection=mock_duckdb_connection)
+        storage.fs = mock_cloud_filesystem
+        yield storage
 
 
 @pytest.fixture
@@ -195,25 +195,25 @@ def sample_danish_data(valid_cvr_numbers):
 # =============================================================================
 
 
-def test_stream_upload_json_simple(gcs_data_access, sample_danish_data):
-    """Test streaming upload of JSON data to GCS."""
-    gcs_path = "gs://test-bucket/test-data.json"
+def test_stream_upload_json_simple(storage_data_access, sample_danish_data):
+    """Test streaming upload of JSON data to cloud storage."""
+    storage_path = "test-bucket/test-data.json"
 
     # Upload JSON
-    gcs_data_access.upload_json(sample_danish_data, gcs_path)
+    storage_data_access.upload_json(sample_danish_data, storage_path)
 
     # Verify JSON was written
-    assert gcs_path in gcs_data_access.fs._file_contents
+    assert storage_path in storage_data_access.fs._file_contents
 
     # Parse and verify content
-    written_content = gcs_data_access.fs._file_contents[gcs_path]
+    written_content = storage_data_access.fs._file_contents[storage_path]
     parsed_data = json.loads(written_content)
 
     assert parsed_data == sample_danish_data
     assert parsed_data["description"] == "Data med danske bogstaver: æøå ÆØÅ"
 
 
-def test_stream_upload_json_with_danish_characters(gcs_data_access):
+def test_stream_upload_json_with_danish_characters(storage_data_access):
     """Test JSON upload preserves Danish special characters (æøå)."""
     test_data = {
         "locations": ["København", "Århus", "Ålborg", "Sønderjylland"],
@@ -221,26 +221,26 @@ def test_stream_upload_json_with_danish_characters(gcs_data_access):
         "special_chars": "æøå ÆØÅ",
     }
 
-    gcs_path = "gs://test-bucket/danish-data.json"
-    gcs_data_access.upload_json(test_data, gcs_path)
+    storage_path = "test-bucket/danish-data.json"
+    storage_data_access.upload_json(test_data, storage_path)
 
     # Verify special characters are preserved (not ASCII-escaped)
-    written_content = gcs_data_access.fs._file_contents[gcs_path]
+    written_content = storage_data_access.fs._file_contents[storage_path]
     assert "København" in written_content
     assert "æøå" in written_content
     assert "\\u00e6" not in written_content  # Not ASCII-escaped
 
 
-def test_upload_json_with_custom_options(gcs_data_access):
+def test_upload_json_with_custom_options(storage_data_access):
     """Test JSON upload with custom serialization options."""
     test_data = {"numbers": [1, 2, 3], "text": "test"}
 
-    gcs_path = "gs://test-bucket/custom-format.json"
+    storage_path = "test-bucket/custom-format.json"
 
     # Upload with no indentation (compact JSON)
-    gcs_data_access.upload_json(test_data, gcs_path, indent=None)
+    storage_data_access.upload_json(test_data, storage_path, indent=None)
 
-    written_content = gcs_data_access.fs._file_contents[gcs_path]
+    written_content = storage_data_access.fs._file_contents[storage_path]
 
     # Verify compact format (no newlines for indentation)
     assert written_content.count("\n") == 0
@@ -248,15 +248,15 @@ def test_upload_json_with_custom_options(gcs_data_access):
     assert parsed == test_data
 
 
-def test_upload_json_retry_on_network_failure(gcs_data_access):
+def test_upload_json_retry_on_network_failure(storage_data_access):
     """Test JSON upload handles network errors gracefully.
 
-    Note: The mock GCSDataAccess doesn't implement retry logic, so this test
+    Note: The mock StorageAccess doesn't implement retry logic, so this test
     verifies that network errors propagate correctly. In production, the real
-    GCSDataAccess would retry before failing.
+    StorageAccess would retry before failing.
     """
     test_data = {"test": "data"}
-    gcs_path = "gs://test-bucket/retry-test.json"
+    storage_path = "test-bucket/retry-test.json"
 
     # Track calls to verify retry behavior
     call_count = 0
@@ -278,39 +278,39 @@ def test_upload_json_retry_on_network_failure(gcs_data_access):
 
             def __exit__(self, *args):
                 buffer.seek(0)
-                gcs_data_access.fs._file_contents[path] = buffer.read()
+                storage_data_access.fs._file_contents[path] = buffer.read()
                 return False
 
         return MockContext()
 
-    gcs_data_access.fs.open.side_effect = mock_open_with_failures
+    storage_data_access.fs.open.side_effect = mock_open_with_failures
 
     # First call will fail, but we can verify the error is raised
     with pytest.raises(ConnectionError):
-        gcs_data_access.upload_json(test_data, gcs_path)
+        storage_data_access.upload_json(test_data, storage_path)
 
     assert call_count == 1  # Verified one call was made before failing
 
 
-def test_upload_json_fails_after_max_retries(gcs_data_access):
+def test_upload_json_fails_after_max_retries(storage_data_access):
     """Test JSON upload fails when network is unreachable.
 
-    Note: The mock GCSDataAccess doesn't implement retry logic, so this test
+    Note: The mock StorageAccess doesn't implement retry logic, so this test
     verifies that the ConnectionError propagates correctly. In production, the real
-    GCSDataAccess would wrap this in RetryError after max attempts.
+    StorageAccess would wrap this in RetryError after max attempts.
     """
     test_data = {"test": "data"}
-    gcs_path = "gs://test-bucket/fail-test.json"
+    storage_path = "test-bucket/fail-test.json"
 
     # Mock to always fail
     def mock_open_always_fails(path, mode="r", **kwargs):
         raise ConnectionError("Network unreachable")
 
-    gcs_data_access.fs.open.side_effect = mock_open_always_fails
+    storage_data_access.fs.open.side_effect = mock_open_always_fails
 
     # Should raise the underlying error (ConnectionError)
     with pytest.raises(ConnectionError):
-        gcs_data_access.upload_json(test_data, gcs_path)
+        storage_data_access.upload_json(test_data, storage_path)
 
 
 # =============================================================================
@@ -318,7 +318,7 @@ def test_upload_json_fails_after_max_retries(gcs_data_access):
 # =============================================================================
 
 
-def test_stream_upload_parquet_from_duckdb_table(gcs_data_access, valid_cvr_numbers, mock_duckdb_connection):
+def test_stream_upload_parquet_from_duckdb_table(storage_data_access, valid_cvr_numbers, mock_duckdb_connection):
     """Test streaming upload of Parquet from DuckDB table."""
     # Create test data in DuckDB
     mock_duckdb_connection.execute("""
@@ -330,22 +330,22 @@ def test_stream_upload_parquet_from_duckdb_table(gcs_data_access, valid_cvr_numb
         ) AS t(cvr_number, company_name, area_ha)
     """)
 
-    gcs_path = "gs://test-bucket/companies.parquet"
+    storage_path = "test-bucket/companies.parquet"
 
     # Mock os.path.getsize to avoid file system operations
     with patch("os.path.getsize", return_value=1024):
         # Mock file exists and size check
-        gcs_data_access.fs.exists.return_value = True
-        gcs_data_access.fs.size.return_value = 1024
+        storage_data_access.fs.exists.return_value = True
+        storage_data_access.fs.size.return_value = 1024
 
         # Upload should succeed
-        gcs_data_access.upload_from_duckdb_table("test_companies", gcs_path)
+        storage_data_access.upload_from_duckdb_table("test_companies", storage_path)
 
     # Verify upload was called
-    assert gcs_data_access.fs.open.called
+    assert storage_data_access.fs.open.called
 
 
-def test_upload_parquet_with_compression_options(gcs_data_access, mock_duckdb_connection):
+def test_upload_parquet_with_compression_options(storage_data_access, mock_duckdb_connection):
     """Test Parquet upload with custom compression settings."""
     # Create test table
     mock_duckdb_connection.execute("""
@@ -354,38 +354,40 @@ def test_upload_parquet_with_compression_options(gcs_data_access, mock_duckdb_co
         AS t(id, value)
     """)
 
-    gcs_path = "gs://test-bucket/compressed.parquet"
+    storage_path = "test-bucket/compressed.parquet"
 
     with patch("os.path.getsize", return_value=512):
-        gcs_data_access.fs.exists.return_value = True
-        gcs_data_access.fs.size.return_value = 512
+        storage_data_access.fs.exists.return_value = True
+        storage_data_access.fs.size.return_value = 512
 
         # Upload with custom compression
-        gcs_data_access.upload_from_duckdb_table("test_data", gcs_path, compression="gzip", row_group_size=50000)
+        storage_data_access.upload_from_duckdb_table(
+            "test_data", storage_path, compression="gzip", row_group_size=50000
+        )
 
     # Verify upload completed without errors
-    assert gcs_data_access.fs.open.called
+    assert storage_data_access.fs.open.called
 
 
-def test_upload_parquet_verifies_upload(gcs_data_access, mock_duckdb_connection):
+def test_upload_parquet_verifies_upload(storage_data_access, mock_duckdb_connection):
     """Test Parquet upload verifies file exists after upload."""
     mock_duckdb_connection.execute("""
         CREATE TABLE test_verify AS
         SELECT * FROM (VALUES (1, 'test')) AS t(id, value)
     """)
 
-    gcs_path = "gs://test-bucket/verified.parquet"
+    storage_path = "test-bucket/verified.parquet"
 
     with patch("os.path.getsize", return_value=1024):
         # Mock successful verification
-        gcs_data_access.fs.exists.return_value = True
-        gcs_data_access.fs.size.return_value = 1024
+        storage_data_access.fs.exists.return_value = True
+        storage_data_access.fs.size.return_value = 1024
 
-        gcs_data_access.upload_from_duckdb_table("test_verify", gcs_path)
+        storage_data_access.upload_from_duckdb_table("test_verify", storage_path)
 
     # Verify invalidate_cache and exists were called
-    assert gcs_data_access.fs.invalidate_cache.called
-    assert gcs_data_access.fs.exists.called
+    assert storage_data_access.fs.invalidate_cache.called
+    assert storage_data_access.fs.exists.called
 
 
 # =============================================================================
@@ -393,55 +395,55 @@ def test_upload_parquet_verifies_upload(gcs_data_access, mock_duckdb_connection)
 # =============================================================================
 
 
-def test_stream_download_json(gcs_data_access, sample_danish_data):
-    """Test streaming download of JSON from GCS."""
-    gcs_path = "gs://test-bucket/test-data.json"
+def test_stream_download_json(storage_data_access, sample_danish_data):
+    """Test streaming download of JSON from cloud storage."""
+    storage_path = "test-bucket/test-data.json"
 
     # Prepare mock data
     json_content = json.dumps(sample_danish_data, ensure_ascii=False, indent=2)
-    gcs_data_access.fs._file_contents[gcs_path] = json_content
+    storage_data_access.fs._file_contents[storage_path] = json_content
 
     # Download
-    result = gcs_data_access.download_json(gcs_path)
+    result = storage_data_access.download_json(storage_path)
 
     assert result == sample_danish_data
     assert result["description"] == "Data med danske bogstaver: æøå ÆØÅ"
 
 
-def test_download_json_preserves_danish_characters(gcs_data_access):
+def test_download_json_preserves_danish_characters(storage_data_access):
     """Test JSON download preserves Danish special characters."""
     test_data = {
         "cities": ["København", "Århus", "Ålborg"],
         "text": "Ærlighed med æøå",
     }
 
-    gcs_path = "gs://test-bucket/danish.json"
-    gcs_data_access.fs._file_contents[gcs_path] = json.dumps(test_data, ensure_ascii=False)
+    storage_path = "test-bucket/danish.json"
+    storage_data_access.fs._file_contents[storage_path] = json.dumps(test_data, ensure_ascii=False)
 
-    result = gcs_data_access.download_json(gcs_path)
+    result = storage_data_access.download_json(storage_path)
 
     assert result["cities"][0] == "København"
     assert "æøå" in result["text"]
 
 
-def test_download_json_nonexistent_file(gcs_data_access):
+def test_download_json_nonexistent_file(storage_data_access):
     """Test downloading non-existent JSON file raises error."""
-    gcs_path = "gs://test-bucket/missing.json"
+    storage_path = "test-bucket/missing.json"
 
     # File doesn't exist in mock storage
-    gcs_data_access.fs._file_contents.pop(gcs_path, None)
+    storage_data_access.fs._file_contents.pop(storage_path, None)
 
     # Mock open to raise FileNotFoundError for non-existent file
     def mock_open_not_found(path, mode="r", **kwargs):
-        if path == gcs_path:
+        if path == storage_path:
             raise FileNotFoundError(f"File not found: {path}")
-        return gcs_data_access.fs.open.default_factory(path, mode, **kwargs)
+        return storage_data_access.fs.open.default_factory(path, mode, **kwargs)
 
-    gcs_data_access.fs.open.side_effect = mock_open_not_found
+    storage_data_access.fs.open.side_effect = mock_open_not_found
 
     # Should raise FileNotFoundError when trying to read non-existent file
     with pytest.raises(FileNotFoundError):
-        gcs_data_access.download_json(gcs_path)
+        storage_data_access.download_json(storage_path)
 
 
 # =============================================================================
@@ -449,25 +451,25 @@ def test_download_json_nonexistent_file(gcs_data_access):
 # =============================================================================
 
 
-def test_stream_download_parquet_creates_duckdb_table(gcs_data_access, mock_duckdb_connection):
+def test_stream_download_parquet_creates_duckdb_table(storage_data_access, mock_duckdb_connection):
     """Test downloading Parquet creates DuckDB table.
 
-    Note: Since we're using a mock GCSDataAccess, this test verifies that
+    Note: Since we're using a mock StorageAccess, this test verifies that
     the read_parquet_streaming method returns a table name. The actual
     parquet reading functionality is tested in integration tests.
     """
-    gcs_path = "gs://test-bucket/test-data.parquet"
+    storage_path = "test-bucket/test-data.parquet"
 
     # The mock just returns a table name
-    table_name = gcs_data_access.read_parquet_streaming(gcs_path)
+    table_name = storage_data_access.read_parquet_streaming(storage_path)
 
     # Verify we get a table name back
     assert table_name == "temp_table"
 
 
-def test_download_parquet_handles_temp_file_cleanup(gcs_data_access):
+def test_download_parquet_handles_temp_file_cleanup(storage_data_access):
     """Test Parquet download cleans up temporary files."""
-    gcs_path = "gs://test-bucket/cleanup-test.parquet"
+    storage_path = "test-bucket/cleanup-test.parquet"
 
     temp_files_created = []
 
@@ -478,10 +480,10 @@ def test_download_parquet_handles_temp_file_cleanup(gcs_data_access):
 
     with (
         patch("tempfile.NamedTemporaryFile", side_effect=track_temp_file),
-        patch("common.gcs.core.shutil.copyfileobj"),
+        patch("common.storage.core.shutil.copyfileobj"),
         contextlib.suppress(Exception),
     ):
-        gcs_data_access.read_parquet_streaming(gcs_path)
+        storage_data_access.read_parquet_streaming(storage_path)
 
     # Verify temp file was cleaned up (file should not exist)
     for temp_file in temp_files_created:
@@ -493,15 +495,15 @@ def test_download_parquet_handles_temp_file_cleanup(gcs_data_access):
 # =============================================================================
 
 
-def test_upload_download_integrity_json(gcs_data_access, sample_danish_data):
+def test_upload_download_integrity_json(storage_data_access, sample_danish_data):
     """Test JSON round-trip: upload then download, verify data matches."""
-    gcs_path = "gs://test-bucket/roundtrip.json"
+    storage_path = "test-bucket/roundtrip.json"
 
     # Upload
-    gcs_data_access.upload_json(sample_danish_data, gcs_path)
+    storage_data_access.upload_json(sample_danish_data, storage_path)
 
     # Download
-    result = gcs_data_access.download_json(gcs_path)
+    result = storage_data_access.download_json(storage_path)
 
     # Verify exact match
     assert result == sample_danish_data
@@ -513,17 +515,17 @@ def test_upload_download_integrity_json(gcs_data_access, sample_danish_data):
     )
 
 
-def test_upload_download_integrity_json_with_cvr_numbers(gcs_data_access, valid_cvr_numbers):
+def test_upload_download_integrity_json_with_cvr_numbers(storage_data_access, valid_cvr_numbers):
     """Test JSON round-trip preserves CVR number formatting (leading zeros)."""
     test_data = {"companies": [{"cvr": cvr, "index": i} for i, cvr in enumerate(valid_cvr_numbers)]}
 
-    gcs_path = "gs://test-bucket/cvr-test.json"
+    storage_path = "test-bucket/cvr-test.json"
 
     # Upload
-    gcs_data_access.upload_json(test_data, gcs_path)
+    storage_data_access.upload_json(test_data, storage_path)
 
     # Download
-    result = gcs_data_access.download_json(gcs_path)
+    result = storage_data_access.download_json(storage_path)
 
     # Verify CVR numbers maintain leading zeros
     for orig, downloaded in zip(test_data["companies"], result["companies"], strict=False):
@@ -531,7 +533,7 @@ def test_upload_download_integrity_json_with_cvr_numbers(gcs_data_access, valid_
         assert len(downloaded["cvr"]) == 8
 
 
-def test_upload_download_integrity_parquet_roundtrip(gcs_data_access, mock_duckdb_connection, valid_cvr_numbers):
+def test_upload_download_integrity_parquet_roundtrip(storage_data_access, mock_duckdb_connection, valid_cvr_numbers):
     """Test Parquet round-trip: upload then download, verify data integrity."""
     # Create source table
     mock_duckdb_connection.execute("""
@@ -546,7 +548,7 @@ def test_upload_download_integrity_parquet_roundtrip(gcs_data_access, mock_duckd
     # Get original data for comparison
     original_data = mock_duckdb_connection.execute("SELECT * FROM source_data ORDER BY cvr_number").fetchall()
 
-    gcs_path = "gs://test-bucket/roundtrip.parquet"
+    storage_path = "test-bucket/roundtrip.parquet"
 
     # Create temp file for upload
     with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_upload:
@@ -556,23 +558,23 @@ def test_upload_download_integrity_parquet_roundtrip(gcs_data_access, mock_duckd
         # Execute COPY to create actual parquet file
         mock_duckdb_connection.execute(f"COPY source_data TO '{temp_upload_path}' (FORMAT PARQUET, COMPRESSION zstd)")
 
-        # Simulate upload to GCS
+        # Simulate upload to cloud storage
         with Path(temp_upload_path).open("rb") as f:
             file_content = f.read()
-            gcs_data_access.fs._file_contents[gcs_path] = file_content
+            storage_data_access.fs._file_contents[storage_path] = file_content
 
         # Mock successful upload verification
         with patch("os.path.getsize", return_value=len(file_content)):
-            gcs_data_access.fs.exists.return_value = True
-            gcs_data_access.fs.size.return_value = len(file_content)
+            storage_data_access.fs.exists.return_value = True
+            storage_data_access.fs.size.return_value = len(file_content)
 
         # Download - create new table from parquet
         with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_download:
             temp_download_path = temp_download.name
 
-            # Write mock GCS content to temp file
+            # Write mock cloud storage content to temp file
             with Path(temp_download_path).open("wb") as f:
-                f.write(gcs_data_access.fs._file_contents[gcs_path])
+                f.write(storage_data_access.fs._file_contents[storage_path])
 
         # Load into new table
         mock_duckdb_connection.execute(
@@ -595,7 +597,7 @@ def test_upload_download_integrity_parquet_roundtrip(gcs_data_access, mock_duckd
 # =============================================================================
 
 
-def test_concurrent_json_uploads(gcs_data_access):
+def test_concurrent_json_uploads(storage_data_access):
     """Test multiple concurrent JSON uploads work correctly."""
     # Simulate concurrent uploads
     test_data_sets = [
@@ -604,24 +606,24 @@ def test_concurrent_json_uploads(gcs_data_access):
         {"id": 3, "data": "third"},
     ]
 
-    gcs_paths = [f"gs://test-bucket/concurrent-{i}.json" for i in range(3)]
+    storage_paths = [f"test-bucket/concurrent-{i}.json" for i in range(3)]
 
     # Upload all files
-    for data, path in zip(test_data_sets, gcs_paths, strict=False):
-        gcs_data_access.upload_json(data, path)
+    for data, path in zip(test_data_sets, storage_paths, strict=False):
+        storage_data_access.upload_json(data, path)
 
     # Verify all were uploaded correctly
-    for data, path in zip(test_data_sets, gcs_paths, strict=False):
-        result = gcs_data_access.download_json(path)
+    for data, path in zip(test_data_sets, storage_paths, strict=False):
+        result = storage_data_access.download_json(path)
         assert result == data
 
 
-def test_concurrent_operations_different_formats(gcs_data_access, mock_duckdb_connection):
+def test_concurrent_operations_different_formats(storage_data_access, mock_duckdb_connection):
     """Test concurrent operations with different file formats (JSON and Parquet)."""
     # JSON upload
     json_data = {"type": "json", "value": 123}
-    json_path = "gs://test-bucket/mixed-format.json"
-    gcs_data_access.upload_json(json_data, json_path)
+    json_path = "test-bucket/mixed-format.json"
+    storage_data_access.upload_json(json_data, json_path)
 
     # Parquet upload
     mock_duckdb_connection.execute("""
@@ -630,19 +632,19 @@ def test_concurrent_operations_different_formats(gcs_data_access, mock_duckdb_co
         AS t(key, value)
     """)
 
-    parquet_path = "gs://test-bucket/mixed-format.parquet"
+    parquet_path = "test-bucket/mixed-format.parquet"
 
     with patch("os.path.getsize", return_value=512):
-        gcs_data_access.fs.exists.return_value = True
-        gcs_data_access.fs.size.return_value = 512
-        gcs_data_access.upload_from_duckdb_table("parquet_data", parquet_path)
+        storage_data_access.fs.exists.return_value = True
+        storage_data_access.fs.size.return_value = 512
+        storage_data_access.upload_from_duckdb_table("parquet_data", parquet_path)
 
     # Verify both uploads succeeded
-    json_result = gcs_data_access.download_json(json_path)
+    json_result = storage_data_access.download_json(json_path)
     assert json_result == json_data
 
     # Verify parquet upload was called
-    assert gcs_data_access.fs.open.called
+    assert storage_data_access.fs.open.called
 
 
 # =============================================================================
@@ -650,91 +652,91 @@ def test_concurrent_operations_different_formats(gcs_data_access, mock_duckdb_co
 # =============================================================================
 
 
-def test_authentication_failure_handling(mock_gcs_filesystem, mock_duckdb_connection):
-    """Test handling of GCS authentication failures.
+def test_authentication_failure_handling(mock_cloud_filesystem, mock_duckdb_connection):
+    """Test handling of cloud storage authentication failures.
 
     Note: Since we're using a mock, authentication errors propagate directly
-    without retry wrapping. In production, the real GCSDataAccess would wrap
+    without retry wrapping. In production, the real StorageAccess would wrap
     these in RetryError after exhausting retry attempts.
     """
 
-    # Create a mock exception class since google.auth may not be installed
+    # Create a mock exception class for authentication failure
     class MockDefaultCredentialsError(Exception):
         pass
 
     # Mock authentication failure
-    mock_gcs_filesystem.open.side_effect = MockDefaultCredentialsError("Authentication failed")
+    mock_cloud_filesystem.open.side_effect = MockDefaultCredentialsError("Authentication failed")
 
-    gcs = GCSDataAccess(connection=mock_duckdb_connection)
-    gcs.fs = mock_gcs_filesystem
+    storage = StorageAccess(connection=mock_duckdb_connection)
+    storage.fs = mock_cloud_filesystem
 
     # Should raise the underlying authentication error
     with pytest.raises(MockDefaultCredentialsError):
-        gcs.upload_json({"test": "data"}, "gs://test-bucket/test.json")
+        storage.upload_json({"test": "data"}, "test-bucket/test.json")
 
 
-def test_network_timeout_handling(gcs_data_access):
+def test_network_timeout_handling(storage_data_access):
     """Test handling of network timeouts.
 
-    Note: The mock GCSDataAccess doesn't implement retry logic, so this test
+    Note: The mock StorageAccess doesn't implement retry logic, so this test
     verifies that the TimeoutError propagates correctly.
     """
     # Mock timeout
-    gcs_data_access.fs.open.side_effect = TimeoutError("Connection timed out")
+    storage_data_access.fs.open.side_effect = TimeoutError("Connection timed out")
 
     # Should raise the underlying TimeoutError
     with pytest.raises(TimeoutError):
-        gcs_data_access.upload_json({"test": "data"}, "gs://test-bucket/test.json")
+        storage_data_access.upload_json({"test": "data"}, "test-bucket/test.json")
 
 
-def test_disk_space_handling(gcs_data_access):
+def test_disk_space_handling(storage_data_access):
     """Test handling of insufficient disk space.
 
-    Note: The mock GCSDataAccess doesn't implement retry logic, so this test
+    Note: The mock StorageAccess doesn't implement retry logic, so this test
     verifies that the OSError propagates correctly.
     """
     # Mock disk space error
-    gcs_data_access.fs.open.side_effect = OSError("No space left on device")
+    storage_data_access.fs.open.side_effect = OSError("No space left on device")
 
     # Should raise the underlying OSError
     with pytest.raises(OSError):
-        gcs_data_access.upload_json({"test": "data"}, "gs://test-bucket/test.json")
+        storage_data_access.upload_json({"test": "data"}, "test-bucket/test.json")
 
 
-def test_file_size_limit_check(gcs_data_access):
+def test_file_size_limit_check(storage_data_access):
     """Test file size limit checking for large files.
 
     Note: The function catches ValueError internally and logs warning,
     then returns True to "proceed with caution". This test verifies that behavior.
     """
-    gcs_path = "gs://test-bucket/huge-file.parquet"
+    storage_path = "test-bucket/huge-file.parquet"
 
     # Mock file info to return oversized file (10 GB)
-    gcs_data_access.fs.info.return_value = {"size": 10 * (1024**3)}
+    storage_data_access.fs.info.return_value = {"size": 10 * (1024**3)}
 
     # Function catches ValueError internally and returns True (proceed with caution)
     # This is by design - it warns but doesn't block processing
-    result = gcs_data_access.check_file_size_limits(gcs_path)
+    result = storage_data_access.check_file_size_limits(storage_path)
 
     # Should return True (proceeds with caution after logging warning)
     assert result is True
 
 
-def test_invalid_gcs_path_handling(gcs_data_access):
-    """Test handling of invalid GCS paths."""
+def test_invalid_storage_path_handling(storage_data_access):
+    """Test handling of invalid storage paths."""
     invalid_paths = [
         "",  # Empty path
-        "not-a-gcs-path",  # Missing gs:// prefix
-        "gs://",  # Just the prefix
+        "not-a-valid-path",  # Missing bucket/key structure
+        "r2://",  # Just the protocol prefix
     ]
 
     for invalid_path in invalid_paths:
         # Should handle gracefully or raise appropriate error
-        # (Actual behavior depends on gcsfs implementation)
+        # (Actual behavior depends on s3fs implementation)
         try:
-            gcs_data_access.upload_json({"test": "data"}, invalid_path)
+            storage_data_access.upload_json({"test": "data"}, invalid_path)
         except Exception as e:
-            # Verify some error was raised (exact type depends on gcsfs)
+            # Verify some error was raised (exact type depends on s3fs)
             assert isinstance(e, Exception)
 
 
@@ -743,27 +745,27 @@ def test_invalid_gcs_path_handling(gcs_data_access):
 # =============================================================================
 
 
-def test_large_json_streaming(gcs_data_access):
+def test_large_json_streaming(storage_data_access):
     """Test streaming of large JSON data (simulated)."""
     # Create large-ish JSON data (1000 companies)
     large_data = {"companies": [{"cvr": f"{i:08d}", "name": f"Company {i}", "area": i * 10.5} for i in range(1000)]}
 
-    gcs_path = "gs://test-bucket/large-data.json"
+    storage_path = "test-bucket/large-data.json"
 
     # Upload large data
-    gcs_data_access.upload_json(large_data, gcs_path)
+    storage_data_access.upload_json(large_data, storage_path)
 
     # Verify upload succeeded
-    assert gcs_path in gcs_data_access.fs._file_contents
+    assert storage_path in storage_data_access.fs._file_contents
 
     # Download and verify
-    result = gcs_data_access.download_json(gcs_path)
+    result = storage_data_access.download_json(storage_path)
     assert len(result["companies"]) == 1000
     assert result["companies"][0]["cvr"] == "00000000"
     assert result["companies"][-1]["cvr"] == "00000999"
 
 
-def test_parquet_chunked_processing_simulation(gcs_data_access, mock_duckdb_connection):
+def test_parquet_chunked_processing_simulation(storage_data_access, mock_duckdb_connection):
     """Test processing large Parquet files in chunks (simulated)."""
     # Create table with many rows
     mock_duckdb_connection.execute("""
@@ -793,46 +795,46 @@ def test_parquet_chunked_processing_simulation(gcs_data_access, mock_duckdb_conn
 # =============================================================================
 
 
-def test_file_exists_check(gcs_data_access):
-    """Test checking if file exists in GCS."""
-    gcs_path = "gs://test-bucket/test-file.json"
+def test_file_exists_check(storage_data_access):
+    """Test checking if file exists in cloud storage."""
+    storage_path = "test-bucket/test-file.json"
 
     # File exists
-    gcs_data_access.fs.exists.return_value = True
-    assert gcs_data_access.file_exists(gcs_path)
+    storage_data_access.fs.exists.return_value = True
+    assert storage_data_access.file_exists(storage_path)
 
     # File doesn't exist
-    gcs_data_access.fs.exists.return_value = False
-    assert not gcs_data_access.file_exists(gcs_path)
+    storage_data_access.fs.exists.return_value = False
+    assert not storage_data_access.file_exists(storage_path)
 
 
-def test_get_file_size(gcs_data_access):
-    """Test getting file size from GCS."""
-    gcs_path = "gs://test-bucket/test-file.json"
+def test_get_file_size(storage_data_access):
+    """Test getting file size from cloud storage."""
+    storage_path = "test-bucket/test-file.json"
 
-    gcs_data_access.fs.size.return_value = 2048
-    size = gcs_data_access.get_file_size(gcs_path)
+    storage_data_access.fs.size.return_value = 2048
+    size = storage_data_access.get_file_size(storage_path)
 
     assert size == 2048
 
 
-def test_list_files_with_pattern(gcs_data_access):
+def test_list_files_with_pattern(storage_data_access):
     """Test listing files matching a pattern."""
     # Mock glob results
-    gcs_data_access.fs.glob.return_value = [
+    storage_data_access.fs.glob.return_value = [
         "test-bucket/data/file1.parquet",
         "test-bucket/data/file2.parquet",
         "test-bucket/data/file3.parquet",
     ]
 
-    files = gcs_data_access.list_files("gs://test-bucket/data/*.parquet")
+    files = storage_data_access.list_files("test-bucket/data/*.parquet")
 
     assert len(files) == 3
-    assert all(f.startswith("gs://") for f in files)
-    assert "gs://test-bucket/data/file1.parquet" in files
+    assert all(not f.startswith("r2://") for f in files)
+    assert "test-bucket/data/file1.parquet" in files
 
 
-def test_csv_format_upload(gcs_data_access, mock_duckdb_connection):
+def test_csv_format_upload(storage_data_access, mock_duckdb_connection):
     """Test uploading data as CSV format instead of Parquet."""
     # Create test table
     mock_duckdb_connection.execute("""
@@ -843,15 +845,15 @@ def test_csv_format_upload(gcs_data_access, mock_duckdb_connection):
         ) AS t(cvr_number, company_name, area_ha)
     """)
 
-    csv_path = "gs://test-bucket/output.csv"
+    csv_path = "test-bucket/output.csv"
 
     with patch("os.path.getsize", return_value=256):
-        gcs_data_access.fs.exists.return_value = True
-        gcs_data_access.fs.size.return_value = 256
+        storage_data_access.fs.exists.return_value = True
+        storage_data_access.fs.size.return_value = 256
 
         # Upload as CSV
-        gcs_data_access.upload_from_duckdb_table("csv_data", csv_path)
+        storage_data_access.upload_from_duckdb_table("csv_data", csv_path)
 
     # Verify CSV format was used (path ends with .csv)
     assert csv_path.endswith(".csv")
-    assert gcs_data_access.fs.open.called
+    assert storage_data_access.fs.open.called

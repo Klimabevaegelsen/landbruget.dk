@@ -40,20 +40,20 @@ def _get_geo_validator() -> Callable | None:
 ComprehensiveGeoValidator = _get_geo_validator()
 
 
-# Try to import optimized GCS access with fallback
-def _get_optimized_gcs_access() -> type | None:
-    """Get optimized GCS access with robust import handling."""
+# Try to import optimized storage access with fallback
+def _get_optimized_storage_access() -> type | None:
+    """Get optimized storage access with robust import handling."""
     try:
-        from common.gcs import GCSDataAccess
+        from common.storage import StorageAccess
 
-        logging.info("✅ Successfully imported optimized GCSDataAccess for BBR buildings")
-        return GCSDataAccess
+        logging.info("✅ Successfully imported optimized StorageAccess for BBR buildings")
+        return StorageAccess
     except ImportError as e:
-        logging.warning(f"⚠️ Could not import optimized GCSDataAccess from common.gcs: {e}")
+        logging.warning(f"⚠️ Could not import optimized StorageAccess from common.storage: {e}")
         return None
 
 
-OptimizedGCSDataAccess = _get_optimized_gcs_access()
+OptimizedStorageAccess = _get_optimized_storage_access()
 
 
 class BuildingProcessor:
@@ -338,28 +338,34 @@ class BuildingProcessor:
         output_dir.mkdir(parents=True, exist_ok=True)
         output_file = output_dir / "buildings_processed.parquet"
 
-        # 🚀 ENHANCED: Try native GCS export first if available
-        gcs_export_success = False
-        if OptimizedGCSDataAccess:
+        # 🚀 ENHANCED: Try native storage export first if available
+        storage_export_success = False
+        if OptimizedStorageAccess:
             try:
-                gcs_access = OptimizedGCSDataAccess()
+                storage_access = OptimizedStorageAccess()
                 timestamp = Path(output_dir).name  # Extract timestamp from output directory
-                bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-                gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
+                bucket_name = (
+                    os.getenv("STORAGE_BUCKET")
+                    or os.getenv("R2_BUCKET")
+                    or os.getenv("GCS_BUCKET", "landbruget-data")
+                )
+                storage_path = (
+                    f"{bucket_name}/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
+                )
 
-                # Use native GCS export with server-side compression
-                gcs_access.export_to_gcs_native(
+                # Use native storage export with server-side compression
+                storage_access.export_to_storage_native(
                     connection=conn,
                     table_name="processed_buildings",
-                    gcs_path=gcs_path,
+                    storage_path=storage_path,
                     compression="zstd",
                     query="SELECT * FROM processed_buildings ORDER BY building_floor_area_sqm DESC",
                 )
 
-                self.logger.info(f"✅ Native GCS export successful: {gcs_path}")
-                gcs_export_success = True
+                self.logger.info(f"✅ Native storage export successful: {storage_path}")
+                storage_export_success = True
             except Exception as e:
-                self.logger.warning(f"Native GCS export failed, using local export: {e}")
+                self.logger.warning(f"Native storage export failed, using local export: {e}")
 
         # Always create local file as well (for compatibility)
         conn.execute(f"""
@@ -370,7 +376,9 @@ class BuildingProcessor:
         """)
 
         export_location = (
-            f"GCS and local: {output_file}" if gcs_export_success else f"local: {output_file}"
+            f"Storage and local: {output_file}"
+            if storage_export_success
+            else f"local: {output_file}"
         )
         self.logger.info(f"Saved processed buildings to: {export_location}")
 

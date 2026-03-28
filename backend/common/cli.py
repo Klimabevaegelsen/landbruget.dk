@@ -42,9 +42,15 @@ def stage_options(stages=None, default="all"):
 def resolve_bucket(override=None):
     """Resolve storage bucket from override, env vars, or default.
 
-    Priority: override > R2_BUCKET > GCS_BUCKET > "landbruget-data"
+    Priority: override > STORAGE_BUCKET > R2_BUCKET > GCS_BUCKET > "landbruget-data"
     """
-    return override or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
+    return (
+        override
+        or os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET")
+        or "landbruget-data"
+    )
 
 
 class PipelineRun:

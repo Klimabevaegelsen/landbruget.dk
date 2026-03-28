@@ -36,7 +36,7 @@ def config() -> WaterProjectsSilverConfig:
 @pytest.fixture
 def silver_source(config: WaterProjectsSilverConfig) -> WaterProjectsSilver:
     """Return a test WaterProjectsSilver instance."""
-    with patch("unified_pipeline.common.base.GCSDataAccess"):
+    with patch("unified_pipeline.common.base.StorageAccess"):
         return WaterProjectsSilver(config)
 
 

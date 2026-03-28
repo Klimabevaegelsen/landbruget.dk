@@ -26,7 +26,7 @@ from . import (
 )
 
 # Import export functions
-from .export import upload_silver_data_to_gcs
+from .export import upload_silver_data_to_storage
 
 # Import helpers
 from .helpers import (
@@ -37,7 +37,7 @@ from .helpers import (
 
 # Try to import CVR collection utilities
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
     from unified_pipeline.util.cvr_collection import (
         extract_cvr_numbers_from_table,
         save_pipeline_cvr_numbers,
@@ -50,10 +50,10 @@ except ImportError as e:
     CVR_COLLECTION_AVAILABLE = False
     extract_cvr_numbers_from_table = None
     save_pipeline_cvr_numbers = None
-    GCSDataAccess = None
+    StorageAccess = None
 
 
-def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Path) -> bool:
+def download_bronze_data_from_storage(bronze_dir_override: str, local_bronze_dir: Path) -> bool:
     """
     Download bronze data from GCS to local filesystem for silver processing.
 
@@ -64,17 +64,21 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
     Returns:
         True if download successful, False otherwise
     """
-    if not CVR_COLLECTION_AVAILABLE or GCSDataAccess is None:
+    if not CVR_COLLECTION_AVAILABLE or StorageAccess is None:
         logging.error("GCS utilities not available - cannot download bronze data")
         return False
 
-    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket_name = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
     if not bucket_name:
         logging.error("GCS_BUCKET not set - cannot download bronze data")
         return False
 
     try:
-        gcs_access = GCSDataAccess()
+        storage_access = StorageAccess()
 
         # Create local directory
         local_bronze_dir.mkdir(parents=True, exist_ok=True)
@@ -96,14 +100,16 @@ def download_bronze_data_from_gcs(bronze_dir_override: str, local_bronze_dir: Pa
         downloaded_count = 0
         for filename in expected_files:
             try:
-                gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_dir_override}/{filename}"
+                storage_path = f"{bucket_name}/bronze/chr/{bronze_dir_override}/{filename}"
                 local_path = local_bronze_dir / filename
 
-                # Check if file exists in GCS
-                if gcs_access.file_exists(gcs_path):
-                    # Download file (strip gs:// for raw fs access)
-                    fs_path = gcs_path.replace("gs://", "", 1)
-                    with gcs_access.fs.open(fs_path, "rb") as src, open(local_path, "wb") as dst:
+                # Check if file exists in storage
+                if storage_access.file_exists(storage_path):
+                    fs_path = storage_path
+                    with (
+                        storage_access.fs.open(fs_path, "rb") as src,
+                        open(local_path, "wb") as dst,
+                    ):
                         shutil.copyfileobj(src, dst)
 
                     logging.info(f"Downloaded {filename} from GCS")
@@ -231,17 +237,17 @@ def _save_discovered_cvr_numbers(
 
         if unique_cvr_numbers:
             # Initialize GCS access and save CVR numbers
-            gcs_access = GCSDataAccess()
+            storage_access = StorageAccess()
 
-            gcs_path = save_pipeline_cvr_numbers(
+            storage_path = save_pipeline_cvr_numbers(
                 pipeline_name="chr_pipeline",
                 cvr_numbers=unique_cvr_numbers,
-                gcs_access=gcs_access,
+                storage_access=storage_access,
                 bucket="landbruget-data",
                 timestamp=export_timestamp,
             )
 
-            logging.info(f"Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
+            logging.info(f"Saved {len(unique_cvr_numbers)} unique CVR numbers to {storage_path}")
         else:
             logging.warning("No CVR numbers found in CHR pipeline data")
 
@@ -281,20 +287,24 @@ def process_chr_data_streaming(
         logging.info(f"Using bronze timestamp as export timestamp: {export_timestamp}")
 
     # Get GCS bucket from environment
-    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket_name = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
     if not bucket_name:
         logging.error("GCS_BUCKET environment variable not set")
         return False
 
     # Check if GCS utilities are available
-    if not CVR_COLLECTION_AVAILABLE or GCSDataAccess is None:
+    if not CVR_COLLECTION_AVAILABLE or StorageAccess is None:
         logging.error("GCS utilities not available - cannot process data")
         return False
 
     try:
         # Initialize GCS access with DuckDB connection
-        gcs_access = GCSDataAccess()
-        con = gcs_access.duckdb_conn
+        storage_access = StorageAccess()
+        con = storage_access.duckdb_conn
 
         logging.info("Initialized GCS access with DuckDB connection")
 
@@ -364,8 +374,8 @@ def process_chr_data_streaming(
                     )
 
                     try:
-                        # Use gcs_access.fs (s3fs via common layer) for directory listing
-                        fs = gcs_access.fs
+                        # Use storage_access.fs (s3fs via common layer) for directory listing
+                        fs = storage_access.fs
 
                         # Find all month-suffixed directories for this bronze timestamp
                         all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
@@ -385,7 +395,7 @@ def process_chr_data_streaming(
 
                                 # Find matching files
                                 dir_matches = [
-                                    f"gs://{f}"
+                                    f
                                     for f in dir_files
                                     if pattern_prefix in f and f.endswith(".parquet")
                                 ]
@@ -405,12 +415,12 @@ def process_chr_data_streaming(
                         matching_files = []
                 else:
                     # Original logic for other datasets
-                    gcs_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{pattern}"
+                    gcs_pattern = f"{bucket_name}/bronze/chr/{bronze_timestamp}/{pattern}"
                     logging.info(f"Looking for files matching pattern: {gcs_pattern}")
 
                     try:
-                        gcs_list_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/*"
-                        all_files = gcs_access.list_files(gcs_list_pattern)
+                        gcs_list_pattern = f"{bucket_name}/bronze/chr/{bronze_timestamp}/*"
+                        all_files = storage_access.list_files(gcs_list_pattern)
 
                         # Filter files matching the pattern (handle both .json and .parquet files)
                         if pattern.endswith(".parquet"):
@@ -498,18 +508,16 @@ def process_chr_data_streaming(
                     continue
             else:
                 # Single file processing - check both base directory and CHR-group-suffixed directories
-                gcs_path = (
-                    f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
-                )
+                storage_path = f"{bucket_name}/bronze/chr/{bronze_timestamp}/{dataset_info['file']}"
 
                 # Check if file exists in base GCS directory
-                file_found = gcs_access.file_exists(gcs_path)
+                file_found = storage_access.file_exists(storage_path)
 
                 # If not found in base directory, search CHR-group-suffixed directories (for ejendom etc.)
                 if not file_found:
                     try:
-                        # Use gcs_access.fs (s3fs via common layer) for directory listing
-                        fs = gcs_access.fs
+                        # Use storage_access.fs (s3fs via common layer) for directory listing
+                        fs = storage_access.fs
 
                         # Find all suffixed directories for this bronze timestamp
                         all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
@@ -527,9 +535,11 @@ def process_chr_data_streaming(
 
                             # Check each suffixed directory
                             for suffixed_dir in suffixed_dirs:
-                                alt_gcs_path = f"gs://{suffixed_dir}/{dataset_info['file']}"
-                                if gcs_access.file_exists(alt_gcs_path):
-                                    gcs_path = alt_gcs_path  # Use the file from suffixed directory
+                                alt_storage_path = f"{suffixed_dir}/{dataset_info['file']}"
+                                if storage_access.file_exists(alt_storage_path):
+                                    storage_path = (
+                                        alt_storage_path  # Use the file from suffixed directory
+                                    )
                                     file_found = True
                                     logging.info(
                                         f"Found {dataset_info['file']} in CHR-group directory: {suffixed_dir}"
@@ -540,14 +550,14 @@ def process_chr_data_streaming(
 
                 if not file_found:
                     if dataset_info["required"]:
-                        logging.error(f"Required file not found: {gcs_path}")
+                        logging.error(f"Required file not found: {storage_path}")
                         return False
-                    logging.info(f"Optional file not found, skipping: {gcs_path}")
+                    logging.info(f"Optional file not found, skipping: {storage_path}")
                     continue
 
                 try:
                     # Get file size for logging
-                    file_size_bytes = gcs_access.get_file_size(gcs_path)
+                    file_size_bytes = storage_access.get_file_size(storage_path)
                     file_size_mb = file_size_bytes / (1024 * 1024)
                     logging.info(f"File size: {file_size_mb:.1f} MB")
 
@@ -556,7 +566,7 @@ def process_chr_data_streaming(
 
                     if file_extension == "parquet":
                         # Download parquet file to temp location (DuckDB can't read directly from GCS)
-                        logging.info(f"Loading parquet file via temp download: {gcs_path}")
+                        logging.info(f"Loading parquet file via temp download: {storage_path}")
                         with tempfile.NamedTemporaryFile(
                             suffix=".parquet", delete=False
                         ) as temp_file:
@@ -564,7 +574,7 @@ def process_chr_data_streaming(
 
                             # Download parquet file to temp location
                             with (
-                                gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src,
+                                storage_access.fs.open(storage_path, "rb") as src,
                                 open(temp_path, "wb") as dst,
                             ):
                                 shutil.copyfileobj(src, dst)
@@ -587,7 +597,7 @@ def process_chr_data_streaming(
 
                             # Download file to temp location
                             with (
-                                gcs_access.fs.open(gcs_path.replace("gs://", ""), "rb") as src,
+                                storage_access.fs.open(storage_path, "rb") as src,
                                 open(temp_path, "wb") as dst,
                             ):
                                 shutil.copyfileobj(src, dst)
@@ -632,10 +642,8 @@ def process_chr_data_streaming(
         vetstat_json_files = []
 
         # First try the traditional single file approach (for backward compatibility)
-        traditional_path = (
-            f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.json"
-        )
-        if gcs_access.file_exists(traditional_path):
+        traditional_path = f"{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.json"
+        if storage_access.file_exists(traditional_path):
             vetstat_json_files.append(traditional_path)
             logging.info(f"Found traditional VetStat file: {traditional_path}")
         else:
@@ -645,8 +653,8 @@ def process_chr_data_streaming(
             )
 
             try:
-                # Use gcs_access.fs (s3fs via common layer) for directory listing
-                fs = gcs_access.fs
+                # Use storage_access.fs (s3fs via common layer) for directory listing
+                fs = storage_access.fs
 
                 # Find all directories that match the bronze timestamp with suffixes
                 all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
@@ -659,8 +667,8 @@ def process_chr_data_streaming(
                 # Look for vetstat_antibiotics.json in each directory
                 for bronze_dir in bronze_dirs:
                     try:
-                        vetstat_file_path = f"gs://{bronze_dir}/vetstat_antibiotics.json"
-                        if gcs_access.file_exists(vetstat_file_path):
+                        vetstat_file_path = f"{bronze_dir}/vetstat_antibiotics.json"
+                        if storage_access.file_exists(vetstat_file_path):
                             vetstat_json_files.append(vetstat_file_path)
                             logging.info(f"Found VetStat file: {vetstat_file_path}")
                     except Exception as e:
@@ -681,7 +689,7 @@ def process_chr_data_streaming(
                 for json_file in vetstat_json_files:
                     try:
                         # Download and parse each JSON file
-                        json_data = gcs_access.download_json(json_file)
+                        json_data = storage_access.download_json(json_file)
                         logging.info(f"Downloaded VetStat JSON: {len(json_data)} top-level items")
 
                         # Handle nested structure: list of lists of dictionaries
@@ -1002,7 +1010,7 @@ def process_chr_data_streaming(
 
         # Upload silver data to GCS
         try:
-            upload_success = upload_silver_data_to_gcs(silver_dir, export_timestamp)
+            upload_success = upload_silver_data_to_storage(silver_dir, export_timestamp)
             if upload_success:
                 logging.info("Silver data uploaded to GCS successfully")
             else:
@@ -1068,7 +1076,7 @@ def process_chr_data(
 
     # Determine processing mode: streaming vs legacy
     use_streaming = force_streaming or (
-        bronze_timestamp is not None and CVR_COLLECTION_AVAILABLE and GCSDataAccess is not None
+        bronze_timestamp is not None and CVR_COLLECTION_AVAILABLE and StorageAccess is not None
     )
 
     if use_streaming and bronze_timestamp:
@@ -1802,7 +1810,7 @@ def process_chr_data(
 
     # --- 14. Upload Silver Data to GCS ---
     try:
-        upload_success = upload_silver_data_to_gcs(silver_dir, export_timestamp)
+        upload_success = upload_silver_data_to_storage(silver_dir, export_timestamp)
         if upload_success:
             logging.info("Silver data uploaded to GCS successfully")
         else:

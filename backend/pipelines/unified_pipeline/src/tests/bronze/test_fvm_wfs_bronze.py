@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from tenacity import RetryError
 
 from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
 
@@ -159,7 +160,7 @@ async def test_fetch_layer_data_error(fvm_wfs_bronze: FVMWFSBronze) -> None:
 
     mock_session = get_async_mock_session(mock_response)
 
-    with pytest.raises(Exception, match="Error response 500"):
+    with pytest.raises(RetryError):
         await fvm_wfs_bronze._fetch_layer_data(mock_session, "Markblokke:Markblokke_2024")
 
 

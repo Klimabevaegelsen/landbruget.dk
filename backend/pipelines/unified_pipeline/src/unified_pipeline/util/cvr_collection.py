@@ -13,7 +13,7 @@ The approach uses a standard file structure in GCS:
 from datetime import datetime
 from typing import Any
 
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 from unified_pipeline.util.log_util import Logger
 
@@ -28,15 +28,15 @@ class CVRCollectionManager:
     - Managing the standard CVR collection file structure
     """
 
-    def __init__(self, gcs_access: GCSDataAccess, bucket: str = "landbruget-data"):
+    def __init__(self, storage_access: StorageAccess, bucket: str = "landbruget-data"):
         """
         Initialize CVR collection manager.
 
         Args:
-            gcs_access: GCS data access instance
+            storage_access: GCS data access instance
             bucket: GCS bucket for CVR collections
         """
-        self.gcs_access = gcs_access
+        self.storage = storage_access
         self.bucket = bucket
         self.log = Logger.get_logger()
 
@@ -70,16 +70,16 @@ class CVRCollectionManager:
         }
 
         # Define GCS path
-        gcs_path = f"cvr_collections/{pipeline_name}/{timestamp}/cvr_numbers.json"
+        storage_path = f"cvr_collections/{pipeline_name}/{timestamp}/cvr_numbers.json"
 
         # Save to GCS
-        self.gcs_access.upload_json(cvr_data, f"gs://{self.bucket}/{gcs_path}")
+        self.storage.upload_json(cvr_data, f"{self.bucket}/{storage_path}")
 
         self.log.info(
-            f"Saved {len(unique_cvr_numbers)} CVR numbers from {pipeline_name} to {gcs_path}"
+            f"Saved {len(unique_cvr_numbers)} CVR numbers from {pipeline_name} to {storage_path}"
         )
 
-        return gcs_path
+        return storage_path
 
     def collect_all_cvr_numbers(self) -> dict[str, Any]:
         """
@@ -184,7 +184,7 @@ class CVRCollectionManager:
             # Load the CVR numbers file
             cvr_file_path = f"cvr_collections/{pipeline_name}/{latest_timestamp}/cvr_numbers.json"
 
-            return self.gcs_access.download_json(f"gs://{self.bucket}/{cvr_file_path}")
+            return self.storage.download_json(f"{self.bucket}/{cvr_file_path}")
 
         except Exception as e:
             self.log.warning(f"Could not load CVR collection for {pipeline_name}: {e}")
@@ -194,14 +194,14 @@ class CVRCollectionManager:
         """List all pipeline folders in cvr_collections/."""
         try:
             # List all files in cvr_collections/ and extract unique pipeline names
-            pattern = f"gs://{self.bucket}/cvr_collections/*/*/*"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.bucket}/cvr_collections/*/*/*"
+            files = self.storage.list_files(pattern)
 
             # Extract unique pipeline names from file paths
             pipeline_names = set()
             for file_path in files:
-                # Extract pipeline name from path like: gs://bucket/cvr_collections/pipeline_name/timestamp/file.json
-                parts = file_path.replace(f"gs://{self.bucket}/", "").split("/")
+                # Extract pipeline name from path like: bucket/cvr_collections/pipeline_name/timestamp/file.json
+                parts = file_path.replace(f"{self.bucket}/", "").split("/")
                 if len(parts) >= 3 and parts[0] == "cvr_collections":
                     pipeline_names.add(parts[1])
 
@@ -216,14 +216,14 @@ class CVRCollectionManager:
         """List all timestamp folders for a specific pipeline."""
         try:
             # List all files for this pipeline and extract unique timestamps
-            pattern = f"gs://{self.bucket}/cvr_collections/{pipeline_name}/*/*"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.bucket}/cvr_collections/{pipeline_name}/*/*"
+            files = self.storage.list_files(pattern)
 
             # Extract unique timestamps from file paths
             timestamps = set()
             for file_path in files:
-                # Extract timestamp from path like: gs://bucket/cvr_collections/pipeline_name/timestamp/file.json
-                parts = file_path.replace(f"gs://{self.bucket}/", "").split("/")
+                # Extract timestamp from path like: bucket/cvr_collections/pipeline_name/timestamp/file.json
+                parts = file_path.replace(f"{self.bucket}/", "").split("/")
                 if len(parts) >= 4 and parts[0] == "cvr_collections" and parts[1] == pipeline_name:
                     timestamps.add(parts[2])
 
@@ -333,7 +333,7 @@ def extract_cvr_numbers_from_table(
 def save_pipeline_cvr_numbers(
     pipeline_name: str,
     cvr_numbers: list[str],
-    gcs_access: GCSDataAccess | None = None,
+    storage_access: StorageAccess | None = None,
     bucket: str = "landbruget-data",
     timestamp: str | None = None,
 ) -> str:
@@ -343,7 +343,7 @@ def save_pipeline_cvr_numbers(
     Args:
         pipeline_name: Name of the pipeline
         cvr_numbers: List of CVR numbers to save
-        gcs_access: GCS data access instance (creates default if None)
+        storage_access: GCS data access instance (creates default if None)
         bucket: GCS bucket name
         timestamp: Optional timestamp
 
@@ -351,10 +351,10 @@ def save_pipeline_cvr_numbers(
         GCS path where data was saved
     """
     # Create default GCS access if none provided
-    if gcs_access is None:
-        from common.gcs import GCSDataAccess
+    if storage_access is None:
+        from common.storage import StorageAccess
 
-        gcs_access = GCSDataAccess()
+        storage_access = StorageAccess()
 
-    manager = CVRCollectionManager(gcs_access, bucket)
+    manager = CVRCollectionManager(storage_access, bucket)
     return manager.save_pipeline_cvr_numbers(pipeline_name, cvr_numbers, timestamp)

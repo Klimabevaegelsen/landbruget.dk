@@ -39,7 +39,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         try:
             stage1c_path = self._get_latest_gold_path(stage1c_dataset)
             self.log.info(f"🔍 DEBUG: Found path: {stage1c_path}")
-            self.gcs_access.query_parquet_direct(
+            self.storage.query_parquet_direct(
                 stage1c_path, "SELECT *", "field_property_intersections"
             )
         except Exception as e:
@@ -52,7 +52,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         try:
             stage1b_path = self._get_latest_gold_path(stage1b_dataset)
             self.log.info(f"🔍 DEBUG: Found path: {stage1b_path}")
-            self.gcs_access.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
+            self.storage.query_parquet_direct(stage1b_path, "SELECT *", "field_soil_areas")
         except Exception as e:
             self.log.error(f"❌ Failed to load {stage1b_dataset}: {e}")
             raise
@@ -63,7 +63,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         try:
             stage3a_path = self._get_latest_gold_path(stage3a_dataset)
             self.log.info(f"🔍 DEBUG: Found path: {stage3a_path}")
-            self.gcs_access.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
+            self.storage.query_parquet_direct(stage3a_path, "SELECT *", "final_bnbo_analysis")
         except Exception as e:
             self.log.error(f"❌ Failed to load {stage3a_dataset}: {e}")
             raise
@@ -80,7 +80,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         try:
             stage3b_path = self._get_latest_gold_path(stage3b_dataset)
             self.log.info(f"🔍 DEBUG: Found path: {stage3b_path}")
-            self.gcs_access.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
+            self.storage.query_parquet_direct(stage3b_path, "SELECT *", "final_wetland_analysis")
         except Exception as e:
             self.log.error(f"❌ Failed to load {stage3b_dataset}: {e}")
             raise

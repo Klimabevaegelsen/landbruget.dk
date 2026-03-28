@@ -48,10 +48,10 @@ Installed as editable via `uv` (hatchling build system, `common/pyproject.toml`)
 
 - `common/duckdb_processor.py` — `SharedDuckDBProcessor` + `PipelineProcessor` base classes
 - `common/crs_utils.py` — CRS constants (`DANISH_UTM`, `WGS84`), SQL transform helpers
-- `common/gcs/core.py` — `GCSDataAccess` class (read/write parquet to cloud)
-- `common/gcs/filesystem.py` — s3fs/gcsfs setup + DuckDB fsspec registration via `setup_duckdb_cloud_auth()`
+- `common/storage/core.py` — `StorageAccess` class (read/write parquet to cloud)
+- `common/storage/filesystem.py` — s3fs setup + DuckDB fsspec registration via `setup_duckdb_cloud_auth()`
 - `common/logging_utils.py` — `setup_pipeline_logger()`, `PipelineLogger`, `StageLogger`
-- `common/storage_interface.py` — `StoragePath` class (supports `gs://` and `r2://`)
+- `common/storage_interface.py` — `StoragePath` class (bare bucket/path format)
 - `common/validation/` — CVR/CHR/BFE validators, area validators, baseline manager
 
 ## Environment Variables
@@ -61,17 +61,17 @@ Each pipeline loads its own env vars — no global config:
 ```python
 from dotenv import load_dotenv
 load_dotenv()
-bucket = os.getenv("GCS_BUCKET", "landbrugsdata")
+bucket = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 ```
 
 Cloud auth priority: `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`/`R2_ACCOUNT_ID` → GCS HMAC → DuckDB native secrets.
-Storage path resolution: `R2_BUCKET` → `GCS_BUCKET` → `"landbruget-data"` default.
+Storage path resolution: `STORAGE_BUCKET` → `R2_BUCKET` → `GCS_BUCKET` → `"landbruget-data"` default.
 
 ## Testing
 
 - Each pipeline has its own `tests/` and `conftest.py`
-- Common fixtures in `common/tests/conftest.py`: `mock_duckdb_connection` (`:memory:` + spatial), `mock_gcs_filesystem`, `sample_danish_geometries`, `valid_cvr_numbers`, `valid_chr_numbers`
-- Markers: `pre_merge` (blocking), `gcs_required` (needs credentials)
+- Common fixtures in `common/tests/conftest.py`: `mock_duckdb_connection` (`:memory:` + spatial), `mock_cloud_filesystem`, `sample_danish_geometries`, `valid_cvr_numbers`, `valid_chr_numbers`
+- Markers: `pre_merge` (blocking), `cloud_required` (needs credentials)
 - `backend/conftest.py` manages `sys.path` for module resolution
 
 ## Common Mistakes to Avoid
@@ -82,5 +82,5 @@ Storage path resolution: `R2_BUCKET` → `GCS_BUCKET` → `"landbruget-data"` de
 - Forgetting `source venv/bin/activate` before running anything
 - Assuming global env loading — each pipeline manages its own `.env`
 - Using WGS84 for buffer/distance — always process in EPSG:25832
-- Referencing `common/gcs_utils.py` — actual path is `common/gcs/core.py` (`GCSDataAccess` class)
+- Referencing `common/gcs_utils.py` — actual path is `common/storage/core.py` (`StorageAccess` class)
 - Using pip — this project uses **uv** for Python package management

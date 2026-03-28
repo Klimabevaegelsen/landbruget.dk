@@ -33,11 +33,26 @@ def config() -> AgriculturalFieldsBronzeConfig:
 
 
 @pytest.fixture
-def agricultural_fields_bronze(config: AgriculturalFieldsBronzeConfig) -> AgriculturalFieldsBronze:
+def mock_storage_access():
+    """Create a mock storage access layer for testing."""
+    with patch("unified_pipeline.common.base.StorageAccess") as mock_class:
+        mock_instance = MagicMock()
+        mock_class.return_value = mock_instance
+        mock_instance.duckdb_conn = MagicMock()
+        mock_instance.fs = MagicMock()
+        mock_instance.monitor = MagicMock()
+        yield mock_instance
+
+
+@pytest.fixture
+def agricultural_fields_bronze(
+    config: AgriculturalFieldsBronzeConfig, mock_storage_access
+) -> AgriculturalFieldsBronze:
     """Return a test AgriculturalFieldsBronze instance."""
-    source = AgriculturalFieldsBronze(config)
-    source.log = MagicMock()
-    return source
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
+        source = AgriculturalFieldsBronze(config)
+        source.log = MagicMock()
+        return source
 
 
 def get_async_mock_session(response: AsyncMock) -> MagicMock:
@@ -207,7 +222,7 @@ async def test_process_data_when_total_count_is_zero(
 @pytest.mark.asyncio
 async def test_run_success(agricultural_fields_bronze: AgriculturalFieldsBronze) -> None:
     """Test running with successful processing."""
-    agricultural_fields_bronze._process_data = AsyncMock()  # type: ignore[method-assign]
+    agricultural_fields_bronze._process_data = AsyncMock(return_value="test_table")  # type: ignore[method-assign]
 
     await agricultural_fields_bronze.run()
 

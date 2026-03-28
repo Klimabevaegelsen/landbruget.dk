@@ -104,12 +104,12 @@ pipelines:
     paths:
       - backend/pipelines/dma_pipeline/**
 
-  climate_pipeline:
+  carbon_emissions:
     workflow: climate_pipeline.yml
     description: "Carbon emissions modeling"
     downstream: []
     paths:
-      - backend/pipelines/climate_pipeline/**
+      - backend/pipelines/unified_pipeline/src/unified_pipeline/gold/carbon_emissions/**
 
   # ── TIER 1: Depends on TIER 0 silver outputs ──
 

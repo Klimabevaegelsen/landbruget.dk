@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # Import data structures from transformer
-from data_transformer import (
+from .data_transformer import (
     FertilizerSummary,
     FieldSummary,
     IntegratedFarmTransformer,
@@ -23,10 +23,10 @@ from data_transformer import (
 )
 
 # Import existing formula modules
-from formulas.kvaeg import enterisk_metan
-from formulas.kvaeg.ammoniak import calculate_nh3_emissions_kvaeg
-from formulas.kvaeg.foder import calculate_feed_emissions_kvaeg
-from formulas.marker import (
+from .formulas.kvaeg import enterisk_metan
+from .formulas.kvaeg.ammoniak import calculate_nh3_emissions_kvaeg
+from .formulas.kvaeg.foder import calculate_feed_emissions_kvaeg
+from .formulas.marker import (
     afgroederester,
     goedning_og_nitrifikationshaemmer,
     kalkning,
@@ -34,16 +34,16 @@ from formulas.marker import (
     nitratudvaskning,
     organogene_jorde,
 )
-from formulas.marker.ammoniak import calculate_nh3_field_per_ha
-from formulas.svin import (
+from .formulas.marker.ammoniak import calculate_nh3_field_per_ha
+from .formulas.svin import (
     calculate_ch4_enteric_svin,
     calculate_feed_emissions_svin,
     calculate_manure_emissions_svin,
 )
-from formulas.svin.ammoniak import calculate_nh3_emissions_svin
+from .formulas.svin.ammoniak import calculate_nh3_emissions_svin
 
 # Import standardfaktorer module for feed intake lookups
-from standardfaktorer import lookup_cattle_ts, lookup_pig_fe
+from .standardfaktorer import lookup_cattle_ts, lookup_pig_fe
 
 logger = logging.getLogger(__name__)
 

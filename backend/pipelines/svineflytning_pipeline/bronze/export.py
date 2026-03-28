@@ -13,12 +13,12 @@ from dotenv import load_dotenv
 
 # Import the unified GCS access layer
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCSDataAccess = None
-    GCS_AVAILABLE = False
+    StorageAccess = None
+    STORAGE_AVAILABLE = False
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -41,32 +41,32 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize storage paths and clients
-GCS_BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+GCS_BUCKET = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 
 # Use GCS if we have the required configuration
-USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT and GCS_AVAILABLE)
+USE_CLOUD_STORAGE = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT and STORAGE_AVAILABLE)
 
 # Initialize GCS access layer if available
-gcs_access = None
-if USE_GCS:
+storage_access = None
+if USE_CLOUD_STORAGE:
     try:
-        gcs_access = GCSDataAccess()
-        logger.debug(f"Initialized GCSDataAccess for project: {GOOGLE_CLOUD_PROJECT}")
+        storage_access = StorageAccess()
+        logger.debug(f"Initialized StorageAccess for project: {GOOGLE_CLOUD_PROJECT}")
     except Exception as e:
-        logger.error(f"Failed to initialize GCSDataAccess: {e}")
+        logger.error(f"Failed to initialize StorageAccess: {e}")
         logger.warning("Falling back to local storage")
-        USE_GCS = False
+        USE_CLOUD_STORAGE = False
 
-if not USE_GCS:
+if not USE_CLOUD_STORAGE:
     logger.warning(
         "Using local storage (path will be determined by SVINEFLYTNING_OUTPUT_DIR environment variable)"
     )
 
 
-def _save_to_gcs(blob_path: str, data_iterator: Iterator[dict]) -> str:
+def _save_to_storage(blob_path: str, data_iterator: Iterator[dict]) -> str:
     """
-    Helper function to stream content to GCS using unified GCSDataAccess.
+    Helper function to stream content to GCS using unified StorageAccess.
 
     Args:
         blob_path: The path to save the blob to.
@@ -77,11 +77,11 @@ def _save_to_gcs(blob_path: str, data_iterator: Iterator[dict]) -> str:
     """
     # Add bronze/svineflytning/{timestamp} prefix to all files
     full_path = f"bronze/svineflytning/{blob_path}"
-    gcs_path = f"gs://{GCS_BUCKET}/{full_path}"
+    storage_path = f"{GCS_BUCKET}/{full_path}"
     fs_path = f"{GCS_BUCKET}/{full_path}"
 
     # Create a streaming upload using gcsfs
-    with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
+    with storage_access.fs.open(fs_path, "w", encoding="utf-8") as f:
         # Write opening bracket for JSON array
         f.write("[\n")
 
@@ -96,7 +96,7 @@ def _save_to_gcs(blob_path: str, data_iterator: Iterator[dict]) -> str:
         # Write closing bracket
         f.write("\n]")
 
-    return gcs_path
+    return storage_path
 
 
 def _save_locally(filepath: Path, data_iterator: Iterator[dict]) -> str:
@@ -148,10 +148,10 @@ def export_movements(
         Dict containing export metadata
     """
     destination = None
-    if USE_GCS:
+    if USE_CLOUD_STORAGE:
         try:
             logger.debug(f"Streaming data to GCS bucket '{GCS_BUCKET}'")
-            destination = _save_to_gcs(f"{export_timestamp}/{filename}", data_iterator)
+            destination = _save_to_storage(f"{export_timestamp}/{filename}", data_iterator)
             logger.debug(f"Successfully exported to GCS: {destination}")
         except Exception as e:
             logger.error(f"Error writing to GCS: {e}")
@@ -167,7 +167,7 @@ def export_movements(
     return {
         "export_timestamp": export_timestamp,
         "filename": filename,
-        "storage_type": "gcs" if USE_GCS else "local",
+        "storage_type": "storage" if USE_CLOUD_STORAGE else "local",
         "destination": destination,
     }
 
@@ -197,17 +197,17 @@ def export_movements_optimized(
             parser = ijson.items(f, "item")
             yield from parser
 
-    if USE_GCS:
+    if USE_CLOUD_STORAGE:
         try:
             logger.debug(f"Starting streaming upload to GCS bucket '{GCS_BUCKET}'")
 
-            gcs_path = (
-                f"gs://{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
+            storage_path = (
+                f"{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
             )
             fs_path = f"{GCS_BUCKET}/bronze/svineflytning/{export_timestamp}/svineflytning.json"
 
             # Stream directly to GCS using gcsfs
-            with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
+            with storage_access.fs.open(fs_path, "w", encoding="utf-8") as f:
                 f.write("[\n")
 
                 first_item = True
@@ -221,7 +221,7 @@ def export_movements_optimized(
 
                 f.write("\n]")
 
-            destination = gcs_path
+            destination = storage_path
             logger.debug(f"Successfully exported to GCS: {destination}")
 
         except Exception as e:
@@ -276,6 +276,6 @@ def export_movements_optimized(
 
     return {
         "export_timestamp": export_timestamp,
-        "storage_type": "gcs" if USE_GCS else "local",
+        "storage_type": "storage" if USE_CLOUD_STORAGE else "local",
         "destination": destination,
     }

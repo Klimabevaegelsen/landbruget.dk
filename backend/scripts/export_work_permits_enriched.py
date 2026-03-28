@@ -17,9 +17,9 @@ from pathlib import Path
 
 import duckdb
 
-# Add backend to path so common.gcs is importable
+# Add backend to path so common.storage is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ BUCKET = os.getenv("GCS_BUCKET", "landbruget-data")
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 
 
-def find_latest(gcs: GCSDataAccess, pattern: str) -> str | None:
+def find_latest(gcs: StorageAccess, pattern: str) -> str | None:
     """Find the most recent file matching a glob pattern."""
     files = gcs.list_files(pattern)
     if not files:
@@ -37,7 +37,7 @@ def find_latest(gcs: GCSDataAccess, pattern: str) -> str | None:
     return files[-1]
 
 
-def load_table(gcs: GCSDataAccess, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) -> bool:
+def load_table(gcs: StorageAccess, conn: duckdb.DuckDBPyConnection, table_name: str, path: str) -> bool:
     """Download a parquet file and load into DuckDB table."""
     log.info(f"Loading {table_name} from .../{'/'.join(path.split('/')[-3:])}")
     try:
@@ -54,7 +54,7 @@ def load_table(gcs: GCSDataAccess, conn: duckdb.DuckDBPyConnection, table_name: 
 def main():
     log.info("Starting work permits enriched export")
 
-    gcs = GCSDataAccess()
+    gcs = StorageAccess()
     conn = duckdb.connect()
 
     # 1. Find latest files for each dataset
@@ -62,22 +62,22 @@ def main():
 
     work_permits_path = find_latest(
         gcs,
-        f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet",
+        f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet",
     )
     if not work_permits_path:
         work_permits_path = find_latest(
             gcs,
-            f"gs://{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet",
+            f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet",
         )
     if not work_permits_path:
         log.error("No work permits files found")
         return
 
-    cvr_companies_path = find_latest(gcs, f"gs://{BUCKET}/silver/cvr_companies/*/data.parquet")
-    cvr_persons_path = find_latest(gcs, f"gs://{BUCKET}/silver/cvr_persons/*/data.parquet")
-    chr_properties_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/properties.parquet")
-    chr_property_owners_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/property_owners.parquet")
-    chr_herds_path = find_latest(gcs, f"gs://{BUCKET}/silver/chr/*/herds.parquet")
+    cvr_companies_path = find_latest(gcs, f"{BUCKET}/silver/cvr_companies/*/data.parquet")
+    cvr_persons_path = find_latest(gcs, f"{BUCKET}/silver/cvr_persons/*/data.parquet")
+    chr_properties_path = find_latest(gcs, f"{BUCKET}/silver/chr/*/properties.parquet")
+    chr_property_owners_path = find_latest(gcs, f"{BUCKET}/silver/chr/*/property_owners.parquet")
+    chr_herds_path = find_latest(gcs, f"{BUCKET}/silver/chr/*/herds.parquet")
 
     # 2. Load all datasets
     log.info("Loading datasets...")

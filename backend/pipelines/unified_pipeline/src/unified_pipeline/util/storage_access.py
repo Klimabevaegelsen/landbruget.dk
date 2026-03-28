@@ -1,32 +1,32 @@
 """
-DEPRECATED: Import from common.gcs instead.
+DEPRECATED: Import from common.storage instead.
 
 This module is maintained for backward compatibility only.
-New code should use: from common.gcs import GCSDataAccess
+New code should use: from common.storage import StorageAccess
 
 Migration guide:
     # Old import (deprecated)
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from unified_pipeline.util.storage_access import StorageAccess
 
     # New import (preferred)
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 """
 
 import warnings
 
 warnings.warn(
-    "unified_pipeline.util.gcs_access is deprecated. "
-    "Use 'from common.gcs import GCSDataAccess' instead.",
+    "unified_pipeline.util.storage_access is deprecated. "
+    "Use 'from common.storage import StorageAccess' instead.",
     DeprecationWarning,
     stacklevel=2,
 )
 
 # Re-export from the new canonical location
-from common.gcs import (  # noqa: E402
-    GCSDataAccess,
+from common.storage import (  # noqa: E402
     ResourceMonitor,
-    get_duckdb_with_gcs,
-    get_gcs_filesystem,
+    StorageAccess,
+    get_duckdb_with_r2,
+    get_r2_filesystem,
 )
 
-__all__ = ["GCSDataAccess", "ResourceMonitor", "get_duckdb_with_gcs", "get_gcs_filesystem"]
+__all__ = ["ResourceMonitor", "StorageAccess", "get_duckdb_with_r2", "get_r2_filesystem"]

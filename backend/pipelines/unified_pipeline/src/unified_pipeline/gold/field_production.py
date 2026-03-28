@@ -34,7 +34,11 @@ class FieldProductionGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Comprehensive field production estimates using DST yield data"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # NEW: Single year processing for matrix jobs
     target_year: int | None = None  # If set, process only this year
@@ -533,13 +537,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             all_files = []
 
             # Try the new pattern first: {dataset}.parquet
-            pattern1 = f"gs://{self.config.bucket}/silver/{dataset}/*/{dataset}.parquet"
-            files1 = self.gcs_access.list_files(pattern1)
+            pattern1 = f"{self.config.bucket}/silver/{dataset}/*/{dataset}.parquet"
+            files1 = self.storage.list_files(pattern1)
             all_files.extend(files1)
 
             # Also try the old pattern: data.parquet
-            pattern2 = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
-            files2 = self.gcs_access.list_files(pattern2)
+            pattern2 = f"{self.config.bucket}/silver/{dataset}/*/data.parquet"
+            files2 = self.storage.list_files(pattern2)
             all_files.extend(files2)
 
             if not all_files:
@@ -564,10 +568,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
         # Load from GCS using direct download and load into our connection
         try:
-            gcs_path = self._get_latest_silver_path(dataset)
+            storage_path = self._get_latest_silver_path(dataset)
 
             # Download to temp file and load into our connection
-            with self.gcs_access._temp_download(gcs_path) as temp_file:
+            with self.storage._temp_download(storage_path) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {table_name} AS
                     SELECT * FROM read_parquet('{temp_file}')
@@ -819,10 +823,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             else:
                 # STREAMING: Load from GCS using temporary download and immediate processing
                 try:
-                    gcs_path = self._get_latest_silver_path(dataset_name)
+                    storage_path = self._get_latest_silver_path(dataset_name)
 
                     # Use temporary download with immediate processing to minimize memory usage
-                    with self.gcs_access._temp_download(gcs_path) as temp_file:
+                    with self.storage._temp_download(storage_path) as temp_file:
                         # Check column structure first
                         columns_info = self.conn.execute(
                             f"DESCRIBE (SELECT * FROM read_parquet('{temp_file}') LIMIT 1)"
@@ -1852,7 +1856,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 # Matrix job: save to year-specific directory
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 output_path = (
-                    f"gs://{self.config.bucket}/gold/{self.config.dataset}_{self.config.target_year}/"
+                    f"{self.config.bucket}/gold/{self.config.dataset}_{self.config.target_year}/"
                     f"{timestamp}/data.parquet"
                 )
                 self.log.info(
@@ -1860,12 +1864,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 )
             else:
                 # Normal job: save to latest directory
-                output_path = (
-                    f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
-                )
+                output_path = f"{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
 
             # Export directly from DuckDB table to GCS
-            self.gcs_access.upload_from_duckdb_table(
+            self.storage.upload_from_duckdb_table(
                 "final_production_estimates",
                 output_path,
                 compression="zstd",

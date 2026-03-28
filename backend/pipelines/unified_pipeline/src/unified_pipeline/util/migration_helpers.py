@@ -1,118 +1,122 @@
 """
-Migration helper utilities for transitioning to the optimized GCSDataAccess architecture.
+Migration helper utilities for transitioning to the optimized StorageAccess architecture.
 
 This module provides utility functions to help with the migration from the legacy
-system to the optimized GCSDataAccess architecture. These helpers ensure
+system to the optimized StorageAccess architecture. These helpers ensure
 consistent patterns and reduce migration complexity.
 """
 
 import duckdb
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 from unified_pipeline.util.log_util import Logger
 
 
 class GCSMigrationHelper:
-    """Helper utilities for migrating to GCSDataAccess."""
+    """Helper utilities for migrating to StorageAccess."""
 
     def __init__(self, logger: Logger | None = None):
         self.log = logger or Logger.get_logger()
 
     @staticmethod
-    def upload_table_to_gcs(
-        gcs_access: GCSDataAccess, table_name: str, bucket: str, path: str
+    def upload_table_to_storage(
+        storage_access: StorageAccess, table_name: str, bucket: str, path: str
     ) -> None:
         """
-        Upload DuckDB table to GCS using optimized path.
+        Upload DuckDB table to storage using optimized path.
 
         Replaces: gcs_util.upload_file() patterns for table data
 
         Args:
-            gcs_access: GCSDataAccess instance
+            storage_access: StorageAccess instance
             table_name: Name of DuckDB table to upload
-            bucket: GCS bucket name
-            path: Path within bucket (without gs:// prefix)
+            bucket: Storage bucket name
+            path: Path within bucket (bare bucket/path)
         """
-        gcs_path = f"gs://{bucket}/{path}"
-        gcs_access.upload_from_duckdb_table(table_name, gcs_path)
+        storage_path = f"{bucket}/{path}"
+        storage_access.upload_from_duckdb_table(table_name, storage_path)
 
     @staticmethod
-    def download_table_from_gcs(gcs_access: GCSDataAccess, gcs_path: str, table_name: str) -> None:
+    def download_table_from_storage(
+        storage_access: StorageAccess, storage_path: str, table_name: str
+    ) -> None:
         """
-        Download GCS file and create DuckDB table.
+        Download storage file and create DuckDB table.
 
         Replaces: gcs_util.download_file() + manual table creation patterns
 
         Args:
-            gcs_access: GCSDataAccess instance
-            gcs_path: Full GCS path (gs://bucket/path)
+            storage_access: StorageAccess instance
+            storage_path: Full storage path (bucket/path)
             table_name: Name for the created DuckDB table
         """
-        gcs_access.create_table_from_gcs(table_name, gcs_path)
+        storage_access.create_table_from_storage(table_name, storage_path)
 
     @staticmethod
-    def list_gcs_files(gcs_access: GCSDataAccess, bucket: str, prefix: str) -> list[str]:
+    def list_storage_files(storage_access: StorageAccess, bucket: str, prefix: str) -> list[str]:
         """
-        List files in GCS bucket with prefix.
+        List files in storage bucket with prefix.
 
         Replaces: gcs_util.list_files()
 
         Args:
-            gcs_access: GCSDataAccess instance
-            bucket: GCS bucket name
+            storage_access: StorageAccess instance
+            bucket: Storage bucket name
             prefix: File prefix to filter by
 
         Returns:
-            List of full GCS paths (gs://bucket/path format)
+            List of full storage paths (bucket/path format)
         """
-        pattern = f"gs://{bucket}/{prefix}*"
-        return gcs_access.list_files(pattern)
+        pattern = f"{bucket}/{prefix}*"
+        return storage_access.list_files(pattern)
 
     @staticmethod
-    def download_json_from_gcs(gcs_access: GCSDataAccess, bucket: str, blob_name: str) -> dict:
+    def download_json_from_storage(
+        storage_access: StorageAccess, bucket: str, blob_name: str
+    ) -> dict:
         """
-        Download JSON data from GCS.
+        Download JSON data from storage.
 
         Replaces: gcs_util.download_json_from_gcs()
 
         Args:
-            gcs_access: GCSDataAccess instance
-            bucket: GCS bucket name
+            storage_access: StorageAccess instance
+            bucket: Storage bucket name
             blob_name: Path to JSON file within bucket
 
         Returns:
             Parsed JSON data as dict or list
         """
-        gcs_path = f"gs://{bucket}/{blob_name}"
-        return gcs_access.download_json(gcs_path)
+        storage_path = f"{bucket}/{blob_name}"
+        return storage_access.download_json(storage_path)
 
     @staticmethod
-    def upload_json_to_gcs(
-        gcs_access: GCSDataAccess, data: dict, bucket: str, blob_name: str
+    def upload_json_to_storage(
+        storage_access: StorageAccess, data: dict, bucket: str, blob_name: str
     ) -> None:
         """
-        Upload JSON data to GCS.
+        Upload JSON data to storage.
 
         Replaces: gcs_util.upload_json_to_gcs() patterns
 
         Args:
-            gcs_access: GCSDataAccess instance
+            storage_access: StorageAccess instance
             data: JSON data to upload
-            bucket: GCS bucket name
+            bucket: Storage bucket name
             blob_name: Path within bucket for the JSON file
         """
-        gcs_path = f"gs://{bucket}/{blob_name}"
-        gcs_access.upload_json(data, gcs_path)
+        storage_path = f"{bucket}/{blob_name}"
+        storage_access.upload_json(data, storage_path)
 
     def validate_connection_sharing(
-        self, base_conn: duckdb.DuckDBPyConnection, gcs_access: GCSDataAccess
+        self, base_conn: duckdb.DuckDBPyConnection, storage_access: StorageAccess
     ) -> bool:
         """
-        Validate that BaseSource and GCSDataAccess are sharing the same connection.
+        Validate that BaseSource and StorageAccess are sharing the same connection.
 
         Args:
             base_conn: BaseSource DuckDB connection
-            gcs_access: GCSDataAccess instance
+            storage_access: StorageAccess instance
 
         Returns:
             True if connections are properly shared, False otherwise
@@ -122,8 +126,10 @@ class GCSMigrationHelper:
             test_table = "migration_test_table"
             base_conn.execute(f"CREATE TABLE {test_table} AS SELECT 1 as test_col")
 
-            # Try to access it from gcs_access connection
-            result = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {test_table}").fetchone()
+            # Try to access it from storage_access connection
+            result = storage_access.duckdb_conn.execute(
+                f"SELECT COUNT(*) FROM {test_table}"
+            ).fetchone()
 
             # Clean up
             base_conn.execute(f"DROP TABLE IF EXISTS {test_table}")
@@ -138,12 +144,12 @@ class GCSMigrationHelper:
             self.log.error(f"❌ Connection sharing validation failed with error: {e}")
             return False
 
-    def create_unified_connection_setup(self) -> tuple[duckdb.DuckDBPyConnection, GCSDataAccess]:
+    def create_unified_connection_setup(self) -> tuple[duckdb.DuckDBPyConnection, StorageAccess]:
         """
         Create a unified connection setup for testing migration patterns.
 
         Returns:
-            Tuple of (DuckDB connection, GCSDataAccess instance) that share the same connection
+            Tuple of (DuckDB connection, StorageAccess instance) that share the same connection
         """
         # Create base connection
         conn = duckdb.connect()
@@ -159,13 +165,13 @@ class GCSMigrationHelper:
 
             from fsspec import filesystem
 
-            # Use HMAC authentication if available (same pattern as gcs_access.py)
-            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            # Use HMAC authentication if available (same pattern as storage_access.py)
+            storage_access_key = os.getenv("GCS_ACCESS_KEY_ID")
             gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
-            if gcs_access_key and gcs_secret_key:
+            if storage_access_key and gcs_secret_key:
                 fs = filesystem(
-                    "gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key
+                    "gs", access_key_id=storage_access_key, secret_access_key=gcs_secret_key
                 )
             else:
                 fs = filesystem("gs")
@@ -176,15 +182,15 @@ class GCSMigrationHelper:
         except Exception as e:
             self.log.warning(f"Connection configuration warning: {e}")
 
-        # Create GCSDataAccess with shared connection
-        gcs_access = GCSDataAccess(connection=conn)
+        # Create StorageAccess with shared connection
+        storage_access = StorageAccess(connection=conn)
 
-        return conn, gcs_access
+        return conn, storage_access
 
 
 # Convenience functions for common migration patterns
 def migrate_save_data_pattern(
-    gcs_access: GCSDataAccess,
+    storage_access: StorageAccess,
     table_name: str,
     dataset: str,
     bucket: str,
@@ -193,22 +199,22 @@ def migrate_save_data_pattern(
     subdataset: str | None = None,
 ) -> None:
     """
-    Migrate the common _save_data pattern to GCSDataAccess.
+    Migrate the common _save_data pattern to StorageAccess.
 
     This replaces the pattern:
     ```python
     # OLD
     with tempfile.NamedTemporaryFile(suffix=".parquet") as tmp:
         conn.execute(f"COPY {table_name} TO '{tmp.name}' (FORMAT PARQUET)")
-        # Use gcs_access instead of gcs_util
-        gcs_path = f"gs://{bucket}/{path}"
+        # Use storage_access instead of gcs_util
+        storage_path = f"{bucket}/{path}"
         with open(tmp.name, "rb") as src:
-            with gcs_access.fs.open(gcs_path, "wb") as dst:
+            with storage_access.fs.open(storage_path, "wb") as dst:
                 import shutil
                 shutil.copyfileobj(src, dst)
 
     # NEW
-    migrate_save_data_pattern(self.gcs_access, table_name, dataset, bucket, stage, timestamp)
+    migrate_save_data_pattern(self.storage, table_name, dataset, bucket, stage, timestamp)
     ```
     """
     # Determine final dataset name
@@ -217,49 +223,48 @@ def migrate_save_data_pattern(
     # Create path with timestamp
     filename = f"{final_dataset}.parquet"
     path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
-    gcs_path = f"gs://{bucket}/{path}"
+    storage_path = f"{bucket}/{path}"
 
     # 🚀 ENHANCED: Try native HMAC export first, fallback to existing method
-    if hasattr(gcs_access, "export_to_gcs_native"):
-        native_used = gcs_access.export_to_gcs_native(
+    if hasattr(storage_access, "export_to_storage_native"):
+        native_used = storage_access.export_to_storage_native(
             table_name,
-            gcs_path,
+            storage_path,
             compression="zstd",  # Optimal compression
             row_group_size=100000,
         )
         if not native_used:
             # Fallback to existing method
-            gcs_access.upload_from_duckdb_table(table_name, gcs_path)
+            storage_access.upload_from_duckdb_table(table_name, storage_path)
     else:
         # Original method for backward compatibility
-        gcs_access.upload_from_duckdb_table(table_name, gcs_path)
+        storage_access.upload_from_duckdb_table(table_name, storage_path)
 
 
 def migrate_read_data_pattern(
-    gcs_access: GCSDataAccess, bucket: str, blob_name: str, table_name: str
+    storage_access: StorageAccess, bucket: str, blob_name: str, table_name: str
 ) -> None:
     """
-    Migrate the common data reading pattern to GCSDataAccess.
+    Migrate the common data reading pattern to StorageAccess.
 
     This replaces the pattern:
     ```python
     # OLD
-    # temp_file = self.gcs_util.download_file(bucket, blob_name, local_path)
     # self.conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')")
 
     # NEW
-    migrate_read_data_pattern(self.gcs_access, bucket, blob_name, table_name)
+    migrate_read_data_pattern(self.storage, bucket, blob_name, table_name)
     ```
     """
-    gcs_path = f"gs://{bucket}/{blob_name}"
+    storage_path = f"{bucket}/{blob_name}"
 
     # 🚀 ENHANCED: Try native HMAC loading first, fallback to existing method
-    if hasattr(gcs_access, "query_parquet_native"):
+    if hasattr(storage_access, "query_parquet_native"):
         try:
-            gcs_access.query_parquet_native(gcs_path, "SELECT *", table_name)
+            storage_access.query_parquet_native(storage_path, "SELECT *", table_name)
         except Exception:
             # Fallback to existing method
-            gcs_access.create_table_from_gcs(table_name, gcs_path)
+            storage_access.create_table_from_storage(table_name, storage_path)
     else:
         # Original method for backward compatibility
-        gcs_access.create_table_from_gcs(table_name, gcs_path)
+        storage_access.create_table_from_storage(table_name, storage_path)

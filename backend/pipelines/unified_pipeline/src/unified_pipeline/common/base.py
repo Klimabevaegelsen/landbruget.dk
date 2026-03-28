@@ -18,10 +18,10 @@ from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 import duckdb
-from common.gcs import GCSDataAccess
 
 # Import the new data tracing system
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from common.storage import StorageAccess
 from pydantic import BaseModel
 
 from unified_pipeline.common.native_schema_manager import NativeSchemaManager
@@ -193,8 +193,8 @@ class BaseSource(Generic[T], ABC):
 
     Attributes:
         config: Source-specific configuration object
-        gcs_access: Unified GCS and DuckDB access layer
-        gcs_access: High-performance GCS data access layer (new)
+        storage_access: Unified GCS and DuckDB access layer
+        storage_access: High-performance GCS data access layer (new)
         log: Logger instance for this source
     """
 
@@ -213,7 +213,7 @@ class BaseSource(Generic[T], ABC):
         self._configure_duckdb()
 
         # Create GCS access layer with shared connection
-        self.gcs_access = GCSDataAccess(connection=self.conn)
+        self.storage = StorageAccess(connection=self.conn)
 
         # Initialize pipeline metadata manager (pipeline-level data tracing)
         self.pipeline_metadata_manager = PipelineMetadataManager()
@@ -333,15 +333,17 @@ class BaseSource(Generic[T], ABC):
                 # If using GCS, also upload the metadata file
                 if not self.config.save_local:
                     try:
-                        metadata_gcs_path = (
+                        metadata_storage_path = (
                             f"{stage}/{final_dataset}/{timestamp}/{metadata_filename}"
                         )
                         # Read JSON metadata and upload using upload_json_string method
                         with open(metadata_file_path, encoding="utf-8") as f:
                             metadata_json_string = f.read()
 
-                        self.gcs_access.upload_json_string(metadata_json_string, metadata_gcs_path)
-                        self.log.info(f"✅ Pipeline metadata uploaded to GCS: {metadata_gcs_path}")
+                        self.storage.upload_json_string(metadata_json_string, metadata_storage_path)
+                        self.log.info(
+                            f"✅ Pipeline metadata uploaded to GCS: {metadata_storage_path}"
+                        )
                     except Exception as e:
                         self.log.warning(f"⚠️  Failed to upload metadata to GCS: {e}")
 
@@ -643,7 +645,7 @@ class BaseSource(Generic[T], ABC):
         """
         Save data using unified GCS access layer.
 
-        ✅ MIGRATION: Now uses GCSDataAccess for optimal performance with shared connection.
+        ✅ MIGRATION: Now uses StorageAccess for optimal performance with shared connection.
         Eliminates temporary file overhead and provides 18x performance improvement.
 
         Args:
@@ -682,14 +684,14 @@ class BaseSource(Generic[T], ABC):
             self.log.info(f"✅ Saved locally: {local_path}")
         else:
             # ✅ MIGRATION: Save to GCS using optimized unified access
-            gcs_path = f"gs://{bucket}/{path}"
+            storage_path = f"{bucket}/{path}"
             if isinstance(data, str):  # Table name
-                self.gcs_access.upload_from_duckdb_table(data, gcs_path)
+                self.storage.upload_from_duckdb_table(data, storage_path)
             elif isinstance(data, dict | list):  # JSON data
-                self.gcs_access.upload_json(data, gcs_path)
+                self.storage.upload_json(data, storage_path)
             else:
                 raise ValueError(f"Unsupported data type: {type(data)}")
-            self.log.info(f"✅ Saved to GCS: {gcs_path}")
+            self.log.info(f"✅ Saved to GCS: {storage_path}")
 
     def _read_silver_data(self, dataset: str) -> Any | None:
         """Read data from silver layer for gold processing."""
@@ -700,9 +702,9 @@ class BaseSource(Generic[T], ABC):
         """Read data from storage for any stage using unified connection."""
 
         try:
-            # ✅ MIGRATION: Use modern gcs_access.list_files with pattern matching
-            prefix = f"gs://{bucket}/{stage}/{dataset}/*/*"
-            files = self.gcs_access.list_files(prefix)
+            # ✅ MIGRATION: Use modern storage_access.list_files with pattern matching
+            prefix = f"{bucket}/{stage}/{dataset}/*/*"
+            files = self.storage.list_files(prefix)
 
             if not files:
                 self.log.warning(f"No files found for {stage}/{dataset} at {prefix}")
@@ -710,17 +712,17 @@ class BaseSource(Generic[T], ABC):
 
             # Get the most recent file by sorting GCS paths (timestamps are in path)
             latest_file_path = sorted(files, reverse=True)[0]
-            latest_file_name = latest_file_path.replace(f"gs://{bucket}/", "")
+            latest_file_name = latest_file_path.replace(f"{bucket}/", "")
             self.log.info(f"Reading latest {stage} data: {latest_file_path}")
 
             # Determine file type and read accordingly
             if latest_file_path.endswith(".parquet"):
-                # ✅ MIGRATION: Use unified GCSDataAccess with shared connection
-                gcs_path = latest_file_path
+                # ✅ MIGRATION: Use unified StorageAccess with shared connection
+                storage_path = latest_file_path
                 table_name = f"data_{dataset}_{stage}"
 
-                # Use shared connection via gcs_access
-                self.gcs_access.create_table_from_gcs(table_name, gcs_path)
+                # Use shared connection via storage_access
+                self.storage.create_table_from_storage(table_name, storage_path)
 
                 # Get row count for logging using shared connection
                 row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -734,8 +736,8 @@ class BaseSource(Generic[T], ABC):
 
             if latest_file_path.endswith(".json"):
                 # ✅ MIGRATION: Use unified GCS access for JSON downloads
-                gcs_path = latest_file_path
-                return self.gcs_access.download_json(gcs_path)
+                storage_path = latest_file_path
+                return self.storage.download_json(storage_path)
             self.log.error(f"Unsupported file type: {latest_file_path}")
             return None
 
@@ -920,9 +922,9 @@ class BaseSource(Generic[T], ABC):
             self.log.error(f"No data files found in {latest_dir_path}")
             return None
         # Read from GCS - find latest timestamped directory
-        bronze_prefix = f"gs://{bucket_name}/bronze/{dataset}/*/*"
+        bronze_prefix = f"{bucket_name}/bronze/{dataset}/*/*"
         try:
-            files = self.gcs_access.list_files(bronze_prefix)
+            files = self.storage.list_files(bronze_prefix)
             if not files:
                 self.log.error(f"No bronze data found in GCS at {bronze_prefix}")
                 return None
@@ -933,11 +935,11 @@ class BaseSource(Generic[T], ABC):
             self.log.info(f"Reading bronze data from GCS: {latest_file_path}")
 
             if latest_file_path.endswith(".parquet"):
-                # ✅ MIGRATION: Use modern GCS access with shared self.gcs_access
-                gcs_path = latest_file_path
+                # ✅ MIGRATION: Use modern GCS access with shared self.storage
+                storage_path = latest_file_path
 
                 # Use the optimized temp download with base class DuckDB connection
-                with self.gcs_access._temp_download(gcs_path) as temp_file:
+                with self.storage._temp_download(storage_path) as temp_file:
                     table_name = f"gcs_bronze_data_{dataset}"
                     self.conn.execute(
                         f"""
@@ -947,8 +949,8 @@ class BaseSource(Generic[T], ABC):
                     )
                     return table_name
             elif latest_file_path.endswith(".json"):
-                # ✅ MIGRATION: Download JSON file using modern gcs_access
-                data = self.gcs_access.download_json(latest_file_path)
+                # ✅ MIGRATION: Download JSON file using modern storage_access
+                data = self.storage.download_json(latest_file_path)
 
                 table_name = f"gcs_bronze_data_{dataset}"
                 if isinstance(data, list):
@@ -1110,10 +1112,12 @@ class BaseSource(Generic[T], ABC):
                     f"{dataset}_{stage}", schema_info, schema_dir
                 )
 
-            # Save schema to GCS if not in local-only mode
+            # Save schema to storage if not in local-only mode
             if not self.config.save_local:
-                gcs_path = f"schemas/{stage}/{self.__class__.__name__}"
-                self._schema_manager.save_schema_to_gcs(f"{dataset}_{stage}", schema_info, gcs_path)
+                storage_path = f"schemas/{stage}/{self.__class__.__name__}"
+                self._schema_manager.save_schema_to_storage(
+                    f"{dataset}_{stage}", schema_info, storage_path
+                )
 
             # Clean up temporary table
             self.conn.execute(f"DROP TABLE IF EXISTS {temp_table_name}")
@@ -1222,8 +1226,8 @@ class BaseSource(Generic[T], ABC):
         if not self.config.save_local:
             try:
                 for stage in ["bronze", "silver", "gold"]:
-                    prefix = f"gs://{self.config.bucket}/schemas/{stage}/*"
-                    files = self.gcs_access.list_files(prefix)
+                    prefix = f"{self.config.bucket}/schemas/{stage}/*"
+                    files = self.storage.list_files(prefix)
                     if files:
                         schemas_info["gcs_schemas"][stage] = []
                         for file_path in files:
@@ -1235,7 +1239,7 @@ class BaseSource(Generic[T], ABC):
                                     {
                                         "dataset": dataset_name,
                                         "file": file_name,
-                                        "gcs_path": file_path,
+                                        "storage_path": file_path,
                                     }
                                 )
             except Exception as e:
@@ -1298,11 +1302,11 @@ class BaseSource(Generic[T], ABC):
         Returns:
             str: Name of the created DuckDB table
         """
-        gcs_path = self._get_latest_silver_path(dataset)
+        storage_path = self._get_latest_silver_path(dataset)
         table_name = table_name or f"silver_{dataset}"
 
         # Create table directly in DuckDB without DataFrame conversion
-        self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", table_name)
+        self.storage.query_parquet_direct(storage_path, "SELECT *", table_name)
         return table_name
 
     def read_silver_data_with_filter_direct(
@@ -1312,11 +1316,11 @@ class BaseSource(Generic[T], ABC):
         ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table -
         NO DataFrame conversion.
         """
-        gcs_path = self._get_latest_silver_path(dataset)
+        storage_path = self._get_latest_silver_path(dataset)
         table_name = table_name or f"silver_{dataset}_filtered"
 
         query = f"SELECT * WHERE {filter_condition}"
-        self.gcs_access.query_parquet_direct(gcs_path, query, table_name)
+        self.storage.query_parquet_direct(storage_path, query, table_name)
         return table_name
 
     def save_data_direct(self, table_name: str, dataset: str, bucket: str, stage: str) -> str:
@@ -1338,7 +1342,7 @@ class BaseSource(Generic[T], ABC):
             str: GCS path where data was saved
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        gcs_path = f"gs://{bucket}/{stage}/{dataset}/{timestamp}/data.parquet"
+        storage_path = f"{bucket}/{stage}/{dataset}/{timestamp}/data.parquet"
 
         # ✅ OPTIMIZED: Export directly from instance's DuckDB connection
         import shutil
@@ -1354,14 +1358,14 @@ class BaseSource(Generic[T], ABC):
             # Export from instance's DuckDB connection where table was created
             self.conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
 
-            # Stream copy to GCS without loading into memory
-            # s3fs expects plain bucket/path without gs:// or r2:// prefix
-            storage_path = gcs_path.removeprefix("gs://").removeprefix("r2://")
-            with open(tmp.name, "rb") as src, self.gcs_access.fs.open(storage_path, "wb") as dst:
+            # Stream copy to storage without loading into memory
+            # s3fs expects plain bucket/path without protocol prefix
+            storage_path = storage_path.removeprefix("r2://").removeprefix("s3://")
+            with open(tmp.name, "rb") as src, self.storage.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
-        self.log.info(f"✅ Saved {table_name} directly to {gcs_path} (optimized)")
-        return gcs_path
+        self.log.info(f"✅ Saved {table_name} directly to {storage_path} (optimized)")
+        return storage_path
 
     def query_data_direct(self, dataset: str, query: str, table_name: str) -> str:
         """
@@ -1375,21 +1379,21 @@ class BaseSource(Generic[T], ABC):
         Returns:
             str: Name of created DuckDB table
         """
-        gcs_path = self._get_latest_silver_path(dataset)
-        self.gcs_access.query_parquet_direct(gcs_path, query, table_name)
+        storage_path = self._get_latest_silver_path(dataset)
+        self.storage.query_parquet_direct(storage_path, query, table_name)
         return table_name
 
     def _get_latest_silver_path(self, dataset: str) -> str:
         """Get path to latest silver data file."""
         # Try new standardized format first
-        pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/data.parquet"
-        files = self.gcs_access.list_files(pattern)
+        pattern = f"{self.config.bucket}/silver/{dataset}/*/data.parquet"
+        files = self.storage.list_files(pattern)
 
         if not files:
             # Fallback to legacy format for backward compatibility
             self.log.warning(f"No new format files found for {dataset}, trying legacy format")
-            legacy_pattern = f"gs://{self.config.bucket}/silver/{dataset}/*.parquet"
-            files = self.gcs_access.list_files(legacy_pattern)
+            legacy_pattern = f"{self.config.bucket}/silver/{dataset}/*.parquet"
+            files = self.storage.list_files(legacy_pattern)
 
             if files:
                 self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
@@ -1403,13 +1407,13 @@ class BaseSource(Generic[T], ABC):
     def _get_available_fvm_marker_years(self) -> list[int]:
         """Get all available fvm_marker years from GCS storage."""
         try:
-            # ✅ MIGRATION: Use modern gcs_access.list_files to find years
-            gcs_pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/*.parquet"
-            files = self.gcs_access.list_files(gcs_pattern)
+            # ✅ MIGRATION: Use modern storage_access.list_files to find years
+            gcs_pattern = f"{self.config.bucket}/silver/fvm_marker_*/*/*.parquet"
+            files = self.storage.list_files(gcs_pattern)
             years = set()
 
             for file_path in files:
-                # Extract years from paths like "gs://.../silver/fvm_marker_2021/.../data.parquet"
+                # Extract years from paths like ".../silver/fvm_marker_2021/.../data.parquet"
                 match = re.search(r"silver/fvm_marker_(\d{4})/", file_path)
                 if match:
                     year = int(match.group(1))
@@ -1445,7 +1449,7 @@ class BaseSource(Generic[T], ABC):
     # ========================================
 
     def load_parquet_with_native_acceleration(
-        self, gcs_path: str, table_name: str | None = None, query: str = "SELECT *"
+        self, storage_path: str, table_name: str | None = None, query: str = "SELECT *"
     ) -> str:
         """
         ⚡ ENHANCED: Load parquet from GCS with automatic native acceleration.
@@ -1454,7 +1458,7 @@ class BaseSource(Generic[T], ABC):
         to the existing temp file approach when not available.
 
         Args:
-            gcs_path: GCS path to parquet file (gs://bucket/path/file.parquet)
+            storage_path: Storage path to parquet file (bucket/path/file.parquet)
             table_name: Optional table name (auto-generated if not provided)
             query: SQL query to apply during load (default: SELECT *)
 
@@ -1466,14 +1470,14 @@ class BaseSource(Generic[T], ABC):
 
         try:
             # Try native method first (3-5x faster if HMAC available)
-            return self.gcs_access.query_parquet_native(gcs_path, query, table_name)
+            return self.storage.query_parquet_native(storage_path, query, table_name)
         except Exception as e:
             self.log.warning(f"Native GCS load failed, using fallback: {e}")
             # Fallback to existing method
-            return self.gcs_access.query_parquet_direct(gcs_path, query, table_name)
+            return self.storage.query_parquet_direct(storage_path, query, table_name)
 
     def save_table_with_native_acceleration(
-        self, table_name: str, gcs_path: str, **parquet_options
+        self, table_name: str, storage_path: str, **parquet_options
     ) -> bool:
         """
         ⚡ ENHANCED: Save table to GCS with automatic native acceleration.
@@ -1483,7 +1487,7 @@ class BaseSource(Generic[T], ABC):
 
         Args:
             table_name: Name of DuckDB table to save
-            gcs_path: GCS destination path (gs://bucket/path/file.parquet)
+            storage_path: Storage destination path (bucket/path/file.parquet)
             **parquet_options: Parquet compression options
 
         Returns:
@@ -1491,11 +1495,13 @@ class BaseSource(Generic[T], ABC):
         """
         try:
             # Try native method first (3-5x faster if HMAC available)
-            return self.gcs_access.export_to_gcs_native(table_name, gcs_path, **parquet_options)
+            return self.storage.export_to_storage_native(
+                table_name, storage_path, **parquet_options
+            )
         except Exception as e:
             self.log.warning(f"Native GCS save failed, using fallback: {e}")
             # Fallback to existing method
-            self.gcs_access.export_table_to_gcs_direct(table_name, gcs_path, **parquet_options)
+            self.storage.export_table_to_storage_direct(table_name, storage_path, **parquet_options)
             return False
 
     def enhanced_save_data_direct(
@@ -1511,22 +1517,26 @@ class BaseSource(Generic[T], ABC):
             GCS path where data was saved
         """
         # Build GCS path using existing logic
-        gcs_path = f"gs://{bucket}/{stage}/{dataset}_{self.date_pattern}/{self.date_pattern}/{dataset}_{self.date_pattern}.parquet"
+        storage_path = f"{bucket}/{stage}/{dataset}_{self.date_pattern}/{self.date_pattern}/{dataset}_{self.date_pattern}.parquet"
 
         # Use enhanced save method with native acceleration
         native_used = self.save_table_with_native_acceleration(
             table_name,
-            gcs_path,
+            storage_path,
             compression="zstd",  # Default compression for best performance
             row_group_size=100000,
         )
 
         if native_used:
-            self.log.info(f"🚀 NATIVE: Saved {table_name} to {gcs_path} using HMAC acceleration")
+            self.log.info(
+                f"🚀 NATIVE: Saved {table_name} to {storage_path} using HMAC acceleration"
+            )
         else:
-            self.log.info(f"💾 FALLBACK: Saved {table_name} to {gcs_path} using temp file method")
+            self.log.info(
+                f"💾 FALLBACK: Saved {table_name} to {storage_path} using temp file method"
+            )
 
-        return gcs_path
+        return storage_path
 
     def load_latest_with_native_acceleration(
         self, dataset: str, stage: str = "silver"
@@ -1546,8 +1556,8 @@ class BaseSource(Generic[T], ABC):
         """
         try:
             # Find latest file using existing logic
-            pattern = f"gs://{self.config.bucket}/{stage}/{dataset}_*/*/{dataset}_*.parquet"
-            files = self.gcs_access.list_files_with_timestamps(pattern)
+            pattern = f"{self.config.bucket}/{stage}/{dataset}_*/*/{dataset}_*.parquet"
+            files = self.storage.list_files_with_timestamps(pattern)
 
             if not files:
                 self.log.warning(f"No files found for pattern: {pattern}")

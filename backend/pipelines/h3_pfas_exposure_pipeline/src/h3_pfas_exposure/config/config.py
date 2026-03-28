@@ -50,11 +50,15 @@ class H3SpatialConfig:
 
     # GCS Configuration
     bucket: str = field(
-        default_factory=lambda: os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        default_factory=lambda: (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
     )
     gcs_base_path: str = field(
         default_factory=lambda: (
-            f"gs://{os.getenv('R2_BUCKET') or os.getenv('GCS_BUCKET', 'landbruget-data')}"
+            f"{os.getenv('R2_BUCKET') or os.getenv('GCS_BUCKET', 'landbruget-data')}"
         )
     )
 

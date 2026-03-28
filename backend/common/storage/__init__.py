@@ -6,21 +6,21 @@ the codebase. All pipelines should import from here instead of using s3fs or
 google-cloud-storage directly.
 
 Usage:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    gcs = GCSDataAccess()
+    storage = StorageAccess()
 
     # Read parquet from R2
-    gcs.query_parquet_direct("r2://bucket/file.parquet", "SELECT *", "my_table")
+    storage.query_parquet_direct("r2://bucket/file.parquet", "SELECT *", "my_table")
 
     # Write parquet to R2
-    gcs.upload_from_duckdb_table("my_table", "r2://bucket/output.parquet")
+    storage.upload_from_duckdb_table("my_table", "r2://bucket/output.parquet")
 
     # Stream JSON
-    gcs.upload_json(data, "r2://bucket/data.json")
-    gcs.download_json("r2://bucket/data.json")
+    storage.upload_json(data, "r2://bucket/data.json")
+    storage.download_json("r2://bucket/data.json")
 
-    # Legacy gs:// paths are also accepted and converted automatically.
+    # r2:// and s3:// prefixed paths are also accepted and converted automatically.
 
 Performance:
     - Streaming operations (no temp file overhead for JSON)
@@ -28,18 +28,18 @@ Performance:
     - s3fs-backed filesystem with connection caching
 """
 
-from common.gcs.core import GCSDataAccess
-from common.gcs.filesystem import (
-    get_duckdb_with_gcs,
-    get_gcs_filesystem,
+from common.storage.core import StorageAccess
+from common.storage.filesystem import (
+    get_duckdb_with_r2,
+    get_r2_filesystem,
     setup_duckdb_cloud_auth,
 )
-from common.gcs.monitoring import ResourceMonitor
+from common.storage.monitoring import ResourceMonitor
 
 __all__ = [
-    "GCSDataAccess",
     "ResourceMonitor",
-    "get_duckdb_with_gcs",
-    "get_gcs_filesystem",
+    "StorageAccess",
+    "get_duckdb_with_r2",
+    "get_r2_filesystem",
     "setup_duckdb_cloud_auth",
 ]

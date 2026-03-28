@@ -1,8 +1,8 @@
 """
-High-Performance GCS Data Access Layer.
+High-Performance Cloud Storage Data Access Layer.
 
-This module provides optimized GCS access patterns:
-- gcsfs-first approach for maximum performance (18x faster than legacy)
+This module provides optimized cloud storage access patterns:
+- s3fs-first approach for maximum performance (18x faster than legacy)
 - DuckDB integration with fsspec registration (6x faster than HTTPFS)
 - Resource monitoring for GitHub runner constraints
 - Automatic cleanup and error handling
@@ -29,8 +29,8 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-from common.gcs.filesystem import _setup_native_gcs_auth, get_gcs_filesystem
-from common.gcs.monitoring import ResourceMonitor
+from common.storage.filesystem import get_r2_filesystem, setup_duckdb_cloud_auth
+from common.storage.monitoring import ResourceMonitor
 from tenacity import (
     before_sleep_log,
     retry,
@@ -40,90 +40,80 @@ from tenacity import (
 )
 
 # Use standard logging - can be configured by calling code
-logger = logging.getLogger("landbruget.gcs")
+logger = logging.getLogger("landbruget.storage")
 
 
 def _strip_protocol(path: str) -> str:
-    """Strip gs:// or r2:// protocol prefix from a storage path."""
-    if path.startswith("gs://"):
-        return path[len("gs://") :]
+    """Strip protocol prefix from a storage path, returning a bare bucket/key string.
+
+    Handles ``r2://`` and ``s3://`` prefixes.  Bare paths (no prefix) are returned
+    unchanged — they are the canonical form produced by ``StoragePath._build()``.
+    """
     if path.startswith("r2://"):
         return path[len("r2://") :]
+    if path.startswith("s3://"):
+        return path[len("s3://") :]
     return path
 
 
-class GCSDataAccess:
+class StorageAccess:
     """Unified cloud data access optimized for maximum performance.
 
-    Supports both GCS (gs://) and R2 (r2://) paths for backward compatibility.
+    Accepts bare ``bucket/key`` paths (canonical form) as well as
+    ``r2://`` and ``s3://`` prefixed paths.
     """
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None):
         """
-        Initialize GCS access with optional DuckDB connection.
+        Initialize cloud storage access with optional DuckDB connection.
 
-        Uses fsspec + gcsfs for optimal performance (5x faster than httpfs).
+        Uses fsspec + s3fs for optimal performance (5x faster than httpfs).
         Based on DuckDB GitHub issue #15140 findings.
 
         Args:
             connection: Existing DuckDB connection to reuse. If None, creates new one.
         """
-        self.fs = get_gcs_filesystem()
+        self.fs = get_r2_filesystem()
         self.log = logger
 
         if connection:
             self.duckdb_conn = connection
-            self.log.info("GCSDataAccess: Using provided DuckDB connection")
-            # CRITICAL: Register gcsfs filesystem even when connection is provided
-            # This is required for DuckDB to read gs:// URLs
-            self._register_gcsfs()
+            self.log.info("StorageAccess: Using provided DuckDB connection")
+            # Register cloud filesystem for provided connections too
+            self._register_filesystem()
         else:
             # Create a fresh connection for this instance
             self.duckdb_conn = duckdb.connect()
             self._configure_duckdb()
-            self.log.info("GCSDataAccess: Created new DuckDB connection")
+            self.log.info("StorageAccess: Created new DuckDB connection")
 
         self.monitor = ResourceMonitor()
-        self._native_gcs_available = self._check_native_gcs_support()
+        self._native_cloud_available = self._check_native_cloud_support()
 
-    def _register_gcsfs(self):
+    def _register_filesystem(self):
         """
-        Register GCS access with DuckDB for gs:// URL support.
+        Register cloud storage access with DuckDB.
 
-        CRITICAL: This must be called for any DuckDB connection that needs to read from GCS.
+        CRITICAL: This must be called for any DuckDB connection that needs to read from cloud storage.
 
         Tries two approaches in order:
-        1. Native DuckDB GCS HMAC authentication (fastest, requires httpfs extension)
-        2. fsspec + gcsfs registration (fallback, 5x faster than httpfs alone)
+        1. Native DuckDB R2 secret (fastest, requires httpfs extension)
+        2. fsspec + s3fs registration (fallback)
 
-        Uses HMAC credentials if available for better performance in GitHub Actions.
+        Uses R2 credentials from environment variables.
         """
-        # Try native GCS HMAC authentication first (fastest)
-        if _setup_native_gcs_auth(self.duckdb_conn):
-            self.log.info("DuckDB configured with native GCS HMAC authentication")
-            self.log.info("DuckDB can now read gs:// URLs via httpfs + HMAC")
+        # Try native R2 authentication first (fastest)
+        if setup_duckdb_cloud_auth(self.duckdb_conn):
+            self.log.info("DuckDB configured with native R2 authentication")
             return
 
-        # Fallback to gcsfs filesystem registration
+        # Fallback to s3fs filesystem registration
         try:
-            from fsspec import filesystem
-
-            # Use HMAC authentication if available
-            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-
-            if gcs_access_key and gcs_secret_key:
-                fs = filesystem("gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key)
-                self.log.info("Registered gcsfs with DuckDB using HMAC credentials")
-            else:
-                fs = filesystem("gs")  # Uses gcsfs under the hood
-                self.log.info("Registered gcsfs with DuckDB using default authentication")
-
-            self.duckdb_conn.register_filesystem(fs)
-            self.log.info("DuckDB can now read gs:// URLs via gcsfs (5x faster than httpfs)")
+            self.duckdb_conn.register_filesystem(self.fs)
+            self.log.info("DuckDB configured with s3fs filesystem registration")
         except Exception as e:
-            self.log.warning(f"Failed to register gcsfs with DuckDB: {e}")
-            self.log.warning("DuckDB will not be able to read gs:// URLs directly")
+            self.log.warning(f"Failed to register s3fs with DuckDB: {e}")
+            self.log.warning("DuckDB will not be able to read cloud storage URLs directly")
 
     def _configure_duckdb(self):
         """
@@ -143,13 +133,13 @@ class GCSDataAccess:
             self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
 
             # Register gcsfs filesystem for optimal GCS performance
-            self._register_gcsfs()
+            self._register_filesystem()
 
             self.log.info("DuckDB configured with spatial and gcsfs filesystem integration")
         except Exception as e:
             self.log.warning(f"DuckDB configuration warning: {e}")
 
-    def _check_native_gcs_support(self) -> bool:
+    def _check_native_cloud_support(self) -> bool:
         """Check if native cloud storage access is available (R2 or GCS)."""
         try:
             # Check if httpfs extension is loaded
@@ -174,11 +164,11 @@ class GCSDataAccess:
             self.log.debug(f"Native storage check failed: {e}")
             return False
 
-    def check_file_size_limits(self, gcs_path: str) -> bool:
+    def check_file_size_limits(self, storage_path: str) -> bool:
         """Check if file is too large for runner constraints."""
-        gcs_path = _strip_protocol(gcs_path)
+        storage_path = _strip_protocol(storage_path)
         try:
-            file_info = self.fs.info(gcs_path)
+            file_info = self.fs.info(storage_path)
             file_size_gb = file_info["size"] / (1024**3)
 
             # Conservative limit: 8 GB (leave room for DuckDB processing)
@@ -186,18 +176,18 @@ class GCSDataAccess:
 
             if file_size_gb > max_file_size_gb:
                 raise ValueError(
-                    f"File {gcs_path} is {file_size_gb:.1f} GB, "
+                    f"File {storage_path} is {file_size_gb:.1f} GB, "
                     f"exceeds runner limit of {max_file_size_gb} GB. "
                     f"Consider using chunked processing or larger runners."
                 )
             return True
         except Exception as e:
-            self.log.warning(f"Could not check file size for {gcs_path}: {e}")
+            self.log.warning(f"Could not check file size for {storage_path}: {e}")
             return True  # Proceed with caution
 
-    def _temp_download(self, gcs_path: str):
+    def _temp_download(self, storage_path: str):
         """Context manager for temporary file download with guaranteed cleanup."""
-        gcs_path = _strip_protocol(gcs_path)
+        storage_path = _strip_protocol(storage_path)
 
         @contextmanager
         def temp_file_context():
@@ -207,16 +197,16 @@ class GCSDataAccess:
                 self.monitor.check_resources("pre_download")["disk_gb"]
 
                 # Check file size constraints
-                self.check_file_size_limits(gcs_path)
+                self.check_file_size_limits(storage_path)
 
                 with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
                     temp_file = tmp.name
 
-                    self.log.debug(f"Downloading {gcs_path} to {temp_file}")
+                    self.log.debug(f"Downloading {storage_path} to {temp_file}")
 
                     # Fast download with gcsfs (5x faster than HTTPFS)
                     with (
-                        self.fs.open(gcs_path, "rb") as src,
+                        self.fs.open(storage_path, "rb") as src,
                         Path(temp_file).open("wb") as dst,
                     ):
                         shutil.copyfileobj(src, dst)
@@ -239,7 +229,7 @@ class GCSDataAccess:
         return temp_file_context()
 
     # For DuckDB + Parquet - Hybrid approach (still faster than current)
-    def query_parquet_with_duckdb(self, gcs_path: str, query: str = "1=1") -> str:
+    def query_parquet_with_duckdb(self, storage_path: str, query: str = "1=1") -> str:
         """
         Query parquet from GCS using optimized download + DuckDB read.
 
@@ -249,7 +239,7 @@ class GCSDataAccess:
         self.monitor.check_resources("start_query")
 
         # Use optimized download approach with guaranteed cleanup
-        with self._temp_download(gcs_path) as temp_file:
+        with self._temp_download(storage_path) as temp_file:
             # OPTIMIZED: Direct query without unnecessary intermediate table
             # Create table and return table name for DuckDB compatibility
             table_name = f"query_result_{int(time.time())}"
@@ -262,7 +252,7 @@ class GCSDataAccess:
             self.monitor.check_resources("post_query")
             return table_name
 
-    def query_parquet_direct(self, gcs_path: str, query: str = "SELECT *", table_name: str = "result_table"):
+    def query_parquet_direct(self, storage_path: str, query: str = "SELECT *", table_name: str = "result_table"):
         """
         OPTIMAL: Query parquet and create DuckDB table directly - NO DataFrame conversion.
 
@@ -272,7 +262,7 @@ class GCSDataAccess:
         - Can be used for further DuckDB operations
 
         Args:
-            gcs_path: GCS path to parquet file
+            storage_path: GCS path to parquet file
             query: SQL query to execute (default: SELECT *)
             table_name: Name for the created DuckDB table
 
@@ -281,7 +271,7 @@ class GCSDataAccess:
         """
         self.monitor.check_resources("start_direct_query")
 
-        with self._temp_download(gcs_path) as temp_file:
+        with self._temp_download(storage_path) as temp_file:
             # DIRECT: Create table without DataFrame conversion
             full_query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
@@ -296,7 +286,7 @@ class GCSDataAccess:
 
             self.monitor.check_resources("post_direct_query")
 
-    def export_table_to_gcs_direct(self, table_name: str, gcs_path: str, *, connection=None, **parquet_options):
+    def export_table_to_storage_direct(self, table_name: str, storage_path: str, *, connection=None, **parquet_options):
         """
         OPTIMAL: Export DuckDB table directly to GCS without DataFrame conversion.
 
@@ -307,12 +297,12 @@ class GCSDataAccess:
 
         Args:
             table_name: Name of the table to export
-            gcs_path: GCS destination path
+            storage_path: GCS destination path
             connection: Optional external DuckDB connection (uses self.duckdb_conn if None)
             **parquet_options: Parquet export options
         """
         conn = connection or self.duckdb_conn
-        gcs_path = _strip_protocol(gcs_path)
+        storage_path = _strip_protocol(storage_path)
         self.monitor.check_resources("start_direct_export")
 
         # Build COPY options for optimal Parquet export
@@ -336,16 +326,16 @@ class GCSDataAccess:
             count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
             # Stream copy to GCS without loading into memory
-            with Path(tmp.name).open("rb") as src, self.fs.open(gcs_path, "wb") as dst:
+            with Path(tmp.name).open("rb") as src, self.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_direct_export")
-        self.log.info(f"Exported DuckDB table {table_name} ({count:,} rows) directly to {gcs_path}")
+        self.log.info(f"Exported DuckDB table {table_name} ({count:,} rows) directly to {storage_path}")
 
-    def process_gcs_to_gcs_direct(
+    def process_storage_to_storage_direct(
         self,
-        input_gcs_path: str,
-        output_gcs_path: str,
+        input_storage_path: str,
+        output_storage_path: str,
         processing_query: str,
         **parquet_options,
     ):
@@ -360,18 +350,18 @@ class GCSDataAccess:
         - No memory bottlenecks
 
         Example:
-            process_gcs_to_gcs_direct(
-                'gs://bucket/input.parquet',
-                'gs://bucket/output.parquet',
+            process_storage_to_storage_direct(
+                'bucket/input.parquet',
+                'bucket/output.parquet',
                 '''SELECT field_id, SUM(area) as total_area
                    FROM input_table
                    WHERE crop_type = 'wheat'
                    GROUP BY field_id'''
             )
         """
-        self.monitor.check_resources("start_gcs_to_gcs")
+        self.monitor.check_resources("start_storage_to_storage")
 
-        with self._temp_download(input_gcs_path) as temp_input:
+        with self._temp_download(input_storage_path) as temp_input:
             # Create input table directly in DuckDB
             self.duckdb_conn.execute(f"""
                 CREATE OR REPLACE TABLE input_table AS
@@ -384,17 +374,19 @@ class GCSDataAccess:
                 {processing_query}
             """)
 
-            # Export result directly to GCS
-            self.export_table_to_gcs_direct("processed_result", output_gcs_path, **parquet_options)
+            # Export result directly to storage
+            self.export_table_to_storage_direct("processed_result", output_storage_path, **parquet_options)
 
             # Cleanup tables
             self.duckdb_conn.execute("DROP TABLE IF EXISTS input_table")
             self.duckdb_conn.execute("DROP TABLE IF EXISTS processed_result")
 
-        self.monitor.check_resources("post_gcs_to_gcs")
-        self.log.info(f"Processed {input_gcs_path} -> {output_gcs_path} with zero DataFrame conversions")
+        self.monitor.check_resources("post_storage_to_storage")
+        self.log.info(f"Processed {input_storage_path} -> {output_storage_path} with zero DataFrame conversions")
 
-    def query_parquet_native(self, gcs_path: str, query: str = "SELECT *", table_name: str = "native_result") -> str:
+    def query_parquet_native(
+        self, storage_path: str, query: str = "SELECT *", table_name: str = "native_result"
+    ) -> str:
         """
         ULTIMATE PERFORMANCE: Query GCS parquet directly using native DuckDB HMAC access.
 
@@ -402,15 +394,15 @@ class GCSDataAccess:
         Falls back to current method if native access is unavailable.
 
         Args:
-            gcs_path: GCS path (gs://bucket/path/file.parquet)
+            storage_path: Storage path (bucket/path/file.parquet)
             query: SQL query to execute
             table_name: Name for the result table
 
         Returns:
             Table name containing the results
         """
-        if self._native_gcs_available:
-            self.log.info(f"Using native GCS access for {gcs_path}")
+        if self._native_cloud_available:
+            self.log.info(f"Using native GCS access for {storage_path}")
             self.monitor.check_resources("start_native_query")
 
             try:
@@ -423,7 +415,7 @@ class GCSDataAccess:
                         # Complete SELECT with FROM - replace the FROM source
                         full_query = f"""
                             CREATE OR REPLACE TABLE {table_name} AS
-                            {query.replace("FROM read_parquet", f"FROM read_parquet('{gcs_path}')")}
+                            {query.replace("FROM read_parquet", f"FROM read_parquet('{storage_path}')")}
                         """
                     elif "WHERE" in query_upper:
                         # SELECT with WHERE but no FROM - split and reassemble
@@ -434,27 +426,27 @@ class GCSDataAccess:
                             where_part = query[where_start:].strip()
                             full_query = f"""
                                 CREATE OR REPLACE TABLE {table_name} AS
-                                {select_part} FROM read_parquet('{gcs_path}')
+                                {select_part} FROM read_parquet('{storage_path}')
                                 {where_part}
                             """
                         else:
                             # Fallback if regex fails
                             full_query = f"""
                                 CREATE OR REPLACE TABLE {table_name} AS
-                                {query} FROM read_parquet('{gcs_path}')
+                                {query} FROM read_parquet('{storage_path}')
                             """
                     else:
                         # Simple SELECT with no WHERE or FROM
                         full_query = f"""
                             CREATE OR REPLACE TABLE {table_name} AS
-                            {query} FROM read_parquet('{gcs_path}')
+                            {query} FROM read_parquet('{storage_path}')
                         """
                 else:
                     # WHERE clause or other fragment - build full SELECT
                     where_clause = query if query.strip() and query.strip().upper() != "SELECT *" else ""
                     full_query = f"""
                         CREATE OR REPLACE TABLE {table_name} AS
-                        SELECT * FROM read_parquet('{gcs_path}')
+                        SELECT * FROM read_parquet('{storage_path}')
                         {where_clause}
                     """
                 self.duckdb_conn.execute(full_query)
@@ -470,10 +462,12 @@ class GCSDataAccess:
                 # Fall through to existing method
 
         # Fallback to existing temp file method
-        self.query_parquet_direct(gcs_path, query, table_name)
+        self.query_parquet_direct(storage_path, query, table_name)
         return table_name
 
-    def export_to_gcs_native(self, table_name: str, gcs_path: str, *, connection=None, **parquet_options) -> bool:
+    def export_to_storage_native(
+        self, table_name: str, storage_path: str, *, connection=None, **parquet_options
+    ) -> bool:
         """
         ULTIMATE PERFORMANCE: Export table directly to GCS using native DuckDB HMAC access.
 
@@ -482,7 +476,7 @@ class GCSDataAccess:
 
         Args:
             table_name: Name of the table to export
-            gcs_path: GCS destination path (gs://bucket/path/file.parquet)
+            storage_path: Storage destination path (bucket/path/file.parquet)
             connection: Optional external DuckDB connection (uses self.duckdb_conn if None)
             **parquet_options: Parquet export options
 
@@ -491,15 +485,15 @@ class GCSDataAccess:
         """
         conn = connection or self.duckdb_conn
         # If using an external connection for native export, ensure R2 auth is configured
-        if connection is not None and self._native_gcs_available:
+        if connection is not None and self._native_cloud_available:
             try:
-                from common.gcs.filesystem import setup_duckdb_cloud_auth
+                from common.storage.filesystem import setup_duckdb_cloud_auth
 
                 setup_duckdb_cloud_auth(connection)
             except Exception as e:
                 self.log.debug(f"Could not configure R2 auth on external connection: {e}")
-        if self._native_gcs_available:
-            self.log.info(f"Using native GCS export to {gcs_path}")
+        if self._native_cloud_available:
+            self.log.info(f"Using native GCS export to {storage_path}")
             self.monitor.check_resources("start_native_export")
 
             try:
@@ -514,11 +508,11 @@ class GCSDataAccess:
                 options_str = ", ".join(copy_options)
 
                 # Direct native export - no temp files!
-                conn.execute(f"COPY {table_name} TO '{gcs_path}' ({options_str})")
+                conn.execute(f"COPY {table_name} TO '{storage_path}' ({options_str})")
 
                 # Log success
                 count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-                self.log.info(f"Native export saved {count:,} rows to {gcs_path}")
+                self.log.info(f"Native export saved {count:,} rows to {storage_path}")
                 self.monitor.check_resources("post_native_export")
                 return True
 
@@ -527,7 +521,7 @@ class GCSDataAccess:
                 # Fall through to existing method
 
         # Fallback to existing method
-        self.export_table_to_gcs_direct(table_name, gcs_path, connection=connection, **parquet_options)
+        self.export_table_to_storage_direct(table_name, storage_path, connection=connection, **parquet_options)
         return False
 
     def query_multiple_direct(
@@ -541,12 +535,13 @@ class GCSDataAccess:
         """
         pattern_without_gs = _strip_protocol(gcs_pattern)
         files = self.fs.glob(pattern_without_gs)
-        gcs_paths = [f"gs://{f}" for f in files]
+        # fs.glob returns bare bucket/key paths — use them directly
+        storage_paths = list(files)
 
-        if not gcs_paths:
+        if not storage_paths:
             raise FileNotFoundError(f"No files found matching pattern: {gcs_pattern}")
 
-        self.log.info(f"Found {len(gcs_paths)} files matching pattern")
+        self.log.info(f"Found {len(storage_paths)} files matching pattern")
 
         temp_files = []
         try:
@@ -556,8 +551,8 @@ class GCSDataAccess:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    for gcs_path in gcs_paths:
-                        with self._temp_download(gcs_path) as temp_file:
+                    for storage_path in storage_paths:
+                        with self._temp_download(storage_path) as temp_file:
                             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as persistent_temp:
                                 persistent_temp_path = persistent_temp.name
                             shutil.copy2(temp_file, persistent_temp_path)
@@ -587,7 +582,7 @@ class GCSDataAccess:
             """)
 
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            self.log.info(f"Created combined table {table_name} with {count:,} rows from {len(gcs_paths)} files")
+            self.log.info(f"Created combined table {table_name} with {count:,} rows from {len(storage_paths)} files")
 
         finally:
             # Cleanup temp files
@@ -599,13 +594,13 @@ class GCSDataAccess:
                     self.log.warning(f"Failed to cleanup {tmp_file}: {e}")
 
     # For Pandas/GeoPandas - Direct gcsfs streaming
-    def read_parquet_streaming(self, gcs_path: str) -> str:
+    def read_parquet_streaming(self, storage_path: str) -> str:
         """Read parquet with streaming via gcsfs."""
         self.monitor.check_resources("start_streaming_read")
 
         # Create table from streaming read and return table name
         table_name = f"streaming_table_{int(time.time())}"
-        with self._temp_download(gcs_path) as temp_file:
+        with self._temp_download(storage_path) as temp_file:
             self.duckdb_conn.execute(f"""
                 CREATE TABLE {table_name} AS
                 SELECT * FROM read_parquet('{temp_file}')
@@ -615,7 +610,7 @@ class GCSDataAccess:
         return table_name
 
     # For uploads - gcsfs streaming (DuckDB cannot write to GCS)
-    def upload_dataframe(self, df: Any, gcs_path: str, **kwargs):
+    def upload_dataframe(self, df: Any, storage_path: str, **kwargs):
         """Upload dataframe with streaming via gcsfs."""
         self.monitor.check_resources("start_upload")
 
@@ -624,7 +619,7 @@ class GCSDataAccess:
 
         # For backward compatibility, assume df is a table name
         if isinstance(df, str):
-            self.upload_from_duckdb_table(df, gcs_path, **kwargs)
+            self.upload_from_duckdb_table(df, storage_path, **kwargs)
         else:
             raise ValueError("Only DuckDB table names are supported. Use upload_from_duckdb_table.")
 
@@ -643,7 +638,7 @@ class GCSDataAccess:
         stop=stop_after_attempt(5),
         before_sleep=before_sleep_log(logger, logging.WARNING),
     )
-    def upload_json(self, data: dict[str, Any] | list[Any], gcs_path: str, **kwargs):
+    def upload_json(self, data: dict[str, Any] | list[Any], storage_path: str, **kwargs):
         """
         OPTIMIZED: Upload JSON data with streaming via gcsfs with retry logic.
 
@@ -655,7 +650,7 @@ class GCSDataAccess:
 
         Args:
             data: Dictionary or list to upload as JSON
-            gcs_path: GCS path (gs://bucket/path/file.json)
+            storage_path: Storage path (bucket/path/file.json)
             **kwargs: Additional options for json.dumps (indent, ensure_ascii, etc.)
 
         Raises:
@@ -677,14 +672,14 @@ class GCSDataAccess:
             json_payload = json.dumps(data, **json_kwargs)
 
             # STREAMING: Write JSON directly to object storage without temp files
-            with self.fs.open(_strip_protocol(gcs_path), "w", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(storage_path), "w", encoding="utf-8") as f:
                 f.write(json_payload)
 
             self.monitor.check_resources("post_json_upload")
-            self.log.info(f"Uploaded JSON data to {gcs_path} (streaming)")
+            self.log.info(f"Uploaded JSON data to {storage_path} (streaming)")
 
         except Exception as e:
-            self.log.error(f"Failed to upload JSON to {gcs_path}: {e}")
+            self.log.error(f"Failed to upload JSON to {storage_path}: {e}")
             # Check if it's a network-related error that should be retried
             if any(
                 error_type in str(type(e).__name__).lower() or error_type in str(e).lower()
@@ -699,7 +694,7 @@ class GCSDataAccess:
                 self.log.warning(f"Network-related error detected, will retry: {e}")
             raise
 
-    def upload_json_string(self, json_string: str, gcs_path: str):
+    def upload_json_string(self, json_string: str, storage_path: str):
         """
         OPTIMIZED: Upload pre-serialized JSON string with streaming.
 
@@ -708,17 +703,17 @@ class GCSDataAccess:
         self.monitor.check_resources("start_json_string_upload")
 
         try:
-            with self.fs.open(_strip_protocol(gcs_path), "w", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(storage_path), "w", encoding="utf-8") as f:
                 f.write(json_string)
 
             self.monitor.check_resources("post_json_string_upload")
-            self.log.info(f"Uploaded JSON string to {gcs_path} (streaming)")
+            self.log.info(f"Uploaded JSON string to {storage_path} (streaming)")
 
         except Exception as e:
-            self.log.error(f"Failed to upload JSON string to {gcs_path}: {e}")
+            self.log.error(f"Failed to upload JSON string to {storage_path}: {e}")
             raise
 
-    def download_json(self, gcs_path: str) -> dict[str, Any] | list[Any]:
+    def download_json(self, storage_path: str) -> dict[str, Any] | list[Any]:
         """
         OPTIMIZED: Download JSON data with streaming via gcsfs.
 
@@ -730,28 +725,28 @@ class GCSDataAccess:
         self.monitor.check_resources("start_json_download")
 
         try:
-            with self.fs.open(_strip_protocol(gcs_path), "r", encoding="utf-8") as f:
+            with self.fs.open(_strip_protocol(storage_path), "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             self.monitor.check_resources("post_json_download")
-            self.log.info(f"Downloaded JSON data from {gcs_path} (streaming)")
+            self.log.info(f"Downloaded JSON data from {storage_path} (streaming)")
             return data
 
         except Exception as e:
-            self.log.error(f"Failed to download JSON from {gcs_path}: {e}")
+            self.log.error(f"Failed to download JSON from {storage_path}: {e}")
             raise
 
-    def upload_from_duckdb_table(self, table_name: str, gcs_path: str, **format_options):
+    def upload_from_duckdb_table(self, table_name: str, storage_path: str, **format_options):
         """Upload DuckDB table directly to GCS without DataFrame conversion.
 
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
         """
-        gcs_path = _strip_protocol(gcs_path)
+        storage_path = _strip_protocol(storage_path)
         self.monitor.check_resources("start_duckdb_upload")
 
         # Detect format based on file extension
-        if gcs_path.lower().endswith(".csv"):
+        if storage_path.lower().endswith(".csv"):
             # CSV format with human-readable options
             copy_options = ["FORMAT CSV"]
             copy_options.append("HEADER true")  # Include column headers
@@ -793,7 +788,7 @@ class GCSDataAccess:
             self.log.info(f"Created local temp file: {local_size:,} bytes")
 
             # Stream copy to GCS without loading into memory
-            with Path(tmp_path).open("rb") as src, self.fs.open(gcs_path, "wb") as dst:
+            with Path(tmp_path).open("rb") as src, self.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             self.log.info(f"Uploaded {local_size:,} bytes to GCS")
@@ -802,16 +797,16 @@ class GCSDataAccess:
             # CRITICAL: Invalidate gcsfs cache before verification to ensure fresh check
             try:
                 # Invalidate cache for this path to force fresh GCS check
-                self.fs.invalidate_cache(gcs_path)
+                self.fs.invalidate_cache(storage_path)
 
-                if self.fs.exists(gcs_path):
-                    remote_size = self.fs.size(gcs_path)
-                    self.log.info(f"Verified upload: {remote_size:,} bytes at {gcs_path}")
+                if self.fs.exists(storage_path):
+                    remote_size = self.fs.size(storage_path)
+                    self.log.info(f"Verified upload: {remote_size:,} bytes at {storage_path}")
                     if remote_size != local_size:
                         self.log.warning(f"Size mismatch: local={local_size}, remote={remote_size}")
                 else:
-                    self.log.error(f"File not found after upload: {gcs_path}")
-                    raise Exception(f"Upload verification failed: file not found at {gcs_path}")
+                    self.log.error(f"File not found after upload: {storage_path}")
+                    raise Exception(f"Upload verification failed: file not found at {storage_path}")
             except Exception as verify_error:
                 self.log.error(f"Upload verification failed: {verify_error}")
                 raise
@@ -821,15 +816,15 @@ class GCSDataAccess:
                 Path(tmp_path).unlink()
 
         self.monitor.check_resources("post_duckdb_upload")
-        format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
-        self.log.info(f"Uploaded DuckDB table {table_name} to {gcs_path} ({format_type} format)")
+        format_type = "CSV" if storage_path.lower().endswith(".csv") else "Parquet"
+        self.log.info(f"Uploaded DuckDB table {table_name} to {storage_path} ({format_type} format)")
 
-    def verify_gcs_upload(self, gcs_path: str, expected_size: int | None = None) -> bool:
+    def verify_storage_upload(self, storage_path: str, expected_size: int | None = None) -> bool:
         """
-        Verify that a file was successfully uploaded to GCS.
+        Verify that a file was successfully uploaded to storage.
 
         Args:
-            gcs_path: Full gs:// path to the file
+            storage_path: Full path to the file (bucket/path/file)
             expected_size: Expected file size in bytes (optional)
 
         Returns:
@@ -838,14 +833,14 @@ class GCSDataAccess:
         Raises:
             Exception if file doesn't exist or size mismatch
         """
-        gcs_path = _strip_protocol(gcs_path)
+        storage_path = _strip_protocol(storage_path)
         try:
-            if not self.fs.exists(gcs_path):
-                self.log.error(f"File not found after upload: {gcs_path}")
-                raise Exception(f"Upload verification failed: file not found at {gcs_path}")
+            if not self.fs.exists(storage_path):
+                self.log.error(f"File not found after upload: {storage_path}")
+                raise Exception(f"Upload verification failed: file not found at {storage_path}")
 
-            remote_size = self.fs.size(gcs_path)
-            self.log.info(f"Verified upload: {remote_size:,} bytes at {gcs_path}")
+            remote_size = self.fs.size(storage_path)
+            self.log.info(f"Verified upload: {remote_size:,} bytes at {storage_path}")
 
             if expected_size is not None and remote_size != expected_size:
                 self.log.warning(f"Size mismatch: expected={expected_size:,}, actual={remote_size:,}")
@@ -856,17 +851,17 @@ class GCSDataAccess:
             self.log.error(f"Upload verification failed: {e}")
             raise
 
-    def upload_from_duckdb_query(self, query: str, gcs_path: str, **format_options):
+    def upload_from_duckdb_query(self, query: str, storage_path: str, **format_options):
         """Execute query and upload result directly to GCS without DataFrame conversion.
 
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
         """
-        gcs_path = _strip_protocol(gcs_path)
+        storage_path = _strip_protocol(storage_path)
         self.monitor.check_resources("start_query_upload")
 
         # Detect format based on file extension
-        if gcs_path.lower().endswith(".csv"):
+        if storage_path.lower().endswith(".csv"):
             # CSV format with human-readable options
             copy_options = ["FORMAT CSV"]
             copy_options.append("HEADER true")  # Include column headers
@@ -901,28 +896,28 @@ class GCSDataAccess:
             self.duckdb_conn.execute(f"COPY ({query}) TO '{tmp.name}' ({options_str})")
 
             # Stream copy to GCS
-            with Path(tmp.name).open("rb") as src, self.fs.open(gcs_path, "wb") as dst:
+            with Path(tmp.name).open("rb") as src, self.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
         self.monitor.check_resources("post_query_upload")
-        format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
-        self.log.info(f"Uploaded query result to {gcs_path} ({format_type} format)")
+        format_type = "CSV" if storage_path.lower().endswith(".csv") else "Parquet"
+        self.log.info(f"Uploaded query result to {storage_path} ({format_type} format)")
 
-    def create_table_from_gcs(self, table_name: str, gcs_path: str):
-        """Create a DuckDB table directly from GCS parquet file."""
-        with self._temp_download(gcs_path) as temp_file:
+    def create_table_from_storage(self, table_name: str, storage_path: str):
+        """Create a DuckDB table directly from storage parquet file."""
+        with self._temp_download(storage_path) as temp_file:
             self.duckdb_conn.execute(f"""
                 CREATE TABLE {table_name} AS
                 SELECT * FROM read_parquet('{temp_file}')
             """)
-            self.log.info(f"Created table {table_name} from {gcs_path}")
+            self.log.info(f"Created table {table_name} from {storage_path}")
 
     # Utility methods
     def list_files(self, gcs_pattern: str) -> list[str]:
         """List files matching pattern."""
         pattern_without_gs = _strip_protocol(gcs_pattern)
         files = self.fs.glob(pattern_without_gs)
-        return [f"gs://{f}" for f in files]
+        return list(files)
 
     def list_files_with_timestamps(self, gcs_pattern: str) -> list[tuple]:
         """
@@ -954,27 +949,27 @@ class GCSDataAccess:
                     # No valid timestamp available
                     timestamp = datetime.datetime.now()
 
-                files_with_timestamps.append((f"gs://{file_path}", timestamp))
+                files_with_timestamps.append((file_path, timestamp))
             except Exception as e:
                 self.log.warning(f"Could not get timestamp for {file_path}: {e}")
                 # Fall back to current time if timestamp unavailable (timezone-naive)
-                files_with_timestamps.append((f"gs://{file_path}", datetime.datetime.now()))
+                files_with_timestamps.append((file_path, datetime.datetime.now()))
 
         return files_with_timestamps
 
-    def file_exists(self, gcs_path: str) -> bool:
+    def file_exists(self, storage_path: str) -> bool:
         """Check if file exists."""
-        path_without_gs = _strip_protocol(gcs_path)
+        path_without_gs = _strip_protocol(storage_path)
         return self.fs.exists(path_without_gs)
 
-    def get_file_size(self, gcs_path: str) -> int:
+    def get_file_size(self, storage_path: str) -> int:
         """Get file size in bytes."""
-        path_without_gs = _strip_protocol(gcs_path)
+        path_without_gs = _strip_protocol(storage_path)
         return self.fs.size(path_without_gs)
 
-    def get_file_info(self, gcs_path: str) -> dict[str, Any]:
+    def get_file_info(self, storage_path: str) -> dict[str, Any]:
         """Get detailed file information."""
-        path_without_gs = _strip_protocol(gcs_path)
+        path_without_gs = _strip_protocol(storage_path)
         return self.fs.info(path_without_gs)
 
     def list_files_with_metadata(self, bucket_name: str, prefix: str = "") -> list[Any]:
@@ -1010,8 +1005,7 @@ class GCSDataAccess:
                     def __init__(self, name):
                         self.name = name
 
-                # The file path from gcsfs.glob() doesn't include gs:// prefix
-                # but the calling code expects the full path without gs://
+                # The file path from s3fs.glob() is a bare path
                 file_objects.append(FileObject(file_path))
 
             return file_objects
@@ -1020,10 +1014,10 @@ class GCSDataAccess:
             self.log.error(f"Error listing files with metadata for {bucket_name}/{prefix}: {e}")
             return []
 
-    def handle_oversized_files(self, gcs_path: str):
+    def handle_oversized_files(self, storage_path: str):
         """Strategies for files exceeding runner capabilities."""
         try:
-            file_info = self.get_file_info(gcs_path)
+            file_info = self.get_file_info(storage_path)
             file_size_gb = file_info["size"] / (1024**3)
 
             if file_size_gb > 8:
@@ -1036,11 +1030,11 @@ class GCSDataAccess:
                 ]
 
                 raise RuntimeError(
-                    f"File {gcs_path} ({file_size_gb:.1f} GB) exceeds runner limits. "
+                    f"File {storage_path} ({file_size_gb:.1f} GB) exceeds runner limits. "
                     f"Consider these strategies:\n" + "\n".join(strategies)
                 )
         except Exception as e:
-            self.log.error(f"Error handling oversized file {gcs_path}: {e}")
+            self.log.error(f"Error handling oversized file {storage_path}: {e}")
             raise
 
     def __del__(self):

@@ -87,6 +87,7 @@ class Source(Enum):
     grukos = "grukos"
     geus_dataverse_pesticides = "geus_dataverse_pesticides"
     kemidata_surface_water_pesticides = "kemidata_surface_water_pesticides"
+    carbon_emissions = "carbon_emissions"
 
 
 class Stage(Enum):

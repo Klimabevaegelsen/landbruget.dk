@@ -425,7 +425,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
 
         # Export filtered wetlands using standard pipeline pattern
         output_path = self._get_stage0_output_path("stage0_wetlands_filtered")
-        self.gcs_access.export_table_to_gcs_direct("wetlands_filtered", output_path)
+        self.storage.export_table_to_storage_direct("wetlands_filtered", output_path)
 
         return {
             "input_wetlands": total_wetlands,

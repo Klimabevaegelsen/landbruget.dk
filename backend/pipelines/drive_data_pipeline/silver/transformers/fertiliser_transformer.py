@@ -23,10 +23,10 @@ from .base import BaseTransformer, TransformResult
 
 # Handle imports for both standalone and package usage
 try:
-    from common.gcs import get_duckdb_with_gcs
+    from common.storage import get_duckdb_with_r2
 except ImportError:
     # Fallback for standalone usage
-    def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
+    def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
         conn = duckdb.connect()
         try:
             conn.execute("INSTALL spatial")
@@ -45,7 +45,7 @@ class FertiliserTransformer(BaseTransformer):
     def __init__(self) -> None:
         """Initialize the fertiliser transformer."""
         super().__init__()
-        self.conn = get_duckdb_with_gcs()
+        self.conn = get_duckdb_with_r2()
         self._setup_harmonization_schemas()
 
     def _setup_harmonization_schemas(self) -> None:

@@ -25,7 +25,11 @@ class PropertyCadastralMergeGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Merge property owners with cadastral data for business analytics"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Input silver datasets
     property_owners_dataset: str = "property_owners"
@@ -103,21 +107,21 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
         return property_path, cadastral_path
 
-    def _stream_merge_to_gcs(self, property_path: str, cadastral_path: str) -> dict[str, Any]:
+    def _stream_merge_to_storage(self, property_path: str, cadastral_path: str) -> dict[str, Any]:
         """
-        Perform streaming BFE-based merge and save directly to GCS
+        Perform streaming BFE-based merge and save directly to storage
         without loading into memory.
         """
 
         try:
             self.log.info("Creating property_owners table from GCS parquet file...")
-            self.gcs_access.create_table_from_gcs("property_owners", property_path)
+            self.storage.create_table_from_storage("property_owners", property_path)
 
             prop_count = self.conn.execute("SELECT COUNT(*) FROM property_owners").fetchone()[0]
             self.log.info(f"Property owners table created with {prop_count:,} records")
 
             self.log.info("Creating cadastral table from GCS parquet file...")
-            self.gcs_access.create_table_from_gcs("cadastral", cadastral_path)
+            self.storage.create_table_from_storage("cadastral", cadastral_path)
 
             cadastral_count = self.conn.execute("SELECT COUNT(*) FROM cadastral").fetchone()[0]
             self.log.info(f"Cadastral table created with {cadastral_count:,} records")
@@ -305,19 +309,19 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                         )
 
                         # Save CVR numbers using the collection utility
-                        cvr_gcs_path = save_pipeline_cvr_numbers(
+                        cvr_storage_path = save_pipeline_cvr_numbers(
                             pipeline_name="property_cadastral_merge",
                             cvr_numbers=cvr_numbers,
-                            gcs_access=self.gcs_access,
+                            storage_access=self.storage,
                             bucket=self.config.bucket,
                             timestamp=timestamp,
                         )
 
-                        self.log.info(f"📋 CVR numbers saved to: {cvr_gcs_path}")
+                        self.log.info(f"📋 CVR numbers saved to: {cvr_storage_path}")
 
                         # Add CVR stats to quality stats
                         quality_stats["cvr_numbers_found"] = len(cvr_numbers)
-                        quality_stats["cvr_collection_path"] = cvr_gcs_path
+                        quality_stats["cvr_collection_path"] = cvr_storage_path
                     else:
                         self.log.warning("⚠️ No CVR numbers found in company ownership data")
                         quality_stats["cvr_numbers_found"] = 0
@@ -330,13 +334,13 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 self.log.info("ℹ️ CVR collection utility not available - skipping CVR extraction")
 
             # Upload the parquet file directly to GCS
-            gcs_path = f"gold/{self.config.dataset}/{timestamp}/{self.config.dataset}.parquet"
-            full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+            storage_path = f"gold/{self.config.dataset}/{timestamp}/{self.config.dataset}.parquet"
+            full_storage_path = f"{self.config.bucket}/{storage_path}"
 
-            self.log.info(f"Uploading merged data to GCS: {full_gcs_path}")
+            self.log.info(f"Uploading merged data to GCS: {full_storage_path}")
 
-            # Use gcs_access to upload the file
-            self.gcs_access.upload_from_duckdb_table("merged_properties", full_gcs_path)
+            # Use storage_access to upload the file
+            self.storage.upload_from_duckdb_table("merged_properties", full_storage_path)
 
             self.log.info(
                 f"Successfully uploaded merged dataset to GCS with {merged_count:,} records"
@@ -389,8 +393,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             self.log.info(f"Using property data: {property_path}")
             self.log.info(f"Using cadastral data: {cadastral_path}")
 
-            # Perform streaming merge directly to GCS
-            quality_stats = self._stream_merge_to_gcs(property_path, cadastral_path)
+            # Perform streaming merge directly to storage
+            quality_stats = self._stream_merge_to_storage(property_path, cadastral_path)
 
             # Validate quality
             self._validate_merge_quality(quality_stats)

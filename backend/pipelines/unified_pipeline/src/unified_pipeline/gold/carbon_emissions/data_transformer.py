@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from farm_data import FarmData
+    from .farm_data import FarmData
 
 import duckdb
 
@@ -733,7 +733,7 @@ class IntegratedFarmTransformer:
         Note:
             This requires importing FarmData from farm_data.py
         """
-        from farm_data import FarmData
+        from .farm_data import FarmData
 
         farm_data = FarmData()
 

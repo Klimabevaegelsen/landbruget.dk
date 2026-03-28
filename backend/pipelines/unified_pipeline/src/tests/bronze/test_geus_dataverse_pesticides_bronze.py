@@ -103,70 +103,48 @@ async def test_download_rds_file_http_error(
         )
 
 
-@patch("unified_pipeline.bronze.geus_dataverse_pesticides.Path")
-def test_save_rds_to_gcs(
-    mock_path: MagicMock,
+def test_save_rds_to_storage(
     geus_dataverse_bronze: GEUSDataversePesticidesBronze,
 ) -> None:
-    """Test saving .rds file to GCS."""
+    """Test saving .rds file to storage."""
     mock_content = b"test rds content bytes"
 
-    # Mock the Path.unlink call
-    mock_path_instance = MagicMock()
-    mock_path.return_value = mock_path_instance
-
-    # Mock gcs_access
-    geus_dataverse_bronze.gcs_access = MagicMock()
+    # Mock storage with fs.open
+    mock_fs = MagicMock()
+    geus_dataverse_bronze.storage = MagicMock()
+    geus_dataverse_bronze.storage.fs = mock_fs
     geus_dataverse_bronze.date_pattern = "2024-01-15T10-00-00"
 
-    with patch("tempfile.NamedTemporaryFile") as mock_temp:
-        mock_temp_file = MagicMock()
-        mock_temp_file.name = "/tmp/test_file.rds"
-        mock_temp_file.__enter__ = MagicMock(return_value=mock_temp_file)
-        mock_temp_file.__exit__ = MagicMock(return_value=False)
-        mock_temp.return_value = mock_temp_file
-
-        result = geus_dataverse_bronze._save_rds_to_gcs(mock_content, "AM_pest.rds")
+    result = geus_dataverse_bronze._save_rds_to_storage(mock_content, "AM_pest.rds")
 
     # Verify the path structure
     assert "bronze/test_geus_dataverse_pesticides" in result
     assert "AM_pest.rds" in result
 
-    # Verify GCS upload was called
-    geus_dataverse_bronze.gcs_access.upload_file.assert_called_once()
+    # Verify fs.open was called
+    mock_fs.open.assert_called_once()
 
 
-@patch("unified_pipeline.bronze.geus_dataverse_pesticides.Path")
-def test_save_pfas_rds_to_gcs(
-    mock_path: MagicMock,
+def test_save_pfas_rds_to_storage(
     geus_dataverse_bronze: GEUSDataversePesticidesBronze,
 ) -> None:
-    """Test saving PFAS .rds file to GCS."""
+    """Test saving PFAS .rds file to storage."""
     mock_content = b"test pfas rds content bytes"
 
-    # Mock the Path.unlink call
-    mock_path_instance = MagicMock()
-    mock_path.return_value = mock_path_instance
-
-    # Mock gcs_access
-    geus_dataverse_bronze.gcs_access = MagicMock()
+    # Mock storage with fs.open
+    mock_fs = MagicMock()
+    geus_dataverse_bronze.storage = MagicMock()
+    geus_dataverse_bronze.storage.fs = mock_fs
     geus_dataverse_bronze.date_pattern = "2024-01-15T10-00-00"
 
-    with patch("tempfile.NamedTemporaryFile") as mock_temp:
-        mock_temp_file = MagicMock()
-        mock_temp_file.name = "/tmp/test_file.rds"
-        mock_temp_file.__enter__ = MagicMock(return_value=mock_temp_file)
-        mock_temp_file.__exit__ = MagicMock(return_value=False)
-        mock_temp.return_value = mock_temp_file
-
-        result = geus_dataverse_bronze._save_rds_to_gcs(mock_content, "AM_pfas.rds")
+    result = geus_dataverse_bronze._save_rds_to_storage(mock_content, "AM_pfas.rds")
 
     # Verify the path structure
     assert "bronze/test_geus_dataverse_pesticides" in result
     assert "AM_pfas.rds" in result
 
-    # Verify GCS upload was called
-    geus_dataverse_bronze.gcs_access.upload_file.assert_called_once()
+    # Verify fs.open was called
+    mock_fs.open.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -174,7 +152,7 @@ def test_save_pfas_rds_to_gcs(
     "unified_pipeline.bronze.geus_dataverse_pesticides.GEUSDataversePesticidesBronze._download_rds_file"
 )
 @patch(
-    "unified_pipeline.bronze.geus_dataverse_pesticides.GEUSDataversePesticidesBronze._save_rds_to_gcs"
+    "unified_pipeline.bronze.geus_dataverse_pesticides.GEUSDataversePesticidesBronze._save_rds_to_storage"
 )
 @patch("aiohttp.ClientSession")
 @patch("aiohttp.TCPConnector")
@@ -194,8 +172,8 @@ async def test_run_success(
         "bronze/test_geus_dataverse_pesticides/2024-01-15/AM_pfas.rds",
     ]
 
-    # Mock gcs_access
-    geus_dataverse_bronze.gcs_access = MagicMock()
+    # Mock storage_access
+    geus_dataverse_bronze.storage = MagicMock()
     geus_dataverse_bronze.date_pattern = "2024-01-15T10-00-00"
 
     result = await geus_dataverse_bronze.run()

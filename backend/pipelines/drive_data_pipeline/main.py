@@ -1,4 +1,4 @@
-"""Main entry point for Google Drive Data Pipeline."""
+"""Main entry point for Drive Data Pipeline."""
 
 import logging
 import os
@@ -27,7 +27,7 @@ from drive_data_pipeline.utils.storage import get_storage_manager  # noqa: E402
 
 # Try to import CVR collection utilities
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
     from unified_pipeline.util.cvr_collection import (
         extract_cvr_numbers_from_table,
         save_pipeline_cvr_numbers,
@@ -40,7 +40,7 @@ except ImportError as e:
     CVR_COLLECTION_AVAILABLE = False
     extract_cvr_numbers_from_table = None
     save_pipeline_cvr_numbers = None
-    GCSDataAccess = None
+    StorageAccess = None
 
 # Load .env file directly - check current directory first, then parent
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -156,19 +156,19 @@ def _save_discovered_cvr_numbers(
             files_to_process = [(str(f), "local") for f in local_parquet_files]
             source_description = "local files"
         else:
-            # Strategy 2: Fallback to downloading recent files from GCS
-            logger.info("🔍 No local parquet files found, searching GCS for recent files")
+            # Strategy 2: Fallback to downloading recent files from cloud storage
+            logger.info("🔍 No local parquet files found, searching cloud storage for recent files")
 
             try:
-                gcs_access = GCSDataAccess()
+                storage_access = StorageAccess()
                 bucket = "landbruget-data"
 
-                # Find parquet files in GCS silver directory.
+                # Find parquet files in cloud storage silver directory.
                 # Use recursive glob (**) to handle directory names with spaces
                 # (e.g. "work permits", "animal welfare", "pig international movements")
                 # that a flat silver/*/*/*.parquet pattern would miss.
                 silver_pattern = f"{bucket}/silver/**/*.parquet"
-                parquet_files = sorted(set(gcs_access.list_files(silver_pattern)))
+                parquet_files = sorted(set(storage_access.list_files(silver_pattern)))
 
                 # Filter to only recent files (within reasonable timeframe of pipeline run)
                 pipeline_date = pipeline_start_time.strftime("%Y%m%d")
@@ -181,15 +181,15 @@ def _save_discovered_cvr_numbers(
                     )
                     recent_files = sorted(parquet_files, reverse=True)
 
-                files_to_process = [(f, "gcs") for f in recent_files]
-                source_description = f"GCS files (filtered for {pipeline_date})"
+                files_to_process = [(f, "cloud") for f in recent_files]
+                source_description = f"cloud storage files (filtered for {pipeline_date})"
 
             except Exception as e:
-                logger.error(f"❌ Could not access GCS files: {e}")
+                logger.error(f"❌ Could not access cloud storage files: {e}")
                 return
 
         if not files_to_process:
-            logger.warning("⚠️ No parquet files found in local directory or GCS")
+            logger.warning("⚠️ No parquet files found in local directory or cloud storage")
             return
 
         logger.info(f"📂 Processing {len(files_to_process)} files from {source_description}")
@@ -199,10 +199,10 @@ def _save_discovered_cvr_numbers(
         conn = duckdb.connect()
         all_cvr_numbers = []
 
-        # Initialize GCS access only if needed
-        gcs_access = None
-        if any(source == "gcs" for _, source in files_to_process):
-            gcs_access = GCSDataAccess()
+        # Initialize cloud storage access only if needed
+        storage_access = None
+        if any(source == "cloud" for _, source in files_to_process):
+            storage_access = StorageAccess()
 
         # Process each parquet file
         for i, (file_path, source) in enumerate(files_to_process):
@@ -212,21 +212,21 @@ def _save_discovered_cvr_numbers(
                     Path(file_path).name if source == "local" else file_path.split("/")[-1]
                 )
 
-                if source == "gcs":
-                    # 🚀 ENHANCED: Use native HMAC acceleration for faster Drive data loading
+                if source == "cloud":
+                    # Use native HMAC acceleration for faster Drive data loading
                     try:
-                        # Use GCS access connection for table creation and CVR extraction
-                        gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
+                        # Use cloud storage access connection for table creation and CVR extraction
+                        storage_access.query_parquet_native(file_path, "SELECT *", table_name)
                         # Extract CVR numbers using flexible column detection
                         cvr_numbers = _extract_cvr_numbers_flexible(
                             table_name=table_name,
-                            connection=gcs_access.duckdb_conn,
+                            connection=storage_access.duckdb_conn,
                             logger=logger,
                         )
                     except Exception as e:
                         logger.warning(f"Native loading failed, using fallback: {e}")
                         # Fallback to existing temp file method
-                        with gcs_access._temp_download(file_path) as temp_file:
+                        with storage_access._temp_download(file_path) as temp_file:
                             conn.execute(
                                 f"CREATE TABLE {table_name} AS "
                                 f"SELECT * FROM read_parquet('{temp_file}')"
@@ -264,21 +264,21 @@ def _save_discovered_cvr_numbers(
         unique_cvr_numbers = sorted(set(all_cvr_numbers))
 
         if unique_cvr_numbers:
-            # Initialize GCS access for saving if not already done
-            if gcs_access is None:
-                gcs_access = GCSDataAccess()
+            # Initialize cloud storage access for saving if not already done
+            if storage_access is None:
+                storage_access = StorageAccess()
 
             timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
-            gcs_path = save_pipeline_cvr_numbers(
+            storage_path = save_pipeline_cvr_numbers(
                 pipeline_name="drive_data_pipeline",
                 cvr_numbers=unique_cvr_numbers,
-                gcs_access=gcs_access,
+                storage_access=storage_access,
                 bucket="landbruget-data",
                 timestamp=timestamp,
             )
 
-            logger.info(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
+            logger.info(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {storage_path}")
         else:
             logger.warning("⚠️ No CVR numbers found in drive data pipeline")
 
@@ -472,10 +472,8 @@ def main() -> int:
         # then public access if enabled
 
         # Initialize storage manager
-        # Use r2_bucket for R2 storage, gcs_bucket for GCS, None for local
-        bucket_name = (
-            settings.r2_bucket if settings.storage_type.value == "r2" else settings.gcs_bucket
-        )
+        # Use r2_bucket for R2 storage, None for local
+        bucket_name = settings.r2_bucket if settings.storage_type.value == "r2" else None
         storage_manager = get_storage_manager(
             storage_type=settings.storage_type.value,
             bucket_name=bucket_name,
@@ -584,9 +582,9 @@ def main() -> int:
                 bronze_runs = []
 
                 # Look for dataset directories in bronze path
-                # Handle both local and GCS storage
-                if settings.storage_type.value in ("gcs", "r2"):
-                    # For GCS, use the storage manager to list directories
+                # Handle both local and R2 storage
+                if settings.storage_type.value == "r2":
+                    # For R2, use the storage manager to list directories
                     try:
                         # List dataset directories (fertiliser, work_permits, etc.)
                         dataset_dirs = storage_manager.list_directories(settings.bronze_path)
@@ -595,7 +593,7 @@ def main() -> int:
                             timestamp_dirs = storage_manager.list_directories(dataset_dir)
                             bronze_runs.extend(timestamp_dirs)
                     except Exception as e:
-                        logger.warning(f"Failed to list GCS bronze directories: {e}")
+                        logger.warning(f"Failed to list R2 bronze directories: {e}")
                         # Fallback: try to list specific known datasets
                         dataset_names = [
                             "fertiliser",
@@ -706,7 +704,7 @@ def main() -> int:
             elif bronze_run_path:
                 # Traditional file-based processing mode
                 # Count files to process for progress tracking using storage manager
-                # This ensures compatibility with both local and GCS storage
+                # This ensures compatibility with both local and R2 storage
                 try:
                     # Use storage manager to list metadata files
                     # (which correspond to processable files)
@@ -714,18 +712,11 @@ def main() -> int:
                         bronze_run_path, pattern="*.metadata.json"
                     )
 
-                    # For GCS storage, also check recursively
-                    if storage_manager.storage_type.lower() in ("gcs", "r2"):
-                        # GCS storage - list with recursive prefix
+                    # For R2 storage, also check recursively
+                    if storage_manager.storage_type.lower() == "r2":
+                        # R2 storage - list with recursive prefix
                         prefix = str(bronze_run_path).rstrip("/") + "/"
-                        if hasattr(storage_manager, "gcs_bucket") and storage_manager.gcs_bucket:
-                            blobs = storage_manager.gcs_bucket.list_blobs(prefix=prefix)
-                            additional_files = [
-                                Path(blob.name)
-                                for blob in blobs
-                                if blob.name.endswith(".metadata.json")
-                            ]
-                            metadata_files.extend(additional_files)
+                        # Note: R2 listing is handled via s3fs in the storage manager
 
                     # Filter by file types if specified
                     files_to_process_count = len(metadata_files)

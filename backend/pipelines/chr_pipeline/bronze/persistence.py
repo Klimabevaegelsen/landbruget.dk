@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 
 # Import GCS access for persistent storage
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 # Load environment variables
 load_dotenv()
@@ -33,15 +33,19 @@ def _load_problematic_herds() -> None:
     if _PROBLEMATIC_HERDS_LOADED:
         return
 
-    if GCS_AVAILABLE:
+    if STORAGE_AVAILABLE:
         try:
-            gcs = GCSDataAccess()
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+            gcs = StorageAccess()
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET")
+                or os.getenv("R2_BUCKET")
+                or os.getenv("GCS_BUCKET", "landbruget-data")
+            )
             problematic_herds_path = "bronze/chr/problematic_herds.json"
-            gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
+            storage_path = f"{bucket_name}/{problematic_herds_path}"
 
             try:
-                data = gcs.download_json(gcs_path)
+                data = gcs.download_json(storage_path)
                 if data and "problematic_herds" in data:
                     _PROBLEMATIC_HERDS.update(data["problematic_herds"])
                     logger.info(f"Loaded {len(_PROBLEMATIC_HERDS)} problematic herds from GCS")
@@ -64,12 +68,16 @@ def _save_problematic_herds() -> None:
     if not _PROBLEMATIC_HERDS:
         return
 
-    if GCS_AVAILABLE:
+    if STORAGE_AVAILABLE:
         try:
-            gcs = GCSDataAccess()
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+            gcs = StorageAccess()
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET")
+                or os.getenv("R2_BUCKET")
+                or os.getenv("GCS_BUCKET", "landbruget-data")
+            )
             problematic_herds_path = "bronze/chr/problematic_herds.json"
-            gcs_path = f"gs://{bucket_name}/{problematic_herds_path}"
+            storage_path = f"{bucket_name}/{problematic_herds_path}"
 
             data = {
                 "problematic_herds": list(_PROBLEMATIC_HERDS),
@@ -77,7 +85,7 @@ def _save_problematic_herds() -> None:
                 "total_count": len(_PROBLEMATIC_HERDS),
             }
 
-            gcs.upload_json(data, gcs_path)
+            gcs.upload_json(data, storage_path)
             logger.info(f"Saved {len(_PROBLEMATIC_HERDS)} problematic herds to GCS")
 
         except Exception as e:

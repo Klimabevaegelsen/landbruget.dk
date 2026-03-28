@@ -5,11 +5,11 @@ This module handles writing EmissionReport results to:
 1. GCS gold layer (primary storage)
 2. Supabase database (optional sync for web access)
 
-The writer uses the GCSDataAccess pattern for optimal performance and
+The writer uses the StorageAccess pattern for optimal performance and
 follows the medallion architecture gold layer standards.
 
 Output Structure:
-- GCS: gs://landbruget-data/gold/carbon_emissions/<YYYYMMDD_HHMMSS>/
+- Storage: landbruget-data/gold/carbon_emissions/<YYYYMMDD_HHMMSS>/
   - emissions.parquet (main report data)
   - categories.parquet (emission categories breakdown)
   - metadata.json (run metadata)
@@ -24,10 +24,11 @@ from datetime import datetime
 from typing import Any
 
 import duckdb
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
+
 from unified_pipeline.util.log_util import Logger
 
-from climate_calculator import EmissionCategory, EmissionReport
+from .climate_calculator import EmissionCategory, EmissionReport
 
 logger = Logger.get_logger()
 
@@ -50,8 +51,13 @@ class ClimateOutputWriter:
         Args:
             bucket: GCS bucket name. Defaults to GCS_BUCKET env var or 'landbruget-data'
         """
-        self.bucket = bucket or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-        self.gcs = GCSDataAccess()
+        self.bucket = (
+            bucket
+            or os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
+        self.gcs = StorageAccess()
         self._duckdb_conn = duckdb.connect()
         logger.info(f"ClimateOutputWriter initialized with bucket: {self.bucket}")
 
@@ -93,7 +99,7 @@ class ClimateOutputWriter:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Build output path
-        output_dir = f"gs://{self.bucket}/gold/carbon_emissions/{timestamp}"
+        output_dir = f"{self.bucket}/gold/carbon_emissions/{timestamp}"
         logger.info(f"Writing {len(reports)} emission reports to {output_dir}")
 
         try:
@@ -465,9 +471,9 @@ class ClimateOutputWriter:
         """
         try:
             if pattern:
-                search_pattern = f"gs://{self.bucket}/gold/carbon_emissions/{pattern}/metadata.json"
+                search_pattern = f"{self.bucket}/gold/carbon_emissions/{pattern}/metadata.json"
             else:
-                search_pattern = f"gs://{self.bucket}/gold/carbon_emissions/*/metadata.json"
+                search_pattern = f"{self.bucket}/gold/carbon_emissions/*/metadata.json"
 
             metadata_files = self.gcs.list_files(search_pattern)
 
@@ -486,14 +492,14 @@ class ClimateOutputWriter:
         Read metadata for a specific emission report.
 
         Args:
-            report_path: GCS path to report directory (e.g., gs://bucket/gold/carbon_emissions/20240101_120000)
+            report_path: Storage path to report directory (e.g., bucket/gold/carbon_emissions/20240101_120000)
 
         Returns:
             Metadata dictionary or None if not found
 
         Example:
             >>> writer = ClimateOutputWriter()
-            >>> metadata = writer.read_report_metadata("gs://bucket/gold/carbon_emissions/20240101_120000")
+            >>> metadata = writer.read_report_metadata("bucket/gold/carbon_emissions/20240101_120000")
             >>> print(f"Report contains {metadata['report_count']} farms")
         """
         try:

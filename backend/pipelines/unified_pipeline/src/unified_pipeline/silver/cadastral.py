@@ -27,7 +27,11 @@ class CadastralSilverConfig(BaseJobConfig):
     type: str = "wfs"
     description: str = "Cadastral parcels from WFS"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()

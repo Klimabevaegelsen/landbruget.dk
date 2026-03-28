@@ -100,12 +100,12 @@ async def run_cumulative_analysis(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Load BMD data once for all analyses
         logger.info("📊 Loading shared BMD data for cumulative analysis")
-        bmd_table = data_loader.load_bmd_data_from_gcs()
+        bmd_table = data_loader.load_bmd_data_from_storage()
         processor._protect_table(bmd_table)
 
         # Load kommune boundaries once if needed
@@ -182,10 +182,10 @@ async def run_cumulative_analysis(
 
                 # Load year-specific data
                 field_year = year + 1
-                fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+                fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
                 fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-                pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+                pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
                 pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
                     pesticide_table, bmd_table, year
                 )
@@ -370,10 +370,10 @@ async def run_cumulative_analysis(
 
                 # Load year-specific data
                 field_year = year + 1
-                fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+                fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
                 fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-                pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+                pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
                 pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
                     pesticide_table, bmd_table, year
                 )
@@ -558,8 +558,8 @@ async def run_cumulative_analysis_optimized(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Determine years to process
         if years is None:
@@ -586,19 +586,19 @@ async def run_cumulative_analysis_optimized(
                 # Try multiple patterns to find existing H3 results
                 patterns = [
                     # New standardized format
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
                     # Alternative format with different timestamp structure
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/*_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/*_res{resolution}.parquet",
                     # Legacy format fallback
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}/*/h3_pesticide_{year}_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}/*/h3_pesticide_{year}_res{resolution}.parquet",
                     # Kepler format as fallback (can be used for aggregation)
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_kepler.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_kepler.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.gcs_access.list_files(pattern)
+                        files = processor.storage_access.list_files(pattern)
                         if files:
                             found_file = sorted(files)[-1]  # Get the most recent result
                             logger.info(
@@ -671,7 +671,7 @@ async def run_cumulative_analysis_optimized(
                 # Load year results from GCS
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                    processor.storage_access.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -852,15 +852,15 @@ async def run_cumulative_analysis_optimized(
             available_kommune_results = []
             for year in years:
                 patterns = [
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/*kommune*.parquet",
-                    f"gs://{config.bucket}/gold/kommune_{year}/*/kommune_{year}.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/*kommune*.parquet",
+                    f"{config.bucket}/gold/kommune_{year}/*/kommune_{year}.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.gcs_access.list_files(pattern)
+                        files = processor.storage_access.list_files(pattern)
                         if files:
                             found_file = sorted(files)[-1]
                             logger.info(
@@ -943,7 +943,7 @@ async def run_cumulative_analysis_optimized(
                     # Load year results from GCS
                     year_table = f"year_kommune_results_{year}"
                     try:
-                        processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                        processor.storage_access.create_table_from_storage(year_table, file_path)
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""
@@ -1135,8 +1135,8 @@ async def run_cumulative_analysis_github_actions_optimized(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Determine years to process
         if years is None:
@@ -1173,16 +1173,16 @@ async def run_cumulative_analysis_github_actions_optimized(
                 # Primary patterns used by GitHub Actions workflow
                 patterns = [
                     # Standard format from individual year jobs
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
                     # Alternative timestamp patterns
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_*.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_*.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
                         # List files with timestamps
-                        files = processor.gcs_access.list_files_with_timestamps(pattern)
+                        files = processor.storage_access.list_files_with_timestamps(pattern)
                         if files:
                             # Sort by timestamp (most recent first) and take the freshest
                             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
@@ -1266,7 +1266,7 @@ async def run_cumulative_analysis_github_actions_optimized(
                 # Load year results from GCS
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                    processor.storage_access.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -1441,14 +1441,14 @@ async def run_cumulative_analysis_github_actions_optimized(
             available_kommune_results = []
             for year in years:
                 patterns = [
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}_*.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}_*.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.gcs_access.list_files_with_timestamps(pattern)
+                        files = processor.storage_access.list_files_with_timestamps(pattern)
                         if files:
                             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
                             most_recent_file, timestamp = files_sorted[0]
@@ -1527,7 +1527,9 @@ async def run_cumulative_analysis_github_actions_optimized(
                     # Load year kommune results from GCS
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
-                        processor.gcs_access.create_table_from_gcs(year_kommune_table, file_path)
+                        processor.storage_access.create_table_from_storage(
+                            year_kommune_table, file_path
+                        )
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""
@@ -1713,12 +1715,12 @@ async def run_combined_analysis(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Load BMD data once for all analyses (shared across all resolutions and modes)
         logger.info("📊 Loading shared BMD data for all analyses")
-        bmd_table = data_loader.load_bmd_data_from_gcs()
+        bmd_table = data_loader.load_bmd_data_from_storage()
         processor._protect_table(bmd_table)
 
         # Load kommune boundaries once if needed
@@ -1744,10 +1746,10 @@ async def run_combined_analysis(
             # Load year-specific data once
             logger.info(f"📊 Loading shared data for year {year}")
             field_year = year + 1
-            fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+            fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
             fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-            pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+            pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
             pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
                 pesticide_table, bmd_table, year
             )
@@ -1956,8 +1958,8 @@ async def run_cumulative_analysis_from_artifacts(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Read artifacts to get GCS paths
         artifacts_path = Path(artifacts_dir)
@@ -2095,7 +2097,7 @@ async def run_cumulative_analysis_from_artifacts(
                 # Load year results from GCS
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                    processor.storage_access.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -2342,7 +2344,9 @@ async def run_cumulative_analysis_from_artifacts(
                     # Load year kommune results from GCS
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
-                        processor.gcs_access.create_table_from_gcs(year_kommune_table, file_path)
+                        processor.storage_access.create_table_from_storage(
+                            year_kommune_table, file_path
+                        )
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""

@@ -2,7 +2,7 @@
 
 This conftest.py ensures that the backend directory is in sys.path
 before any test modules are imported, enabling imports like:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
 It also adds pipeline directories to sys.path to support pipeline-local imports.
 """

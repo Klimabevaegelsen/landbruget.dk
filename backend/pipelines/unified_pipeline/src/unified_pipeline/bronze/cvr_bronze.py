@@ -162,17 +162,21 @@ class CVRBronze(BaseSource[CVRBronzeConfig], BronzeJobInterface):
         """
         try:
             # Save company data
-            company_path = f"gs://{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_company.json"
-            self.gcs_access.upload_json(company_data, company_path)
+            company_path = (
+                f"{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_company.json"
+            )
+            self.storage.upload_json(company_data, company_path)
 
             # Save financial documents if any
             if financial_docs:
-                financial_path = f"gs://{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_financial.json"
-                self.gcs_access.upload_json(financial_docs, financial_path)
+                financial_path = f"{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_financial.json"
+                self.storage.upload_json(financial_docs, financial_path)
 
             # Save metadata
-            metadata_path = f"gs://{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_metadata.json"
-            self.gcs_access.upload_json(metadata, metadata_path)
+            metadata_path = (
+                f"{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_metadata.json"
+            )
+            self.storage.upload_json(metadata, metadata_path)
 
             self.log.info(f"Saved CVR {cvr_number} data to storage")
 

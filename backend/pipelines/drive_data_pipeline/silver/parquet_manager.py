@@ -82,8 +82,8 @@ class ParquetManager(DuckDBProcessor):
         try:
             logger.info(f"Saving DuckDB table '{table_name}' to Parquet: {output_path}")
 
-            # Check if we're using cloud storage (GCS or R2)
-            if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
+            # Check if we're using R2 cloud storage
+            if self.storage_manager.storage_type.lower() == "r2":
                 # Cloud storage - write to temp file first, then upload
                 with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as temp_file:
                     temp_path = temp_file.name
@@ -279,8 +279,8 @@ class ParquetManager(DuckDBProcessor):
         try:
             logger.info(f"Saving spatial table '{table_name}' to GeoParquet: {output_path}")
 
-            # Check if we're using cloud storage (GCS or R2)
-            if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
+            # Check if we're using R2 cloud storage
+            if self.storage_manager.storage_type.lower() == "r2":
                 # Cloud storage - need to convert through geopandas for GeoParquet
                 with tempfile.NamedTemporaryFile(suffix=".geoparquet", delete=False) as temp_file:
                     temp_path = temp_file.name
@@ -308,11 +308,11 @@ class ParquetManager(DuckDBProcessor):
                     else:
                         gdf.to_parquet(temp_path, compression=self.compression)
 
-                    # Upload to GCS
+                    # Upload to R2
                     with open(temp_path, "rb") as f:
                         self.storage_manager.save_file(f.read(), output_path)
 
-                    logger.info(f"Saved GeoParquet file to GCS: {output_path}")
+                    logger.info(f"Saved GeoParquet file to R2: {output_path}")
                     return output_path
 
                 finally:

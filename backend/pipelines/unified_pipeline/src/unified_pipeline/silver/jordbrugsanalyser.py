@@ -554,10 +554,12 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                         self.log.info(f"Saving {total_features:,} features for year {year}")
 
                         # ✅ OPTIMIZED: Save directly without DataFrame conversion
-                        gcs_path = self.save_data_direct(
+                        storage_path = self.save_data_direct(
                             processed_table, dataset_name, self.config.bucket, "silver"
                         )
-                        self.log.info(f"Year {year}: Silver data saved successfully to {gcs_path}")
+                        self.log.info(
+                            f"Year {year}: Silver data saved successfully to {storage_path}"
+                        )
 
                         # Log some statistics using DuckDB
                         total_area = (

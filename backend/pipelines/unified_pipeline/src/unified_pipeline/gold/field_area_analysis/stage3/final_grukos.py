@@ -40,7 +40,7 @@ class FinalGrukosAnalysis(FieldAnalysisStageBase):
         # Load field-property intersections from Stage 1C (foundation data)
         stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage1c_path,
             "SELECT field_uuid, bfe_number, intersection_geometry as property_geometry",
             "field_property_intersections",
@@ -50,7 +50,7 @@ class FinalGrukosAnalysis(FieldAnalysisStageBase):
         # Load field-grukos intersections from Stage 2C
         stage2c_grukos_dataset = updated_outputs["field_grukos_intersections"]
         stage2c_grukos_path = self._get_latest_gold_path(stage2c_grukos_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2c_grukos_path, "SELECT *", "field_grukos_intersections"
         )
         self.log.info(f"Loaded field_grukos_intersections from {stage2c_grukos_dataset}")

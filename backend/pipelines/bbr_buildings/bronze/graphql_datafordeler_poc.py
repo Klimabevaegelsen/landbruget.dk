@@ -42,7 +42,7 @@ from datetime import UTC, datetime
 import requests
 
 API_KEY = os.getenv("DATAFORDELER_GRAPHQL_API_KEY")
-if not API_KEY:
+if not API_KEY and __name__ == "__main__":
     print("ERROR: Set DATAFORDELER_GRAPHQL_API_KEY environment variable")
     sys.exit(1)
 

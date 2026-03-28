@@ -58,7 +58,7 @@ class FieldsGrukosCoverage(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered Grukos dataset...")
         stage0_grukos_dataset = updated_outputs["grukos_prefiltered"]
         stage0_grukos_path = self._get_latest_gold_path(stage0_grukos_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage0_grukos_path,
             "SELECT *",
             "grukos_prefiltered",

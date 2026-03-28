@@ -45,27 +45,23 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Load Stage 1C field-property intersections (foundation data)
         stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
-        self.gcs_access.query_parquet_direct(
-            stage1c_path, "SELECT *", "field_property_intersections"
-        )
+        self.storage.query_parquet_direct(stage1c_path, "SELECT *", "field_property_intersections")
         self.log.info(f"✅ Loaded field_property_intersections from {stage1c_dataset}")
 
         # Load Stage 1D field-soil intersections for soil analysis
         stage1d_dataset = updated_outputs["field_soil_intersections"]
         stage1d_path = self._get_latest_gold_path(stage1d_dataset)
-        self.gcs_access.query_parquet_direct(stage1d_path, "SELECT *", "field_soil_intersections")
+        self.storage.query_parquet_direct(stage1d_path, "SELECT *", "field_soil_intersections")
         self.log.info(f"✅ Loaded field_soil_intersections from {stage1d_dataset}")
 
         # Load Stage 2A outputs: field × BNBO geometries
         stage2a_bnbo_dataset = updated_outputs["field_bnbo_intersections"]
         stage2a_bnbo_path = self._get_latest_gold_path(stage2a_bnbo_dataset)
-        self.gcs_access.query_parquet_direct(
-            stage2a_bnbo_path, "SELECT *", "field_bnbo_intersections"
-        )
+        self.storage.query_parquet_direct(stage2a_bnbo_path, "SELECT *", "field_bnbo_intersections")
 
         stage2a_water_dataset = updated_outputs["field_bnbo_water_intersections"]
         stage2a_water_path = self._get_latest_gold_path(stage2a_water_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2a_water_path, "SELECT *", "field_bnbo_water_intersections"
         )
         self.log.info("✅ Loaded Stage 2A BNBO geometric outputs")
@@ -73,13 +69,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Load Stage 2B outputs: field × wetland geometries
         stage2b_wetland_dataset = updated_outputs["field_wetland_intersections"]
         stage2b_wetland_path = self._get_latest_gold_path(stage2b_wetland_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2b_wetland_path, "SELECT *", "field_wetland_intersections"
         )
 
         stage2b_water_dataset = updated_outputs["field_wetland_water_intersections"]
         stage2b_water_path = self._get_latest_gold_path(stage2b_water_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2b_water_path, "SELECT *", "field_wetland_water_intersections"
         )
         self.log.info("✅ Loaded Stage 2B wetland geometric outputs")
@@ -87,13 +83,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Load Stage 3A outputs: property × BNBO geometries
         stage3a_bnbo_dataset = updated_outputs["property_bnbo_intersections"]
         stage3a_bnbo_path = self._get_latest_gold_path(stage3a_bnbo_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage3a_bnbo_path, "SELECT *", "property_bnbo_intersections"
         )
 
         stage3a_water_dataset = updated_outputs["property_bnbo_water_intersections"]
         stage3a_water_path = self._get_latest_gold_path(stage3a_water_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage3a_water_path, "SELECT *", "property_bnbo_water_intersections"
         )
         self.log.info("✅ Loaded Stage 3A property-BNBO geometric outputs")
@@ -101,13 +97,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Load Stage 3B outputs: property × wetland geometries
         stage3b_wetland_dataset = updated_outputs["property_wetland_intersections"]
         stage3b_wetland_path = self._get_latest_gold_path(stage3b_wetland_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage3b_wetland_path, "SELECT *", "property_wetland_intersections"
         )
 
         stage3b_water_dataset = updated_outputs["property_wetland_water_intersections"]
         stage3b_water_path = self._get_latest_gold_path(stage3b_water_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage3b_water_path, "SELECT *", "property_wetland_water_intersections"
         )
         self.log.info("✅ Loaded Stage 3B property-wetland geometric outputs")
@@ -115,7 +111,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Load Stage 2C outputs: field × grukos geometries
         stage2c_grukos_dataset = updated_outputs["field_grukos_intersections"]
         stage2c_grukos_path = self._get_latest_gold_path(stage2c_grukos_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2c_grukos_path, "SELECT *", "field_grukos_intersections"
         )
         self.log.info("✅ Loaded Stage 2C grukos geometric outputs")
@@ -123,7 +119,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         # Load Stage 3C outputs: property × grukos geometries
         stage3c_grukos_dataset = updated_outputs["property_grukos_intersections"]
         stage3c_grukos_path = self._get_latest_gold_path(stage3c_grukos_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage3c_grukos_path, "SELECT *", "property_grukos_intersections"
         )
         self.log.info("✅ Loaded Stage 3C property-grukos geometric outputs")

@@ -31,10 +31,10 @@ class TestGetR2Filesystem:
             "R2_ACCOUNT_ID": "abc123def456ghi789jkl012mno345pqr",
         },
     )
-    @patch("common.gcs.filesystem.s3fs.S3FileSystem")
+    @patch("common.storage.filesystem.s3fs.S3FileSystem")
     def test_creates_s3fs_with_r2_endpoint(self, mock_s3fs_class):
         """S3FileSystem should be created with R2-specific endpoint URL."""
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
         # Clear any cached instance
         get_r2_filesystem.cache_clear()
@@ -60,10 +60,10 @@ class TestGetR2Filesystem:
             "R2_ACCOUNT_ID": "abc123def456ghi789jkl012mno345pqr",
         },
     )
-    @patch("common.gcs.filesystem.s3fs.S3FileSystem")
+    @patch("common.storage.filesystem.s3fs.S3FileSystem")
     def test_uses_r2_credentials(self, mock_s3fs_class):
         """S3FileSystem should use R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY."""
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
         get_r2_filesystem.cache_clear()
         mock_s3fs_class.return_value = MagicMock()
@@ -82,10 +82,10 @@ class TestGetR2Filesystem:
             "R2_ACCOUNT_ID": "abc123def456ghi789jkl012mno345pqr",
         },
     )
-    @patch("common.gcs.filesystem.s3fs.S3FileSystem")
+    @patch("common.storage.filesystem.s3fs.S3FileSystem")
     def test_caches_filesystem_instance(self, mock_s3fs_class):
         """Repeated calls should return the same cached filesystem instance."""
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
         get_r2_filesystem.cache_clear()
         mock_fs = MagicMock()
@@ -99,10 +99,10 @@ class TestGetR2Filesystem:
         assert result1 is result2
 
     @patch.dict(os.environ, {}, clear=True)
-    @patch("common.gcs.filesystem.s3fs.S3FileSystem")
+    @patch("common.storage.filesystem.s3fs.S3FileSystem")
     def test_fallback_when_no_r2_credentials(self, mock_s3fs_class):
         """Should handle missing credentials gracefully."""
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
         get_r2_filesystem.cache_clear()
 
@@ -125,7 +125,7 @@ class TestGetDuckDBWithR2:
     )
     def test_creates_type_r2_secret(self):
         """DuckDB should be configured with TYPE r2 secret containing ACCOUNT_ID."""
-        from common.gcs.filesystem import _setup_native_r2_auth
+        from common.storage.filesystem import _setup_native_r2_auth
 
         conn = duckdb.connect(":memory:")
         try:
@@ -152,7 +152,7 @@ class TestGetDuckDBWithR2:
     )
     def test_duckdb_connection_returned(self):
         """get_duckdb_with_r2 should return a valid DuckDB connection."""
-        from common.gcs.filesystem import get_duckdb_with_r2
+        from common.storage.filesystem import get_duckdb_with_r2
 
         get_duckdb_with_r2.cache_clear()
 
@@ -167,7 +167,7 @@ class TestGetDuckDBWithR2:
     @patch.dict(os.environ, {}, clear=True)
     def test_no_credentials_falls_back_to_fsspec(self):
         """Without R2 credentials, should try fsspec registration."""
-        from common.gcs.filesystem import _setup_native_r2_auth
+        from common.storage.filesystem import _setup_native_r2_auth
 
         conn = duckdb.connect(":memory:")
         try:
@@ -187,7 +187,7 @@ class TestGetDuckDBWithR2:
     )
     def test_sql_escaping_in_credentials(self):
         """Credentials with special characters should be properly escaped."""
-        from common.gcs.filesystem import _setup_native_r2_auth
+        from common.storage.filesystem import _setup_native_r2_auth
 
         conn = duckdb.connect(":memory:")
         try:
@@ -207,7 +207,7 @@ class TestGetDuckDBWithR2:
     )
     def test_setup_duckdb_cloud_auth_function_works(self):
         """New shared auth helper should configure native cloud auth."""
-        from common.gcs.filesystem import setup_duckdb_cloud_auth
+        from common.storage.filesystem import setup_duckdb_cloud_auth
 
         conn = duckdb.connect(":memory:")
         try:
@@ -224,9 +224,9 @@ class TestGetDuckDBWithR2:
         },
         clear=True,
     )
-    def test_setup_duckdb_cloud_auth_falls_back_to_gcs(self):
+    def test_setup_duckdb_cloud_auth_fallback(self):
         """Shared auth helper should keep legacy GCS HMAC fallback."""
-        from common.gcs.filesystem import setup_duckdb_cloud_auth
+        from common.storage.filesystem import setup_duckdb_cloud_auth
 
         conn = duckdb.connect(":memory:")
         try:
@@ -235,55 +235,3 @@ class TestGetDuckDBWithR2:
             assert "gcs" in str(secrets).lower()
         finally:
             conn.close()
-
-
-class TestBackwardCompatibility:
-    """Tests that old GCS function names still work via aliases."""
-
-    @patch.dict(
-        os.environ,
-        {
-            "R2_ACCESS_KEY_ID": "test-key-id",
-            "R2_SECRET_ACCESS_KEY": "test-secret-key",
-            "R2_ACCOUNT_ID": "abc123def456ghi789jkl012mno345pqr",
-        },
-    )
-    @patch("common.gcs.filesystem.s3fs.S3FileSystem")
-    def test_get_gcs_filesystem_alias_works(self, mock_s3fs_class):
-        """get_gcs_filesystem should still work as an alias for get_r2_filesystem."""
-        from common.gcs.filesystem import get_gcs_filesystem, get_r2_filesystem
-
-        get_r2_filesystem.cache_clear()
-        if hasattr(get_gcs_filesystem, "cache_clear"):
-            get_gcs_filesystem.cache_clear()
-
-        mock_s3fs_class.return_value = MagicMock()
-
-        # Old name should still work
-        result = get_gcs_filesystem()
-        assert result is not None
-
-    @patch.dict(
-        os.environ,
-        {
-            "R2_ACCESS_KEY_ID": "test-key-id",
-            "R2_SECRET_ACCESS_KEY": "test-secret-key",
-            "R2_ACCOUNT_ID": "abc123def456ghi789jkl012mno345pqr",
-        },
-    )
-    def test_get_duckdb_with_gcs_alias_works(self):
-        """get_duckdb_with_gcs should still work as an alias for get_duckdb_with_r2."""
-        from common.gcs.filesystem import get_duckdb_with_gcs, get_duckdb_with_r2
-
-        get_duckdb_with_r2.cache_clear()
-        if hasattr(get_duckdb_with_gcs, "cache_clear"):
-            get_duckdb_with_gcs.cache_clear()
-
-        conn = get_duckdb_with_gcs()
-        try:
-            result = conn.execute("SELECT 1 AS test").fetchone()
-            assert result[0] == 1
-        finally:
-            get_duckdb_with_r2.cache_clear()
-            if hasattr(get_duckdb_with_gcs, "cache_clear"):
-                get_duckdb_with_gcs.cache_clear()

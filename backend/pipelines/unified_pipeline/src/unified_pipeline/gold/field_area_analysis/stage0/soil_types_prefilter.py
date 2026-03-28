@@ -372,7 +372,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
 
         # Export filtered soil types using standard pipeline pattern (like other Stage 0 jobs)
         output_path = self._get_stage0_output_path("stage0_soil_types_filtered")
-        self.gcs_access.export_table_to_gcs_direct("soil_types_filtered", output_path)
+        self.storage.export_table_to_storage_direct("soil_types_filtered", output_path)
 
         return {
             "original_count": total_soil_types,

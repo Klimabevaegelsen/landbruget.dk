@@ -75,7 +75,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                                             for the processor."""
         super().__init__(config)
 
-        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # ✅ MIGRATION: BaseSource already created StorageAccess and configured DuckDB
         # No need to create another instance or setup DuckDB again
         self.log.info("✅ WetlandsSilver: Using unified GCS access and DuckDB connection")
         self.log.info("✅ Optimized for DuckDB-spatial v1.2.2+ with SPATIAL_JOIN operator")

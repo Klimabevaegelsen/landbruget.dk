@@ -1,6 +1,6 @@
 """Pytest configuration for common tests.
 
-Adds backend to sys.path before test collection to enable common.gcs imports.
+Adds backend to sys.path before test collection to enable common.storage imports.
 """
 
 import sys

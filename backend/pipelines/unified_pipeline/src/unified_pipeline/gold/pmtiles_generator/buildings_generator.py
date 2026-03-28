@@ -413,11 +413,11 @@ class BuildingsProximityPMTilesGenerator:
 
             for year in range(current_year, current_year - 3, -1):  # Try last 3 years
                 try:
-                    base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{year}"
+                    base_path = f"{self.config.storage_bucket}/silver/fvm_marker_{year}"
 
                     # Try to find the latest timestamped directory for this year
-                    gcs_path = await self.data_loader._find_latest_timestamped_path(base_path)
-                    if gcs_path:
+                    storage_path = await self.data_loader._find_latest_timestamped_path(base_path)
+                    if storage_path:
                         logger.info(
                             f"Loading agricultural fields from {year} for proximity filtering"
                         )
@@ -428,7 +428,7 @@ class BuildingsProximityPMTilesGenerator:
                         SELECT DISTINCT
                             field_uuid,
                             geometry  -- Keep in EPSG:25832 for processing
-                        FROM read_parquet('{gcs_path}data.parquet')
+                        FROM read_parquet('{storage_path}data.parquet')
                         WHERE geometry IS NOT NULL
                             AND ST_IsValid(geometry)
                             AND area_ha > 0.1  -- Minimum 0.1 hectare fields

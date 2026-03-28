@@ -1326,21 +1326,21 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     organic_table = f"fvm_organic_areas_{year}"
 
                     # Check if both datasets exist for this year
-                    marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
-                    organic_path = f"gs://{self.config.bucket}/silver/{organic_table}/"
+                    marker_path = f"{self.config.bucket}/silver/{marker_table}/"
+                    organic_path = f"{self.config.bucket}/silver/{organic_table}/"
 
-                    # Load marker data using GCSDataAccess
+                    # Load marker data using StorageAccess
                     try:
                         # Find the latest timestamped file
                         marker_pattern = f"{marker_path}*/data.parquet"
-                        marker_files = self.gcs_access.list_files(marker_pattern)
+                        marker_files = self.storage.list_files(marker_pattern)
                         if not marker_files:
                             raise FileNotFoundError(
                                 f"No files found matching pattern: {marker_pattern}"
                             )
 
                         latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
-                        self.gcs_access.query_parquet_direct(
+                        self.storage.query_parquet_direct(
                             latest_marker_file, "SELECT *", f"temp_marker_{year}"
                         )
                         marker_count = self.conn.execute(
@@ -1354,18 +1354,18 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         self.log.warning(f"Could not load marker data for {year}: {e}")
                         continue
 
-                    # Load organic data using GCSDataAccess
+                    # Load organic data using StorageAccess
                     try:
                         # Find the latest timestamped file
                         organic_pattern = f"{organic_path}*/data.parquet"
-                        organic_files = self.gcs_access.list_files(organic_pattern)
+                        organic_files = self.storage.list_files(organic_pattern)
                         if not organic_files:
                             raise FileNotFoundError(
                                 f"No files found matching pattern: {organic_pattern}"
                             )
 
                         latest_organic_file = sorted(organic_files)[-1]  # Latest by timestamp
-                        self.gcs_access.query_parquet_direct(
+                        self.storage.query_parquet_direct(
                             latest_organic_file, "SELECT *", f"temp_organic_{year}"
                         )
                         organic_count = self.conn.execute(
@@ -1525,8 +1525,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         """Find the latest GKEA fertilizer data for a specific year."""
         try:
             # Look for GKEA data in fertiliser silver dataset for CVR identification
-            pattern = f"gs://{self.config.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.config.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
+            files = self.storage.list_files(pattern)
 
             if files:
                 # Find the most recent file by sorting (timestamps are in path)
@@ -1579,7 +1579,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 table_name = f"gkea_raw_{year}" if not all_gkea_data_loaded else "gkea_raw_temp"
 
-                self.gcs_access.query_parquet_direct(
+                self.storage.query_parquet_direct(
                     gkea_path,
                     f"""
                     SELECT
@@ -2099,21 +2099,21 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         marker_table = f"fvm_marker_{year}"
 
                         # Check if both datasets exist for this year
-                        subsidy_path = f"gs://{self.config.bucket}/silver/{subsidy_table}/"
-                        marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
+                        subsidy_path = f"{self.config.bucket}/silver/{subsidy_table}/"
+                        marker_path = f"{self.config.bucket}/silver/{marker_table}/"
 
-                        # Load subsidy data using GCSDataAccess
+                        # Load subsidy data using StorageAccess
                         try:
                             # Find the latest timestamped file
                             subsidy_pattern = f"{subsidy_path}*/data.parquet"
-                            subsidy_files = self.gcs_access.list_files(subsidy_pattern)
+                            subsidy_files = self.storage.list_files(subsidy_pattern)
                             if not subsidy_files:
                                 raise FileNotFoundError(
                                     f"No files found matching pattern: {subsidy_pattern}"
                                 )
 
                             latest_subsidy_file = sorted(subsidy_files)[-1]  # Latest by timestamp
-                            self.gcs_access.query_parquet_direct(
+                            self.storage.query_parquet_direct(
                                 latest_subsidy_file, "SELECT *", f"temp_subsidy_{year}"
                             )
                             subsidy_count = self.conn.execute(
@@ -2131,14 +2131,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         try:
                             # Find the latest timestamped file
                             marker_pattern = f"{marker_path}*/data.parquet"
-                            marker_files = self.gcs_access.list_files(marker_pattern)
+                            marker_files = self.storage.list_files(marker_pattern)
                             if not marker_files:
                                 raise FileNotFoundError(
                                     f"No files found matching pattern: {marker_pattern}"
                                 )
 
                             latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
-                            self.gcs_access.query_parquet_direct(
+                            self.storage.query_parquet_direct(
                                 latest_marker_file, "SELECT *", f"temp_marker_{year}"
                             )
                             # Filter the loaded data in DuckDB
@@ -2338,17 +2338,17 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 unique_pipeline_name = f"fvm_marker_{unique_suffix}"
 
                 # Save CVR numbers using the collection utility with unique pipeline name
-                cvr_gcs_path = save_pipeline_cvr_numbers(
+                cvr_storage_path = save_pipeline_cvr_numbers(
                     pipeline_name=unique_pipeline_name,
                     cvr_numbers=unique_cvr_numbers,
-                    gcs_access=self.gcs_access,
+                    storage_access=self.storage,
                     bucket=self.config.bucket,
                     timestamp=timestamp,
                 )
 
                 self.log.info(
                     f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers "
-                    f"from FVM marker data to: {cvr_gcs_path} (pipeline: {unique_pipeline_name})"
+                    f"from FVM marker data to: {cvr_storage_path} (pipeline: {unique_pipeline_name})"
                 )
             else:
                 self.log.warning("⚠️ No CVR numbers found in FVM marker data")
@@ -2368,13 +2368,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         try:
             self.log.info("Loading municipality boundaries for spatial assignment")
 
-            # Load kommune boundaries from silver storage using GCSDataAccess
+            # Load kommune boundaries from silver storage using StorageAccess
             try:
-                gcs_path = self._get_latest_silver_path(self.config.kommune_boundaries_dataset)
-                self.log.info(f"Loading municipality boundaries from: {gcs_path}")
+                storage_path = self._get_latest_silver_path(self.config.kommune_boundaries_dataset)
+                self.log.info(f"Loading municipality boundaries from: {storage_path}")
 
-                # Use GCSDataAccess instead of direct DuckDB read_parquet for proper authentication
-                self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", "kommune_boundaries_raw")
+                # Use StorageAccess instead of direct DuckDB read_parquet for proper authentication
+                self.storage.query_parquet_direct(
+                    storage_path, "SELECT *", "kommune_boundaries_raw"
+                )
             except Exception as e:
                 self.log.warning(f"Could not load municipality boundaries: {e}")
                 return
@@ -2608,10 +2610,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         """
         try:
             # Use GCS data access to list files in the fields directory (same pattern as others)
-            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_*.parquet"
+            fields_pattern = f"{self.config.bucket}/silver/fields/*/MARKER_*.parquet"
 
-            # Find all MARKER files using GCSDataAccess
-            marker_files = self.gcs_access.list_files(fields_pattern)
+            # Find all MARKER files using StorageAccess
+            marker_files = self.storage.list_files(fields_pattern)
             if not marker_files:
                 self.log.warning("No fields data files found")
                 return []
@@ -2651,10 +2653,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         """
         try:
             # Use GCS data access to find the latest file for this year (same pattern as others)
-            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_{year}.parquet"
+            fields_pattern = f"{self.config.bucket}/silver/fields/*/MARKER_{year}.parquet"
 
-            # Find all files for this year using GCSDataAccess
-            marker_files = self.gcs_access.list_files(fields_pattern)
+            # Find all files for this year using StorageAccess
+            marker_files = self.storage.list_files(fields_pattern)
             if not marker_files:
                 raise Exception(f"No fields data files found for year {year}")
 
@@ -2729,16 +2731,16 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.log.info(f"Found {incomplete_cvr_count:,} records with incomplete CVR numbers")
 
             # Download fields data for this year using the latest available timestamp
-            fields_gcs_path = await self._get_fields_data_path(year)
+            fields_storage_path = await self._get_fields_data_path(year)
 
-            if not fields_gcs_path:
+            if not fields_storage_path:
                 self.log.warning(f"Could not determine fields data path for year {year}")
                 return
 
             try:
-                # Load fields data using GCSDataAccess (same pattern as other parts of the pipeline)
-                self.gcs_access.query_parquet_direct(
-                    fields_gcs_path, "SELECT *", f"fields_data_{year}"
+                # Load fields data using StorageAccess (same pattern as other parts of the pipeline)
+                self.storage.query_parquet_direct(
+                    fields_storage_path, "SELECT *", f"fields_data_{year}"
                 )
 
                 fields_count = self.conn.execute(
@@ -2747,7 +2749,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.log.info(f"Loaded {fields_count:,} records from fields data for year {year}")
 
             except Exception as e:
-                self.log.warning(f"Could not load fields data from {fields_gcs_path}: {e}")
+                self.log.warning(f"Could not load fields data from {fields_storage_path}: {e}")
                 return
 
             # Perform the enrichment join

@@ -30,7 +30,7 @@ class TestResolveBucket:
         monkeypatch.setenv("GCS_BUCKET", "gcs-bucket")
         assert resolve_bucket() == "r2-bucket"
 
-    def test_falls_back_to_gcs_bucket(self, monkeypatch):
+    def test_falls_back_to_legacy_bucket_env(self, monkeypatch):
         monkeypatch.delenv("R2_BUCKET", raising=False)
         monkeypatch.setenv("GCS_BUCKET", "gcs-bucket")
         assert resolve_bucket() == "gcs-bucket"

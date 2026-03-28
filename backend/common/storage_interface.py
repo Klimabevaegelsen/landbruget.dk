@@ -3,12 +3,12 @@ import os
 from pathlib import Path
 from typing import Any, Never
 
-# Import the optimized GCS access layer
+# Import the optimized cloud storage access layer
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 except ImportError:
-    # Fallback for when common.gcs is not available
-    GCSDataAccess = None
+    # Fallback for when common.storage is not available
+    StorageAccess = None
 
 # DuckDB is required - no fallback
 try:
@@ -16,7 +16,7 @@ try:
 except ImportError as e:
     raise ImportError("DuckDB is required for storage operations") from e
 
-# google.cloud.storage no longer needed — using s3fs via GCSDataAccess (R2)
+# google.cloud.storage no longer needed — using s3fs via StorageAccess (R2)
 storage = None
 
 DEFAULT_BUCKET = "landbruget-data"
@@ -25,25 +25,29 @@ DEFAULT_BUCKET = "landbruget-data"
 class StoragePath:
     """Build cloud storage paths consistently across all pipelines.
 
-    Centralizes bucket name, protocol prefix, and medallion-layer path construction
-    so pipelines never build URLs ad-hoc.
+    Centralizes bucket name and medallion-layer path construction so pipelines
+    never build paths ad-hoc.  Paths are returned as bare ``bucket/key`` strings
+    with no protocol prefix — callers (StorageAccess, DuckDB, s3fs) accept these
+    directly and add their own protocol when needed.
 
     Usage:
-        paths = StoragePath()  # reads bucket from R2_BUCKET or GCS_BUCKET env
+        paths = StoragePath()  # reads bucket from STORAGE_BUCKET, R2_BUCKET, or GCS_BUCKET env
         paths.bronze("chr_pipeline", "2025-03-07", "raw.parquet")
-        # -> "gs://landbruget-data/bronze/chr_pipeline/2025-03-07/raw.parquet"
+        # -> "landbruget-data/bronze/chr_pipeline/2025-03-07/raw.parquet"
 
         paths.silver("unified_pipeline", "agricultural_fields.parquet")
-        # -> "gs://landbruget-data/silver/unified_pipeline/agricultural_fields.parquet"
+        # -> "landbruget-data/silver/unified_pipeline/agricultural_fields.parquet"
     """
 
     def __init__(self, bucket: str | None = None) -> None:
-        self.bucket = bucket or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or DEFAULT_BUCKET
+        self.bucket = (
+            bucket or os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or DEFAULT_BUCKET
+        )
 
     def _build(self, *parts: str) -> str:
-        """Build a gs:// path from parts, stripping extra slashes."""
+        """Build a bare bucket/key path from parts, stripping extra slashes."""
         joined = "/".join(p.strip("/") for p in parts if p)
-        return f"gs://{self.bucket}/{joined}"
+        return f"{self.bucket}/{joined}"
 
     def bronze(self, source: str, *parts: str) -> str:
         return self._build("bronze", source, *parts)
@@ -145,14 +149,14 @@ class LocalStorage(StorageInterface):
 
 
 class CloudStorage(StorageInterface):
-    """Save JSON files to cloud object storage using optimized GCSDataAccess."""
+    """Save JSON files to cloud object storage using optimized StorageAccess."""
 
     def __init__(self, bucket_name: str) -> None:
         self.bucket_name = bucket_name
 
         # Use optimized GCS access layer if available
-        if GCSDataAccess:
-            self.gcs_access = GCSDataAccess()
+        if StorageAccess:
+            self.storage = StorageAccess()
             self.optimized = True
         else:
             # Fallback to legacy Google Cloud Storage client
@@ -161,32 +165,32 @@ class CloudStorage(StorageInterface):
                 self.bucket = self.client.bucket(bucket_name)
                 self.optimized = False
             else:
-                raise ImportError("Neither GCSDataAccess nor google.cloud.storage is available")
+                raise ImportError("Neither StorageAccess nor google.cloud.storage is available")
 
     def save_json(self, data: Any, dst_path: str) -> None:
         """Save JSON data using optimized streaming approach."""
-        gcs_path = f"gs://{self.bucket_name}/{dst_path}"
+        storage_path = f"{self.bucket_name}/{dst_path}"
 
         if self.optimized:
-            # ✅ OPTIMIZED: Use gcs_access.py streaming JSON upload
-            self.gcs_access.upload_json(data, gcs_path)
+            # ✅ OPTIMIZED: Use storage_access.py streaming JSON upload
+            self.storage.upload_json(data, storage_path)
         else:
             # Fallback to legacy approach
             blob = self.bucket.blob(dst_path)
             blob.upload_from_string(json.dumps(data), content_type="application/json")
 
     def save_parquet(self, data: Any, dst_path: str) -> None:
-        """Save data as Parquet to GCS using DuckDB approach."""
-        gcs_path = f"gs://{self.bucket_name}/{dst_path}"
+        """Save data as Parquet to cloud storage using DuckDB approach."""
+        storage_path = f"{self.bucket_name}/{dst_path}"
 
         if self.optimized:
-            # ✅ OPTIMIZED: Use gcs_access.py DuckDB-based upload
+            # ✅ OPTIMIZED: Use storage_access.py DuckDB-based upload
             if isinstance(data, str):
                 # Assume it's a DuckDB table name
-                self.gcs_access.upload_from_duckdb_table(data, gcs_path)
+                self.storage.upload_from_duckdb_table(data, storage_path)
             else:
                 # Convert data to DuckDB table and upload
-                conn = self.gcs_access.duckdb_conn
+                conn = self.storage.duckdb_conn
                 if isinstance(data, dict):
                     conn.register("temp_parquet_data", [data])
                 elif isinstance(data, list):
@@ -224,7 +228,7 @@ class CloudStorage(StorageInterface):
                         f"Only DuckDB tables, dicts, and lists are supported."
                     )
 
-                self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
+                self.storage.upload_from_duckdb_table("temp_parquet_data", storage_path)
         else:
             # Fallback: Use DuckDB to create parquet and upload as bytes
             conn = duckdb.connect()
@@ -255,11 +259,11 @@ class CloudStorage(StorageInterface):
 
     def read_json(self, src_path: str) -> Any:
         """Read JSON data using optimized streaming approach."""
-        gcs_path = f"gs://{self.bucket_name}/{src_path}"
+        storage_path = f"{self.bucket_name}/{src_path}"
 
         if self.optimized:
-            # ✅ OPTIMIZED: Use gcs_access.py streaming JSON download
-            return self.gcs_access.download_json(gcs_path)
+            # ✅ OPTIMIZED: Use storage_access.py streaming JSON download
+            return self.storage.download_json(storage_path)
         # Fallback to legacy approach
         blob = self.bucket.blob(src_path)
         content = blob.download_as_string()

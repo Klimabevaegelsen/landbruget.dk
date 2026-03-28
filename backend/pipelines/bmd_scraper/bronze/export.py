@@ -9,28 +9,28 @@ from bs4 import BeautifulSoup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def _get_optimized_gcs_access() -> type | None:
+def _get_optimized_storage_access() -> type | None:
     """
     Get optimized GCS access with robust import handling.
 
-    Returns GCSDataAccess if available, otherwise None for fallback.
+    Returns StorageAccess if available, otherwise None for fallback.
     """
     try:
-        from common.gcs import GCSDataAccess
+        from common.storage import StorageAccess
 
-        logging.info("✅ Successfully imported optimized GCSDataAccess")
-        return GCSDataAccess
+        logging.info("✅ Successfully imported optimized StorageAccess")
+        return StorageAccess
     except ImportError as e:
-        logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logging.warning(f"⚠️ Could not import optimized StorageAccess: {e}")
         logging.warning(
-            "⚠️ Falling back to basic storage - ensure common.gcs is installed "
+            "⚠️ Falling back to basic storage - ensure common.storage is installed "
             "for optimal performance"
         )
         return None
 
 
 # Get optimized GCS access class or None if not available
-OptimizedGCSDataAccess = _get_optimized_gcs_access()
+OptimizedStorageAccess = _get_optimized_storage_access()
 
 
 class BMDScraper:
@@ -220,66 +220,68 @@ class GCSStorage:
     def __init__(self, bucket_name, prefix="bronze/bmd"):
         self.bucket_name = bucket_name
         self.prefix = prefix
-        self.is_available = self._check_gcs_available()
+        self.is_available = self._check_storage_available()
 
         # ✅ OPTIMIZED: Initialize optimized GCS access
-        self.gcs_access = None
+        self.storage = None
         self.use_optimized = False
 
-        if self.is_available and OptimizedGCSDataAccess:
+        if self.is_available and OptimizedStorageAccess:
             try:
-                self.gcs_access = OptimizedGCSDataAccess()
+                self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
                 logging.info("✅ BMD GCSStorage: Initialized optimized GCS access")
             except Exception as e:
                 logging.warning(f"Failed to initialize optimized GCS access: {e}")
-                self.gcs_access = None
+                self.storage = None
                 self.use_optimized = False
 
-    def _check_gcs_available(self):
-        """Check if cloud storage is available (R2/S3 via common.gcs)."""
+    def _check_storage_available(self):
+        """Check if cloud storage is available (R2/S3 via common.storage)."""
         try:
-            from common.gcs.filesystem import get_r2_filesystem  # noqa: F401
+            from common.storage.filesystem import get_r2_filesystem  # noqa: F401
 
             return True
         except (OSError, ImportError):
             logging.warning("Cloud storage not available. Using local storage only.")
             return False
 
-    def upload_file(self, local_path, gcs_path=None):
+    def upload_file(self, local_path, storage_path=None):
         """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
             return False
 
-        if gcs_path is None:
+        if storage_path is None:
             # Use the file structure from local path but with GCS prefix
             relative_path = os.path.relpath(
                 local_path, start=os.path.dirname(os.path.dirname(local_path))
             )
-            gcs_path = f"{self.prefix}/{relative_path}"
+            storage_path = f"{self.prefix}/{relative_path}"
 
         try:
             # ✅ OPTIMIZED: Use streaming upload if available
-            if self.use_optimized and self.gcs_access:
-                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+            if self.use_optimized and self.storage:
+                full_storage_path = f"{self.bucket_name}/{storage_path}"
 
                 # Stream file directly without loading into memory
                 import shutil
 
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                    self.storage.fs.open(full_storage_path, "wb") as gcs_file,
                 ):
                     shutil.copyfileobj(file_obj, gcs_file)
 
-                logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+                logging.info(
+                    f"✅ Uploaded {local_path} to {full_storage_path} (optimized streaming)"
+                )
                 return True
             # Fallback to s3fs upload if optimized access failed
-            from common.gcs.filesystem import get_r2_filesystem
+            from common.storage.filesystem import get_r2_filesystem
 
             fs = get_r2_filesystem()
-            dest_path = f"{self.bucket_name}/{gcs_path}"
+            dest_path = f"{self.bucket_name}/{storage_path}"
             fs.put(local_path, dest_path)
             logging.info(f"Uploaded {local_path} to {dest_path} (fallback)")
             return True

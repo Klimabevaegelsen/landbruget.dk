@@ -79,19 +79,19 @@ jobs:
           # Add unified pipeline to path
           sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-          from unified_pipeline.util.gcs_access import GCSDataAccess
+          from unified_pipeline.util.storage_access import StorageAccess
           from unified_pipeline.util.log_util import Logger
 
           def discover_fvm_marker_years():
               """Discover available fvm_marker years from silver data."""
               import re
               logger = Logger.get_logger()
-              gcs_access = GCSDataAccess()
+              storage_access = StorageAccess()
               bucket = os.getenv('R2_BUCKET', 'landbruget-data')
 
               try:
                   # Get files with timestamps to find latest for each year
-                  files_with_timestamps = gcs_access.list_files_with_timestamps(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
+                  files_with_timestamps = storage_access.list_files_with_timestamps(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
 
                   # Group by year and find latest timestamp for each
                   year_latest_files = {}

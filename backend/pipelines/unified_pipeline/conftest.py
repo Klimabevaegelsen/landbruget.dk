@@ -1,6 +1,6 @@
 """Root pytest conftest.py that sets up PYTHONPATH before test collection.
 
-This adds the backend directory to sys.path so tests can import from common.gcs.
+This adds the backend directory to sys.path so tests can import from common.storage.
 The path setup happens immediately when this module loads, before pytest collects tests.
 """
 

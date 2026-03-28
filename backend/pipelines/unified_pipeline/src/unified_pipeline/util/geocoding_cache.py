@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any
 
 import duckdb
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 from unified_pipeline.util.log_util import Logger
 
@@ -49,14 +49,12 @@ class GeocodingCache:
         self.conn = duckdb.connect()
 
         # Initialize GCS access with the same connection
-        self.gcs_access = GCSDataAccess(connection=self.conn)
+        self.storage = StorageAccess(connection=self.conn)
 
         # Cache paths in GCS
-        self.dawa_cache_path = (
-            f"gs://{bucket}/cache/geocoding/dawa_id_cache_v{cache_version}.parquet"
-        )
+        self.dawa_cache_path = f"{bucket}/cache/geocoding/dawa_id_cache_v{cache_version}.parquet"
         self.address_cache_path = (
-            f"gs://{bucket}/cache/geocoding/address_text_cache_v{cache_version}.parquet"
+            f"{bucket}/cache/geocoding/address_text_cache_v{cache_version}.parquet"
         )
 
         # In-memory cache (DuckDB tables)
@@ -110,9 +108,9 @@ class GeocodingCache:
 
         # Load DAWA ID cache
         try:
-            if self.gcs_access.file_exists(self.dawa_cache_path):
+            if self.storage.file_exists(self.dawa_cache_path):
                 self.log.info("Loading existing DAWA ID cache from GCS")
-                with self.gcs_access._temp_download(self.dawa_cache_path) as temp_file:
+                with self.storage._temp_download(self.dawa_cache_path) as temp_file:
                     self.conn.execute(f"""
                         INSERT INTO dawa_id_cache
                         SELECT * FROM read_parquet('{temp_file}')
@@ -127,9 +125,9 @@ class GeocodingCache:
 
         # Load address text cache
         try:
-            if self.gcs_access.file_exists(self.address_cache_path):
+            if self.storage.file_exists(self.address_cache_path):
                 self.log.info("Loading existing address text cache from GCS")
-                with self.gcs_access._temp_download(self.address_cache_path) as temp_file:
+                with self.storage._temp_download(self.address_cache_path) as temp_file:
                     self.conn.execute(f"""
                         INSERT INTO address_text_cache
                         SELECT * FROM read_parquet('{temp_file}')
@@ -383,8 +381,8 @@ class GeocodingCache:
                 "total_cache_entries": 0,
             }
 
-    def save_cache_to_gcs(self) -> None:
-        """Save cache tables back to GCS for persistence."""
+    def save_cache_to_storage(self) -> None:
+        """Save cache tables back to storage for persistence."""
 
         try:
             # Save DAWA ID cache
@@ -393,7 +391,7 @@ class GeocodingCache:
                 self.log.info(f"Saving {dawa_count:,} DAWA ID cache entries to GCS")
 
                 # Upload directly from DuckDB table to GCS
-                self.gcs_access.upload_from_duckdb_table("dawa_id_cache", self.dawa_cache_path)
+                self.storage.upload_from_duckdb_table("dawa_id_cache", self.dawa_cache_path)
                 self.log.info(f"DAWA ID cache saved to {self.dawa_cache_path}")
 
             # Save address text cache
@@ -404,9 +402,7 @@ class GeocodingCache:
                 self.log.info(f"Saving {address_count:,} address text cache entries to GCS")
 
                 # Upload directly from DuckDB table to GCS
-                self.gcs_access.upload_from_duckdb_table(
-                    "address_text_cache", self.address_cache_path
-                )
+                self.storage.upload_from_duckdb_table("address_text_cache", self.address_cache_path)
                 self.log.info(f"Address text cache saved to {self.address_cache_path}")
 
         except Exception as e:
@@ -425,7 +421,7 @@ class GeocodingCache:
     def cleanup(self) -> None:
         """Clean up resources and save cache to GCS."""
         try:
-            self.save_cache_to_gcs()
+            self.save_cache_to_storage()
             self.conn.close()
         except Exception as e:
             self.log.error(f"Error during cleanup: {e}")
@@ -435,5 +431,5 @@ class GeocodingCache:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - save cache to GCS."""
+        """Context manager exit - save cache to storage."""
         self.cleanup()

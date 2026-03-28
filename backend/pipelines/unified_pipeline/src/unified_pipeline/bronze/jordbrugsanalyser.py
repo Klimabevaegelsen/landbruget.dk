@@ -455,7 +455,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                                 gc.collect()
 
                                 # Store minimal reference for in-memory passing (just the year)
-                                all_year_data[str(year)] = [f"saved_to_gcs_{dataset_name}"]
+                                all_year_data[str(year)] = [f"saved_to_storage_{dataset_name}"]
 
                             # 🧹 CLEANUP: Clean up any temporary tables and force memory
                             # cleanup after each year

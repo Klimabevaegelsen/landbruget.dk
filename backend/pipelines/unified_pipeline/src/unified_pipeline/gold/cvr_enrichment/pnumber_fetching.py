@@ -256,7 +256,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
 
                 # Use GCS temp download for local development
                 self.log.info(f"Local development - downloading from GCS: {input_path}")
-                with self.gcs_access._temp_download(input_path) as temp_file:
+                with self.storage._temp_download(input_path) as temp_file:
                     # Load company data from temp file
                     result = self.conn.execute(
                         """
@@ -627,9 +627,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         # No batching - single summary file
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/pnumber_summary.json"
 
-        self.gcs_access.upload_json(
-            data=summary, gcs_path=f"gs://{self.config.bucket}/{summary_path}"
-        )
+        self.storage.upload_json(data=summary, storage_path=f"{self.config.bucket}/{summary_path}")
 
         self.log.info(f"Saved processing summary to {summary_path}")
 

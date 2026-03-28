@@ -393,9 +393,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Save to Gold layer for downstream steps
         companies_path = (
-            f"gs://{self.config.bucket}/gold/cvr_enrichment/{timestamp}/data_parsing.parquet"
+            f"{self.config.bucket}/gold/cvr_enrichment/{timestamp}/data_parsing.parquet"
         )
-        self.gcs_access.upload_from_duckdb_table(
+        self.storage.upload_from_duckdb_table(
             validated_table,
             companies_path,
             compression="zstd",
@@ -405,9 +405,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Also save to legacy location for compatibility
         legacy_companies_path = (
-            f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
+            f"{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
         )
-        self.gcs_access.upload_from_duckdb_table(
+        self.storage.upload_from_duckdb_table(
             validated_table,
             legacy_companies_path,
             compression="zstd",

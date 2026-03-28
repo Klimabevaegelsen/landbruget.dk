@@ -233,16 +233,16 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                 )
             else:
                 # Bronze data is actual data - should not happen in normal flow
-                self.log.warning("Unexpected bronze data format, falling back to GCS")
-                return self._load_raw_data_from_gcs(table_name)
+                self.log.warning("Unexpected bronze data format, falling back to storage")
+                return self._load_raw_data_from_storage(table_name)
         else:
-            # Load from GCS (normal flow)
-            return self._load_raw_data_from_gcs(table_name)
+            # Load from storage (normal flow)
+            return self._load_raw_data_from_storage(table_name)
 
         return table_name
 
-    def _load_raw_data_from_gcs(self, table_name: str) -> str:
-        """Load raw data from GCS Bronze layer."""
+    def _load_raw_data_from_storage(self, table_name: str) -> str:
+        """Load raw data from storage Bronze layer."""
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
             CVREnrichmentStep,
             get_step_input_paths,
@@ -259,7 +259,7 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
 
         if not input_paths:
             # Provide more debugging information
-            expected_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{self.date_pattern}/consolidated.parquet"
+            expected_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{self.date_pattern}/consolidated.parquet"
             self.log.error(f"Expected Bronze layer data at: {expected_path}")
             self.log.error(f"Date pattern used: {self.date_pattern}")
             self.log.error("This usually means:")
@@ -275,8 +275,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
             )
 
         raw_data_path = input_paths[0]  # Should be the consolidated.parquet file
-        # DuckDB reads R2 via r2:// prefix (TYPE r2 secret); gs:// would use GCS which no longer holds the files
-        duckdb_path = raw_data_path.replace("gs://", "r2://", 1)
+        # DuckDB reads R2 via r2:// prefix (TYPE r2 secret)
+        duckdb_path = "r2://" + raw_data_path
 
         try:
             self.log.info(f"Loading raw data from: {duckdb_path}")
@@ -586,10 +586,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
 
         # Save companies table
         if self.config.save_companies_table:
-            companies_path = (
-                f"gs://{self.config.bucket}/silver/cvr_companies/{timestamp}/data.parquet"
-            )
-            self.gcs_access.upload_from_duckdb_table(
+            companies_path = f"{self.config.bucket}/silver/cvr_companies/{timestamp}/data.parquet"
+            self.storage.upload_from_duckdb_table(
                 companies_table,
                 companies_path,
                 compression="zstd",
@@ -599,8 +597,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
 
         # Save persons table
         if self.config.save_persons_table:
-            persons_path = f"gs://{self.config.bucket}/silver/cvr_persons/{timestamp}/data.parquet"
-            self.gcs_access.upload_from_duckdb_table(
+            persons_path = f"{self.config.bucket}/silver/cvr_persons/{timestamp}/data.parquet"
+            self.storage.upload_from_duckdb_table(
                 persons_table,
                 persons_path,
                 compression="zstd",
@@ -610,10 +608,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
 
         # Save employment table
         if self.config.save_employment_table:
-            employment_path = (
-                f"gs://{self.config.bucket}/silver/cvr_employment/{timestamp}/data.parquet"
-            )
-            self.gcs_access.upload_from_duckdb_table(
+            employment_path = f"{self.config.bucket}/silver/cvr_employment/{timestamp}/data.parquet"
+            self.storage.upload_from_duckdb_table(
                 employment_table,
                 employment_path,
                 compression="zstd",

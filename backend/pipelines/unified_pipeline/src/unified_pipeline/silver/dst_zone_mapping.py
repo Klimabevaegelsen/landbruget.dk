@@ -244,12 +244,12 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                         if data_result is not None:
                             # Handle the new return format from base class
-                            if isinstance(data_result, dict) and "gcs_access" in data_result:
-                                # New format: dict with gcs_access instance and table_name
-                                gcs_access = data_result["gcs_access"]
+                            if isinstance(data_result, dict) and "storage_access" in data_result:
+                                # New format: dict with storage_access instance and table_name
+                                storage_access = data_result["storage_access"]
                                 source_table = data_result["table_name"]
                                 # Use the GCS connection for all operations
-                                conn = gcs_access.duckdb_conn
+                                conn = storage_access.duckdb_conn
                                 # Set the data connection for all subsequent operations
                                 if self.data_conn is None:
                                     self.data_conn = conn

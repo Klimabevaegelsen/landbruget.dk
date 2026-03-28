@@ -26,9 +26,9 @@ print("[DEBUG] DOCKER_ENV =", os.environ.get("DOCKER_ENV"))
 @click.option(
     "--end-date", type=str, default=None, help="End date in YYYY-MM-DD format (default: today)"
 )
-@click.option("--gcs-bucket", type=str, default=None, help="Google Cloud Storage bucket for export")
+@click.option("--storage-bucket", type=str, default=None, help="Cloud storage bucket for export")
 @common_options
-def main(stage, start_date, end_date, gcs_bucket, log_level):
+def main(stage, start_date, end_date, storage_bucket, log_level):
     """Run the Arbejdstilsynet Inspections pipeline."""
     load_dotenv()
 
@@ -44,17 +44,17 @@ def main(stage, start_date, end_date, gcs_bucket, log_level):
     pipeline_run = PipelineRun("arbejdstilsynet_inspections", logger=logger)
 
     # Determine GCS bucket to use
-    actual_gcs_bucket = resolve_bucket(gcs_bucket)
-    if actual_gcs_bucket == "landbruget-data" and not gcs_bucket:
+    actual_storage_bucket = resolve_bucket(storage_bucket)
+    if actual_storage_bucket == "landbruget-data" and not storage_bucket:
         # Only warn if no explicit bucket was provided and we fell back to default
         if not os.getenv("R2_BUCKET") and not os.getenv("GCS_BUCKET"):
             logger.warning(
                 "GCS_BUCKET not provided via --gcs-bucket argument or environment variable. "
                 "GCS uploads will be skipped."
             )
-            actual_gcs_bucket = None
+            actual_storage_bucket = None
         else:
-            logger.info(f"Using bucket from environment variable: {actual_gcs_bucket}")
+            logger.info(f"Using bucket from environment variable: {actual_storage_bucket}")
 
     bronze_success = True
     silver_success = True
@@ -63,7 +63,7 @@ def main(stage, start_date, end_date, gcs_bucket, log_level):
         # Run Bronze Layer
         if stage in ["all", "bronze"]:
             print("[main.py] Running Bronze Layer: export.py ...")
-            bronze.export.main(log_level=log_level, gcs_bucket=actual_gcs_bucket)
+            bronze.export.main(log_level=log_level, storage_bucket=actual_storage_bucket)
             print("[main.py] Bronze Layer complete.")
         else:
             logger.info("Skipping Bronze Layer due to --stage setting.")
@@ -83,7 +83,7 @@ def main(stage, start_date, end_date, gcs_bucket, log_level):
                 silver.transform.main(
                     start_date=start_date,
                     end_date=end_date,
-                    gcs_bucket=actual_gcs_bucket,
+                    storage_bucket=actual_storage_bucket,
                     log_level=log_level,
                 )
                 print("[main.py] Silver Layer complete.")

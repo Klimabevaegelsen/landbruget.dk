@@ -32,12 +32,12 @@ class PropertiesPreFilter(PreFilteringStageBase):
         # Load full properties dataset (PROBE side - the massive dataset)
         # property_cadastral_merged is a gold layer dataset, not silver
         self.log.info("Loading full properties dataset (6.5M properties)...")
-        pattern = f"gs://{CONFIG.bucket}/gold/{CONFIG.properties_dataset}/*/*.parquet"
-        files = self.gcs_access.list_files(pattern)
+        pattern = f"{CONFIG.bucket}/gold/{CONFIG.properties_dataset}/*/*.parquet"
+        files = self.storage.list_files(pattern)
         if not files:
             raise FileNotFoundError(f"No gold data found for {CONFIG.properties_dataset}")
         latest_path = sorted(files)[-1]
-        self.gcs_access.query_parquet_direct(latest_path, "SELECT *", "properties_full")
+        self.storage.query_parquet_direct(latest_path, "SELECT *", "properties_full")
 
         # Log dataset sizes
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
@@ -146,7 +146,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
 
         # Export filtered properties using standard pipeline pattern
         output_path = self._get_stage0_output_path("stage0_properties_filtered")
-        self.gcs_access.export_table_to_gcs_direct("properties_filtered", output_path)
+        self.storage.export_table_to_storage_direct("properties_filtered", output_path)
 
         return {
             "input_properties": total_properties,

@@ -17,7 +17,7 @@ import asyncio
 from asyncio import Semaphore
 
 import aiohttp
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 from pydantic import Field
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -87,7 +87,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
         """Initialize the DAGI bronze layer with configuration."""
         super().__init__(config)
         self.semaphore = Semaphore(config.max_concurrent_requests)
-        self.gcs_access = GCSDataAccess()
+        self.storage = StorageAccess()
 
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10), reraise=True
@@ -197,11 +197,13 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
                         # Create the GCS path following the unified pattern
                         timestamp = self.date_pattern
                         filename = f"{dataset_name}.json"
-                        gcs_path = f"gs://{self.config.bucket}/bronze/{dataset_name}/{timestamp}/{filename}"
+                        storage_path = (
+                            f"{self.config.bucket}/bronze/{dataset_name}/{timestamp}/{filename}"
+                        )
 
                         # Save JSON string directly to GCS
-                        self.gcs_access.upload_json_string(raw_data, gcs_path)
-                        self.log.info(f"Saved raw data for {layer_name} to {gcs_path}")
+                        self.storage.upload_json_string(raw_data, storage_path)
+                        self.log.info(f"Saved raw data for {layer_name} to {storage_path}")
                     except Exception as e:
                         self.log.error(f"Failed to save {layer_name}: {e}")
                         continue

@@ -10,12 +10,12 @@ from zeep import Client
 
 # Import GCS access for persistent storage
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 # Load environment variables
 load_dotenv()
@@ -35,11 +35,15 @@ def _load_high_volume_herds() -> None:
     if _HIGH_VOLUME_HERDS_LOADED:
         return
 
-    if GCS_AVAILABLE:
+    if STORAGE_AVAILABLE:
         try:
-            gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-            config_path = f"gs://{bucket_name}/bronze/chr/config/high_volume_herds.json"
+            gcs_data_access = StorageAccess()
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET")
+                or os.getenv("R2_BUCKET")
+                or os.getenv("GCS_BUCKET", "landbruget-data")
+            )
+            config_path = f"{bucket_name}/bronze/chr/config/high_volume_herds.json"
 
             if gcs_data_access.file_exists(config_path):
                 _HIGH_VOLUME_HERDS = gcs_data_access.download_json(config_path)
@@ -91,11 +95,15 @@ def _initialize_known_high_volume_herds() -> None:
 
 def _save_high_volume_herds() -> None:
     """Save high-volume herds configuration to GCS."""
-    if GCS_AVAILABLE:
+    if STORAGE_AVAILABLE:
         try:
-            gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-            config_path = f"gs://{bucket_name}/bronze/chr/config/high_volume_herds.json"
+            gcs_data_access = StorageAccess()
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET")
+                or os.getenv("R2_BUCKET")
+                or os.getenv("GCS_BUCKET", "landbruget-data")
+            )
+            config_path = f"{bucket_name}/bronze/chr/config/high_volume_herds.json"
 
             gcs_data_access.upload_json(_HIGH_VOLUME_HERDS, config_path)
             logger.info(f"Saved {len(_HIGH_VOLUME_HERDS)} high-volume herd configurations to GCS")

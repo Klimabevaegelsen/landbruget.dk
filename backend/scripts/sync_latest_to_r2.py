@@ -75,7 +75,7 @@ def copy_file(src: str, dst: str, dry_run: bool = False) -> bool:
 
 
 def sync_latest(
-    gcs_bucket: str,
+    storage_bucket: str,
     r2_bucket: str,
     r2_account_id: str,
     r2_access_key_id: str,
@@ -110,7 +110,7 @@ def sync_latest(
     total_failed = 0
 
     for layer in LAYERS:
-        gcs_layer = f"gcs:{gcs_bucket}/{layer}"
+        gcs_layer = f"gcs:{storage_bucket}/{layer}"
         r2_layer = f"r2:{r2_bucket}/{layer}"
 
         logger.info(f"{'[DRY RUN] ' if dry_run else ''}Scanning {gcs_layer}...")
@@ -248,7 +248,7 @@ def main() -> int:
         return 1
 
     results = sync_latest(
-        gcs_bucket=os.environ["GCS_BUCKET"],
+        storage_bucket=os.environ["GCS_BUCKET"],
         r2_bucket=os.environ["R2_BUCKET"],
         r2_account_id=os.environ["R2_ACCOUNT_ID"],
         r2_access_key_id=os.environ["R2_ACCESS_KEY_ID"],

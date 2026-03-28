@@ -147,7 +147,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         # Initialize CVR collection manager
         self.cvr_collection_manager = CVRCollectionManager(
-            gcs_access=self.gcs_access, bucket=self.config.bucket
+            storage_access=self.storage, bucket=self.config.bucket
         )
 
         # Initialize CVR API client with credentials from memory [[memory:2283672]]
@@ -662,9 +662,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         """Save CVR collection summary data."""
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/collection_summary.json"
 
-        self.gcs_access.upload_json(
+        self.storage.upload_json(
             data=cvr_collection_data["collection_summary"],
-            gcs_path=f"gs://{self.config.bucket}/{summary_path}",
+            storage_path=f"{self.config.bucket}/{summary_path}",
         )
 
         self.log.info(f"Saved CVR collection summary to {summary_path}")
@@ -673,8 +673,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         """Save raw API responses for debugging."""
         raw_path = f"gold/{self.config.dataset}/{self.date_pattern}/raw_responses.json"
 
-        self.gcs_access.upload_json(
-            data=enrichment_data, gcs_path=f"gs://{self.config.bucket}/{raw_path}"
+        self.storage.upload_json(
+            data=enrichment_data, storage_path=f"{self.config.bucket}/{raw_path}"
         )
 
         self.log.info(f"Saved raw CVR API responses to {raw_path}")
@@ -689,8 +689,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             "api_summary": processed_data["api_summary"],
         }
 
-        self.gcs_access.upload_json(
-            data=summary_data, gcs_path=f"gs://{self.config.bucket}/{summary_path}"
+        self.storage.upload_json(
+            data=summary_data, storage_path=f"{self.config.bucket}/{summary_path}"
         )
 
         self.log.info(f"Saved processing summary to {summary_path}")

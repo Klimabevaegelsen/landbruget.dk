@@ -58,7 +58,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
         stage0_wetlands_dataset = updated_outputs["wetlands_prefiltered"]
         stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage0_wetlands_path,
             "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, "
             "geometry, wetland_area_m2",
@@ -69,7 +69,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info("Loading Stage 1B water projects × wetlands intersections...")
         stage1b_dataset = updated_outputs["water_projects_wetlands_intersections"]
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage1b_path,
             "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, "
             "project_id, intersection_geometry, intersection_area_m2, "

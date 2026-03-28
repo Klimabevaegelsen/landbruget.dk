@@ -32,7 +32,7 @@ class NLES5SpatialOperations:
 
         # Initialize NLES5 fertilizer distributor for proper allocation
         self.fertilizer_distributor = NLES5FertilizerDistributor(self.conn, self.log)
-        self.gcs_access = processor.gcs_access
+        self.storage = processor.storage_access
 
     @timed(name="Spatial join fields with climate data")
     def _spatial_join_fields_climate(self) -> str:

@@ -28,7 +28,11 @@ class WorkPermitsGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Clean agricultural work permits data by company, year, and nationality"
     frequency: str = "monthly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Input silver datasets from drive pipeline
     drive_data_dataset: str = "drive_data"  # Drive pipeline silver output
@@ -97,12 +101,12 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
         # The drive pipeline stores work permits data in "work permits" folder (with space)
         try:
             # Try to find work permits files in the silver bucket
-            work_permits_pattern = f"gs://{self.config.bucket}/silver/work permits/**/*.parquet"
+            work_permits_pattern = f"{self.config.bucket}/silver/work permits/**/*.parquet"
 
             self.log.info(f"🔍 Looking for work permits files: {work_permits_pattern}")
 
             # Find the latest work permits file using the same pattern as other pipelines
-            files = self.gcs_access.list_files(work_permits_pattern)
+            files = self.storage.list_files(work_permits_pattern)
 
             if not files:
                 self.log.warning("⚠️ No work permits files found")
@@ -146,7 +150,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             self.log.info(f"📥 Loading work permits data from: {latest_file}")
 
             # Use temp download pattern like other working pipelines
-            with self.gcs_access._temp_download(latest_file) as temp_file:
+            with self.storage._temp_download(latest_file) as temp_file:
                 create_table_sql = f"""
                 CREATE OR REPLACE TABLE work_permits AS
                 SELECT
@@ -292,7 +296,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
 
             # Save main work permits dataset
             work_permits_path = f"{output_dir}/work_permits.parquet"
-            await self._save_table_to_gcs("work_permits", work_permits_path)
+            await self._save_table_to_storage("work_permits", work_permits_path)
 
             output_paths["work_permits"] = work_permits_path
 
@@ -314,7 +318,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             FROM work_permits
             """)
 
-            await self._save_table_to_gcs("work_permits_summary", summary_path)
+            await self._save_table_to_storage("work_permits_summary", summary_path)
             output_paths["summary"] = summary_path
 
             return output_paths
@@ -323,11 +327,11 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             self.log.error(f"❌ Failed to save gold data: {e}")
             raise
 
-    async def _save_table_to_gcs(self, table_name: str, gcs_path: str) -> None:
-        """Save a DuckDB table to GCS as parquet."""
+    async def _save_table_to_storage(self, table_name: str, storage_path: str) -> None:
+        """Save a DuckDB table to storage as parquet."""
 
-        # Upload directly from DuckDB table to GCS (more efficient)
-        full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
-        self.gcs_access.upload_from_duckdb_table(table_name, full_gcs_path)
+        # Upload directly from DuckDB table to storage (more efficient)
+        full_storage_path = f"{self.config.bucket}/{storage_path}"
+        self.storage.upload_from_duckdb_table(table_name, full_storage_path)
 
-        self.log.info(f"✅ Saved {table_name} to {full_gcs_path}")
+        self.log.info(f"✅ Saved {table_name} to {full_storage_path}")

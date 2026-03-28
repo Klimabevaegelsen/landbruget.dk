@@ -114,7 +114,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                                                 for the processor."""
         super().__init__(config)
 
-        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # ✅ MIGRATION: BaseSource already created StorageAccess and configured DuckDB
         # No need to create another instance or setup DuckDB again
         self.log.info("✅ WaterProjectsSilver: Using unified GCS access and DuckDB connection")
 

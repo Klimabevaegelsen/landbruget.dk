@@ -250,7 +250,8 @@ class AgriculturalPatternMatcher(BaseSource[AgriculturalPatternMatcherConfig], G
                     g.crop_code as gkea_crop_code,
                     g.journal_nummer as gkea_journal_number
                 FROM {gkea_table} g
-                LEFT JOIN {self.fvm_table_name} f ON g.field_id = f.field_id  -- Direct composite key match
+                LEFT JOIN {self.fvm_table_name} f ON g.cvr_number = f.cvr_number
+                                                 AND g.marknummer = f.field_id  -- Match on CVR + marknummer
                 WHERE f.field_id IS NULL  -- Unmatched fields only
                   AND g.areal > 0
                   AND g.journal_nummer IS NOT NULL

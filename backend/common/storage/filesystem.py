@@ -2,12 +2,7 @@
 R2/S3-compatible filesystem utilities using s3fs.
 
 Provides cached filesystem access and DuckDB integration for optimal performance.
-Migrated from gcsfs (GCS) to s3fs (Cloudflare R2) — all public APIs preserved.
-
-Backward compatibility:
-- get_gcs_filesystem() → alias for get_r2_filesystem()
-- get_duckdb_with_gcs() → alias for get_duckdb_with_r2()
-- _setup_native_gcs_auth() → alias for _setup_native_r2_auth()
+Uses Cloudflare R2 as primary storage backend, with GCS HMAC as fallback.
 """
 
 import logging
@@ -18,7 +13,7 @@ import duckdb
 import s3fs
 
 # Use standard logging - can be configured by calling code
-logger = logging.getLogger("landbruget.gcs")
+logger = logging.getLogger("landbruget.storage")
 
 
 @lru_cache(maxsize=1)
@@ -128,12 +123,12 @@ def setup_duckdb_cloud_auth(conn: duckdb.DuckDBPyConnection) -> bool:
             logger.warning(f"Could not setup R2 authentication: {e}")
 
     # Fallback to GCS HMAC credentials
-    gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+    storage_access_key = os.getenv("GCS_ACCESS_KEY_ID")
     gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
-    if gcs_access_key and gcs_secret_key:
+    if storage_access_key and gcs_secret_key:
         try:
-            escaped_key = gcs_access_key.replace("'", "''")
+            escaped_key = storage_access_key.replace("'", "''")
             escaped_secret = gcs_secret_key.replace("'", "''")
             conn.execute(f"""
                 CREATE OR REPLACE SECRET gcs_hmac (
@@ -151,8 +146,5 @@ def setup_duckdb_cloud_auth(conn: duckdb.DuckDBPyConnection) -> bool:
     return False
 
 
-# Backward-compatible aliases
+# Alias for backward compatibility with tests
 _setup_native_r2_auth = setup_duckdb_cloud_auth
-_setup_native_gcs_auth = setup_duckdb_cloud_auth
-get_gcs_filesystem = get_r2_filesystem
-get_duckdb_with_gcs = get_duckdb_with_r2

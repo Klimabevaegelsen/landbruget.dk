@@ -8,6 +8,11 @@ with special handling for GitHub Actions environments.
 import os
 import warnings
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 
 class ResourceMonitor:
     """Monitor runner resource usage during GCS operations."""
@@ -28,9 +33,15 @@ class ResourceMonitor:
             }
 
         # Normal resource monitoring for local/non-CI environments
-        try:
-            import psutil
+        if psutil is None:
+            return {
+                "memory_gb": 0.0,
+                "disk_gb": 0.0,
+                "memory_percent": 0.0,
+                "disk_percent": 0.0,
+            }
 
+        try:
             # Memory check
             memory = psutil.virtual_memory()
             memory_used_gb = (memory.total - memory.available) / (1024**3)
@@ -62,8 +73,7 @@ class ResourceMonitor:
                 "memory_percent": memory.percent,
                 "disk_percent": (disk_used_gb / (disk.total / (1024**3))) * 100,
             }
-        except ImportError:
-            # psutil not available
+        except Exception:
             return {
                 "memory_gb": 0.0,
                 "disk_gb": 0.0,

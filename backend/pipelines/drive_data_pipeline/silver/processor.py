@@ -105,10 +105,10 @@ class SilverProcessor:
         self.parquet_manager.conn = shared_conn
         self.parquet_manager._owns_connection = False
 
-        # Create a persistent GCSDataAccess instance to avoid connection closure
-        from common.gcs import GCSDataAccess
+        # Create a persistent StorageAccess instance to avoid connection closure
+        from common.storage import StorageAccess
 
-        self._shared_gcs_access = GCSDataAccess(connection=shared_conn)
+        self._shared_storage_access = StorageAccess(connection=shared_conn)
 
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
@@ -375,21 +375,16 @@ class SilverProcessor:
         """
         bronze_files = []
 
-        # FIXED: Use storage manager to list files instead of Path.glob() for GCS compatibility
+        # FIXED: Use storage manager to list files instead of Path.glob() for cloud storage compatibility
         try:
             # List all files in the bronze run directory using storage manager
             all_files = self.storage_manager.list_files(bronze_run_path, pattern="*.metadata.json")
 
             # Also check subdirectories for metadata files
-            # For GCS, we need to list files recursively
-            if self.storage_manager.storage_type.lower() in ("gcs", "r2"):
-                # Cloud storage - list with recursive prefix
-                prefix = str(bronze_run_path).rstrip("/") + "/"
-                if hasattr(self.storage_manager, "gcs_bucket") and self.storage_manager.gcs_bucket:
-                    blobs = self.storage_manager.gcs_bucket.list_blobs(prefix=prefix)
-                    for blob in blobs:
-                        if blob.name.endswith(".metadata.json"):
-                            all_files.append(Path(blob.name))
+            # For R2, we need to list files recursively
+            if self.storage_manager.storage_type.lower() == "r2":
+                # R2 storage - listing is handled via s3fs in the storage manager
+                pass
             else:
                 # Local storage - use recursive glob through storage manager
                 import os
@@ -619,7 +614,7 @@ class SilverProcessor:
                     output_filename = f"{Path(original_filename).stem}.parquet"
                     output_path = output_dir / output_filename
 
-                    # Save the DuckDB table using ParquetManager (handles GCS uploads)
+                    # Save the DuckDB table using ParquetManager (handles cloud uploads)
                     try:
                         # Get the data from transformer's connection and register it
                         # in ParquetManager
@@ -627,7 +622,7 @@ class SilverProcessor:
                         parquet_table_name = f"temp_parquet_{int(time.time())}"
                         self.parquet_manager.register_dataframe(df, parquet_table_name)
 
-                        # Use the parquet manager to save the table (handles both local and GCS)
+                        # Use the parquet manager to save the table (handles both local and R2)
                         self.parquet_manager.save_table_to_parquet(parquet_table_name, output_path)
 
                         # Clean up the temporary table
@@ -810,28 +805,35 @@ class SilverProcessor:
 
             table_schema = TableSchema.from_dict(table_schema_dict)
 
-            # ✅ MIGRATION: Read parquet file using DuckDB with GCS support
+            # ✅ MIGRATION: Read parquet file using DuckDB with cloud storage support
             output_path_str = str(output_path)
-            is_gcs_path = output_path_str.startswith("gs://")
+            is_storage_path = (
+                not output_path_str.startswith("/")
+                and "/" in output_path_str
+                and not output_path_str.startswith(".")
+            )
 
-            # Check if we're using GCS storage but have a local path
-            using_gcs_storage = hasattr(
-                self.storage_manager, "storage_type"
-            ) and self.storage_manager.storage_type.lower() in ("gcs", "r2")
+            # Check if we're using cloud storage but have a local path
+            using_cloud_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "r2"
+            )
 
-            if is_gcs_path or using_gcs_storage:
-                # Use the persistent GCSDataAccess instance to avoid connection closure
-                gcs_access = self._shared_gcs_access
+            if is_storage_path or using_cloud_storage:
+                # Use the persistent StorageAccess instance to avoid connection closure
+                storage_access = self._shared_storage_access
 
-                # Construct GCS path if needed
-                if not is_gcs_path and using_gcs_storage:
+                # Construct cloud storage path if needed
+                if not is_storage_path and using_cloud_storage:
                     bucket = getattr(self.storage_manager, "bucket_name", "landbruget-data")
-                    gcs_path = f"{bucket}/silver/{output_path_str}"
+                    storage_path = f"{bucket}/silver/{output_path_str}"
                 else:
-                    gcs_path = output_path_str
+                    storage_path = output_path_str
 
-                # Read from GCS using shared connection
-                table_name = gcs_access.query_parquet_native(gcs_path, "SELECT *", "schema_table")
+                # Read from cloud storage using shared connection
+                table_name = storage_access.query_parquet_native(
+                    storage_path, "SELECT *", "schema_table"
+                )
             else:
                 # Local file - use shared connection instead of temp connection
                 table_name = "local_schema_table"
@@ -841,7 +843,7 @@ class SilverProcessor:
 
             # Apply the schema
             schema_table_name = self.schema_adapter.apply_schema(
-                table_name_or_data=table_name,  # Use the table name from GCS access
+                table_name_or_data=table_name,  # Use the table name from cloud storage access
                 table_schema=table_schema,
                 infer_types=True,
             )
@@ -880,41 +882,46 @@ class SilverProcessor:
         """Detect and handle PII in a processed file.
 
         Args:
-            output_path: Path to the processed file (can be local or GCS path)
+            output_path: Path to the processed file (can be local or cloud storage path)
             silver_run_path: Silver layer run directory
 
         Returns:
             Path to the PII-handled file or None if failed
         """
         try:
-            # Check if this is a GCS path or if we're using GCS storage
+            # Check if this is a cloud storage path or if we're using R2 storage
             output_path_str = str(output_path)
-            is_gcs_path = output_path_str.startswith("gs://")
+            is_storage_path = (
+                not output_path_str.startswith("/")
+                and "/" in output_path_str
+                and not output_path_str.startswith(".")
+            )
 
-            # Also check if we're using GCS storage but have a local path
-            using_gcs_storage = hasattr(
-                self.storage_manager, "storage_type"
-            ) and self.storage_manager.storage_type.lower() in ("gcs", "r2")
+            # Also check if we're using cloud storage but have a local path
+            using_cloud_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "r2"
+            )
 
-            if is_gcs_path or using_gcs_storage:
-                # Use the persistent GCSDataAccess instance to avoid connection closure
-                gcs_access = self._shared_gcs_access
+            if is_storage_path or using_cloud_storage:
+                # Use the persistent StorageAccess instance to avoid connection closure
+                storage_access = self._shared_storage_access
 
-                # If we have a local path but are using GCS storage, construct the GCS path
-                if not is_gcs_path and using_gcs_storage:
-                    # Convert local path to GCS path using storage manager's bucket and base path
+                # If we have a local path but are using cloud storage, construct the storage path
+                if not is_storage_path and using_cloud_storage:
+                    # Convert local path to cloud path using storage manager's bucket and base path
                     # The output_path is relative to the silver base path
                     bucket = getattr(self.storage_manager, "bucket_name", "landbruget-data")
-                    gcs_path = f"{bucket}/silver/{output_path_str}"
+                    storage_path = f"{bucket}/silver/{output_path_str}"
                 else:
-                    gcs_path = output_path_str
+                    storage_path = output_path_str
 
                 # Create a temporary table name for validation
                 temp_table = "pii_validation_table"
 
                 try:
                     # Load parquet data into DuckDB table
-                    gcs_access.query_parquet_native(gcs_path, "SELECT *", temp_table)
+                    storage_access.query_parquet_native(storage_path, "SELECT *", temp_table)
 
                     # Validate for PII using the table name instead of dataframe
                     validation_result = self.pii_validator.validate(temp_table)
@@ -924,8 +931,8 @@ class SilverProcessor:
                         # Handle PII according to validator's action
                         handled_table = self.pii_validator.handle_pii(temp_table, validation_result)
 
-                        # Generate new GCS path for handled file
-                        path_parts = gcs_path.split("/")
+                        # Generate new cloud storage path for handled file
+                        path_parts = storage_path.split("/")
                         filename = path_parts[-1]
                         filename_stem = filename.rsplit(".", 1)[0] if "." in filename else filename
                         filename_ext = "." + filename.rsplit(".", 1)[1] if "." in filename else ""
@@ -933,14 +940,16 @@ class SilverProcessor:
 
                         pii_output_path_str = "/".join([*path_parts[:-1], new_filename])
 
-                        # Export handled table back to GCS
-                        gcs_access.export_table_to_gcs_direct(handled_table, pii_output_path_str)
+                        # Export handled table back to cloud storage
+                        storage_access.export_table_to_storage_direct(
+                            handled_table, pii_output_path_str
+                        )
 
                         logger.info(f"Handled PII in file: {pii_output_path_str}")
                         return Path(pii_output_path_str)
 
-                except Exception as gcs_e:
-                    logger.warning(f"GCS PII handling failed: {gcs_e}, skipping PII processing")
+                except Exception as cloud_e:
+                    logger.warning(f"Cloud PII handling failed: {cloud_e}, skipping PII processing")
                     return None
 
             else:

@@ -401,7 +401,7 @@ class BNBOPreFilter(PreFilteringStageBase):
 
         # Export filtered BNBO using standard pipeline pattern
         output_path = self._get_stage0_output_path("stage0_bnbo_filtered")
-        self.gcs_access.export_table_to_gcs_direct("bnbo_filtered", output_path)
+        self.storage.export_table_to_storage_direct("bnbo_filtered", output_path)
 
         return {
             "input_bnbo_polygons": total_bnbo,

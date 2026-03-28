@@ -28,7 +28,7 @@ class NLES5ClimateProcessor:
         self.config = processor.config
         self.log = processor.log
         self.conn = processor.conn
-        self.gcs_access = processor.gcs_access
+        self.storage = processor.storage_access
 
     @timed(name="Processing DMI climate data")
     def _process_climate_data(self) -> str:

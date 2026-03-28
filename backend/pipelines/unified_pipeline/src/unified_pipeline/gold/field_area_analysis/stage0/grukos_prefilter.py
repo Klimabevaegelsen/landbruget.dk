@@ -142,7 +142,7 @@ class GrukosPreFilter(PreFilteringStageBase):
 
         # Export filtered Grukos using standard pipeline pattern
         output_path = self._get_stage0_output_path("stage0_grukos_filtered")
-        self.gcs_access.export_table_to_gcs_direct("grukos_filtered", output_path)
+        self.storage.export_table_to_storage_direct("grukos_filtered", output_path)
 
         return {
             "input_grukos_geometries": total_grukos,

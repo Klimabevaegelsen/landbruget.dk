@@ -319,8 +319,8 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                             self.log.info(f"Reading bronze data from storage for {layer_name}")
                             try:
                                 # Find the latest bronze data file for this layer
-                                pattern = f"gs://{self.config.bucket}/bronze/{bronze_dataset_name}/*/{bronze_dataset_name}.json"
-                                bronze_files = self.gcs_access.list_files(pattern)
+                                pattern = f"{self.config.bucket}/bronze/{bronze_dataset_name}/*/{bronze_dataset_name}.json"
+                                bronze_files = self.storage.list_files(pattern)
 
                                 if not bronze_files:
                                     self.log.warning(f"No bronze data files found for {layer_name}")
@@ -334,7 +334,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
                                 # ✅ FIXED: Use direct JSON download instead of DuckDB extraction
                                 # This avoids the maximum_object_size issue and JSON parsing errors
-                                raw_geojson_data = self.gcs_access.download_json(latest_file)
+                                raw_geojson_data = self.storage.download_json(latest_file)
 
                                 # Convert back to JSON string for processing (if it's a dict/list)
                                 if isinstance(raw_geojson_data, dict | list):
@@ -360,11 +360,11 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
                         # ✅ OPTIMIZED: Save directly from main connection without copying
                         try:
-                            gcs_path = self.save_data_direct(
+                            storage_path = self.save_data_direct(
                                 processed_table, silver_dataset_name, self.config.bucket, "silver"
                             )
                             self.log.info(
-                                f"Successfully processed and saved DAGI {layer_name} to {gcs_path}"
+                                f"Successfully processed and saved DAGI {layer_name} to {storage_path}"
                             )
                         except Exception as e:
                             self.log.error(f"Error saving DAGI {layer_name}: {e}")

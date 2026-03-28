@@ -30,14 +30,14 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
         stage0_bnbo_dataset = updated_outputs["bnbo_prefiltered"]
         stage0_bnbo_path = self._get_latest_gold_path(stage0_bnbo_dataset)
-        self.gcs_access.query_parquet_direct(stage0_bnbo_path, "SELECT *", "bnbo_status_raw")
+        self.storage.query_parquet_direct(stage0_bnbo_path, "SELECT *", "bnbo_status_raw")
         self.log.info(f"✅ Loaded BNBO from {stage0_bnbo_dataset}")
 
         # Load Stage 0 pre-filtered water projects (2.4K → ~500, 80% reduction)
         self.log.info("Loading Stage 0 pre-filtered water projects dataset...")
         stage0_water_projects_dataset = updated_outputs["water_projects_prefiltered"]
         stage0_water_projects_path = self._get_latest_gold_path(stage0_water_projects_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage0_water_projects_path, "SELECT *", "water_projects_raw"
         )
         self.log.info(f"✅ Loaded water projects from {stage0_water_projects_dataset}")

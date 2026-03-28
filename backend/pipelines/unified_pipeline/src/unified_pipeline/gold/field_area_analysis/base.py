@@ -92,14 +92,14 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
     def _get_latest_gold_path(self, dataset: str) -> str:
         """Get path to latest gold data file for a given dataset."""
         # Try new standardized format first
-        pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
-        files = self.gcs_access.list_files(pattern)
+        pattern = f"{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
+        files = self.storage.list_files(pattern)
 
         if not files:
             # Fallback to legacy format where file name matches dataset name
             self.log.warning(f"No new format files found for {dataset}, trying legacy format")
-            legacy_pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/{dataset}.parquet"
-            files = self.gcs_access.list_files(legacy_pattern)
+            legacy_pattern = f"{CONFIG.bucket}/gold/{dataset}/*/{dataset}.parquet"
+            files = self.storage.list_files(legacy_pattern)
 
             if files:
                 self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
@@ -128,12 +128,12 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         # Get the latest gold path
         gold_path = self._get_latest_gold_path(dataset_name)
 
-        # Use gcs_access to query the data directly
+        # Use storage_access to query the data directly
         if where_clause != "1=1":
             query = f"SELECT * WHERE {where_clause}"
-            self.gcs_access.query_parquet_direct(gold_path, query, table_name)
+            self.storage.query_parquet_direct(gold_path, query, table_name)
         else:
-            self.gcs_access.query_parquet_direct(gold_path, "SELECT *", table_name)
+            self.storage.query_parquet_direct(gold_path, "SELECT *", table_name)
 
         # Log table statistics
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]

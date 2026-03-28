@@ -20,23 +20,25 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import contextlib
 
+pytest.importorskip("playwright", reason="playwright not installed")
+
 from bronze.export import BronzePipeline, GCSStorage
 
 
 @pytest.fixture
-def mock_gcs_bucket():
+def mock_storage_bucket():
     """Mock GCS bucket for testing."""
     return "test-bucket"
 
 
 @pytest.fixture
-def bronze_pipeline(mock_gcs_bucket):
+def bronze_pipeline(mock_storage_bucket):
     """Create a BronzePipeline instance for testing."""
     with patch.dict("os.environ", {"SOURCE_CSV_URL": "https://test.com"}):
         return BronzePipeline(
             pipeline_name="test_pipeline",
             source_url="https://test.com",
-            gcs_bucket=mock_gcs_bucket,
+            storage_bucket=mock_storage_bucket,
             log_level="ERROR",
         )
 
@@ -271,10 +273,10 @@ class TestPlaywrightAutomation:
 class TestGCSStreaming:
     """Tests for GCS streaming uploads."""
 
-    def test_gcs_streaming_upload(self):
+    def test_cloud_streaming_upload(self):
         """Test streaming upload to GCS."""
         # Mock GCS access
-        with patch("bronze.export.OptimizedGCSDataAccess") as mock_gcs_class:
+        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -301,7 +303,7 @@ class TestGCSStreaming:
 
     def test_upload_integrity(self):
         """Test file integrity after upload."""
-        with patch("bronze.export.OptimizedGCSDataAccess") as mock_gcs_class:
+        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -337,7 +339,7 @@ class TestGCSStreaming:
 
     def test_metadata_json_creation(self):
         """Test metadata structure validation."""
-        with patch("bronze.export.OptimizedGCSDataAccess") as mock_gcs_class:
+        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs

@@ -110,8 +110,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
         # Fallback to storage if no in-memory data
         try:
             # List all bronze data files for this parameter
-            pattern = f"gs://{self.config.bucket}/bronze/dmi/*/{parameter_id}_data.json"
-            bronze_files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.config.bucket}/bronze/dmi/*/{parameter_id}_data.json"
+            bronze_files = self.storage.list_files(pattern)
 
             if not bronze_files:
                 self.log.warning(f"No bronze data files found for parameter {parameter_id}")
@@ -124,13 +124,13 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             self.log.info(f"Loading latest bronze data from GCS: {latest_file}")
 
             # Load the data
-            parameter_data = self.gcs_access.download_json(latest_file)
+            parameter_data = self.storage.download_json(latest_file)
 
             # Try to load metadata
             metadata = None
             try:
                 metadata_file = latest_file.replace("_data.json", "_metadata.json")
-                metadata = self.gcs_access.download_json(metadata_file)
+                metadata = self.storage.download_json(metadata_file)
             except Exception as e:
                 self.log.warning(f"Could not load metadata for {parameter_id}: {e}")
 

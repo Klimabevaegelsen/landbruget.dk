@@ -17,25 +17,25 @@ from utils.logger import setup_logger
 
 # Storage upload functionality
 try:
-    from common.gcs import GCSDataAccess  # noqa: F401
-    from common.gcs.filesystem import get_r2_filesystem
+    from common.storage import StorageAccess  # noqa: F401
+    from common.storage.filesystem import get_r2_filesystem
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
+    STORAGE_AVAILABLE = False
 
 
-def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str) -> bool | None:
+def upload_to_cloud(file_path: str, bucket: str, storage_path: str) -> bool | None:
     """Upload file to storage using s3fs."""
-    if not GCS_AVAILABLE:
+    if not STORAGE_AVAILABLE:
         print("⚠️ Storage not available - skipping upload")
         return False
 
     try:
-        print(f"📤 Uploading {file_path} to {gcs_bucket}/{gcs_path}")
+        print(f"📤 Uploading {file_path} to {bucket}/{storage_path}")
 
         fs = get_r2_filesystem()
-        r2_path = f"{gcs_bucket}/{gcs_path}"
+        r2_path = f"{bucket}/{storage_path}"
         fs.put(file_path, r2_path)
         print(f"✅ Successfully uploaded to {r2_path}")
         return True
@@ -44,25 +44,25 @@ def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str) -> bool | None
         return False
 
 
-def upload_inspire_data_to_gcs(output_dir: Path, gcs_bucket: str, timestamp: str) -> None:
-    """Upload INSPIRE BBR data files to GCS."""
-    if not gcs_bucket or not GCS_AVAILABLE:
-        print("ℹ️ Not uploading to GCS (no bucket specified or GCS not available)")
+def upload_inspire_data(output_dir: Path, bucket: str, timestamp: str) -> None:
+    """Upload INSPIRE BBR data files to cloud storage."""
+    if not bucket or not STORAGE_AVAILABLE:
+        print("ℹ️ Not uploading (no bucket specified or storage not available)")
         return
 
-    print("📤 Uploading INSPIRE BBR data to GCS...")
+    print("📤 Uploading INSPIRE BBR data to cloud storage...")
 
     # Upload building IDs JSON
     building_ids_file = output_dir / "inspire_building_ids.json"
     if building_ids_file.exists():
-        gcs_path = f"bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
-        upload_to_gcs(str(building_ids_file), gcs_bucket, gcs_path)
+        storage_path = f"bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
+        upload_to_cloud(str(building_ids_file), bucket, storage_path)
 
     # Upload attributes parquet
     attributes_file = output_dir / "inspire_attributes.parquet"
     if attributes_file.exists():
-        gcs_path = f"bronze/bbr_buildings/inspire/{timestamp}/inspire_attributes.parquet"
-        upload_to_gcs(str(attributes_file), gcs_bucket, gcs_path)
+        storage_path = f"bronze/bbr_buildings/inspire/{timestamp}/inspire_attributes.parquet"
+        upload_to_cloud(str(attributes_file), bucket, storage_path)
 
     # Upload bronze subdirectory if it exists
     bronze_dir = output_dir / "bronze"
@@ -70,8 +70,8 @@ def upload_inspire_data_to_gcs(output_dir: Path, gcs_bucket: str, timestamp: str
         for bronze_file in bronze_dir.rglob("*"):
             if bronze_file.is_file():
                 relative_path = bronze_file.relative_to(output_dir)
-                gcs_path = f"bronze/bbr_buildings/inspire/{timestamp}/{relative_path}"
-                upload_to_gcs(str(bronze_file), gcs_bucket, gcs_path)
+                storage_path = f"bronze/bbr_buildings/inspire/{timestamp}/{relative_path}"
+                upload_to_cloud(str(bronze_file), bucket, storage_path)
 
 
 def _save_attributes_to_parquet(attributes_data: list[dict[str, Any]], output_dir: Path) -> None:
@@ -402,7 +402,7 @@ def main() -> None:
         # Use WARNING level by default to reduce log output for GitHub Actions
         logger = setup_logger(level="WARNING")
         output_dir = Path("data/bronze")
-        gcs_bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+        bucket = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
 
         # Set sample size if specified
         sample_size = None
@@ -483,14 +483,14 @@ def main() -> None:
 
             print(f"🏢 Total INSPIRE BBR buildings processed: {building_count:,}")
 
-            # Upload to GCS if in production environment
-            if gcs_bucket and os.getenv("ENVIRONMENT") == "production":
-                upload_inspire_data_to_gcs(output_dir, gcs_bucket, timestamp)
+            # Upload to cloud storage if in production environment
+            if bucket and os.getenv("ENVIRONMENT") == "production":
+                upload_inspire_data(output_dir, bucket, timestamp)
                 print(
-                    f"✅ INSPIRE BBR data uploaded to GCS: gs://{gcs_bucket}/bronze/bbr_buildings/inspire/{timestamp}/"
+                    f"✅ INSPIRE BBR data uploaded to bucket: {bucket}/bronze/bbr_buildings/inspire/{timestamp}/"
                 )
             else:
-                print("ℹ️ Not uploading to GCS (no bucket specified or not in production)")
+                print("ℹ️ Not uploading (no bucket specified or not in production)")
 
             # Write to GITHUB_OUTPUT if running in GitHub Actions
             if "GITHUB_OUTPUT" in os.environ:

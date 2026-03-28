@@ -24,7 +24,11 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
         "Comprehensive nitrogen washout estimates using the NLES5 model with real climate data"
     )
     frequency: str = "monthly$"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Input silver datasets - Updated to match actual GCS structure
     soil_types_dataset: str = "soil_types"
@@ -42,7 +46,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
 
     # Farm-level gødningsregnskab data integration
     farm_data_source: str = "gcs"  # Source for farm data: "gcs" (GCS bucket parquet files)
-    # Note: farm_data_gcs_path is no longer used - the pipeline now dynamically discovers
+    # Note: farm_data_storage_path is no longer used - the pipeline now dynamically discovers
     # the latest timestamped directory for each year (e.g., silver/gr {year}/YYYYMMDD_HHMMSS/)
     enable_farm_data_integration: bool = True  # Enable farm data integration for enhanced accuracy
     farm_data_years: ClassVar[list[int]] = [

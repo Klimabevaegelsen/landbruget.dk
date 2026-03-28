@@ -8,12 +8,12 @@ import duckdb
 
 # Try to import GCS utilities
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 
 def save_table(
@@ -123,7 +123,7 @@ def save_table_with_connection(
         return None
 
 
-def upload_silver_data_to_gcs(silver_dir: Path, export_timestamp: str) -> bool:
+def upload_silver_data_to_storage(silver_dir: Path, export_timestamp: str) -> bool:
     """
     Upload all silver parquet files to GCS.
 
@@ -134,17 +134,17 @@ def upload_silver_data_to_gcs(silver_dir: Path, export_timestamp: str) -> bool:
     Returns:
         True if upload successful, False otherwise
     """
-    if not GCS_AVAILABLE:
+    if not STORAGE_AVAILABLE:
         logging.warning("GCS utilities not available - skipping silver data upload")
         return False
 
-    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+    bucket_name = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
     if not bucket_name:
         logging.warning("GCS_BUCKET not set - skipping silver data upload")
         return False
 
     try:
-        gcs_access = GCSDataAccess()
+        storage_access = StorageAccess()
 
         # Find all parquet files in the silver directory
         parquet_files = list(silver_dir.glob("*.parquet"))
@@ -159,16 +159,16 @@ def upload_silver_data_to_gcs(silver_dir: Path, export_timestamp: str) -> bool:
         for parquet_file in parquet_files:
             try:
                 # Create GCS path: silver/chr/{timestamp}/{filename}
-                gcs_path = f"gs://{bucket_name}/silver/chr/{export_timestamp}/{parquet_file.name}"
+                storage_path = f"{bucket_name}/silver/chr/{export_timestamp}/{parquet_file.name}"
 
-                # Upload file using streaming (strip gs:// for raw fs access)
-                fs_path = gcs_path.replace("gs://", "", 1)
-                with open(parquet_file, "rb") as src, gcs_access.fs.open(fs_path, "wb") as dst:
+                # Upload file using streaming
+                fs_path = storage_path
+                with open(parquet_file, "rb") as src, storage_access.fs.open(fs_path, "wb") as dst:
                     import shutil
 
                     shutil.copyfileobj(src, dst)
 
-                logging.info(f"Uploaded {parquet_file.name} to {gcs_path}")
+                logging.info(f"Uploaded {parquet_file.name} to {storage_path}")
                 uploaded_count += 1
 
             except Exception as e:

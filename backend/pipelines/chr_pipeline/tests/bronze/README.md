@@ -128,7 +128,7 @@ def test_create_client(mock_get_creds):
 ### Export Tests
 
 ```python
-@patch("bronze.export.USE_GCS", True)
+@patch("bronze.export.USE_CLOUD_STORAGE", True)
 @patch("bronze.export.gcs_access")
 def test_save_to_gcs(mock_gcs):
     save_data_immediately("test_type", data, "test_id")

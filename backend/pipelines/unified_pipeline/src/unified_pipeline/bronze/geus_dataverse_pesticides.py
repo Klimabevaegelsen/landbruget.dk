@@ -136,9 +136,9 @@ class GEUSDataversePesticidesBronze(
 
             return content
 
-    def _save_rds_to_gcs(self, rds_content: bytes, filename: str) -> str:
+    def _save_rds_to_storage(self, rds_content: bytes, filename: str) -> str:
         """
-        Save a raw .rds file to GCS.
+        Save a raw .rds file to storage.
 
         Path structure: bronze/{dataset}/{run_timestamp}/{filename}
 
@@ -147,14 +147,14 @@ class GEUSDataversePesticidesBronze(
             filename: Name of the file (AM_pest.rds or AM_pfas.rds)
 
         Returns:
-            GCS path where the file was saved (relative to bucket)
+            Storage path where the file was saved (relative to bucket)
         """
         run_timestamp = self.date_pattern
         relative_path = f"bronze/{self.config.dataset}/{run_timestamp}/{filename}"
         storage_path = f"{self.config.bucket}/{relative_path}"
 
         # Stream binary content directly to storage using s3fs (R2)
-        with self.gcs_access.fs.open(storage_path, "wb") as f:
+        with self.storage.fs.open(storage_path, "wb") as f:
             f.write(rds_content)
 
         self.log.info(f"Saved {filename} to {storage_path}")
@@ -196,8 +196,8 @@ class GEUSDataversePesticidesBronze(
                     )
 
                     # Save to GCS
-                    pest_path = self._save_rds_to_gcs(pest_content, "AM_pest.rds")
-                    pfas_path = self._save_rds_to_gcs(pfas_content, "AM_pfas.rds")
+                    pest_path = self._save_rds_to_storage(pest_content, "AM_pest.rds")
+                    pfas_path = self._save_rds_to_storage(pfas_content, "AM_pfas.rds")
 
                     # Create manifest for silver layer
                     run_timestamp = self.date_pattern
@@ -222,10 +222,10 @@ class GEUSDataversePesticidesBronze(
 
                     # Save manifest to GCS
                     manifest_path = (
-                        f"gs://{self.config.bucket}/bronze/{self.config.dataset}/"
+                        f"{self.config.bucket}/bronze/{self.config.dataset}/"
                         f"{run_timestamp}/manifest.json"
                     )
-                    self.gcs_access.upload_json(manifest, manifest_path)
+                    self.storage.upload_json(manifest, manifest_path)
 
                     # Create and save pipeline metadata for data tracing
                     if self.pipeline_metadata_manager and self.processing_start_time:
@@ -241,12 +241,10 @@ class GEUSDataversePesticidesBronze(
                             )
 
                             metadata_path = (
-                                f"gs://{self.config.bucket}/bronze/{self.config.dataset}/"
+                                f"{self.config.bucket}/bronze/{self.config.dataset}/"
                                 f"{run_timestamp}/pipeline_metadata.json"
                             )
-                            self.gcs_access.upload_json(
-                                pipeline_metadata.model_dump(), metadata_path
-                            )
+                            self.storage.upload_json(pipeline_metadata.model_dump(), metadata_path)
                             self.log.info(f"✅ Pipeline metadata saved to {metadata_path}")
                         except Exception as e:
                             self.log.warning(f"⚠️ Failed to create pipeline metadata: {e}")

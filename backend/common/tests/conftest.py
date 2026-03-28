@@ -29,7 +29,7 @@ def temp_dir() -> Generator[Path, None, None]:
 
 
 @pytest.fixture(scope="function")
-def mock_gcs_filesystem() -> Generator[MagicMock, None, None]:
+def mock_cloud_filesystem() -> Generator[MagicMock, None, None]:
     """Mock gcsfs.GCSFileSystem for isolated testing.
 
     Provides a mock GCS filesystem that simulates file operations without

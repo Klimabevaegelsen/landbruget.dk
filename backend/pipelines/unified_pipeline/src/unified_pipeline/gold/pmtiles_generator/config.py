@@ -67,9 +67,11 @@ class PMTilesGeneratorConfig(BaseJobConfig):
     )
 
     # Data source bucket (R2_BUCKET → GCS_BUCKET → default)
-    gcs_bucket: str = Field(
+    storage_bucket: str = Field(
         default_factory=lambda: (
-            os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
         ),
         description="Storage bucket for source data",
     )

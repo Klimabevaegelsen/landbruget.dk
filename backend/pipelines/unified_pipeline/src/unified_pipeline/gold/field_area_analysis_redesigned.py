@@ -21,8 +21,8 @@ Root Cause Fixed: Fields dataset coordinate swapping fixed in silver layer pipel
 import os
 import time
 
-from ..util.gcs_access import GCSDataAccess
 from ..util.log_util import Logger
+from ..util.storage_access import StorageAccess
 
 
 class FieldAreaAnalysisRedesigned:
@@ -40,11 +40,15 @@ class FieldAreaAnalysisRedesigned:
 
     def __init__(self):
         self.log = Logger.get_logger()
-        self.bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        self.bucket = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
 
         # Initialize single GCS connection for all operations
-        self.gcs_access = GCSDataAccess()
-        self.conn = self.gcs_access.duckdb_conn
+        self.storage = StorageAccess()
+        self.conn = self.storage.duckdb_conn
 
         # Performance tracking
         self.start_time = None
@@ -103,7 +107,7 @@ class FieldAreaAnalysisRedesigned:
         if not fields_path:
             raise ValueError("No FVM marker data found")
 
-        self.gcs_access.create_table_from_gcs("fields_raw", fields_path)
+        self.storage.create_table_from_storage("fields_raw", fields_path)
 
         # Convert WKT to geometry (coordinates now fixed in silver layer)
         self.log.info("🔄 Converting agricultural fields WKT to geometry...")
@@ -164,7 +168,7 @@ class FieldAreaAnalysisRedesigned:
         self.log.info("🔄 Loading soil types...")
         soil_path = self._get_latest_dataset_path("soil_types")
         if soil_path:
-            self.gcs_access.create_table_from_gcs("soil_types", soil_path)
+            self.storage.create_table_from_storage("soil_types", soil_path)
             soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
             self.log.info(f"✅ Loaded {soil_count:,} soil type polygons")
 
@@ -172,7 +176,7 @@ class FieldAreaAnalysisRedesigned:
         self.log.info("🔄 Loading and splitting BNBO multipolygons...")
         bnbo_path = self._get_latest_dataset_path("bnbo_status_dissolved")
         if bnbo_path:
-            self.gcs_access.create_table_from_gcs("bnbo_raw", bnbo_path)
+            self.storage.create_table_from_storage("bnbo_raw", bnbo_path)
 
             # Split multipolygons into individual polygons for optimal spatial indexing
             self.conn.execute("""
@@ -191,7 +195,7 @@ class FieldAreaAnalysisRedesigned:
         self.log.info("🔄 Loading and splitting water project multipolygons...")
         water_path = self._get_latest_dataset_path("water_projects_dissolved")
         if water_path:
-            self.gcs_access.create_table_from_gcs("water_raw", water_path)
+            self.storage.create_table_from_storage("water_raw", water_path)
 
             # Split multipolygons into individual polygons
             self.conn.execute("""
@@ -212,7 +216,7 @@ class FieldAreaAnalysisRedesigned:
         self.log.info("🔄 Loading wetlands...")
         wetlands_path = self._get_latest_dataset_path("wetlands")
         if wetlands_path:
-            self.gcs_access.create_table_from_gcs("wetlands", wetlands_path)
+            self.storage.create_table_from_storage("wetlands", wetlands_path)
             wetlands_count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
             self.log.info(f"✅ Loaded {wetlands_count:,} wetland polygons")
 
@@ -530,8 +534,8 @@ class FieldAreaAnalysisRedesigned:
     def _get_latest_dataset_path(self, dataset_name: str) -> str | None:
         """Get the latest path for a specific dataset."""
         try:
-            pattern = f"gs://{self.bucket}/silver/{dataset_name}/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.bucket}/silver/{dataset_name}/*/*.parquet"
+            files = self.storage.list_files(pattern)
             if files:
                 return sorted(files, reverse=True)[0]
             self.log.warning(f"No data found for {dataset_name}")
@@ -543,8 +547,8 @@ class FieldAreaAnalysisRedesigned:
     def _get_latest_fvm_marker_path(self) -> str | None:
         """Get the latest FVM marker dataset."""
         try:
-            pattern = f"gs://{self.bucket}/silver/fvm_marker_*/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.bucket}/silver/fvm_marker_*/*/*.parquet"
+            files = self.storage.list_files(pattern)
 
             year_files = {}
             for file_path in files:

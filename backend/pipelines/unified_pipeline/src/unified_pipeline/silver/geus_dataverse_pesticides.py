@@ -93,12 +93,12 @@ class GEUSDataversePesticidesSilver(
             self.log.error(f"Failed to setup DuckDB spatial extension: {e}")
             raise
 
-    def _download_rds_from_gcs(self, rds_path: str) -> Path:
+    def _download_rds_from_storage(self, rds_path: str) -> Path:
         """
-        Download .rds file from GCS to a temporary local file.
+        Download .rds file from storage to a temporary local file.
 
         Args:
-            rds_path: Relative path to .rds file in GCS
+            rds_path: Relative path to .rds file in storage
 
         Returns:
             Path to the downloaded temporary file
@@ -113,7 +113,7 @@ class GEUSDataversePesticidesSilver(
 
         # Download using s3fs (R2) directly (binary read)
         with (
-            self.gcs_access.fs.open(storage_path, "rb") as gcs_file,
+            self.storage.fs.open(storage_path, "rb") as gcs_file,
             tmp_path.open("wb") as local_file,
         ):
             local_file.write(gcs_file.read())
@@ -454,9 +454,9 @@ class GEUSDataversePesticidesSilver(
                     # Find latest manifest in GCS
                     self.log.info("No bronze data passed - reading from GCS")
                     manifest_pattern = (
-                        f"gs://{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
+                        f"{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
                     )
-                    manifest_files = self.gcs_access.list_files(manifest_pattern)
+                    manifest_files = self.storage.list_files(manifest_pattern)
 
                     if not manifest_files:
                         self.log.error(
@@ -469,7 +469,7 @@ class GEUSDataversePesticidesSilver(
                     latest_manifest = sorted(manifest_files, reverse=True)[0]
                     self.log.info(f"Reading manifest from {latest_manifest}")
 
-                    manifest = self.gcs_access.download_json(latest_manifest)
+                    manifest = self.storage.download_json(latest_manifest)
                     pest_rds_path = manifest.get("pest_rds_path") or manifest.get("rds_path")
                     pfas_rds_path = manifest.get("pfas_rds_path")
 
@@ -479,7 +479,7 @@ class GEUSDataversePesticidesSilver(
 
                 # === Process Pesticide Data ===
                 self.log.info("=== Processing Pesticide Data ===")
-                tmp_pest_path = self._download_rds_from_gcs(pest_rds_path)
+                tmp_pest_path = self._download_rds_from_storage(pest_rds_path)
                 pest_df = self._convert_rds_to_dataframe(tmp_pest_path)
                 pest_table = self._transform_data(pest_df)
                 self._validate_geometries(pest_table)
@@ -508,7 +508,7 @@ class GEUSDataversePesticidesSilver(
                 pfas_stats = None
                 if pfas_rds_path:
                     self.log.info("=== Processing PFAS Data ===")
-                    tmp_pfas_path = self._download_rds_from_gcs(pfas_rds_path)
+                    tmp_pfas_path = self._download_rds_from_storage(pfas_rds_path)
                     pfas_df = self._convert_rds_to_dataframe(tmp_pfas_path)
                     pfas_table = self._transform_pfas_data(pfas_df)
                     self._validate_geometries(pfas_table)

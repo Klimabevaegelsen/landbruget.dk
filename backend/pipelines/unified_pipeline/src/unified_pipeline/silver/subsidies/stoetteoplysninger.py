@@ -49,7 +49,11 @@ class StoetteoplysningerSilverConfig(BaseJobConfig):
     type: str = "transformation"
     description: str = "EU CAP payment data - EAGF and EAFRD funds"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Bronze source
     bronze_path: str = Field(
@@ -151,10 +155,10 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
         else:
             # Load from GCS
             self.log.info(f"Loading bronze data from: {self.config.bronze_path}")
-            pattern = f"gs://{self.config.bucket}/{self.config.bronze_path}"
+            pattern = f"{self.config.bucket}/{self.config.bronze_path}"
 
             # Find latest file
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
             if not files:
                 raise FileNotFoundError(f"No bronze files found matching: {pattern}")
 
@@ -354,7 +358,7 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
         """Save silver data to GCS."""
         output_path = f"silver/{self.config.dataset}"
 
-        self.log.info(f"Saving silver data to: gs://{self.config.bucket}/{output_path}")
+        self.log.info(f"Saving silver data to: {self.config.bucket}/{output_path}")
 
         # Export to parquet
         self._save_data(
@@ -364,4 +368,4 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
             stage="silver",
         )
 
-        return f"gs://{self.config.bucket}/{output_path}"
+        return f"{self.config.bucket}/{output_path}"

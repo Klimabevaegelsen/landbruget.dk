@@ -255,21 +255,21 @@ class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
         """
         try:
             # Save table data
-            data_path = (
-                f"gs://{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_data.json"
-            )
-            self.gcs_access.upload_json(table_data, data_path)
+            data_path = f"{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_data.json"
+            self.storage.upload_json(table_data, data_path)
 
             # Save table info if available
             if table_info:
-                info_path = f"gs://{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_tableinfo.json"
-                self.gcs_access.upload_json(table_info, info_path)
+                info_path = (
+                    f"{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_tableinfo.json"
+                )
+                self.storage.upload_json(table_info, info_path)
 
             # Save metadata
             metadata_path = (
-                f"gs://{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_metadata.json"
+                f"{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_metadata.json"
             )
-            self.gcs_access.upload_json(metadata, metadata_path)
+            self.storage.upload_json(metadata, metadata_path)
 
             self.log.info(f"Saved DST table {table_id} data to storage")
 

@@ -39,7 +39,11 @@ class SlagtepraemieSilverConfig(BaseJobConfig):
     type: str = "transformation"
     description: str = "Slaughter premium - voluntary coupled support for cattle"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Bronze source
     bronze_path: str = Field(
@@ -98,7 +102,7 @@ class SlagtepraemieSilver(BaseSource[SlagtepraemieSilverConfig], SilverJobInterf
             self.conn.register("raw_slagtepraemie", bronze_data)
         else:
             self.log.info(f"Loading bronze data from: {self.config.bronze_path}")
-            path = f"gs://{self.config.bucket}/{self.config.bronze_path}"
+            path = f"{self.config.bucket}/{self.config.bronze_path}"
 
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE raw_slagtepraemie AS
@@ -243,7 +247,7 @@ class SlagtepraemieSilver(BaseSource[SlagtepraemieSilverConfig], SilverJobInterf
         """Save silver data to GCS."""
         output_path = f"silver/{self.config.dataset}"
 
-        self.log.info(f"Saving silver data to: gs://{self.config.bucket}/{output_path}")
+        self.log.info(f"Saving silver data to: {self.config.bucket}/{output_path}")
 
         self._save_data(
             data="slagtepraemie_silver",
@@ -252,4 +256,4 @@ class SlagtepraemieSilver(BaseSource[SlagtepraemieSilverConfig], SilverJobInterf
             stage="silver",
         )
 
-        return f"gs://{self.config.bucket}/{output_path}"
+        return f"{self.config.bucket}/{output_path}"

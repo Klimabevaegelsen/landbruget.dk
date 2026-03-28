@@ -9,7 +9,11 @@ class FieldAreaAnalysisConfig(BaseModel):
     """Shared configuration across all pipeline stages."""
 
     # GCS Configuration
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Year configuration for agricultural fields
     agricultural_fields_year: int = int(os.getenv("AGRICULTURAL_FIELDS_YEAR", "2024"))

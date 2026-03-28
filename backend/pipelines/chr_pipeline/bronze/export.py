@@ -3,7 +3,9 @@
 import json
 import logging
 import os
+import shutil
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,12 +18,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 # Import the unified GCS access layer
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCSDataAccess = None
-    GCS_AVAILABLE = False
+    StorageAccess = None
+    STORAGE_AVAILABLE = False
 
 # Import the unified metadata system
 try:
@@ -39,34 +41,34 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize storage paths and clients
-GCS_BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+GCS_BUCKET = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
 LOCAL_DATA_PATH = os.getenv(
     "LOCAL_DATA_PATH", "/tmp/data"
 )  # Default to /tmp/data for GitHub Actions
 
-# Use cloud storage if we have bucket name and GCSDataAccess available
-USE_GCS = bool(GCS_BUCKET and GCS_AVAILABLE)
+# Use cloud storage if we have bucket name and StorageAccess available
+USE_CLOUD_STORAGE = bool(GCS_BUCKET and STORAGE_AVAILABLE)
 
 logger.info(
     f"Storage Configuration - Bucket: {GCS_BUCKET}, "
-    f"GCS_AVAILABLE: {GCS_AVAILABLE}, USE_GCS: {USE_GCS}"
+    f"STORAGE_AVAILABLE: {STORAGE_AVAILABLE}, USE_CLOUD_STORAGE: {USE_CLOUD_STORAGE}"
 )
 
 # Initialize GCS access layer if available
-gcs_access = None
-if USE_GCS:
+storage_access = None
+if USE_CLOUD_STORAGE:
     try:
-        logger.info("Attempting to initialize GCSDataAccess...")
-        gcs_access = GCSDataAccess()
+        logger.info("Attempting to initialize StorageAccess...")
+        storage_access = StorageAccess()
         logger.info(
-            f"Successfully initialized GCSDataAccess. Using GCS storage with bucket: {GCS_BUCKET}"
+            f"Successfully initialized StorageAccess. Using GCS storage with bucket: {GCS_BUCKET}"
         )
     except Exception as e:
-        logger.error(f"Failed to initialize GCSDataAccess: {e}", exc_info=True)
+        logger.error(f"Failed to initialize StorageAccess: {e}", exc_info=True)
         logger.info("Falling back to local storage")
-        USE_GCS = False
+        USE_CLOUD_STORAGE = False
 
-if not USE_GCS:
+if not USE_CLOUD_STORAGE:
     logger.info(f"Using local storage in {LOCAL_DATA_PATH}/bronze/")
 
 # --- In-memory buffer for consolidated output ---
@@ -125,7 +127,7 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
         bool: True if save succeeded, False otherwise
     """
     try:
-        if not USE_GCS:
+        if not USE_CLOUD_STORAGE:
             logger.warning("GCS not available - cannot save data immediately")
             return False
 
@@ -144,23 +146,23 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
                 content = json.dumps(data, indent=2, default=str)
             content_type = "application/json"
 
-        # Save directly to GCS using unified GCSDataAccess
+        # Save directly to GCS using unified StorageAccess
         blob_path = f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}"
-        gcs_path = f"gs://{GCS_BUCKET}/{blob_path}"
+        storage_path = f"{GCS_BUCKET}/{blob_path}"
 
         if content_type == "application/json":
             # Parse back to dict/list for proper JSON upload if it was serialized
             if isinstance(data, str):
-                gcs_access.upload_json_string(content, gcs_path)
+                storage_access.upload_json_string(content, storage_path)
             else:
-                gcs_access.upload_json(data, gcs_path)
+                storage_access.upload_json(data, storage_path)
         else:
-            # XML or other content - use streaming write (strip gs:// for raw fs access)
-            fs_path = gcs_path.replace("gs://", "", 1)
-            with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
+            # XML or other content - use streaming write
+            fs_path = storage_path
+            with storage_access.fs.open(fs_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
-        logger.info(f"✅ Saved {data_type} data immediately to {gcs_path}")
+        logger.info(f"✅ Saved {data_type} data immediately to {storage_path}")
 
         # Create and upload metadata using existing upload method
         if _metadata_manager:
@@ -185,9 +187,9 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
                 metadata_blob_path = blob_path.replace(".json", "_metadata.json").replace(
                     ".xml", "_metadata.json"
                 )
-                metadata_gcs_path = f"gs://{GCS_BUCKET}/{metadata_blob_path}"
-                gcs_access.upload_json(metadata.model_dump(mode="json"), metadata_gcs_path)
-                logger.info(f"✅ Uploaded metadata to {metadata_gcs_path}")
+                metadata_storage_path = f"{GCS_BUCKET}/{metadata_blob_path}"
+                storage_access.upload_json(metadata.model_dump(mode="json"), metadata_storage_path)
+                logger.info(f"✅ Uploaded metadata to {metadata_storage_path}")
             except Exception as e:
                 logger.warning(f"⚠️  Failed to create metadata for {data_type}: {e}")
 
@@ -259,15 +261,15 @@ def _serialize_data(data: Any) -> str | None:
         return None
 
 
-def _save_to_gcs(blob_path: str, content: str, format_type: str):
-    """Helper function to save content to GCS using unified GCSDataAccess."""
+def _save_to_storage(blob_path: str, content: str, format_type: str):
+    """Helper function to save content to GCS using unified StorageAccess."""
     # Add bronze/chr/{timestamp_with_suffixes} prefix to all files
     bronze_dir = get_bronze_directory_path()
-    # Use bucket/path format directly (no gs:// prefix) since fs.open() expects raw S3/R2 paths
+    # Use bare bucket/path format since fs.open() expects raw S3/R2 paths
     fs_path = f"{GCS_BUCKET}/bronze/chr/{bronze_dir}/{blob_path}"
 
     # Use streaming write for both JSON and XML
-    with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
+    with storage_access.fs.open(fs_path, "w", encoding="utf-8") as f:
         f.write(content)
 
 
@@ -322,7 +324,7 @@ def finalize_export(clear_buffer: bool = True):
         logger.warning("No data buffered for export.")
         return
 
-    storage_mode = "GCS (GitHub Actions)" if USE_GCS else "local filesystem"
+    storage_mode = "GCS (GitHub Actions)" if USE_CLOUD_STORAGE else "local filesystem"
     logger.info(f"Starting export using {storage_mode}")
 
     # Check if we're in a memory-constrained environment (like GitHub Actions)
@@ -334,6 +336,7 @@ def finalize_export(clear_buffer: bool = True):
         logger.info("Memory-constrained environment detected - using streaming export")
 
     total_files = 0
+    failed_files = []
     for buffer_key, format_data in _data_buffer.items():
         data_type = buffer_key
 
@@ -349,12 +352,13 @@ def finalize_export(clear_buffer: bool = True):
             # Use streaming approach for large datasets
             if is_memory_constrained and data_count > 1000:
                 logger.info(f"Using streaming export for large dataset: {filename}")
-                if USE_GCS:
+                if USE_CLOUD_STORAGE:
                     try:
-                        _save_to_gcs_streaming(filename, json_data_list)
+                        _save_to_storage_streaming(filename, json_data_list)
                         total_files += 1
                     except Exception as e:
                         logger.error(f"Error in streaming GCS export for {filename}: {e}")
+                        failed_files.append(filename)
                 else:
                     filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
                     try:
@@ -362,18 +366,20 @@ def finalize_export(clear_buffer: bool = True):
                         total_files += 1
                     except Exception as e:
                         logger.error(f"Error in streaming local export for {filename}: {e}")
+                        failed_files.append(filename)
             else:
                 # Use original approach for smaller datasets
-                if USE_GCS:
+                if USE_CLOUD_STORAGE:
                     try:
                         logger.info(
                             f"Writing {data_count} records to GCS bucket '{GCS_BUCKET}': {filename}"
                         )
                         json_content = json.dumps(json_data_list, indent=2, default=str)
-                        _save_to_gcs(filename, json_content, "json")
+                        _save_to_storage(filename, json_content, "json")
                         total_files += 1
                     except Exception as e:
                         logger.error(f"Error writing JSON to GCS {filename}: {e}")
+                        failed_files.append(filename)
                 else:
                     filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
                     try:
@@ -384,6 +390,7 @@ def finalize_export(clear_buffer: bool = True):
                         total_files += 1
                     except Exception as e:
                         logger.error(f"Error writing JSON file {filepath}: {e}")
+                        failed_files.append(filename)
 
         # Process XML data (unchanged - typically smaller)
         xml_data_list = format_data.get("xml", [])
@@ -391,15 +398,16 @@ def finalize_export(clear_buffer: bool = True):
             filename = f"{data_type}.xml"
             full_xml_content = "\n<!-- RAW_RESPONSE_SEPARATOR -->\n".join(xml_data_list)
 
-            if USE_GCS:
+            if USE_CLOUD_STORAGE:
                 try:
                     logger.info(
                         f"Writing {len(xml_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}"
                     )
-                    _save_to_gcs(filename, full_xml_content, "xml")
+                    _save_to_storage(filename, full_xml_content, "xml")
                     total_files += 1
                 except Exception as e:
                     logger.error(f"Error writing XML to GCS {filename}: {e}")
+                    failed_files.append(filename)
             else:
                 filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
                 try:
@@ -408,6 +416,12 @@ def finalize_export(clear_buffer: bool = True):
                     total_files += 1
                 except Exception as e:
                     logger.error(f"Error writing XML file {filepath}: {e}")
+                    failed_files.append(filename)
+
+    if failed_files:
+        raise RuntimeError(
+            f"Bronze export failed: {len(failed_files)} file(s) not uploaded: {', '.join(failed_files)}"
+        )
 
     bronze_dir = get_bronze_directory_path()
     logger.info(
@@ -442,8 +456,8 @@ def finalize_export(clear_buffer: bool = True):
         logger.warning(f"Error during post-export cleanup: {e}")
 
 
-def _save_to_gcs_streaming(filename: str, data_list: list[Any], path_suffix: str = ""):
-    """Save large datasets to GCS using streaming via unified GCSDataAccess.
+def _save_to_storage_streaming(filename: str, data_list: list[Any], path_suffix: str = ""):
+    """Save large datasets to GCS using streaming via unified StorageAccess.
 
     Args:
         filename: Target filename in GCS
@@ -455,7 +469,7 @@ def _save_to_gcs_streaming(filename: str, data_list: list[Any], path_suffix: str
     # If path_suffix is provided, add it to the bronze directory
     if path_suffix:
         bronze_dir += path_suffix
-    # Use bucket/path format directly (no gs:// prefix) since fs.open() expects raw S3/R2 paths
+    # Use bare bucket/path format since fs.open() expects raw S3/R2 paths
     fs_path = f"{GCS_BUCKET}/bronze/chr/{bronze_dir}/{filename}"
 
     # Estimate data size for logging
@@ -467,24 +481,38 @@ def _save_to_gcs_streaming(filename: str, data_list: list[Any], path_suffix: str
     )
 
     try:
-        # Use gcsfs streaming write via unified GCSDataAccess
-        with gcs_access.fs.open(fs_path, "w", encoding="utf-8") as f:
-            f.write("[\n")
-
+        # Write to temp file first, then upload as single file.
+        # Direct item-by-item streaming via fs.open() causes uneven multipart chunk
+        # writes that trigger s3fs [Errno 22] for large files (50K+ records).
+        # See StorageAccess.upload_json comment in common/storage/core.py:678-684.
+        tmp_path = None
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".json",
+            prefix="chr_streaming_",
+            delete=False,
+            dir="/tmp",
+            encoding="utf-8",
+        ) as tmp:
+            tmp.write("[\n")
             for i, item in enumerate(data_list):
                 if i > 0:
-                    f.write(",\n")
-
-                # Serialize one item at a time to avoid memory buildup
-                json.dump(item, f, indent=2, default=str)
-
-                # Log progress more frequently for very large datasets
+                    tmp.write(",\n")
+                json.dump(item, tmp, indent=2, default=str)
                 if i > 0 and i % 1000 == 0:
                     logger.info(
-                        f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)"
+                        f"Wrote {i}/{len(data_list)} records to temp file ({(i / len(data_list) * 100):.1f}%)"
                     )
+            tmp.write("\n]")
+            tmp_path = tmp.name
 
-            f.write("\n]")
+        # Upload as single file — even chunk sizes satisfy s3fs multipart requirements
+        try:
+            with open(tmp_path, "rb") as src, storage_access.fs.open(fs_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
         logger.info(f"Completed streaming upload to GCS for {filename}")
 
@@ -498,8 +526,10 @@ def _save_to_gcs_streaming(filename: str, data_list: list[Any], path_suffix: str
                 )
 
                 metadata_filename = filename.replace(".json", "_metadata.json")
-                metadata_gcs_path = f"gs://{GCS_BUCKET}/bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{metadata_filename}"
-                gcs_access.upload_json(metadata.model_dump(mode="json"), metadata_gcs_path)
+                metadata_storage_path = (
+                    f"{GCS_BUCKET}/bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{metadata_filename}"
+                )
+                storage_access.upload_json(metadata.model_dump(mode="json"), metadata_storage_path)
                 logger.info(f"✅ Uploaded streaming metadata for {filename}")
             except Exception as e:
                 logger.warning(f"⚠️  Failed to create streaming metadata for {filename}: {e}")

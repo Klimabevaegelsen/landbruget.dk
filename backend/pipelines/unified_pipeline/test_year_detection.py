@@ -8,7 +8,7 @@ import sys
 # Add src directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 from unified_pipeline.gold.pmtiles_generator.config import PMTilesGeneratorConfig
 from unified_pipeline.gold.pmtiles_generator.year_detector import DataSourceYearDetector
@@ -28,7 +28,7 @@ async def main():
 
     # Create minimal config
     config = PMTilesGeneratorConfig(
-        gcs_bucket="landbruget-data",
+        storage_bucket="landbruget-data",
         temp_dir="/tmp/pmtiles_test",
         cloudflare_r2_account_id="",  # Not needed for testing
         cloudflare_r2_access_key_id="",
@@ -37,8 +37,8 @@ async def main():
     )
 
     # Initialize GCS access (creates its own DuckDB connection) and year detector
-    gcs_access = GCSDataAccess()  # No connection parameter - creates new one
-    year_detector = DataSourceYearDetector(config, gcs_access)
+    storage_access = StorageAccess()  # No connection parameter - creates new one
+    year_detector = DataSourceYearDetector(config, storage_access)
 
     # Detect available years
     logger.info("\n" + "=" * 80)

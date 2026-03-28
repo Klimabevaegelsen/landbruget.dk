@@ -9,6 +9,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+pytest.importorskip("google.auth", reason="google-auth not installed")
 from drive_data_pipeline.bronze import BronzeProcessor
 from drive_data_pipeline.config import Settings
 from drive_data_pipeline.utils.storage import DriveStorageManager
@@ -100,7 +102,7 @@ def test_settings() -> Generator[Settings, None, None]:
             google_drive_folder_id="mock_folder_id",
             google_application_credentials="mock_credentials.json",
             storage_type="local",
-            gcs_bucket=None,
+            r2_bucket=None,
             bronze_path=str(bronze_path),
             silver_path=str(silver_path),
             max_workers=1,

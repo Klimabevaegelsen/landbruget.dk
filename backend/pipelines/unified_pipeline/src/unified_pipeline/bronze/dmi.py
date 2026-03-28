@@ -315,13 +315,15 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         try:
             # Save parameter data
             data_path = (
-                f"gs://{self.config.bucket}/bronze/dmi/{self.date_pattern}/{parameter_id}_data.json"
+                f"{self.config.bucket}/bronze/dmi/{self.date_pattern}/{parameter_id}_data.json"
             )
-            self.gcs_access.upload_json(parameter_data, data_path)
+            self.storage.upload_json(parameter_data, data_path)
 
             # Save metadata
-            metadata_path = f"gs://{self.config.bucket}/bronze/dmi/{self.date_pattern}/{parameter_id}_metadata.json"
-            self.gcs_access.upload_json(metadata, metadata_path)
+            metadata_path = (
+                f"{self.config.bucket}/bronze/dmi/{self.date_pattern}/{parameter_id}_metadata.json"
+            )
+            self.storage.upload_json(metadata, metadata_path)
 
             self.log.info(f"Saved DMI parameter {parameter_id} data to storage")
 

@@ -5,16 +5,8 @@ Uses actual A_over and A_under calculations from afgroederester.py
 with crop parameters from crop_parameters.py.
 """
 
-# Import crop parameters for lookup
-import sys
-from pathlib import Path as SysPath
-
 # Import crop residue calculations from afgroederester
 from .afgroederester import calculate_crop_residue_emissions
-
-_climate_root = SysPath(__file__).resolve().parent.parent.parent
-if str(_climate_root) not in sys.path:
-    sys.path.insert(0, str(_climate_root))
 
 # Constants from the notebook
 C_FRAK_TORSTOF_TIL_C = 0.45  # Den antagede kulstoffraktion i tørstof [kg C/kg ts]

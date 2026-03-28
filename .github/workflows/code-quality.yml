@@ -120,7 +120,7 @@ jobs:
           "backend/scripts/generate_baseline_metrics.py"
           "backend/common/validation/baseline_manager.py"
           "backend/pipelines/chr_pipeline/silver/chr_silver_processing.py"
-          "backend/common/gcs/core.py"
+          "backend/common/storage/core.py"
         )
         ALLOWLIST_PATTERN=$(printf "|%s" "${ALLOWLIST[@]}")
         ALLOWLIST_PATTERN="${ALLOWLIST_PATTERN:1}"  # remove leading |
@@ -139,7 +139,7 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "$MATCHES" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Use common.gcs instead of google.cloud.storage directly." >> $GITHUB_STEP_SUMMARY
+          echo "Use common.storage instead of google.cloud.storage directly." >> $GITHUB_STEP_SUMMARY
           FAILED=1
         fi
 
@@ -155,25 +155,52 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "$MATCHES" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "Use common.gcs (s3fs-based) instead of gcsfs." >> $GITHUB_STEP_SUMMARY
+          echo "Use common.storage (s3fs-based) instead of gcsfs." >> $GITHUB_STEP_SUMMARY
           FAILED=1
         fi
 
-        # Count hardcoded gs:// URLs in runtime Python code (informational — not blocking yet)
-        # Many legacy files still use gs:// paths; this tracks migration progress over time.
-        GS_COUNT=$(grep -rn 'gs://' \
+        # Check for stale GCS-specific Python identifiers (class names, attributes, functions,
+        # variables, constants). Env var string lookups like os.getenv("GCS_BUCKET") are fine —
+        # we're looking for Python identifiers that embed "gcs" in their name.
+        IDENT_MATCHES=$(grep -rEn "(self\.(gcs_|_gcs)|def [a-z_]*gcs|GCSData|\bGCS_AVAILABLE\b|\bUSE_GCS\b|\bgcs_bucket\b|\bgcs_client\b)" \
           --include="*.py" \
-          backend/pipelines/ backend/common/ backend/api/ \
-          | grep -v "_test\.py\|test_\|/tests/" \
-          | wc -l || echo "0")
-        echo "### Hardcoded gs:// URL count (informational): $GS_COUNT" >> $GITHUB_STEP_SUMMARY
-        echo "Migrate these to \`StoragePath\` or \`r2://\` paths to reduce this number." >> $GITHUB_STEP_SUMMARY
+          --exclude-dir=".venv" \
+          --exclude-dir="venv" \
+          --exclude-dir="site-packages" \
+          . | grep -v -E "$ALLOWLIST_PATTERN" \
+            | grep -v "property_owners_sftp" \
+            | grep -v "_test\.py\|test_\|/tests/" \
+            | grep -v 'os\.getenv\|os\.environ\|"GCS_BUCKET"\|'"'"'GCS_BUCKET'"'"'' || true)
+        if [ -n "$IDENT_MATCHES" ]; then
+          echo "### Stale GCS identifiers in Python code:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$IDENT_MATCHES" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Rename these to storage-neutral names (see #844)." >> $GITHUB_STEP_SUMMARY
+          FAILED=1
+        fi
+
+        # Block any gs:// URLs in Python code — migration to R2 is complete
+        GS_MATCHES=$(grep -rn 'gs://' \
+          --include="*.py" \
+          --exclude-dir=".venv" \
+          --exclude-dir="venv" \
+          --exclude-dir="site-packages" \
+          . || true)
+        if [ -n "$GS_MATCHES" ]; then
+          echo "### ❌ Hardcoded gs:// URLs found:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$GS_MATCHES" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "All gs:// references must be removed. Use bare bucket/path or r2:// instead." >> $GITHUB_STEP_SUMMARY
+          FAILED=1
+        fi
 
         if [ "$FAILED" -eq 0 ]; then
           echo "No new GCS library usage detected." >> $GITHUB_STEP_SUMMARY
         else
           echo ""
-          echo "ERROR: New GCS library usage detected. Use common.gcs module instead."
+          echo "ERROR: New GCS library usage detected. Use common.storage module instead."
           exit 1
         fi
 

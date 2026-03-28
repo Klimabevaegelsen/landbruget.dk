@@ -30,12 +30,12 @@ GCS_BUCKET = os.getenv("R2_BUCKET", "landbruget-data")
 
 # Initialize R2/S3 filesystem if available
 _r2_fs = None
-USE_GCS = False
+USE_CLOUD_STORAGE = False
 try:
-    from common.gcs.filesystem import get_r2_filesystem
+    from common.storage.filesystem import get_r2_filesystem
 
     _r2_fs = get_r2_filesystem()
-    USE_GCS = True
+    USE_CLOUD_STORAGE = True
     logger.debug("Initialized R2/S3 filesystem for cloud storage")
 except (OSError, ImportError) as e:
     logger.warning(f"Cloud storage not available: {e}")
@@ -134,10 +134,9 @@ class SvineflytningSilverProcessor:
         logger.info(f"Loading bronze data from: {data_path}")
 
         try:
-            if data_path.startswith("gs://"):
+            if not data_path.startswith("/") and not data_path.startswith("."):
                 # Load from R2/S3 cloud storage
-                # Strip gs:// prefix for s3fs compatibility
-                r2_path = data_path.replace("gs://", "")
+                r2_path = data_path
 
                 # Download to temporary file for processing
                 with tempfile.NamedTemporaryFile(
@@ -558,31 +557,31 @@ class SvineflytningSilverProcessor:
         tables = ["silver_movements", "silver_properties", "silver_vehicles"]
         exported_files = []
 
-        if USE_GCS:
+        if USE_CLOUD_STORAGE:
             try:
-                from common.gcs import GCSDataAccess
+                from common.storage import StorageAccess
 
-                gcs_access = GCSDataAccess()
+                storage_access = StorageAccess()
 
                 # Try native DuckDB HTTPFS GCS export for each table
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
-                    gcs_path = (
-                        f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+                    storage_path = (
+                        f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
                     )
 
-                    gcs_access.export_to_gcs_native(
+                    storage_access.export_to_storage_native(
                         connection=self.conn,
                         table_name=table,
-                        gcs_path=gcs_path,
+                        storage_path=storage_path,
                         compression="zstd",
                     )
-                    exported_files.append(gcs_path)
-                    logger.info(f"✅ Native GCS export successful: {gcs_path}")
+                    exported_files.append(storage_path)
+                    logger.info(f"✅ Native GCS export successful: {storage_path}")
 
                 gcs_export_success = True
-                destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
-                storage_type = "gcs"
+                destination_base = f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
+                storage_type = "storage"
 
             except Exception as e:
                 logger.warning(f"Native GCS export failed, using fallback: {e}")
@@ -601,18 +600,18 @@ class SvineflytningSilverProcessor:
                 logger.info(f"Exported {table} to local file: {local_path}")
 
         # If using GCS and native export didn't work, upload the local files
-        if USE_GCS and not gcs_export_success:
-            success = self._upload_silver_data_to_gcs(local_destination, export_timestamp)
+        if USE_CLOUD_STORAGE and not gcs_export_success:
+            success = self._upload_silver_data_to_storage(local_destination, export_timestamp)
             if success:
                 # Build GCS paths for return
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
-                    gcs_path = (
-                        f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+                    storage_path = (
+                        f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
                     )
-                    exported_files.append(gcs_path)
-                destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
-                storage_type = "gcs"
+                    exported_files.append(storage_path)
+                destination_base = f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
+                storage_type = "storage"
             else:
                 logger.warning("GCS upload failed, falling back to local files")
                 for table in tables:
@@ -638,7 +637,7 @@ class SvineflytningSilverProcessor:
             "export_timestamp": export_timestamp,
         }
 
-    def _upload_silver_data_to_gcs(self, silver_dir: Path, export_timestamp: str) -> bool:
+    def _upload_silver_data_to_storage(self, silver_dir: Path, export_timestamp: str) -> bool:
         """
         Upload all silver parquet files to GCS using streaming.
 
@@ -651,9 +650,9 @@ class SvineflytningSilverProcessor:
         """
         try:
             # Try to import GCS utilities
-            from common.gcs import GCSDataAccess
+            from common.storage import StorageAccess
 
-            gcs_access = GCSDataAccess()
+            storage_access = StorageAccess()
 
             # Find all parquet files in the silver directory
             parquet_files = list(silver_dir.glob("*.parquet"))
@@ -668,18 +667,20 @@ class SvineflytningSilverProcessor:
             for parquet_file in parquet_files:
                 try:
                     # Create GCS path: silver/svineflytning/{timestamp}/{filename}
-                    gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{parquet_file.name}"
+                    storage_path = (
+                        f"{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{parquet_file.name}"
+                    )
 
                     # Upload file using streaming
                     import shutil
 
                     with (
                         open(parquet_file, "rb") as src,
-                        gcs_access.fs.open(gcs_path.replace("gs://", ""), "wb") as dst,
+                        storage_access.fs.open(storage_path, "wb") as dst,
                     ):
                         shutil.copyfileobj(src, dst)
 
-                    logger.info(f"✅ Uploaded {parquet_file.name} to {gcs_path}")
+                    logger.info(f"✅ Uploaded {parquet_file.name} to {storage_path}")
                     uploaded_count += 1
 
                 except Exception as e:

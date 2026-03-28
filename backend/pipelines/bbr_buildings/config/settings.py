@@ -48,9 +48,12 @@ class Settings:
             "https://graphql.datafordeler.dk/BBR/v1",
         )
 
-        # Google Cloud Storage
-        self.gcs_bucket = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-        self.gcs_credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        # Cloud Storage
+        self.bucket = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
 
         # Output directories
         self.output_dir = Path(os.getenv("OUTPUT_DIR", "data"))
@@ -141,12 +144,7 @@ class Settings:
     @property
     def use_cloud_storage(self) -> bool:
         """Check if cloud storage should be used (production with bucket configured)."""
-        return self.environment == "production" and bool(self.gcs_bucket)
-
-    @property
-    def has_gcs_credentials(self) -> bool:
-        """Check if GCS credentials are available."""
-        return bool(self.gcs_credentials_path and Path(self.gcs_credentials_path).exists())
+        return self.environment == "production" and bool(self.bucket)
 
     @property
     def spatial_optimization_config(self) -> dict:

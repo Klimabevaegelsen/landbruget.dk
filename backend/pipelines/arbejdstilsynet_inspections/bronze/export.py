@@ -28,28 +28,28 @@ load_dotenv()
 
 
 # Try to import optimized GCS access with fallback
-def _get_optimized_gcs_access() -> Any | None:
+def _get_optimized_storage_access() -> Any | None:
     """
     Get optimized GCS access with robust import handling.
 
-    Returns GCSDataAccess if available, otherwise None for fallback.
+    Returns StorageAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when common.gcs is properly installed
-        from common.gcs import GCSDataAccess
+        # Primary import path - should work when common.storage is properly installed
+        from common.storage import StorageAccess
 
-        logging.info("✅ Successfully imported optimized GCSDataAccess")
-        return GCSDataAccess
+        logging.info("✅ Successfully imported optimized StorageAccess")
+        return StorageAccess
     except ImportError as e:
-        logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logging.warning(f"⚠️ Could not import optimized StorageAccess: {e}")
         logging.warning(
-            "⚠️ Falling back to basic storage - ensure common.gcs is installed for optimal performance"
+            "⚠️ Falling back to basic storage - ensure common.storage is installed for optimal performance"
         )
         return None
 
 
 # Get optimized GCS access class or None if not available
-OptimizedGCSDataAccess = _get_optimized_gcs_access()
+OptimizedStorageAccess = _get_optimized_storage_access()
 
 
 class GCSStorage:
@@ -58,60 +58,62 @@ class GCSStorage:
     def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections") -> None:
         self.bucket_name = bucket_name
         self.prefix = prefix
-        self.is_available = self._check_gcs_available()
+        self.is_available = self._check_storage_available()
 
         # ✅ OPTIMIZED: Initialize optimized GCS access
-        self.gcs_access = None
+        self.storage = None
         self.use_optimized = False
 
-        if self.is_available and OptimizedGCSDataAccess:
+        if self.is_available and OptimizedStorageAccess:
             try:
-                self.gcs_access = OptimizedGCSDataAccess()
+                self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
                 logging.info("✅ Arbejdstilsynet GCSStorage: Initialized optimized GCS access")
             except Exception as e:
                 logging.warning(f"Failed to initialize optimized GCS access: {e}")
-                self.gcs_access = None
+                self.storage = None
                 self.use_optimized = False
 
-    def _check_gcs_available(self) -> bool:
-        """Check if cloud storage is available (R2/S3 via common.gcs)."""
+    def _check_storage_available(self) -> bool:
+        """Check if cloud storage is available (R2/S3 via common.storage)."""
         try:
-            from common.gcs.filesystem import get_r2_filesystem  # noqa: F401
+            from common.storage.filesystem import get_r2_filesystem  # noqa: F401
 
             return True
         except (OSError, ImportError):
             logging.warning("Cloud storage not available. Using local storage only.")
             return False
 
-    def upload_file(self, local_path, gcs_path=None) -> bool:
+    def upload_file(self, local_path, storage_path=None) -> bool:
         """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
             return False
 
-        if gcs_path is None:
+        if storage_path is None:
             # Use the timestamp from the local path
             timestamp = os.path.basename(os.path.dirname(local_path))
             filename = os.path.basename(local_path)
-            gcs_path = f"{self.prefix}/{timestamp}/{filename}"
+            storage_path = f"{self.prefix}/{timestamp}/{filename}"
 
         try:
             # ✅ OPTIMIZED: Use streaming upload if available
-            if self.use_optimized and self.gcs_access:
-                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
-                fs_path = f"{self.bucket_name}/{gcs_path}"
+            if self.use_optimized and self.storage:
+                full_storage_path = f"{self.bucket_name}/{storage_path}"
+                fs_path = f"{self.bucket_name}/{storage_path}"
 
                 # Stream file directly without loading into memory
                 import shutil
 
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.gcs_access.fs.open(fs_path, "wb") as gcs_file,
+                    self.storage.fs.open(fs_path, "wb") as gcs_file,
                 ):
                     shutil.copyfileobj(file_obj, gcs_file)
 
-                logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+                logging.info(
+                    f"✅ Uploaded {local_path} to {full_storage_path} (optimized streaming)"
+                )
 
                 # Create and upload metadata using existing methods
                 if METADATA_AVAILABLE:
@@ -141,7 +143,7 @@ class GCSStorage:
                         )
                         metadata_fs_path = fs_path.replace(".csv", "_metadata.json")
 
-                        with self.gcs_access.fs.open(metadata_fs_path, "w") as f:
+                        with self.storage.fs.open(metadata_fs_path, "w") as f:
                             f.write(metadata_content)
 
                         logging.info(f"✅ Uploaded metadata to {metadata_fs_path}")
@@ -150,10 +152,10 @@ class GCSStorage:
 
                 return True
             # Fallback to s3fs upload if optimized access failed
-            from common.gcs.filesystem import get_r2_filesystem
+            from common.storage.filesystem import get_r2_filesystem
 
             fs = get_r2_filesystem()
-            dest_path = f"{self.bucket_name}/{gcs_path}"
+            dest_path = f"{self.bucket_name}/{storage_path}"
             fs.put(local_path, dest_path)
             logging.info(f"Uploaded {local_path} to {dest_path} (fallback)")
 
@@ -204,14 +206,14 @@ class BronzePipeline:
         self,
         pipeline_name: str,
         source_url: str | None,
-        gcs_bucket: str | None = None,
+        storage_bucket: str | None = None,
         log_level: str = "INFO",
     ) -> None:
         self.pipeline_name = pipeline_name
         self.source_url = source_url
         self.pipeline_root_dir = Path(__file__).resolve().parent.parent
         self.bronze_data_dir = self.pipeline_root_dir / "bronze" / "data"
-        self.gcs_bucket = gcs_bucket
+        self.storage_bucket = storage_bucket
         self.log_level = log_level
         self.pipeline_start_time = datetime.datetime.now()  # Track pipeline start time
 
@@ -230,11 +232,11 @@ class BronzePipeline:
 
         # Initialize GCS storage if bucket is provided
         self.gcs = None
-        if self.gcs_bucket:
+        if self.storage_bucket:
             self.gcs = GCSStorage(
-                bucket_name=self.gcs_bucket, prefix=f"bronze/{self.pipeline_name}"
+                bucket_name=self.storage_bucket, prefix=f"bronze/{self.pipeline_name}"
             )
-            logging.info(f"GCS storage initialized with bucket: {self.gcs_bucket}")
+            logging.info(f"Storage initialized with bucket: {self.storage_bucket}")
 
     async def fetch_data_with_playwright(self, filters_to_apply=None) -> list[tuple[str, bytes]]:
         """Fetches data using Playwright automation. Returns list of (filter_name, csv_bytes)."""
@@ -614,7 +616,7 @@ class BronzePipeline:
         )
 
 
-def main(log_level: str = "INFO", gcs_bucket: str | None = None) -> None:
+def main(log_level: str = "INFO", storage_bucket: str | None = None) -> None:
     # Environment variable loading is done at the top of the script
     # load_dotenv()
 
@@ -624,7 +626,7 @@ def main(log_level: str = "INFO", gcs_bucket: str | None = None) -> None:
     pipeline = BronzePipeline(
         pipeline_name=pipeline_name,
         source_url=source_url,
-        gcs_bucket=gcs_bucket,
+        storage_bucket=storage_bucket,
         log_level=log_level,
     )
     try:

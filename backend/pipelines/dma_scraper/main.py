@@ -22,18 +22,18 @@ def _get_optimized_storage():
     """
     Get optimized storage with robust import handling for different environments.
 
-    Returns GCSDataAccess if available, otherwise None for fallback.
+    Returns StorageAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when common.gcs is properly installed
-        from common.gcs import GCSDataAccess
+        # Primary import path - should work when common.storage is properly installed
+        from common.storage import StorageAccess
 
-        print("✅ Successfully imported optimized GCSDataAccess")
-        return GCSDataAccess
+        print("✅ Successfully imported optimized StorageAccess")
+        return StorageAccess
     except ImportError as e:
-        print(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        print(f"⚠️ Could not import optimized StorageAccess: {e}")
         print(
-            "⚠️ Falling back to basic storage - ensure common.gcs is installed for optimal performance"
+            "⚠️ Falling back to basic storage - ensure common.storage is installed for optimal performance"
         )
         return None
 
@@ -59,7 +59,7 @@ def _get_cvr_collection_utility():
 
 
 # Get optimized GCS access class or None if not available
-OptimizedGCSDataAccess = _get_optimized_storage()
+OptimizedStorageAccess = _get_optimized_storage()
 
 # Get CVR collection utilities
 extract_cvr_numbers_from_table, save_pipeline_cvr_numbers = _get_cvr_collection_utility()
@@ -73,9 +73,9 @@ class OptimizedStorageBackend:
         self.use_optimized = False
 
         # Try to use optimized storage
-        if OptimizedGCSDataAccess:
+        if OptimizedStorageAccess:
             try:
-                self.gcs_access = OptimizedGCSDataAccess()
+                self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
                 print(f"✅ DMA Storage: Using optimized GCS access for bucket: {bucket_name}")
             except Exception as e:
@@ -85,9 +85,9 @@ class OptimizedStorageBackend:
             self._init_fallback(bucket_name)
 
     def _init_fallback(self, bucket_name: str):
-        """Initialize fallback storage using s3fs via common.gcs.filesystem."""
+        """Initialize fallback storage using s3fs via common.storage.filesystem."""
         try:
-            from common.gcs.filesystem import get_r2_filesystem
+            from common.storage.filesystem import get_r2_filesystem
 
             self.fs = get_r2_filesystem()
             print(f"✅ DMA Storage: Using s3fs fallback for bucket: {bucket_name}")
@@ -98,8 +98,8 @@ class OptimizedStorageBackend:
         """Save JSON data to GCS."""
         try:
             if self.use_optimized:
-                gcs_path = f"gs://{self.bucket_name}/{blob_name}"
-                self.gcs_access.upload_json(data, gcs_path)
+                storage_path = f"{self.bucket_name}/{blob_name}"
+                self.storage.upload_json(data, storage_path)
                 print(f"Saved {blob_name} to optimized GCS storage")
             else:
                 import json
@@ -144,7 +144,7 @@ class OptimizedStorageBackend:
                 with open(tmp_path, "rb") as f:
                     file_data = f.read()
                 fs_path = f"{self.bucket_name}/{blob_name}"
-                with self.gcs_access.fs.open(fs_path, "wb") as gcs_file:
+                with self.storage.fs.open(fs_path, "wb") as gcs_file:
                     gcs_file.write(file_data)
                 print(f"Saved {blob_name} to optimized GCS storage (parquet)")
             else:
@@ -161,8 +161,8 @@ class OptimizedStorageBackend:
         """Read JSON data from GCS."""
         try:
             if self.use_optimized:
-                gcs_path = f"gs://{self.bucket_name}/{blob_name}"
-                return self.gcs_access.download_json(gcs_path)
+                storage_path = f"{self.bucket_name}/{blob_name}"
+                return self.storage.download_json(storage_path)
             import json
 
             r2_path = f"{self.bucket_name}/{blob_name}"
@@ -273,15 +273,15 @@ def _save_discovered_cvr_numbers(data, timestamp: str):
 
         if unique_cvr_numbers:
             # Save CVR numbers using the collection utility (with automatic GCS access initialization)
-            gcs_path = save_pipeline_cvr_numbers(
+            storage_path = save_pipeline_cvr_numbers(
                 pipeline_name="dma_scraper",
                 cvr_numbers=unique_cvr_numbers,
-                gcs_access=None,  # Will create default GCS access
+                storage_access=None,  # Will create default GCS access
                 bucket="landbruget-data",
                 timestamp=timestamp,
             )
 
-            print(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {gcs_path}")
+            print(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers to {storage_path}")
         else:
             print("⚠️ No CVR numbers found in DMA scraper data")
 

@@ -16,6 +16,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 # Treat the current directory as the "common" package
-# This allows imports like "from common.gcs import ..."
+# This allows imports like "from common.storage import ..."
 [tool.hatch.build.targets.wheel.force-include]
 "." = "common"

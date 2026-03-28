@@ -95,13 +95,13 @@ class GCSStorage(StorageInterface):
     def __init__(self, bucket_name: str):
         self.bucket_name = bucket_name
         self.optimized = False
-        self.gcs_access = None
+        self.storage = None
 
-        # Try to use optimized GCSDataAccess
+        # Try to use optimized StorageAccess
         with contextlib.suppress(Exception):
-            # Check if GCSDataAccess is available (mocked in tests)
-            if hasattr(sys.modules.get("storage_interface", None), "GCSDataAccess"):
-                self.gcs_access = sys.modules["storage_interface"].GCSDataAccess()
+            # Check if StorageAccess is available (mocked in tests)
+            if hasattr(sys.modules.get("storage_interface", None), "StorageAccess"):
+                self.storage = sys.modules["storage_interface"].StorageAccess()
                 self.optimized = True
 
         # Fall back to google.cloud.storage
@@ -115,30 +115,30 @@ class GCSStorage(StorageInterface):
                     self.client = storage_module.Client()
                     self.bucket = self.client.bucket(bucket_name)
                 else:
-                    raise ImportError("Neither GCSDataAccess nor google.cloud.storage available")
+                    raise ImportError("Neither StorageAccess nor google.cloud.storage available")
             except Exception as e:
-                raise ImportError(f"Neither GCSDataAccess nor google.cloud.storage available: {e}") from e
+                raise ImportError(f"Neither StorageAccess nor google.cloud.storage available: {e}") from e
 
-    def _get_gcs_path(self, dst_path: str) -> str:
-        return f"gs://{self.bucket_name}/{dst_path}"
+    def _get_storage_path(self, dst_path: str) -> str:
+        return f"{self.bucket_name}/{dst_path}"
 
     def save_json(self, data: Any, dst_path: str) -> None:
-        if self.optimized and self.gcs_access:
-            gcs_path = self._get_gcs_path(dst_path)
-            self.gcs_access.upload_json(data, gcs_path)
+        if self.optimized and self.storage:
+            storage_path = self._get_storage_path(dst_path)
+            self.storage.upload_json(data, storage_path)
         else:
             blob = self.bucket.blob(dst_path)
             blob.upload_from_string(json.dumps(data, ensure_ascii=False))
 
     def save_parquet(self, data: Any, dst_path: str) -> None:
-        gcs_path = self._get_gcs_path(dst_path)
+        storage_path = self._get_storage_path(dst_path)
 
-        if self.optimized and self.gcs_access:
-            conn = self.gcs_access.duckdb_conn
+        if self.optimized and self.storage:
+            conn = self.storage.duckdb_conn
 
             if isinstance(data, str):
                 # Table name
-                self.gcs_access.upload_from_duckdb_table(data, gcs_path)
+                self.storage.upload_from_duckdb_table(data, storage_path)
             elif isinstance(data, list):
                 # List of dicts - create temp table
                 columns = list(data[0].keys())
@@ -149,11 +149,11 @@ class GCSStorage(StorageInterface):
                     values = ", ".join([f"'{row.get(col, '')!s}'" for col in columns])
                     conn.execute(f"INSERT INTO temp_parquet_data VALUES ({values})")
 
-                self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
+                self.storage.upload_from_duckdb_table("temp_parquet_data", storage_path)
             elif isinstance(data, dict):
                 # Single dict - will fail
                 conn.register("temp_parquet_data", [data])
-                self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
+                self.storage.upload_from_duckdb_table("temp_parquet_data", storage_path)
             else:
                 raise ValueError(f"Unsupported data type: {type(data)}")
         else:
@@ -165,9 +165,9 @@ class GCSStorage(StorageInterface):
             raise ValueError("Parquet not supported in fallback mode")
 
     def read_json(self, src_path: str) -> Any:
-        if self.optimized and self.gcs_access:
-            gcs_path = self._get_gcs_path(src_path)
-            return self.gcs_access.download_json(gcs_path)
+        if self.optimized and self.storage:
+            storage_path = self._get_storage_path(src_path)
+            return self.storage.download_json(storage_path)
         blob = self.bucket.blob(src_path)
         content = blob.download_as_string()
         return json.loads(content.decode("utf-8"))
@@ -178,7 +178,7 @@ mock_storage_interface = type(sys)("storage_interface")
 mock_storage_interface.StorageInterface = StorageInterface
 mock_storage_interface.LocalStorage = LocalStorage
 mock_storage_interface.GCSStorage = GCSStorage
-mock_storage_interface.GCSDataAccess = None
+mock_storage_interface.StorageAccess = None
 mock_storage_interface.storage = None
 sys.modules["storage_interface"] = mock_storage_interface
 
@@ -401,12 +401,12 @@ def test_local_storage_unsupported_type_parquet(temp_dir):
 # =============================================================================
 
 
-@patch("storage_interface.GCSDataAccess")
-def test_gcs_storage_save_json_optimized(mock_gcs_data_access_class):
-    """Test optimized GCS JSON save path using GCSDataAccess."""
+@patch("storage_interface.StorageAccess")
+def test_cloud_storage_save_json_optimized(mock_cloud_data_access_class):
+    """Test optimized GCS JSON save path using StorageAccess."""
     # Setup mock
-    mock_gcs_access = MagicMock()
-    mock_gcs_data_access_class.return_value = mock_gcs_access
+    mock_storage_access = MagicMock()
+    mock_cloud_data_access_class.return_value = mock_storage_access
 
     storage = GCSStorage("test-bucket")
 
@@ -424,17 +424,17 @@ def test_gcs_storage_save_json_optimized(mock_gcs_data_access_class):
     storage.save_json(test_data, dst_path)
 
     # Verify upload_json was called with correct parameters
-    expected_gcs_path = "gs://test-bucket/bronze/companies/data.json"
-    mock_gcs_access.upload_json.assert_called_once_with(test_data, expected_gcs_path)
+    expected_storage_path = "test-bucket/bronze/companies/data.json"
+    mock_storage_access.upload_json.assert_called_once_with(test_data, expected_storage_path)
 
 
-@patch("storage_interface.GCSDataAccess")
-def test_gcs_storage_save_parquet_streaming(mock_gcs_data_access_class):
+@patch("storage_interface.StorageAccess")
+def test_cloud_storage_save_parquet_streaming(mock_cloud_data_access_class):
     """Test parquet streaming upload to GCS using DuckDB."""
     # Setup mock
-    mock_gcs_access = MagicMock()
-    mock_gcs_access.duckdb_conn = duckdb.connect()
-    mock_gcs_data_access_class.return_value = mock_gcs_access
+    mock_storage_access = MagicMock()
+    mock_storage_access.duckdb_conn = duckdb.connect()
+    mock_cloud_data_access_class.return_value = mock_storage_access
 
     storage = GCSStorage("test-bucket")
 
@@ -448,22 +448,22 @@ def test_gcs_storage_save_parquet_streaming(mock_gcs_data_access_class):
     storage.save_parquet(test_data, dst_path)
 
     # Verify upload_from_duckdb_table was called
-    expected_gcs_path = "gs://test-bucket/silver/companies/data.parquet"
-    mock_gcs_access.upload_from_duckdb_table.assert_called_once_with("temp_parquet_data", expected_gcs_path)
+    expected_storage_path = "test-bucket/silver/companies/data.parquet"
+    mock_storage_access.upload_from_duckdb_table.assert_called_once_with("temp_parquet_data", expected_storage_path)
 
 
-@patch("storage_interface.GCSDataAccess")
-def test_gcs_storage_save_parquet_single_dict(mock_gcs_data_access_class):
+@patch("storage_interface.StorageAccess")
+def test_cloud_storage_save_parquet_single_dict(mock_cloud_data_access_class):
     """Test parquet upload with single dict.
 
     NOTE: Current implementation has the same bug as LocalStorage - conn.register()
     doesn't work with single dict wrapped in a list. This test documents the bug.
     """
     # Setup mock with real DuckDB connection
-    mock_gcs_access = MagicMock()
+    mock_storage_access = MagicMock()
     # Use a real in-memory DuckDB connection for temp table operations
-    mock_gcs_access.duckdb_conn = duckdb.connect(":memory:")
-    mock_gcs_data_access_class.return_value = mock_gcs_access
+    mock_storage_access.duckdb_conn = duckdb.connect(":memory:")
+    mock_cloud_data_access_class.return_value = mock_storage_access
 
     storage = GCSStorage("test-bucket")
 
@@ -477,12 +477,12 @@ def test_gcs_storage_save_parquet_single_dict(mock_gcs_data_access_class):
         storage.save_parquet(test_data, dst_path)
 
 
-@patch("storage_interface.GCSDataAccess")
-def test_gcs_storage_save_parquet_duckdb_table(mock_gcs_data_access_class):
+@patch("storage_interface.StorageAccess")
+def test_cloud_storage_save_parquet_duckdb_table(mock_cloud_data_access_class):
     """Test parquet upload with DuckDB table name."""
     # Setup mock
-    mock_gcs_access = MagicMock()
-    mock_gcs_data_access_class.return_value = mock_gcs_access
+    mock_storage_access = MagicMock()
+    mock_cloud_data_access_class.return_value = mock_storage_access
 
     storage = GCSStorage("test-bucket")
 
@@ -493,22 +493,22 @@ def test_gcs_storage_save_parquet_duckdb_table(mock_gcs_data_access_class):
     storage.save_parquet(table_name, dst_path)
 
     # Verify upload was called with table name
-    expected_gcs_path = "gs://test-bucket/gold/analysis/result.parquet"
-    mock_gcs_access.upload_from_duckdb_table.assert_called_once_with(table_name, expected_gcs_path)
+    expected_storage_path = "test-bucket/gold/analysis/result.parquet"
+    mock_storage_access.upload_from_duckdb_table.assert_called_once_with(table_name, expected_storage_path)
 
 
-@patch("storage_interface.GCSDataAccess")
-def test_gcs_storage_read_json(mock_gcs_data_access_class):
+@patch("storage_interface.StorageAccess")
+def test_cloud_storage_read_json(mock_cloud_data_access_class):
     """Test GCS JSON read using optimized path."""
     # Setup mock
-    mock_gcs_access = MagicMock()
+    mock_storage_access = MagicMock()
     expected_data = {
         "company": "Arla Foods",
         "cvr": "31373077",
         "municipality": "København",
     }
-    mock_gcs_access.download_json.return_value = expected_data
-    mock_gcs_data_access_class.return_value = mock_gcs_access
+    mock_storage_access.download_json.return_value = expected_data
+    mock_cloud_data_access_class.return_value = mock_storage_access
 
     storage = GCSStorage("test-bucket")
 
@@ -517,17 +517,17 @@ def test_gcs_storage_read_json(mock_gcs_data_access_class):
     result = storage.read_json(src_path)
 
     # Verify download_json was called
-    expected_gcs_path = "gs://test-bucket/bronze/companies/data.json"
-    mock_gcs_access.download_json.assert_called_once_with(expected_gcs_path)
+    expected_storage_path = "test-bucket/bronze/companies/data.json"
+    mock_storage_access.download_json.assert_called_once_with(expected_storage_path)
 
     # Verify result
     assert result == expected_data
 
 
-@patch("storage_interface.GCSDataAccess", None)
+@patch("storage_interface.StorageAccess", None)
 @patch("storage_interface.storage")
-def test_gcs_storage_fallback_behavior(mock_storage_module):
-    """Test fallback to legacy GCS client when GCSDataAccess unavailable."""
+def test_cloud_storage_fallback_behavior(mock_storage_module):
+    """Test fallback to legacy GCS client when StorageAccess unavailable."""
     # Setup mock for legacy client
     mock_client = MagicMock()
     mock_bucket = MagicMock()
@@ -553,9 +553,9 @@ def test_gcs_storage_fallback_behavior(mock_storage_module):
     mock_blob.upload_from_string.assert_called_once()
 
 
-@patch("storage_interface.GCSDataAccess", None)
+@patch("storage_interface.StorageAccess", None)
 @patch("storage_interface.storage")
-def test_gcs_storage_fallback_read_json(mock_storage_module):
+def test_cloud_storage_fallback_read_json(mock_storage_module):
     """Test fallback read_json with legacy client."""
     # Setup mock
     mock_client = MagicMock()
@@ -582,9 +582,9 @@ def test_gcs_storage_fallback_read_json(mock_storage_module):
     assert result == expected_data
 
 
-@patch("storage_interface.GCSDataAccess", None)
+@patch("storage_interface.StorageAccess", None)
 @patch("storage_interface.storage")
-def test_gcs_storage_fallback_parquet_error(mock_storage_module):
+def test_cloud_storage_fallback_parquet_error(mock_storage_module):
     """Test that fallback mode raises error for parquet operations."""
     # Setup mock
     mock_client = MagicMock()
@@ -603,11 +603,11 @@ def test_gcs_storage_fallback_parquet_error(mock_storage_module):
         storage.save_parquet(test_data, "test/data.parquet")
 
 
-@patch("storage_interface.GCSDataAccess", None)
+@patch("storage_interface.StorageAccess", None)
 @patch("storage_interface.storage", None)
-def test_gcs_storage_no_backend_error():
+def test_cloud_storage_no_backend_error():
     """Test that GCSStorage raises error when no backend available."""
-    with pytest.raises(ImportError, match=re.escape("Neither GCSDataAccess nor google.cloud.storage")):
+    with pytest.raises(ImportError, match=re.escape("Neither StorageAccess nor google.cloud.storage")):
         GCSStorage("test-bucket")
 
 
@@ -651,11 +651,11 @@ def test_storage_round_trip_json_local(temp_dir):
     assert loaded_data["metrics"]["total_area_ha"] == 1250.5
 
 
-@patch("storage_interface.GCSDataAccess")
-def test_storage_round_trip_json_gcs(mock_gcs_data_access_class):
+@patch("storage_interface.StorageAccess")
+def test_storage_round_trip_json_cloud(mock_cloud_data_access_class):
     """Test save and load JSON round-trip with GCSStorage."""
     # Setup mock to return data on download
-    mock_gcs_access = MagicMock()
+    mock_storage_access = MagicMock()
 
     original_data = {
         "cvr": "31373077",
@@ -664,8 +664,8 @@ def test_storage_round_trip_json_gcs(mock_gcs_data_access_class):
     }
 
     # Mock download to return saved data
-    mock_gcs_access.download_json.return_value = original_data
-    mock_gcs_data_access_class.return_value = mock_gcs_access
+    mock_storage_access.download_json.return_value = original_data
+    mock_cloud_data_access_class.return_value = mock_storage_access
 
     storage = GCSStorage("test-bucket")
 
@@ -794,24 +794,24 @@ def test_local_storage_large_parquet_batch(temp_dir, valid_cvr_numbers):
     conn.close()
 
 
-@patch("storage_interface.GCSDataAccess")
-def test_gcs_storage_path_construction(mock_gcs_data_access_class):
+@patch("storage_interface.StorageAccess")
+def test_cloud_storage_path_construction(mock_cloud_data_access_class):
     """Test that GCS paths are constructed correctly."""
-    mock_gcs_access = MagicMock()
-    mock_gcs_data_access_class.return_value = mock_gcs_access
+    mock_storage_access = MagicMock()
+    mock_cloud_data_access_class.return_value = mock_storage_access
 
     storage = GCSStorage("my-bucket")
 
     # Test various path formats
     test_cases = [
-        ("simple.json", "gs://my-bucket/simple.json"),
-        ("path/to/file.json", "gs://my-bucket/path/to/file.json"),
-        ("bronze/2024/01/data.parquet", "gs://my-bucket/bronze/2024/01/data.parquet"),
+        ("simple.json", "my-bucket/simple.json"),
+        ("path/to/file.json", "my-bucket/path/to/file.json"),
+        ("bronze/2024/01/data.parquet", "my-bucket/bronze/2024/01/data.parquet"),
     ]
 
-    for dst_path, expected_gcs_path in test_cases:
+    for dst_path, expected_storage_path in test_cases:
         storage.save_json({}, dst_path)
-        mock_gcs_access.upload_json.assert_called_with({}, expected_gcs_path)
+        mock_storage_access.upload_json.assert_called_with({}, expected_storage_path)
 
 
 def test_storage_interface_not_implemented():

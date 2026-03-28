@@ -56,7 +56,11 @@ class SoilTypesSilverConfig(BaseJobConfig):
     type: str = "wfs"
     description: str = "Processed soil types data from Danish Environmental Portal"
     frequency: str = "monthly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
     save_local: bool = os.getenv("SAVE_LOCAL", "False").lower() == "true"
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)

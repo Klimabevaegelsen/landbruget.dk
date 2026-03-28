@@ -27,7 +27,7 @@ from pathlib import Path
 
 import duckdb
 import requests
-from common.gcs.filesystem import setup_duckdb_cloud_auth
+from common.storage.filesystem import setup_duckdb_cloud_auth
 from dotenv import load_dotenv
 
 logging.basicConfig(

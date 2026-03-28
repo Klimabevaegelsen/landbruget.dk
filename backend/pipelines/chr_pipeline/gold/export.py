@@ -5,12 +5,12 @@ from pathlib import Path
 
 # Try to import GCS utilities
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 
 def save_table(output_path: Path, con, table_name: str) -> Path | None:
@@ -41,28 +41,28 @@ def save_table(output_path: Path, con, table_name: str) -> Path | None:
         return None
 
 
-def upload_to_gcs(local_path: Path, gcs_path: str, bucket: str = "landbruget-data") -> bool:
+def upload_to_storage(local_path: Path, storage_path: str, bucket: str = "landbruget-data") -> bool:
     """
     Upload a local file to Google Cloud Storage.
 
     Args:
         local_path: Local file path
-        gcs_path: GCS destination path (without gs:// prefix)
+        storage_path: GCS destination path (bare bucket/path format)
         bucket: GCS bucket name
 
     Returns:
         True if successful, False otherwise
     """
-    if not GCS_AVAILABLE:
+    if not STORAGE_AVAILABLE:
         logging.warning("GCS utilities not available, skipping upload")
         return False
 
     try:
-        gcs = GCSDataAccess()
-        success = gcs.upload_file(str(local_path), f"gs://{bucket}/{gcs_path}")
+        gcs = StorageAccess()
+        success = gcs.upload_file(str(local_path), f"{bucket}/{storage_path}")
 
         if success:
-            logging.info(f"✅ Uploaded {local_path} to gs://{bucket}/{gcs_path}")
+            logging.info(f"✅ Uploaded {local_path} to {bucket}/{storage_path}")
         else:
             logging.error(f"❌ Failed to upload {local_path} to GCS")
 
@@ -96,9 +96,9 @@ def export_gold_table(
             return False
 
         # GCS export
-        if upload_to_cloud and GCS_AVAILABLE:
-            gcs_path = f"gold/chr/{timestamp}/{table_name}.parquet"
-            upload_to_gcs(local_path, gcs_path)
+        if upload_to_cloud and STORAGE_AVAILABLE:
+            storage_path = f"gold/chr/{timestamp}/{table_name}.parquet"
+            upload_to_storage(local_path, storage_path)
 
         return True
 

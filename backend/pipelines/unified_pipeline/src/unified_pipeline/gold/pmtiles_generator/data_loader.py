@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 import duckdb
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 from .config import PMTilesGeneratorConfig
 
@@ -17,18 +17,18 @@ class PMTilesDataLoader:
     def __init__(
         self,
         config: PMTilesGeneratorConfig,
-        gcs_access: GCSDataAccess,
+        storage_access: StorageAccess,
         duckdb_conn: duckdb.DuckDBPyConnection,
     ):
         """Initialize the data loader.
 
         Args:
             config: PMTiles generator configuration
-            gcs_access: GCS data access instance
+            storage_access: GCS data access instance
             duckdb_conn: DuckDB connection for data processing
         """
         self.config = config
-        self.gcs = gcs_access
+        self.gcs = storage_access
         self.conn = duckdb_conn
 
     async def load_and_integrate_field_data(self, year: int) -> str | None:
@@ -101,22 +101,22 @@ class PMTilesDataLoader:
             f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)"
         )
 
-        base_path = f"r2://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/silver/fvm_marker_{boundary_year}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"FVM marker data not found in: {base_path}")
             return None
 
         table_name = f"fvm_marker_{year}"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading FVM marker data from {gcs_path}")
+                logger.info(f"Loading FVM marker data from {storage_path}")
 
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}data.parquet')
+                FROM read_parquet('{storage_path}data.parquet')
                 WHERE year = {boundary_year}
                 """
                 await asyncio.to_thread(self.conn.execute, query)
@@ -127,16 +127,16 @@ class PMTilesDataLoader:
                 count = count_result.fetchone()[0]
 
                 if count == 0:
-                    logger.warning(f"No FVM marker data in {gcs_path} for year {year}")
+                    logger.warning(f"No FVM marker data in {storage_path} for year {year}")
                     continue
 
                 logger.info(f"Loaded {count:,} FVM marker records for year {year}")
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load FVM marker from {gcs_path}, trying older timestamp: {e}"
+                        f"Failed to load FVM marker from {storage_path}, trying older timestamp: {e}"
                     )
                 else:
                     logger.error(f"Error loading FVM marker data for year {year}: {e}")
@@ -191,23 +191,23 @@ class PMTilesDataLoader:
         logger.info(f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)")
 
         base_path = (
-            f"r2://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
+            f"r2://{self.config.storage_bucket}/gold/field_environmental_analysis_fields_{env_year}"
         )
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"Environmental analysis data not found in: {base_path}")
             return None
 
         table_name = f"field_environmental_{year}"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading field environmental analysis from {gcs_path}")
+                logger.info(f"Loading field environmental analysis from {storage_path}")
 
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}/data.parquet')
+                FROM read_parquet('{storage_path}/data.parquet')
                 """
                 await asyncio.to_thread(self.conn.execute, query)
 
@@ -223,9 +223,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load environmental analysis from {gcs_path}, "
+                        f"Failed to load environmental analysis from {storage_path}, "
                         f"trying older timestamp: {e}"
                     )
                 else:
@@ -245,22 +245,22 @@ class PMTilesDataLoader:
             DuckDB table name or None if failed
         """
         production_year = year + 1
-        base_path = f"r2://{self.config.gcs_bucket}/gold/field_production_{production_year}"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/gold/field_production_{production_year}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"Field production data not found in: {base_path}")
             return None
 
         table_name = f"field_production_{year}"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading field production data from {gcs_path}")
+                logger.info(f"Loading field production data from {storage_path}")
 
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}data.parquet')
+                FROM read_parquet('{storage_path}data.parquet')
                 WHERE year = {production_year}
                 """
                 await asyncio.to_thread(self.conn.execute, query)
@@ -277,9 +277,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load field production from {gcs_path}, "
+                        f"Failed to load field production from {storage_path}, "
                         f"trying older timestamp: {e}"
                     )
                 else:
@@ -297,22 +297,22 @@ class PMTilesDataLoader:
             DuckDB table name or None if failed
         """
         next_year = year + 1
-        base_path = f"r2://{self.config.gcs_bucket}/gold/pesticide_proximity_{year}_{next_year}"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/gold/pesticide_proximity_{year}_{next_year}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"Pesticide proximity data not found in: {base_path}")
             return None
 
         table_name = f"pesticide_proximity_{year}"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading pesticide proximity data from {gcs_path}")
+                logger.info(f"Loading pesticide proximity data from {storage_path}")
 
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}pesticide_proximity_{year}_{next_year}.parquet')
+                FROM read_parquet('{storage_path}pesticide_proximity_{year}_{next_year}.parquet')
                 """
                 await asyncio.to_thread(self.conn.execute, query)
 
@@ -325,9 +325,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load pesticide proximity from {gcs_path}, "
+                        f"Failed to load pesticide proximity from {storage_path}, "
                         f"trying older timestamp: {e}"
                     )
                 else:
@@ -346,12 +346,12 @@ class PMTilesDataLoader:
         """
         try:
             path = self.config.nles5_estimation_path
-            gcs_path = f"r2://{self.config.gcs_bucket}/{path}"
+            storage_path = f"r2://{self.config.storage_bucket}/{path}"
 
-            logger.info(f"Loading NLES5 data from {gcs_path}")
+            logger.info(f"Loading NLES5 data from {storage_path}")
 
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"NLES5 data not found: {gcs_path}")
+            if not await asyncio.to_thread(self.gcs.file_exists, storage_path):
+                logger.warning(f"NLES5 data not found: {storage_path}")
                 return None
 
             table_name = f"nles5_estimates_{year}"
@@ -359,7 +359,7 @@ class PMTilesDataLoader:
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{storage_path}/*.parquet')
             WHERE year = {year}
             """
 
@@ -1034,20 +1034,20 @@ class PMTilesDataLoader:
         Returns:
             DuckDB table name or None if not available
         """
-        base_path = f"r2://{self.config.gcs_bucket}/silver/bmd"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/silver/bmd"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"BMD data not found in: {base_path}")
             return None
 
         table_name = "bmd_data"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}pesticide_products.parquet')
+                FROM read_parquet('{storage_path}pesticide_products.parquet')
                 WHERE registrerings_nr IS NOT NULL
                 """
                 await asyncio.to_thread(self.conn.execute, query)
@@ -1061,9 +1061,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load BMD data from {gcs_path}, trying older timestamp: {e}"
+                        f"Failed to load BMD data from {storage_path}, trying older timestamp: {e}"
                     )
                 else:
                     logger.warning(f"Could not load BMD data: {e}")
@@ -1145,13 +1145,13 @@ class PMTilesDataLoader:
             files_with_timestamps.sort(key=lambda x: x[1], reverse=True)
 
             # Extract unique directory paths, preserving order
-            # Normalize gs:// → r2:// since list_files_with_timestamps returns gs:// paths
-            # but DuckDB needs r2:// for R2 storage access
+            # Add r2:// prefix since DuckDB needs r2:// for R2 storage access
             seen = set()
             dir_paths = []
             for file_path, _ in files_with_timestamps:
                 dir_path = "/".join(file_path.split("/")[:-1]) + "/"
-                dir_path = dir_path.replace("gs://", "r2://", 1)
+                if not dir_path.startswith(("r2://", "s3://")):
+                    dir_path = "r2://" + dir_path
                 if dir_path not in seen:
                     seen.add(dir_path)
                     dir_paths.append(dir_path)
@@ -1180,21 +1180,21 @@ class PMTilesDataLoader:
 
     async def _load_bnbo_status(self) -> str | None:
         """Load BNBO status dissolved data."""
-        base_path = f"r2://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/{self.config.bnbo_status_path}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"BNBO status data not found in: {base_path}")
             return None
 
         table_name = "bnbo_status_dissolved"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading BNBO status data from {gcs_path}")
+                logger.info(f"Loading BNBO status data from {storage_path}")
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}*.parquet')
+                FROM read_parquet('{storage_path}*.parquet')
                 """
                 await asyncio.to_thread(self.conn.execute, query)
 
@@ -1207,9 +1207,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load BNBO status from {gcs_path}, trying older timestamp: {e}"
+                        f"Failed to load BNBO status from {storage_path}, trying older timestamp: {e}"
                     )
                 else:
                     logger.error(f"Error loading BNBO status data: {e}")
@@ -1218,21 +1218,21 @@ class PMTilesDataLoader:
 
     async def _load_wetlands(self) -> str | None:
         """Load wetlands dissolved data."""
-        base_path = f"r2://{self.config.gcs_bucket}/{self.config.wetlands_path}"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/{self.config.wetlands_path}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"Wetlands data not found in: {base_path}")
             return None
 
         table_name = "wetlands_dissolved"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading wetlands data from {gcs_path}")
+                logger.info(f"Loading wetlands data from {storage_path}")
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}*.parquet')
+                FROM read_parquet('{storage_path}*.parquet')
                 """
                 await asyncio.to_thread(self.conn.execute, query)
 
@@ -1245,9 +1245,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load wetlands from {gcs_path}, trying older timestamp: {e}"
+                        f"Failed to load wetlands from {storage_path}, trying older timestamp: {e}"
                     )
                 else:
                     logger.error(f"Error loading wetlands data: {e}")
@@ -1256,21 +1256,21 @@ class PMTilesDataLoader:
 
     async def _load_water_projects(self) -> str | None:
         """Load water projects dissolved data."""
-        base_path = f"r2://{self.config.gcs_bucket}/{self.config.water_projects_path}"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/{self.config.water_projects_path}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"Water projects data not found in: {base_path}")
             return None
 
         table_name = "water_projects_dissolved"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading water projects data from {gcs_path}")
+                logger.info(f"Loading water projects data from {storage_path}")
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}*.parquet')
+                FROM read_parquet('{storage_path}*.parquet')
                 """
                 await asyncio.to_thread(self.conn.execute, query)
 
@@ -1283,9 +1283,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load water projects from {gcs_path}, "
+                        f"Failed to load water projects from {storage_path}, "
                         f"trying older timestamp: {e}"
                     )
                 else:
@@ -1295,21 +1295,21 @@ class PMTilesDataLoader:
 
     async def _load_bbr_buildings(self) -> str | None:
         """Load BBR buildings data."""
-        base_path = f"r2://{self.config.gcs_bucket}/{self.config.bbr_buildings_path}"
-        gcs_paths = await self._find_timestamped_paths_ranked(base_path)
-        if not gcs_paths:
+        base_path = f"r2://{self.config.storage_bucket}/{self.config.bbr_buildings_path}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
             logger.warning(f"BBR buildings data not found in: {base_path}")
             return None
 
         table_name = "bbr_buildings"
 
-        for i, gcs_path in enumerate(gcs_paths):
+        for i, storage_path in enumerate(storage_paths):
             try:
-                logger.info(f"Loading BBR buildings data from {gcs_path}")
+                logger.info(f"Loading BBR buildings data from {storage_path}")
                 query = f"""
                 CREATE OR REPLACE TABLE {table_name} AS
                 SELECT *
-                FROM read_parquet('{gcs_path}joined_buildings.parquet')
+                FROM read_parquet('{storage_path}joined_buildings.parquet')
                 WHERE category_group IN ('residential', 'publicServices', 'agricultural')
                     AND geo_building_centroid IS NOT NULL
                 """
@@ -1324,9 +1324,9 @@ class PMTilesDataLoader:
                 return table_name
 
             except Exception as e:
-                if i < len(gcs_paths) - 1:
+                if i < len(storage_paths) - 1:
                     logger.warning(
-                        f"Failed to load BBR buildings from {gcs_path}, trying older timestamp: {e}"
+                        f"Failed to load BBR buildings from {storage_path}, trying older timestamp: {e}"
                     )
                 else:
                     logger.error(f"Error loading BBR buildings data: {e}")

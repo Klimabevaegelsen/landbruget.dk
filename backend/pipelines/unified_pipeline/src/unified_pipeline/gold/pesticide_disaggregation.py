@@ -76,7 +76,11 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Disaggregates pesticide applications from company to field level"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # CRITICAL PARAMETER: Area tolerance for matching pesticide applications to fields
     # This 2% tolerance is what achieved 92% coverage in the original pipeline
@@ -219,17 +223,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         print("DEBUG: PesticideDisaggregationGold.__init__ completed!")
 
-    def _upload_file_with_gcs_access(
+    def _upload_file_with_storage_access(
         self, bucket_name: str, source_file_path: str, destination_blob_name: str
     ):
-        """Helper method to upload file using gcs_access."""
+        """Helper method to upload file using storage_access."""
         import shutil
 
-        # s3fs expects plain bucket/path without gs:// or r2:// prefix
+        # s3fs expects plain bucket/path without r2:// or s3:// prefix
         storage_path = f"{bucket_name}/{destination_blob_name}"
         with (
             open(source_file_path, "rb") as src,
-            self.gcs_access.fs.open(storage_path, "wb") as dst,
+            self.storage.fs.open(storage_path, "wb") as dst,
         ):
             shutil.copyfileobj(src, dst)
 
@@ -406,6 +410,44 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         f"0 disaggregated results - this may indicate processing issues"
                     )
 
+                # DOSAGE CONSERVATION CHECK
+                # Compare original dosage totals for matched records against
+                # disaggregated totals. They should be approximately equal.
+                try:
+                    conservation = self.duckdb_conn.execute("""
+                        SELECT
+                            SUM(p.DosageQuantity) as original_dosage,
+                            SUM(p.AcreageSize) as original_area
+                        FROM pesticide p
+                        WHERE CAST(p.OriginalPesticideRowID AS VARCHAR) IN (
+                            SELECT DISTINCT OriginalPesticideRowID
+                            FROM disaggregated_pesticide_applications
+                        )
+                    """).fetchone()
+
+                    if conservation and conservation[0]:
+                        original_dosage = conservation[0]
+                        original_area = conservation[1] or 0.0
+                        dosage_ratio = final_dosage / original_dosage if original_dosage > 0 else 0
+                        area_ratio = final_acreage / original_area if original_area > 0 else 0
+
+                        self.log.info("🔬 DOSAGE CONSERVATION CHECK:")
+                        self.log.info(f"   Original matched dosage: {original_dosage:,.2f}")
+                        self.log.info(f"   Disaggregated dosage:    {final_dosage:,.2f}")
+                        self.log.info(f"   Dosage ratio:            {dosage_ratio:.4f}x")
+                        self.log.info(f"   Area ratio:              {area_ratio:.4f}x")
+
+                        if abs(dosage_ratio - 1.0) > 0.01:
+                            self.log.warning(
+                                f"⚠️ DOSAGE CONSERVATION VIOLATION: "
+                                f"ratio is {dosage_ratio:.4f}x "
+                                f"(expected ~1.0, tolerance 1%)"
+                            )
+                        else:
+                            self.log.info("✅ Dosage conservation: PASS")
+                except Exception as e:
+                    self.log.warning(f"⚠️ Could not run dosage conservation check: {e}")
+
                 self.log.info("✅ Validation completed")
 
         except Exception as e:
@@ -564,7 +606,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info(f"📊 Counting total pesticide records for year {pesticide_year}")
                 try:
                     temp_conn = duckdb.connect(":memory:")
-                    with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
+                    with self.storage._temp_download(pesticide_applications_path) as temp_file:
                         pesticide_count = temp_conn.execute(
                             f"SELECT COUNT(*) FROM read_parquet('{temp_file}')"
                         ).fetchone()[0]
@@ -675,10 +717,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     SELECT * FROM disaggregated_pesticide_applications
                 """)
 
-                # Save directly to GCS using our own method
-                self.log.info(f"🚀 Uploading {table_name} to GCS bucket")
+                # Save directly to storage using our own method
+                self.log.info(f"🚀 Uploading {table_name} to storage bucket")
                 dataset_name = f"{self.config.dataset}_{year}_{year + 1}"
-                self._save_table_to_gcs(table_name, dataset_name, "gold")
+                self._save_table_to_storage(table_name, dataset_name, "gold")
 
                 self.log.info(f"✅ Successfully saved {result_count:,} records for year {year}")
 
@@ -693,13 +735,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"❌ Failed to save results for year {year}: {e}")
             return False
 
-    def _save_table_to_gcs(self, table_name: str, dataset: str, stage: str) -> None:
+    def _save_table_to_storage(self, table_name: str, dataset: str, stage: str) -> None:
         """
-        Save a DuckDB table directly to GCS storage.
+        Save a DuckDB table directly to storage.
 
         Args:
             table_name: Name of the DuckDB table to save
-            dataset: Dataset name for GCS path
+            dataset: Dataset name for storage path
             stage: Processing stage (bronze, silver, gold)
         """
         import os
@@ -710,7 +752,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Create timestamp and GCS path
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{dataset}.parquet"
-            gcs_path = f"{stage}/{dataset}/{timestamp}/{filename}"
+            storage_path = f"{stage}/{dataset}/{timestamp}/{filename}"
 
             # Create temporary file for export
             with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
@@ -723,21 +765,21 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             """)
 
             # Upload to GCS
-            self._upload_file_with_gcs_access(
+            self._upload_file_with_storage_access(
                 self.config.bucket,
                 temp_path,
-                gcs_path,
+                storage_path,
             )
 
             # Clean up temporary file
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-            full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
-            self.log.info(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
-            self.log.info(f"📁 GCS Path: {full_gcs_path}")
-            print(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
-            print(f"📁 GCS Path: {full_gcs_path}")
+            full_storage_path = f"{self.config.bucket}/{storage_path}"
+            self.log.info(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_storage_path}")
+            self.log.info(f"📁 GCS Path: {full_storage_path}")
+            print(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_storage_path}")
+            print(f"📁 GCS Path: {full_storage_path}")
 
         except Exception as e:
             self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
@@ -839,8 +881,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Extract available pesticide years from GCS storage."""
         try:
             # Use list_files with recursive pattern to find all parquet files
-            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.config.bucket}/silver/pesticides/*/*.parquet"
+            files = self.storage.list_files(pattern)
             years = set()
 
             for file_path in files:
@@ -864,8 +906,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Override base method to look for the correct FVM marker file pattern."""
         try:
             # Use list_files with recursive pattern to find all parquet files
-            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.config.bucket}/silver/fvm_marker_*/*/*.parquet"
+            files = self.storage.list_files(pattern)
             years = set()
 
             for file_path in files:
@@ -950,10 +992,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             filename = f"pesticiddata_{year}_{year + 1}.parquet"
 
             # Use specific pattern to find only matching files
-            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/{filename}"
+            pattern = f"{self.config.bucket}/silver/pesticides/*/{filename}"
 
             # Use list_files_with_timestamps for deterministic file selection
-            files_with_ts = self.gcs_access.list_files_with_timestamps(pattern)
+            files_with_ts = self.storage.list_files_with_timestamps(pattern)
 
             if not files_with_ts:
                 self.log.warning(
@@ -983,10 +1025,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info(f"Reading FVM marker data for year {year}")
 
             # Use specific pattern to find only data.parquet files (standard silver layer format)
-            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{year}/*/data.parquet"
+            pattern = f"{self.config.bucket}/silver/fvm_marker_{year}/*/data.parquet"
 
             # Use list_files_with_timestamps for deterministic file selection
-            files_with_ts = self.gcs_access.list_files_with_timestamps(pattern)
+            files_with_ts = self.storage.list_files_with_timestamps(pattern)
 
             if not files_with_ts:
                 self.log.warning(f"No FVM marker file found for year {year}")
@@ -1444,7 +1486,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         # Download field data from cloud storage for processing
         self.log.info("📥 Downloading agricultural fields data for schema inspection...")
-        with self.gcs_access._temp_download(agricultural_fields_path) as temp_file:
+        with self.storage._temp_download(agricultural_fields_path) as temp_file:
             self.log.info(f"✅ Downloaded to temporary file: {temp_file}")
             # Load the data into a temporary table so we can inspect its structure
             self.duckdb_conn.execute(
@@ -1600,7 +1642,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         # ✅ MIGRATION: Create pesticide table using optimized GCS access with temp download
         self.log.info("📥 Downloading pesticide data...")
-        with self.gcs_access._temp_download(pesticide_applications_path) as temp_file:
+        with self.storage._temp_download(pesticide_applications_path) as temp_file:
             self.log.info(f"✅ Downloaded to temporary file: {temp_file}")
 
             # First, create a temporary table to inspect the pesticide schema
@@ -1680,6 +1722,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.duckdb_conn.execute("DROP TABLE pesticide_temp")
         self.log.info("✅ Pesticide table created successfully")
 
+        # CHECK FOR DUPLICATE PESTICIDE RECORDS
+        # =====================================
+        # The silver pesticide data may contain exact duplicates (same CVR, crop,
+        # product, dosage, and area) which would inflate disaggregated amounts.
+        self._check_and_remove_pesticide_duplicates()
+
         # FINAL STEP: VALIDATE AND REPORT SUCCESS
         # =======================================
         # Count the records we loaded to ensure everything worked correctly
@@ -1699,6 +1747,71 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # - 'pesticide' table: Pesticide applications with company and area information
         # - Both tables have standardized CVR numbers for matching
         return True
+
+    def _check_and_remove_pesticide_duplicates(self) -> None:
+        """Detect and remove exact duplicate pesticide records that would inflate dosages.
+
+        Only removes rows where ALL key columns are identical (same CVR, crop, product,
+        dosage, and area). Multiple applications of the same product at different rates
+        or areas are preserved as legitimate separate applications.
+        """
+        try:
+            before_count = self.duckdb_conn.execute("SELECT COUNT(*) FROM pesticide").fetchone()[0]
+
+            # Check for exact duplicates across all key columns
+            dup_stats = self.duckdb_conn.execute("""
+                SELECT COUNT(*) as dup_groups, SUM(cnt - 1) as extra_rows
+                FROM (
+                    SELECT cvr_number, Code, PesticideName, DosageQuantity,
+                           DosageUnit, AcreageSize, COUNT(*) as cnt
+                    FROM pesticide
+                    WHERE cvr_number IS NOT NULL
+                    GROUP BY cvr_number, Code, PesticideName, DosageQuantity,
+                             DosageUnit, AcreageSize
+                    HAVING COUNT(*) > 1
+                ) dups
+            """).fetchone()
+
+            dup_groups = dup_stats[0] if dup_stats[0] else 0
+            extra_rows = int(dup_stats[1]) if dup_stats[1] else 0
+
+            if extra_rows > 0:
+                self.log.warning(
+                    f"⚠️ DUPLICATE PESTICIDE RECORDS DETECTED: "
+                    f"{dup_groups:,} duplicate groups, {extra_rows:,} extra rows "
+                    f"({extra_rows / before_count * 100:.1f}% of total)"
+                )
+
+                # Remove exact duplicates, keeping one row per group
+                self.duckdb_conn.execute("""
+                    CREATE OR REPLACE TABLE pesticide_deduped AS
+                    SELECT DISTINCT ON (cvr_number, Code, PesticideName,
+                                        DosageQuantity, DosageUnit, AcreageSize)
+                        *
+                    FROM pesticide
+                    ORDER BY cvr_number, Code, PesticideName,
+                             DosageQuantity, DosageUnit, AcreageSize,
+                             OriginalPesticideRowID
+                """)
+
+                # Replace original table
+                self.duckdb_conn.execute("DROP TABLE pesticide")
+                self.duckdb_conn.execute("ALTER TABLE pesticide_deduped RENAME TO pesticide")
+
+                after_count = self.duckdb_conn.execute("SELECT COUNT(*) FROM pesticide").fetchone()[
+                    0
+                ]
+
+                self.log.warning(
+                    f"🧹 Removed {before_count - after_count:,} duplicate rows "
+                    f"({before_count:,} → {after_count:,})"
+                )
+            else:
+                self.log.info("✅ No duplicate pesticide records found")
+
+        except Exception as e:
+            self.log.error(f"Error checking for pesticide duplicates: {e}")
+            # Don't fail the pipeline - duplicates are better than crashing
 
     def _create_results_table(self):
         """Create the disaggregated results table with original schema plus municipality support."""
@@ -2501,25 +2614,40 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # OPTIMIZED: Single batch query to process all candidates at once
             # This replaces the inefficient Python loop with pure DuckDB operations
             insert_query = """
-                WITH MarkerSingleFieldCVRCrop AS (
+                WITH SingleFieldCVRCrops AS (
+                    -- First identify CVR+crop combos that have exactly 1 field
                     SELECT
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
-                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
-                        COUNT(*) as FieldCount,
-                        m.field_id as FieldID,
-                        m.area_ha as FieldArea,
-                        m.field_id as FieldIdentifier,
-                                                 ANY_VALUE(m.field_uuid) as field_uuid,
-                         ANY_VALUE(m.field_uuid) as primary_field_id,
-                        ANY_VALUE(m.municipality) as municipality
+                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
                     FROM marker m
                     WHERE m.cvr_number IS NOT NULL
                       AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m.crop_code IS NOT NULL
                       AND m.area_ha > 0.0
-                    GROUP BY 1, 2, 4, 5, 6
+                    GROUP BY 1, 2
                     HAVING COUNT(*) = 1  -- Only single field per CVR/Crop
+                ),
+                MarkerSingleFieldCVRCrop AS (
+                    -- Then get the field details for those single-field combos
+                    SELECT
+                        CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
+                        CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
+                        m.field_id as FieldID,
+                        m.area_ha as FieldArea,
+                        m.field_id as FieldIdentifier,
+                        m.field_uuid as field_uuid,
+                        m.field_uuid as primary_field_id,
+                        m.municipality as municipality
+                    FROM marker m
+                    JOIN SingleFieldCVRCrops sc
+                        ON CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) = sc.CVR_Str
+                        AND CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) = sc.Crop_Str
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
+                      AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
+                      AND m.crop_code IS NOT NULL
+                      AND m.area_ha > 0.0
                 ),
                 PendingForSingleFields AS (
                     SELECT
@@ -3138,6 +3266,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         efm.fvm_area_ha
                     FROM fertilizer_enhanced_field_mappings efm
                     JOIN marker m ON efm.fvm_field_id = m.field_id
+                                 AND efm.fvm_cvr = CAST(m.cvr_number AS VARCHAR)
                     WHERE efm.confidence_score >= 0.75  -- High-confidence matches only
                 ),
                 company_crop_enhanced_summary AS (

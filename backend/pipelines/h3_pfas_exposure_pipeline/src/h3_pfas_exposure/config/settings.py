@@ -88,7 +88,9 @@ class H3PFASConfig:
             chunk_size=int(os.getenv("CHUNK_SIZE", "25000")),
             memory_limit="12GB",  # Always use 12GB - no env dependency
             thread_count=int(os.getenv("THREAD_COUNT", "4")),
-            bucket=os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data"),
+            bucket=os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data"),
             enable_progress_tracking=os.getenv("ENABLE_PROGRESS_TRACKING", "true").lower()
             == "true",
             log_chunk_details=os.getenv("LOG_CHUNK_DETAILS", "false").lower() == "true",
