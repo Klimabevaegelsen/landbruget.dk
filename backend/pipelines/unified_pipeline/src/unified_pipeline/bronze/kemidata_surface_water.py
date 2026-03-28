@@ -14,6 +14,7 @@ The pipeline is designed to start with pesticides but can expand to all paramete
 by modifying the search configuration.
 """
 
+import asyncio
 import json
 import ssl
 import time
@@ -223,20 +224,60 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
 
         return merged, total_results
 
+    async def _download_single_batch(
+        self,
+        session: aiohttp.ClientSession,
+        body: dict,
+        cloud_file: Any,
+        batch_idx: int,
+        attempt: int,
+    ) -> int:
+        """Download a single batch of parameters as CSV, appending to cloud_file."""
+        async with session.post(
+            self.config.download_url,
+            json=body,
+            headers={"Content-Type": "application/json"},
+        ) as resp:
+            if resp.status != 200:
+                err_text = await resp.text()
+                raise Exception(
+                    f"Download batch {batch_idx} failed (attempt {attempt}): "
+                    f"HTTP {resp.status} — {err_text[:500]}"
+                )
+
+            batch_bytes = 0
+            is_first_line = True
+            async for chunk in resp.content.iter_chunked(8 * 1024 * 1024):
+                # Skip CSV header line for batches after the first
+                if batch_idx > 1 and is_first_line:
+                    newline_pos = chunk.find(b"\n")
+                    if newline_pos >= 0:
+                        chunk = chunk[newline_pos + 1 :]
+                    is_first_line = False
+                else:
+                    is_first_line = False
+
+                if chunk:
+                    cloud_file.write(chunk)
+                    batch_bytes += len(chunk)
+
+        return batch_bytes
+
     async def _download_csv_to_storage(
         self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
     ) -> tuple[str, int]:
         """
         Download the full CSV export from Kemidata and stream directly to storage.
 
-        Batches parameters in chunks of 200 to avoid server-side timeouts,
-        concatenating CSV output (skipping duplicate headers after the first batch).
+        Batches parameters in chunks of 50 to avoid server-side timeouts
+        (download is much slower than search — generates full CSV exports).
+        Concatenates CSV output, skipping duplicate headers after the first batch.
         Streams each response in chunks to avoid holding 100MB+ in memory.
 
         Returns:
             Tuple of (relative storage path, total bytes written).
         """
-        batch_size = 200
+        batch_size = 50
         batches = [
             search_parameters[i : i + batch_size]
             for i in range(0, len(search_parameters), batch_size)
@@ -251,36 +292,28 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         )
 
         total_bytes = 0
+        max_retries = 3
         with self.storage.fs.open(storage_path, "wb") as cloud_file:
             for idx, batch in enumerate(batches, 1):
                 self.log.info(f"  Download batch {idx}/{len(batches)} ({len(batch)} parameters)")
                 body = self._build_download_body(session_id, batch)
 
-                async with session.post(
-                    self.config.download_url,
-                    json=body,
-                    headers={"Content-Type": "application/json"},
-                ) as resp:
-                    if resp.status != 200:
-                        err_text = await resp.text()
-                        raise Exception(
-                            f"Download batch {idx} failed: HTTP {resp.status} — {err_text[:500]}"
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        batch_bytes = await self._download_single_batch(
+                            session, body, cloud_file, idx, attempt
                         )
-
-                    is_first_line = True
-                    async for chunk in resp.content.iter_chunked(8 * 1024 * 1024):
-                        # Skip CSV header line for batches after the first
-                        if idx > 1 and is_first_line:
-                            newline_pos = chunk.find(b"\n")
-                            if newline_pos >= 0:
-                                chunk = chunk[newline_pos + 1 :]
-                            is_first_line = False
-                        else:
-                            is_first_line = False
-
-                        if chunk:
-                            cloud_file.write(chunk)
-                            total_bytes += len(chunk)
+                        total_bytes += batch_bytes
+                        break
+                    except Exception:
+                        if attempt == max_retries:
+                            raise
+                        wait = 10 * attempt
+                        self.log.warning(
+                            f"  Download batch {idx} attempt {attempt} failed, "
+                            f"retrying in {wait}s..."
+                        )
+                        await asyncio.sleep(wait)
 
         size_mb = total_bytes / (1024 * 1024)
         self.log.info(f"Streamed CSV to storage: {size_mb:.1f} MB → {storage_path}")
