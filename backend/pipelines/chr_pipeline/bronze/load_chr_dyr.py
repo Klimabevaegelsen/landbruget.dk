@@ -13,14 +13,14 @@ from dotenv import load_dotenv
 from .animal_movements import load_animal_movements, load_cattle_movement_summaries
 from .auth import create_chr_dyr_client, get_fvm_credentials
 
-# Import GCS access from common module
+# Import cloud storage access from common module
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 # Load environment variables
 load_dotenv()
@@ -54,20 +54,20 @@ def load_animal_movements_task(
 
 # Consolidated processing for unified pipeline
 _duckdb_conn = None
-_gcs_access = None
+_storage_access = None
 
 
 def initialize_consolidated_processing():
-    """Initialize DuckDB connection and GCS access for consolidated processing."""
-    global _duckdb_conn, _gcs_access
+    """Initialize DuckDB connection and cloud storage access for consolidated processing."""
+    global _duckdb_conn, _storage_access
 
-    if not GCS_AVAILABLE:
-        logger.error("GCSDataAccess not available - cannot use consolidated processing")
+    if not STORAGE_AVAILABLE:
+        logger.error("StorageAccess not available - cannot use consolidated processing")
         return False
 
     try:
-        _gcs_access = GCSDataAccess()
-        _duckdb_conn = _gcs_access.duckdb_conn
+        _storage_access = StorageAccess()
+        _duckdb_conn = _storage_access.duckdb_conn
 
         # Create consolidated table for all movement data
         _duckdb_conn.execute("""
@@ -145,10 +145,10 @@ def add_to_consolidated_table(movement_data):
 
 
 def finalize_consolidated_processing():
-    """Save consolidated data to GCS and cleanup resources."""
-    global _duckdb_conn, _gcs_access
+    """Save consolidated data to cloud storage and cleanup resources."""
+    global _duckdb_conn, _storage_access
 
-    if not _duckdb_conn or not _gcs_access:
+    if not _duckdb_conn or not _storage_access:
         return False
 
     try:
@@ -162,32 +162,36 @@ def finalize_consolidated_processing():
             logger.warning("No movement data to save - consolidated table is empty")
             return True
 
-        logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
+        logger.info(f"Saving {record_count:,} consolidated movement records to cloud storage")
 
         # MINIMAL FIX: Create unique parquet file per matrix job to prevent overwrites
         import os
 
         from .export import EXPORT_TIMESTAMP
 
-        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        bucket_name = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
 
         # Add month suffix if matrix job (environment variable set by GitHub Actions)
         month_suffix = os.getenv("BRONZE_MONTH_SUFFIX", "")
         bronze_dir = f"{EXPORT_TIMESTAMP}{month_suffix}"
-        gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_dir}/chr_dyr_movement_summaries.parquet"
+        storage_path = f"{bucket_name}/bronze/chr/{bronze_dir}/chr_dyr_movement_summaries.parquet"
 
         # 🚀 ENHANCED: Use native HMAC acceleration for faster CHR bronze export
-        native_used = _gcs_access.export_to_gcs_native(
+        native_used = _storage_access.export_to_storage_native(
             "consolidated_movements",
-            gcs_path,
+            storage_path,
             compression="zstd",  # Optimal compression for movement data
             row_group_size=75000,  # Optimized for CHR data volume
         )
         if not native_used:
             # Fallback to existing method
-            _gcs_access.export_table_to_gcs_direct("consolidated_movements", gcs_path)
+            _storage_access.export_table_to_storage_direct("consolidated_movements", storage_path)
 
-        logger.info(f"✅ Saved consolidated movement data to {gcs_path}")
+        logger.info(f"✅ Saved consolidated movement data to {storage_path}")
 
         # Clean up table
         _duckdb_conn.execute("DROP TABLE IF EXISTS consolidated_movements")

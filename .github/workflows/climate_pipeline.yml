@@ -1,5 +1,9 @@
 name: Climate Pipeline
 
+concurrency:
+  group: climate-pipeline
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
@@ -14,14 +18,9 @@ on:
         default: '0'
         required: false
       max_parallel_jobs:
-        description: 'Maximum number of parallel batch jobs'
+        description: 'Maximum number of parallel year jobs'
         type: string
-        default: '10'
-        required: true
-      batch_size:
-        description: 'CVRs per batch'
-        type: string
-        default: '500'
+        default: '3'
         required: true
       dry_run:
         description: 'Dry run mode (discover CVRs only, no calculations)'
@@ -29,521 +28,195 @@ on:
         default: false
 
 env:
-  ENVIRONMENT: production
-  R2_BUCKET: ${{ secrets.R2_BUCKET }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
-
 jobs:
-  discover-cvrs:
+  prepare-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      years: ${{ steps.parse.outputs.years }}
+      year_count: ${{ steps.parse.outputs.year_count }}
+
+    steps:
+      - name: Parse years into matrix
+        id: parse
+        run: |
+          # Convert comma-separated years into JSON array
+          years_json=$(echo "${{ inputs.years }}" | tr ',' '\n' | sed 's/ //g' | jq -R 'tonumber' | jq -sc '.')
+          year_count=$(echo "$years_json" | jq '. | length')
+
+          echo "years=$years_json" >> $GITHUB_OUTPUT
+          echo "year_count=$year_count" >> $GITHUB_OUTPUT
+          echo "Processing $year_count years: $years_json"
+
+  process-years:
+    if: ${{ !inputs.dry_run }}
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+
     permissions:
       contents: 'read'
       id-token: 'write'
 
     strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false
       matrix:
-        year: ${{ fromJson(format('[{0}]', inputs.years)) }}
+        year: ${{ fromJson(needs.prepare-matrix.outputs.years) }}
 
-    outputs:
-      # Outputs are per-year, stored as artifacts
-      batch_count_2021: ${{ steps.discover.outputs.batch_count_2021 }}
-      batch_count_2022: ${{ steps.discover.outputs.batch_count_2022 }}
-      batch_count_2023: ${{ steps.discover.outputs.batch_count_2023 }}
+    name: Carbon Emissions ${{ matrix.year }}
 
-    name: Discover CVRs (${{ matrix.year }})
+    env:
+      ENVIRONMENT: production
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
 
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-        cache: 'pip'
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip uv
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        uv pip install --system pandas pyarrow
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Discover CVRs for year ${{ matrix.year }}
-      id: discover
-      working-directory: backend/pipelines/climate
-      run: |
-        test_limit="${{ inputs.test_limit }}"
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
 
-        if [ "$test_limit" = "0" ] || [ -z "$test_limit" ]; then
-          python cli.py --discover --year ${{ matrix.year }} --output /tmp/cvrs_${{ matrix.year }}.json
-        else
-          python cli.py --discover --year ${{ matrix.year }} --output /tmp/cvrs_${{ matrix.year }}.json --test-limit $test_limit
-        fi
+      - name: Run carbon emissions for year ${{ matrix.year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "Processing carbon emission estimates for year ${{ matrix.year }}..."
 
-        # Extract batch count for output
-        batch_count=$(jq '.batch_count' /tmp/cvrs_${{ matrix.year }}.json)
-        cvr_count=$(jq '.count' /tmp/cvrs_${{ matrix.year }}.json)
-
-        echo "Discovered $cvr_count CVRs for year ${{ matrix.year }} ($batch_count batches)"
-        echo "batch_count_${{ matrix.year }}=$batch_count" >> $GITHUB_OUTPUT
-
-        # Store batch info in a separate file for matrix generation
-        echo "{\"batches\": $(seq 0 $((batch_count - 1)) | jq -R . | jq -s .)}" > /tmp/batches_${{ matrix.year }}.json
-
-    - name: Upload CVR list artifact
-      uses: actions/upload-artifact@v7
-      with:
-        name: cvrs-${{ matrix.year }}
-        path: /tmp/cvrs_${{ matrix.year }}.json
-        retention-days: 1
-
-    - name: Upload batch info artifact
-      uses: actions/upload-artifact@v7
-      with:
-        name: batches-${{ matrix.year }}
-        path: /tmp/batches_${{ matrix.year }}.json
-        retention-days: 1
-
-  # Generate batch matrix for each year
-  generate-matrix:
-    needs: discover-cvrs
-    runs-on: ubuntu-latest
-    outputs:
-      matrix_2021: ${{ steps.gen.outputs.matrix_2021 }}
-      matrix_2022: ${{ steps.gen.outputs.matrix_2022 }}
-      matrix_2023: ${{ steps.gen.outputs.matrix_2023 }}
-
-    steps:
-    - name: Download batch info
-      uses: actions/download-artifact@v8
-      with:
-        pattern: batches-*
-        path: /tmp/batch_info
-        merge-multiple: true
-
-    - name: Generate batch matrices
-      id: gen
-      run: |
-        for year in 2021 2022 2023; do
-          batch_file="/tmp/batch_info/batches_${year}.json"
-          if [ -f "$batch_file" ]; then
-            batches=$(jq -c '.batches' "$batch_file")
-            echo "matrix_${year}=$batches" >> $GITHUB_OUTPUT
-            echo "Year $year batches: $batches"
-          else
-            echo "matrix_${year}=[]" >> $GITHUB_OUTPUT
-            echo "Year $year: no batch file found"
+          test_limit="${{ inputs.test_limit }}"
+          test_limit_flag=""
+          if [ "$test_limit" != "0" ] && [ -n "$test_limit" ]; then
+            test_limit_flag="--test-limit $test_limit"
           fi
-        done
 
-  # Process batches for 2021
-  process-2021:
-    if: ${{ !inputs.dry_run && contains(inputs.years, '2021') }}
-    needs: [discover-cvrs, generate-matrix]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
+          trap 'echo "Received cancellation signal, stopping..."; kill -TERM $PID 2>/dev/null; wait $PID 2>/dev/null; exit 130' SIGINT SIGTERM
 
-    strategy:
-      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
-      fail-fast: false
-      matrix:
-        batch: ${{ fromJson(needs.generate-matrix.outputs.matrix_2021 || '[]') }}
+          python -m unified_pipeline run \
+            -s carbon_emissions \
+            -j gold \
+            --year ${{ matrix.year }} \
+            $test_limit_flag &
 
-    name: Process 2021 Batch ${{ matrix.batch }}
+          PID=$!
+          wait $PID
 
-    steps:
-    - uses: actions/checkout@v6
+      - name: Report completion
+        if: success()
+        run: |
+          echo "Successfully processed carbon emissions for year ${{ matrix.year }}"
+          echo "Data saved to: r2://landbruget-data/gold/carbon_emissions_${{ matrix.year }}/"
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-        cache: 'pip'
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "Failed to process carbon emissions for year ${{ matrix.year }}"
+          exit 1
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip uv
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        uv pip install --system pandas pyarrow
-
-    - name: Download CVR list
-      uses: actions/download-artifact@v8
-      with:
-        name: cvrs-2021
-        path: /tmp
-
-    - name: Process batch ${{ matrix.batch }}
-      working-directory: backend/pipelines/climate
-      run: |
-        python cli.py \
-          --batch ${{ matrix.batch }} \
-          --batch-size ${{ inputs.batch_size }} \
-          --year 2021 \
-          --cvr-file /tmp/cvrs_2021.json \
-          --output-dir /tmp/climate_output_2021
-
-    - name: Upload batch result
-      uses: actions/upload-artifact@v7
-      with:
-        name: batch-2021-${{ matrix.batch }}
-        path: /tmp/climate_output_2021/batch_*.parquet
-        retention-days: 1
-
-  # Process batches for 2022
-  process-2022:
-    if: ${{ !inputs.dry_run && contains(inputs.years, '2022') }}
-    needs: [discover-cvrs, generate-matrix]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-
-    strategy:
-      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
-      fail-fast: false
-      matrix:
-        batch: ${{ fromJson(needs.generate-matrix.outputs.matrix_2022 || '[]') }}
-
-    name: Process 2022 Batch ${{ matrix.batch }}
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip uv
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        uv pip install --system pandas pyarrow
-
-    - name: Download CVR list
-      uses: actions/download-artifact@v8
-      with:
-        name: cvrs-2022
-        path: /tmp
-
-    - name: Process batch ${{ matrix.batch }}
-      working-directory: backend/pipelines/climate
-      run: |
-        python cli.py \
-          --batch ${{ matrix.batch }} \
-          --batch-size ${{ inputs.batch_size }} \
-          --year 2022 \
-          --cvr-file /tmp/cvrs_2022.json \
-          --output-dir /tmp/climate_output_2022
-
-    - name: Upload batch result
-      uses: actions/upload-artifact@v7
-      with:
-        name: batch-2022-${{ matrix.batch }}
-        path: /tmp/climate_output_2022/batch_*.parquet
-        retention-days: 1
-
-  # Process batches for 2023
-  process-2023:
-    if: ${{ !inputs.dry_run && contains(inputs.years, '2023') }}
-    needs: [discover-cvrs, generate-matrix]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-
-    strategy:
-      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
-      fail-fast: false
-      matrix:
-        batch: ${{ fromJson(needs.generate-matrix.outputs.matrix_2023 || '[]') }}
-
-    name: Process 2023 Batch ${{ matrix.batch }}
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip uv
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        uv pip install --system pandas pyarrow
-
-    - name: Download CVR list
-      uses: actions/download-artifact@v8
-      with:
-        name: cvrs-2023
-        path: /tmp
-
-    - name: Process batch ${{ matrix.batch }}
-      working-directory: backend/pipelines/climate
-      run: |
-        python cli.py \
-          --batch ${{ matrix.batch }} \
-          --batch-size ${{ inputs.batch_size }} \
-          --year 2023 \
-          --cvr-file /tmp/cvrs_2023.json \
-          --output-dir /tmp/climate_output_2023
-
-    - name: Upload batch result
-      uses: actions/upload-artifact@v7
-      with:
-        name: batch-2023-${{ matrix.batch }}
-        path: /tmp/climate_output_2023/batch_*.parquet
-        retention-days: 1
-
-  # Consolidate results for each year
-  consolidate-2021:
-    if: ${{ !inputs.dry_run && contains(inputs.years, '2021') && always() }}
-    needs: [discover-cvrs, generate-matrix, process-2021]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip uv
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        uv pip install --system pandas pyarrow
-
-    - name: Download all batch results
-      uses: actions/download-artifact@v8
-      with:
-        pattern: batch-2021-*
-        path: /tmp/climate_output_2021
-        merge-multiple: true
-
-    - name: Download CVR info for batch count
-      uses: actions/download-artifact@v8
-      with:
-        name: cvrs-2021
-        path: /tmp
-
-    - name: Consolidate and upload to R2
-      working-directory: backend/pipelines/climate
-      run: |
-        batch_count=$(jq '.batch_count' /tmp/cvrs_2021.json)
-        timestamp=$(date +%Y%m%d_%H%M%S)
-        r2_path="s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_2021/${timestamp}"
-
-        python -c "
-        from batch_processor import BatchProcessor
-        import json
-
-        processor = BatchProcessor(output_dir='/tmp/climate_output_2021')
-        result = processor.consolidate_batches(
-            year=2021,
-            batch_count=${batch_count},
-            gcs_output_path='${r2_path}',
-            cleanup=True
-        )
-        print(json.dumps(result, indent=2))
-        "
-
-        echo "## 2021 Results" >> $GITHUB_STEP_SUMMARY
-        echo "R2 Path: ${r2_path}" >> $GITHUB_STEP_SUMMARY
-
-  consolidate-2022:
-    if: ${{ !inputs.dry_run && contains(inputs.years, '2022') && always() }}
-    needs: [discover-cvrs, generate-matrix, process-2022]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip uv
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        uv pip install --system pandas pyarrow
-
-    - name: Download all batch results
-      uses: actions/download-artifact@v8
-      with:
-        pattern: batch-2022-*
-        path: /tmp/climate_output_2022
-        merge-multiple: true
-
-    - name: Download CVR info for batch count
-      uses: actions/download-artifact@v8
-      with:
-        name: cvrs-2022
-        path: /tmp
-
-    - name: Consolidate and upload to R2
-      working-directory: backend/pipelines/climate
-      run: |
-        batch_count=$(jq '.batch_count' /tmp/cvrs_2022.json)
-        timestamp=$(date +%Y%m%d_%H%M%S)
-        r2_path="s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_2022/${timestamp}"
-
-        python -c "
-        from batch_processor import BatchProcessor
-        import json
-
-        processor = BatchProcessor(output_dir='/tmp/climate_output_2022')
-        result = processor.consolidate_batches(
-            year=2022,
-            batch_count=${batch_count},
-            gcs_output_path='${r2_path}',
-            cleanup=True
-        )
-        print(json.dumps(result, indent=2))
-        "
-
-        echo "## 2022 Results" >> $GITHUB_STEP_SUMMARY
-        echo "R2 Path: ${r2_path}" >> $GITHUB_STEP_SUMMARY
-
-  consolidate-2023:
-    if: ${{ !inputs.dry_run && contains(inputs.years, '2023') && always() }}
-    needs: [discover-cvrs, generate-matrix, process-2023]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.12'
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip uv
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        uv pip install --system pandas pyarrow
-
-    - name: Download all batch results
-      uses: actions/download-artifact@v8
-      with:
-        pattern: batch-2023-*
-        path: /tmp/climate_output_2023
-        merge-multiple: true
-
-    - name: Download CVR info for batch count
-      uses: actions/download-artifact@v8
-      with:
-        name: cvrs-2023
-        path: /tmp
-
-    - name: Consolidate and upload to R2
-      working-directory: backend/pipelines/climate
-      run: |
-        batch_count=$(jq '.batch_count' /tmp/cvrs_2023.json)
-        timestamp=$(date +%Y%m%d_%H%M%S)
-        r2_path="s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_2023/${timestamp}"
-
-        python -c "
-        from batch_processor import BatchProcessor
-        import json
-
-        processor = BatchProcessor(output_dir='/tmp/climate_output_2023')
-        result = processor.consolidate_batches(
-            year=2023,
-            batch_count=${batch_count},
-            gcs_output_path='${r2_path}',
-            cleanup=True
-        )
-        print(json.dumps(result, indent=2))
-        "
-
-        echo "## 2023 Results" >> $GITHUB_STEP_SUMMARY
-        echo "R2 Path: ${r2_path}" >> $GITHUB_STEP_SUMMARY
-
-  # Final summary
-  summary:
-    if: ${{ always() }}
-    needs: [discover-cvrs, consolidate-2021, consolidate-2022, consolidate-2023]
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Pipeline Summary
-      run: |
-        echo "## Climate Pipeline Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Years Processed:** ${{ inputs.years }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Batch Size:** ${{ inputs.batch_size }} CVRs" >> $GITHUB_STEP_SUMMARY
-        echo "**Max Parallel Jobs:** ${{ inputs.max_parallel_jobs }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Test Limit:** ${{ inputs.test_limit || 'None' }}" >> $GITHUB_STEP_SUMMARY
-        echo "**Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-
-        if [ "${{ inputs.dry_run }}" = "true" ]; then
-          echo "This was a dry run - no calculations were performed." >> $GITHUB_STEP_SUMMARY
-        else
-          echo "Results uploaded to R2 gold layer:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`s3://${{ secrets.R2_BUCKET }}/gold/carbon_emissions_{year}/{timestamp}/\`" >> $GITHUB_STEP_SUMMARY
-        fi
-
-  # Dry run summary
-  dry-run-summary:
+  dry-run:
     if: ${{ inputs.dry_run }}
-    needs: discover-cvrs
+    needs: prepare-matrix
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false
+      matrix:
+        year: ${{ fromJson(needs.prepare-matrix.outputs.years) }}
+
+    name: Dry Run ${{ matrix.year }}
+
+    env:
+      ENVIRONMENT: production
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+
     steps:
-    - name: Download all CVR lists
-      uses: actions/download-artifact@v8
-      with:
-        pattern: cvrs-*
-        path: /tmp/cvr_lists
-        merge-multiple: true
+      - uses: actions/checkout@v6
 
-    - name: Dry Run Summary
-      run: |
-        echo "## Climate Pipeline - Dry Run" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
 
-        for year in 2021 2022 2023; do
-          cvr_file="/tmp/cvr_lists/cvrs_${year}.json"
-          if [ -f "$cvr_file" ]; then
-            cvr_count=$(jq '.count' "$cvr_file")
-            batch_count=$(jq '.batch_count' "$cvr_file")
-            echo "### Year $year" >> $GITHUB_STEP_SUMMARY
-            echo "- CVRs discovered: $cvr_count" >> $GITHUB_STEP_SUMMARY
-            echo "- Batches: $batch_count" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - name: Discover CVRs for year ${{ matrix.year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+
+          python -c "
+          import os, sys
+          sys.path.insert(0, 'src')
+          from unified_pipeline.util.storage_access import StorageAccess
+          from unified_pipeline.util.log_util import Logger
+
+          logger = Logger.get_logger()
+          storage = StorageAccess()
+          bucket = os.getenv('R2_BUCKET', 'landbruget-data')
+          year = ${{ matrix.year }}
+
+          # Check Green Accounts
+          try:
+              gr_files = storage.list_files(f'{bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet')
+              logger.info(f'Green Accounts files for {year}: {len(gr_files or [])}')
+          except Exception as e:
+              logger.warning(f'Green Accounts query failed: {e}')
+
+          # Check FVM
+          try:
+              fvm_files = storage.list_files(f'{bucket}/silver/fvm_marker_{year}/*/data.parquet')
+              logger.info(f'FVM marker files for {year}: {len(fvm_files or [])}')
+          except Exception as e:
+              logger.warning(f'FVM query failed: {e}')
+
+          logger.info(f'Dry run complete for year {year}')
+          "
+
+  summary:
+    needs: [prepare-matrix, process-years]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Pipeline Summary
+        run: |
+          echo "## Climate Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Years Requested | ${{ inputs.years }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Max Parallel Jobs | ${{ inputs.max_parallel_jobs }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Limit | ${{ inputs.test_limit || 'None' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dry Run | ${{ inputs.dry_run }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "This was a dry run - no calculations were performed." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Data Location" >> $GITHUB_STEP_SUMMARY
+            echo "- **Individual Years**: \`r2://landbruget-data/gold/carbon_emissions_YYYY/{timestamp}/\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files**: \`emissions.parquet\`, \`categories.parquet\`, \`metadata.json\`" >> $GITHUB_STEP_SUMMARY
           fi
-        done
-
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "To run the actual processing, set 'Dry run mode' to false." >> $GITHUB_STEP_SUMMARY

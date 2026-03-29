@@ -11,7 +11,7 @@ The module consists of two main components:
 - AgriculturalFieldsSilver: Implementation of Silver processing logic using DuckDB-spatial
 
 The process reads in bronze layer data, transforms it using DuckDB-spatial,
-validates geometries, and stores the processed data in GCS.
+validates geometries, and stores the processed data in cloud storage.
 
 CRS Strategy:
 - Output CRS: EPSG:25832 (Danish UTM Zone 32N) for all processing
@@ -51,7 +51,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         dataset (str): Primary dataset name for silver data collection
         fields_dataset (str): Name of the agricultural fields dataset
         blocks_dataset (str): Name of the agricultural blocks dataset
-        bucket (str): GCS bucket name for storing processed data
+        bucket (str): storage bucket name for storing processed data
         storage_batch_size (int): Batch size for storage operations
         column_mapping (dict): Dictionary mapping raw field names to standardized names
         debug_memory (bool): Whether to log memory usage for debugging
@@ -99,11 +99,11 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
     standardizes column names, and saves the processed data.
 
     The processing includes:
-    1. Reading raw data from GCS
+    1. Reading raw data from cloud storage
     2. Extracting GeoJSON from each payload using DuckDB-spatial
     3. Validating and transforming geometries using DuckDB-spatial
     4. Standardizing column names using the mapping from config
-    5. Saving processed data to GCS
+    5. Saving processed data to cloud storage
     """
 
     def __init__(self, config: AgriculturalFieldsSilverConfig):

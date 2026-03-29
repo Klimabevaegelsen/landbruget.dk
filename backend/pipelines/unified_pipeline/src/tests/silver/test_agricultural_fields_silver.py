@@ -41,7 +41,7 @@ def silver_source(
     config: AgriculturalFieldsSilverConfig,
 ) -> AgriculturalFieldsSilver:
     """Create a silver source for testing."""
-    with patch("unified_pipeline.common.base.GCSDataAccess"), patch("duckdb.connect"):
+    with patch("unified_pipeline.common.base.StorageAccess"), patch("duckdb.connect"):
         return AgriculturalFieldsSilver(config)
 
 

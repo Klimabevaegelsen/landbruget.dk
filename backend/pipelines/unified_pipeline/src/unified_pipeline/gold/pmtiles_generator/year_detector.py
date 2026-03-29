@@ -4,7 +4,7 @@ import asyncio
 import logging
 import re
 
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 from .config import PMTilesGeneratorConfig
 
@@ -12,22 +12,24 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_path(path: str) -> str:
-    """Normalize gs:// paths to r2:// since list_files returns gs:// prefix."""
-    return path.replace("gs://", "r2://", 1) if path.startswith("gs://") else path
+    """Add r2:// prefix for DuckDB R2 storage access if no protocol prefix present."""
+    if path.startswith(("r2://", "s3://")):
+        return path
+    return "r2://" + path
 
 
 class DataSourceYearDetector:
-    """Detects available years for different data sources in GCS."""
+    """Detects available years for different data sources in cloud storage."""
 
-    def __init__(self, config: PMTilesGeneratorConfig, gcs_access: GCSDataAccess):
+    def __init__(self, config: PMTilesGeneratorConfig, storage_access: StorageAccess):
         """Initialize the year detector.
 
         Args:
             config: PMTiles generator configuration
-            gcs_access: GCS data access instance
+            storage_access: cloud storage data access instance
         """
         self.config = config
-        self.gcs = gcs_access
+        self.storage = storage_access
 
     async def detect_all_available_years(self) -> dict[str, list[int]]:
         """Detect available years for all data sources.
@@ -85,8 +87,8 @@ class DataSourceYearDetector:
         try:
             # Use direct glob pattern like pesticide_proximity does
             # For "silver/fvm_marker_" -> use "silver/fvm_marker_*"
-            direct_pattern = f"r2://{self.config.gcs_bucket}/{path_pattern}*"
-            all_paths = await asyncio.to_thread(self.gcs.list_files, direct_pattern)
+            direct_pattern = f"r2://{self.config.storage_bucket}/{path_pattern}*"
+            all_paths = await asyncio.to_thread(self.storage.list_files, direct_pattern)
 
             # Extract years using regex like pesticide_proximity does
             years = set()
@@ -123,7 +125,7 @@ class DataSourceYearDetector:
         try:
             # List all pesticide proximity directories
             all_paths = await asyncio.to_thread(
-                self.gcs.list_files, f"r2://{self.config.gcs_bucket}/gold/*"
+                self.storage.list_files, f"r2://{self.config.storage_bucket}/gold/*"
             )
 
             years = set()
@@ -132,7 +134,9 @@ class DataSourceYearDetector:
 
             for path in all_paths:
                 normalized = _normalize_path(path)
-                path_parts = normalized.replace(f"r2://{self.config.gcs_bucket}/", "").split("/")
+                path_parts = normalized.replace(f"r2://{self.config.storage_bucket}/", "").split(
+                    "/"
+                )
 
                 for part in path_parts:
                     match = pattern.match(part)
@@ -159,12 +163,10 @@ class DataSourceYearDetector:
         try:
             # NLES5 data is stored in timestamped directories under
             # gold/nles5_nitrogen_estimation_nitrogen_estimates/{timestamp}/
-            nles5_base_path = (
-                f"r2://{self.config.gcs_bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/"
-            )
+            nles5_base_path = f"r2://{self.config.storage_bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/"
 
             # Check if the base path exists
-            paths = await asyncio.to_thread(self.gcs.list_files, f"{nles5_base_path}*")
+            paths = await asyncio.to_thread(self.storage.list_files, f"{nles5_base_path}*")
             if not paths:
                 logger.warning("NLES5 data path not found")
                 return []
@@ -172,7 +174,7 @@ class DataSourceYearDetector:
             # Find timestamped directories (format: YYYYMMDD_HHMMSS)
             timestamp_dirs = []
             for path in paths:
-                # Extract directory name from path — normalize gs:// → r2://
+                # Extract directory name from path — normalize to r2:// for DuckDB
                 normalized = _normalize_path(path)
                 parts = normalized.replace(nles5_base_path, "").split("/")
                 if parts and parts[0] and parts[0][0].isdigit():
@@ -195,7 +197,7 @@ class DataSourceYearDetector:
                 FROM read_parquet('{latest_path}')
                 ORDER BY year
                 """
-                result = await asyncio.to_thread(self.gcs.duckdb_conn.execute, query)
+                result = await asyncio.to_thread(self.storage.duckdb_conn.execute, query)
                 years = [row[0] for row in result.fetchall()]
 
                 if years:

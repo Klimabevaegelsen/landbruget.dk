@@ -11,7 +11,7 @@ The module consists of two main components:
 - BNBOStatusSilver: Implementation of Silver processing logic using DuckDB-spatial
 
 The process reads in bronze layer data, transforms it using DuckDB-spatial,
-validates geometries, and stores the processed data in GCS.
+validates geometries, and stores the processed data in cloud storage.
 """
 
 import xml.etree.ElementTree as ET
@@ -41,7 +41,7 @@ class BNBOStatusSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): The name of the dataset, defaults to "bnbo_status".
-        bucket (str): The GCS bucket name where data is stored,
+        bucket (str): The storage bucket name where data is stored,
                         defaults to "landbruget-data".
         storage_batch_size (int): The batch size for storage operations, defaults to 5000.
         status_mapping (dict): A mapping from detailed status descriptions to simplified categories.
@@ -69,7 +69,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     This class handles the processing of BNBO status data from the bronze layer
     to the silver layer. It reads, transforms, and saves the data according to
     the data pipeline architecture. The class handles XML processing, geometry
-    operations, and data storage in GCS.
+    operations, and data storage in cloud storage.
 
     The processing includes:
     1. Reading raw XML data from the bronze layer.
@@ -77,7 +77,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
     3. Converting geometries to WKT format and calculating areas.
     4. Creating a Geo with the processed features.
     5. Dissolving geometries based on status categories.
-    6. Saving the processed data back to GCS.
+    6. Saving the processed data back to cloud storage.
     """
 
     def __init__(self, config: BNBOStatusSilverConfig):
@@ -88,9 +88,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             config (BNBOStatusSilverConfig): Configuration object for the processor."""
         super().__init__(config)
 
-        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # ✅ MIGRATION: BaseSource already created StorageAccess and configured DuckDB
         # No need to create another instance or setup DuckDB again
-        self.log.info("✅ BNBOStatusSilver: Using unified GCS access and DuckDB connection")
+        self.log.info(
+            "✅ BNBOStatusSilver: Using unified cloud storage access and DuckDB connection"
+        )
 
     def get_first_namespace(self, root: ET.Element) -> str | None:
         """
@@ -585,7 +587,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         1. Reads data from the bronze layer (either in-memory or from storage)
         2. Processes XML data into a Geo
         3. Creates a dissolved version of the Geo
-        4. Saves both the original and dissolved data to GCS
+        4. Saves both the original and dissolved data to cloud storage
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,

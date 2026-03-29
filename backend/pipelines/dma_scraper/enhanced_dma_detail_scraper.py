@@ -627,7 +627,7 @@ class FullDMAPipeline:
             logger.info("📤 Uploading data to storage...")
             r2_path = f"landbruget-data/bronze/dma/{self.timestamp}/"
             try:
-                from common.gcs.filesystem import get_r2_filesystem
+                from common.storage.filesystem import get_r2_filesystem
 
                 fs = get_r2_filesystem()
                 fs.put(str(self.session_dir), r2_path, recursive=True)
@@ -766,5 +766,5 @@ if __name__ == "__main__":
         logger.info("ℹ️  This will:")
         logger.info("   - Fetch companies from DMA API")
         logger.info("   - Download PDFs and company data")
-        logger.info("   - Upload results to GCS")
+        logger.info("   - Upload results to cloud storage")
         logger.info("   - Auto-shutdown the VM when complete (unless disabled)")

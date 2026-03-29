@@ -30,7 +30,11 @@ class FieldAreaAnalysisGoldConfig(BaseJobConfig):
         "Comprehensive spatial analysis of agricultural fields with environmental coverage"
     )
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Input silver datasets
     agricultural_fields_dataset: str = "fvm_marker"
@@ -136,10 +140,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info(f"Processing latest year: {latest_year}")
 
         dataset_name = f"fvm_marker_{latest_year}"
-        gcs_path = self._get_latest_silver_path(dataset_name)
+        storage_path = self._get_latest_silver_path(dataset_name)
 
-        self.gcs_access.query_parquet_direct(
-            gcs_path,
+        self.storage.query_parquet_direct(
+            storage_path,
             f"""SELECT
                 field_id,
                 block_id,
@@ -320,7 +324,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """Load a dataset with the given select query."""
         try:
             path = self._get_latest_silver_path(dataset_name)
-            self.gcs_access.query_parquet_direct(path, select_query, table_name)
+            self.storage.query_parquet_direct(path, select_query, table_name)
             count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             self.log.info(f"✅ Loaded {count:,} {table_name} records")
         except FileNotFoundError:
@@ -331,7 +335,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         """Load a dataset and split multipolygons."""
         try:
             path = self._get_latest_silver_path(dataset_name)
-            self.gcs_access.create_table_from_gcs(f"{table_name}_raw", path)
+            self.storage.create_table_from_storage(f"{table_name}_raw", path)
 
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} AS
@@ -535,7 +539,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("🔄 Processing properties...")
 
         # Get total count
-        with self.gcs_access._temp_download(self.properties_path) as temp_file:
+        with self.storage._temp_download(self.properties_path) as temp_file:
             total_properties = self.conn.execute(f"""
                 SELECT COUNT(*) FROM read_parquet('{temp_file}')
             """).fetchone()[0]
@@ -566,7 +570,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 f"   Processing chunk: {processed:,} to {processed + chunk_size_actual:,}"
             )
 
-            with self.gcs_access._temp_download(self.properties_path) as temp_file:
+            with self.storage._temp_download(self.properties_path) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE properties_chunk AS
                     SELECT * FROM read_parquet('{temp_file}')
@@ -808,7 +812,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
         self.log.info("=" * 80)
 
     def _get_available_fvm_marker_years(self) -> list[int]:
-        """Get list of available FVM marker years from GCS."""
+        """Get list of available FVM marker years from cloud storage."""
         return super()._get_available_fvm_marker_years()
 
     def _get_latest_silver_path_for_dataset(self, dataset_name: str) -> str | None:

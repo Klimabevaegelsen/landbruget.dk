@@ -37,7 +37,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         # Load field-property intersections from Stage 1C (foundation data)
         stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage1c_path,
             "SELECT field_uuid, bfe_number, intersection_geometry as property_geometry",
             "field_property_intersections",
@@ -47,15 +47,13 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         # Load field-BNBO intersections from Stage 2A
         stage2a_bnbo_dataset = updated_outputs["field_bnbo_intersections"]
         stage2a_bnbo_path = self._get_latest_gold_path(stage2a_bnbo_dataset)
-        self.gcs_access.query_parquet_direct(
-            stage2a_bnbo_path, "SELECT *", "field_bnbo_intersections"
-        )
+        self.storage.query_parquet_direct(stage2a_bnbo_path, "SELECT *", "field_bnbo_intersections")
         self.log.info(f"✅ Loaded field_bnbo_intersections from {stage2a_bnbo_dataset}")
 
         # Load field-BNBO-water intersections from Stage 2A
         stage2a_water_dataset = updated_outputs["field_bnbo_water_intersections"]
         stage2a_water_path = self._get_latest_gold_path(stage2a_water_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2a_water_path, "SELECT *", "stage3a_field_bnbo_water_intersections"
         )
         self.log.info(f"✅ Loaded field_bnbo_water_intersections from {stage2a_water_dataset}")
@@ -208,7 +206,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save both geometric intersection tables to GCS."""
+        """Save both geometric intersection tables to cloud storage."""
         # Save property × BNBO intersections
         self._save_stage_output("property_bnbo_intersections", "property_bnbo_intersections")
 

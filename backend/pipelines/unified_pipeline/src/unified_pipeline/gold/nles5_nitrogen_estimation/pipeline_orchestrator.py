@@ -27,7 +27,7 @@ class NLES5PipelineOrchestrator:
         self.config = processor.config
         self.log = processor.log
         self.conn = processor.conn
-        self.gcs_access = processor.gcs_access
+        self.storage = processor.storage_access
 
     async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Run production-optimized NLES5 nitrogen estimation with real climate data."""

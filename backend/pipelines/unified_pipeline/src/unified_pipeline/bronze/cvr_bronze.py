@@ -37,7 +37,7 @@ class CVRBronzeConfig(BaseJobConfig):
         type (str): Type of the data source (api)
         description (str): Brief description of the data
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         cvr_numbers (List[str]): List of CVR numbers to fetch
         fetch_mode (str): 'full' or 'basic' - controls data verbosity
         include_financial_docs (bool): Whether to fetch financial documents
@@ -66,13 +66,13 @@ class CVRBronze(BaseSource[CVRBronzeConfig], BronzeJobInterface):
 
     This class is responsible for fetching raw company data from the Danish CVR register API
     for specified CVR numbers. It handles API communication, error handling,
-    and stores the raw data in Google Cloud Storage for further processing.
+    and stores the raw data in cloud storage for further processing.
 
     Processing flow:
     1. Initialize CVR API client with configuration
     2. Fetch company data for each CVR number
     3. Optionally fetch financial documents
-    4. Store raw responses in GCS
+    4. Store raw responses in cloud storage
     5. Return structured data for in-memory passing to silver stage
     """
 
@@ -162,17 +162,21 @@ class CVRBronze(BaseSource[CVRBronzeConfig], BronzeJobInterface):
         """
         try:
             # Save company data
-            company_path = f"gs://{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_company.json"
-            self.gcs_access.upload_json(company_data, company_path)
+            company_path = (
+                f"{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_company.json"
+            )
+            self.storage.upload_json(company_data, company_path)
 
             # Save financial documents if any
             if financial_docs:
-                financial_path = f"gs://{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_financial.json"
-                self.gcs_access.upload_json(financial_docs, financial_path)
+                financial_path = f"{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_financial.json"
+                self.storage.upload_json(financial_docs, financial_path)
 
             # Save metadata
-            metadata_path = f"gs://{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_metadata.json"
-            self.gcs_access.upload_json(metadata, metadata_path)
+            metadata_path = (
+                f"{self.config.bucket}/bronze/cvr/{self.date_pattern}/{cvr_number}_metadata.json"
+            )
+            self.storage.upload_json(metadata, metadata_path)
 
             self.log.info(f"Saved CVR {cvr_number} data to storage")
 

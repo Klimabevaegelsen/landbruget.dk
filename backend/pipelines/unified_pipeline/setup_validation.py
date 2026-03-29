@@ -30,7 +30,7 @@ def check_required_packages() -> list[tuple[bool, str]]:
         "python-dotenv",
         "loguru",
         "aiohttp",
-        "gcsfs",
+        "s3fs",
         "google.cloud.storage",
         "ibis",
         "duckdb",
@@ -68,9 +68,9 @@ def check_required_packages() -> list[tuple[bool, str]]:
 def check_environment_variables() -> list[tuple[bool, str]]:
     """Check if required environment variables are set."""
     required_env_vars = [
-        ("GCS_BUCKET", "Google Cloud Storage bucket name"),
-        ("GCS_ACCESS_KEY_ID", "GCS access key ID"),
-        ("GCS_SECRET_ACCESS_KEY", "GCS secret access key"),
+        ("GCS_BUCKET", "Cloud storage bucket name"),
+        ("GCS_ACCESS_KEY_ID", "Cloud storage access key ID"),
+        ("GCS_SECRET_ACCESS_KEY", "Cloud storage secret access key"),
     ]
 
     optional_env_vars = [

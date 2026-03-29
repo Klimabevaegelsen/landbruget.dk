@@ -143,7 +143,7 @@ last_updated: DATE
 ```
 
 **Storage**:
-- **Production**: GCS as GeoParquet
+- **Production: Cloud storage as GeoParquet
 - **Development**: Local GeoParquet files
 - **Structure**: `silver/YYYYMMDD/buildings_filtered.parquet`
 

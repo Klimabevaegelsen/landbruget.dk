@@ -57,7 +57,7 @@ class FVMWFSBronzeConfig(BaseJobConfig):
         dataset_environmental_subsidies (str): Name of the environmental subsidies dataset
             in storage
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         markblokke_years (List[int]): Years available for Markblokke data (2005-2026)
         marker_years (List[int]): Years available for Marker data (2008-2025)
         smaabiotoper_years (List[int]): Years available for Smaabiotoper data (2023-2025)
@@ -206,7 +206,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
        OrganicSubsidies, GrasslandSubsidies, EnvironmentalSubsidies), iterate through years
     2. Get total feature count from WFS service
     3. Fetch complete dataset in single request (optimal based on testing)
-    4. Save raw WFS responses to Google Cloud Storage
+    4. Save raw WFS responses to cloud storage
     """
 
     def __init__(self, config: FVMWFSBronzeConfig):

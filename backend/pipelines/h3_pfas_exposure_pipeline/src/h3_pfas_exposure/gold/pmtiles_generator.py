@@ -20,10 +20,12 @@ from ..config import H3SpatialConfig
 class H3PMTilesGenerator:
     """Generates PMTiles from H3 PFAS analysis results."""
 
-    def __init__(self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, gcs_access=None):
+    def __init__(
+        self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, storage_access=None
+    ):
         self.conn = conn
         self.config = config
-        self.gcs_access = gcs_access
+        self.storage = storage_access
         self.log = logger.bind(component="H3PMTilesGenerator")
 
     def generate_pmtiles_for_year(self, results_table: str, year: int | str) -> str | None:
@@ -62,15 +64,15 @@ class H3PMTilesGenerator:
                     os.remove(geojson_path)
                 return None
 
-            # Upload to GCS if available
-            if self.gcs_access:
-                gcs_path = self._upload_pmtiles_to_gcs(pmtiles_path, year)
-                if gcs_path:
-                    self.log.info(f"✅ PMTiles uploaded to: {gcs_path}")
+            # Upload to cloud storage if available
+            if self.storage:
+                storage_path = self._upload_pmtiles_to_storage(pmtiles_path, year)
+                if storage_path:
+                    self.log.info(f"✅ PMTiles uploaded to: {storage_path}")
                     # Clean up GeoJSON file after successful upload
                     if geojson_path and os.path.exists(geojson_path):
                         os.remove(geojson_path)
-                    return gcs_path
+                    return storage_path
                 # Clean up files on upload failure
                 if geojson_path and os.path.exists(geojson_path):
                     os.remove(geojson_path)
@@ -130,15 +132,15 @@ class H3PMTilesGenerator:
                     os.remove(geojson_path)
                 return None
 
-            # Upload to GCS if available
-            if self.gcs_access:
-                gcs_path = self._upload_kommune_pmtiles_to_gcs(pmtiles_path, year)
-                if gcs_path:
-                    self.log.info(f"✅ Kommune PMTiles uploaded to: {gcs_path}")
+            # Upload to cloud storage if available
+            if self.storage:
+                storage_path = self._upload_kommune_pmtiles_to_storage(pmtiles_path, year)
+                if storage_path:
+                    self.log.info(f"✅ Kommune PMTiles uploaded to: {storage_path}")
                     # Clean up GeoJSON file after successful upload
                     if geojson_path and os.path.exists(geojson_path):
                         os.remove(geojson_path)
-                    return gcs_path
+                    return storage_path
                 # Clean up files on upload failure
                 if geojson_path and os.path.exists(geojson_path):
                     os.remove(geojson_path)
@@ -431,30 +433,30 @@ class H3PMTilesGenerator:
             self.log.error(f"❌ PMTiles generation failed: {e}")
             return None
 
-    def _upload_pmtiles_to_gcs(self, pmtiles_path: str, year: int | str) -> str | None:
-        """Upload PMTiles to GCS with public read access."""
+    def _upload_pmtiles_to_storage(self, pmtiles_path: str, year: int | str) -> str | None:
+        """Upload PMTiles to cloud storage with public read access."""
         try:
             import shutil
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            gcs_path = f"gs://{self.config.bucket}/gold/pmtiles/h3_pfas_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pfas_{year}_res{self.config.h3_resolution}.pmtiles"
-            fs_path = gcs_path.replace("gs://", "", 1)
+            storage_path = f"{self.config.bucket}/gold/pmtiles/h3_pfas_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pfas_{year}_res{self.config.h3_resolution}.pmtiles"
+            fs_path = storage_path
 
-            self.log.info(f"☁️ Uploading PMTiles to: {gcs_path}")
+            self.log.info(f"☁️ Uploading PMTiles to: {storage_path}")
 
-            # Upload using GCS access - use the correct streaming method
-            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(fs_path, "wb") as dst:
+            # Upload using cloud storage access - use the correct streaming method
+            with open(pmtiles_path, "rb") as src, self.storage.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             # Set public read ACL on the uploaded file
-            self._set_public_read_acl(gcs_path)
+            self._set_public_read_acl(storage_path)
 
             # Clean up local file after successful upload
             if os.path.exists(pmtiles_path):
                 os.remove(pmtiles_path)
 
-            return gcs_path
+            return storage_path
 
         except Exception as e:
             self.log.error(f"❌ PMTiles upload failed: {e}")
@@ -464,15 +466,15 @@ class H3PMTilesGenerator:
                     os.remove(pmtiles_path)
             return None
 
-    def _set_public_read_acl(self, gcs_path: str) -> None:
+    def _set_public_read_acl(self, storage_path: str) -> None:
         """Set public read ACL on a storage file.
 
-        Note: R2 does not support per-object ACLs in the same way as GCS.
+        Note: R2 does not support per-object ACLs in the same way as native cloud storage.
         Public access is controlled via R2 bucket settings or custom domains.
         This method is kept as a no-op for backward compatibility.
         """
         self.log.info(
-            f"ℹ️ Public read ACL not applicable for R2 storage: {gcs_path}. "
+            f"ℹ️ Public read ACL not applicable for R2 storage: {storage_path}. "
             "Configure public access via R2 bucket settings or custom domain."
         )
 
@@ -713,30 +715,30 @@ class H3PMTilesGenerator:
             self.log.error(f"❌ Kommune PMTiles generation failed: {e}")
             return None
 
-    def _upload_kommune_pmtiles_to_gcs(self, pmtiles_path: str, year: int | str) -> str | None:
-        """Upload kommune PMTiles to GCS with public read access."""
+    def _upload_kommune_pmtiles_to_storage(self, pmtiles_path: str, year: int | str) -> str | None:
+        """Upload kommune PMTiles to cloud storage with public read access."""
         try:
             import shutil
             from datetime import datetime
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            gcs_path = f"gs://{self.config.bucket}/gold/pmtiles/kommune_pfas_{year}/{timestamp}/kommune_pfas_{year}.pmtiles"
-            fs_path = gcs_path.replace("gs://", "", 1)
+            storage_path = f"{self.config.bucket}/gold/pmtiles/kommune_pfas_{year}/{timestamp}/kommune_pfas_{year}.pmtiles"
+            fs_path = storage_path
 
-            self.log.info(f"☁️ Uploading kommune PMTiles to: {gcs_path}")
+            self.log.info(f"☁️ Uploading kommune PMTiles to: {storage_path}")
 
-            # Upload using GCS access - use the correct streaming method
-            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(fs_path, "wb") as dst:
+            # Upload using cloud storage access - use the correct streaming method
+            with open(pmtiles_path, "rb") as src, self.storage.fs.open(fs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
             # Set public read ACL on the uploaded file
-            self._set_public_read_acl(gcs_path)
+            self._set_public_read_acl(storage_path)
 
             # Clean up local file after successful upload
             if os.path.exists(pmtiles_path):
                 os.remove(pmtiles_path)
 
-            return gcs_path
+            return storage_path
 
         except Exception as e:
             self.log.error(f"❌ Kommune PMTiles upload failed: {e}")
@@ -753,7 +755,7 @@ class H3PMTilesGenerator:
             years_data: Dict mapping year to results table name
 
         Returns:
-            Dict mapping year to PMTiles path (GCS or local)
+            Dict mapping year to PMTiles path (cloud storage or local)
         """
         results = {}
 

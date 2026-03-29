@@ -295,7 +295,7 @@ def test_validate_geometries_outside_bounds(
 
 @pytest.mark.asyncio
 @patch(
-    "unified_pipeline.silver.geus_dataverse_pesticides.GEUSDataversePesticidesSilver._download_rds_from_gcs"
+    "unified_pipeline.silver.geus_dataverse_pesticides.GEUSDataversePesticidesSilver._download_rds_from_storage"
 )
 @patch(
     "unified_pipeline.silver.geus_dataverse_pesticides.GEUSDataversePesticidesSilver._convert_rds_to_dataframe"
@@ -356,10 +356,10 @@ async def test_run_missing_rds_path(
 async def test_run_no_manifest_found(
     silver_source: GEUSDataversePesticidesSilver,
 ) -> None:
-    """Test running silver processing when no manifest is found in GCS."""
-    # Mock GCS access methods to return empty list (no manifests)
-    silver_source.gcs_access = MagicMock()
-    silver_source.gcs_access.list_files.return_value = []
+    """Test running silver processing when no manifest is found in cloud storage."""
+    # Mock cloud storage access methods to return empty list (no manifests)
+    silver_source.storage = MagicMock()
+    silver_source.storage.list_files.return_value = []
 
     result = await silver_source.run(bronze_data=None)
 
@@ -506,7 +506,7 @@ def test_pfas_geometry_creation(
 
 @pytest.mark.asyncio
 @patch(
-    "unified_pipeline.silver.geus_dataverse_pesticides.GEUSDataversePesticidesSilver._download_rds_from_gcs"
+    "unified_pipeline.silver.geus_dataverse_pesticides.GEUSDataversePesticidesSilver._download_rds_from_storage"
 )
 @patch(
     "unified_pipeline.silver.geus_dataverse_pesticides.GEUSDataversePesticidesSilver._convert_rds_to_dataframe"

@@ -74,16 +74,16 @@ jobs:
         import sys
         import json
         import re
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from unified_pipeline.util.storage_access import StorageAccess
 
         def discover_pesticide_years():
             """Discover available pesticide years from R2 storage."""
             try:
-                gcs_access = GCSDataAccess()
+                storage_access = StorageAccess()
                 bucket = os.getenv("R2_BUCKET", "landbruget-data")
 
                 # List all parquet files in the pesticides silver directory (recursive)
-                files = gcs_access.list_files(f"gs://{bucket}/silver/pesticides/*/*.parquet")
+                files = storage_access.list_files(f"{bucket}/silver/pesticides/*/*.parquet")
                 years = set()
 
                 for file_path in files:
@@ -102,11 +102,11 @@ jobs:
         def discover_field_years():
             """Discover available field years from R2 storage."""
             try:
-                gcs_access = GCSDataAccess()
+                storage_access = StorageAccess()
                 bucket = os.getenv("R2_BUCKET", "landbruget-data")
 
                 # List all parquet files in silver layer to find fvm_marker directories (recursive)
-                files = gcs_access.list_files(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
+                files = storage_access.list_files(f"{bucket}/silver/fvm_marker_*/*/*.parquet")
                 years = set()
 
                 for file_path in files:

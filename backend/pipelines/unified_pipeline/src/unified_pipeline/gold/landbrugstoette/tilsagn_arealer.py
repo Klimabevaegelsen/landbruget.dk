@@ -32,7 +32,11 @@ class TilsagnArealerGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Unified spatial subsidies - organic, grassland, environmental"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Silver input datasets (from FVM WFS processor)
     organic_dataset: str = Field(
@@ -133,11 +137,11 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
             self.log.info(f"Using in-memory silver data for {dataset}")
             self.conn.register(table_name, silver_data[dataset])
         else:
-            # Load from GCS - FVM data is organized by year
-            pattern = f"gs://{self.config.bucket}/silver/{dataset}/**/*.parquet"
+            # Load from cloud storage - FVM data is organized by year
+            pattern = f"{self.config.bucket}/silver/{dataset}/**/*.parquet"
             self.log.info(f"Loading {dataset} from: {pattern}")
 
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
             if not files:
                 self.log.warning(f"No files found for {dataset}, creating empty table")
                 self.conn.execute(f"""
@@ -167,7 +171,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
             latest_file = sorted(files)[-1]
             self.log.info(f"Loading: {latest_file}")
 
-            with self.gcs_access._temp_download(latest_file) as temp_file:
+            with self.storage._temp_download(latest_file) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {table_name} AS
                     SELECT * FROM read_parquet('{temp_file}')
@@ -412,7 +416,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
         return validation
 
     async def _save_gold_data(self) -> dict[str, str]:
-        """Save gold tables to GCS."""
+        """Save gold tables to cloud storage."""
         self.log.info("Saving spatial subsidies gold data")
 
         output_paths = {}
@@ -424,7 +428,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
             bucket=self.config.bucket,
             stage="gold",
         )
-        output_paths["detail"] = f"gs://{self.config.bucket}/gold/{self.config.dataset}"
+        output_paths["detail"] = f"{self.config.bucket}/gold/{self.config.dataset}"
 
         # Save CVR summary
         self._save_data(
@@ -433,9 +437,7 @@ class TilsagnArealerGold(BaseSource[TilsagnArealerGoldConfig], GoldJobInterface)
             bucket=self.config.bucket,
             stage="gold",
         )
-        output_paths["cvr_summary"] = (
-            f"gs://{self.config.bucket}/gold/{self.config.dataset}_cvr_summary"
-        )
+        output_paths["cvr_summary"] = f"{self.config.bucket}/gold/{self.config.dataset}_cvr_summary"
 
         self.log.info(f"Saved gold data: {output_paths}")
 

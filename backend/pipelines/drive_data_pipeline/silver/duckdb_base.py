@@ -8,8 +8,8 @@ import duckdb
 
 # Handle imports for both standalone and package usage
 try:
-    # Use common GCS module's optimized DuckDB connection
-    from common.gcs import get_duckdb_with_gcs
+    # Use common storage module's optimized DuckDB connection
+    from common.storage import get_duckdb_with_r2
 
     from ..utils.logging import get_logger
 
@@ -21,7 +21,7 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
     # Fallback connection for standalone usage
-    def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
+    def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
         conn = duckdb.connect()
         try:
             conn.execute("INSTALL spatial")
@@ -54,8 +54,8 @@ class DuckDBProcessor:
         else:
             # Use shared connection or create new one
             if DuckDBProcessor._shared_conn is None:
-                DuckDBProcessor._shared_conn = get_duckdb_with_gcs()
-                logger.info("🔗 Created new shared DuckDB connection with GCS support")
+                DuckDBProcessor._shared_conn = get_duckdb_with_r2()
+                logger.info("🔗 Created new shared DuckDB connection with cloud storage support")
 
             self.conn = DuckDBProcessor._shared_conn
             DuckDBProcessor._conn_ref_count += 1

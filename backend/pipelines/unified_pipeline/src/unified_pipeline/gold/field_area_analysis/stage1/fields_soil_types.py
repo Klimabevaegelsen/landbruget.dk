@@ -65,7 +65,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         updated_outputs = CONFIG.update_outputs_for_year()
         stage0_soil_types_dataset = updated_outputs["soil_types_prefiltered"]
         stage0_soil_types_path = self._get_latest_gold_path(stage0_soil_types_dataset)
-        self.gcs_access.query_parquet_direct(stage0_soil_types_path, "SELECT *", "soil_types_raw")
+        self.storage.query_parquet_direct(stage0_soil_types_path, "SELECT *", "soil_types_raw")
         self.log.info(f"✅ Loaded soil types from {stage0_soil_types_dataset}")
 
         # OPTIMIZATION: Decompose soil types with ST_Dump for optimal spatial indexing
@@ -307,7 +307,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save simplified areas to GCS for Stage 4 compatibility."""
+        """Save simplified areas to cloud storage for Stage 4 compatibility."""
         # Save simplified areas - this is what Stage 4 expects
         self.log.info("Saving field soil areas for Stage 4 compatibility...")
         self._save_stage_output("field_soil_areas", "field_soil_intersections")

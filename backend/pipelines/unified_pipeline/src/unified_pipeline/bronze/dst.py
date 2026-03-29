@@ -40,7 +40,7 @@ class DSTBronzeConfig(BaseJobConfig):
         type (str): Type of the data source (api)
         description (str): Brief description of the data
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         table_ids (List[str]): List of DST table IDs to fetch
         lang (str): Language for API responses
         api_base_url (str): Base URL for DST API
@@ -169,12 +169,12 @@ class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
 
     This class is responsible for fetching raw data from the Danmarks Statistik API
     for multiple table types. It handles API communication, error handling, and
-    stores the raw data in Google Cloud Storage for further processing.
+    stores the raw data in cloud storage for further processing.
 
     Processing flow:
     1. Initialize API client with configuration
     2. Fetch data and metadata for each configured table
-    3. Store raw responses in GCS
+    3. Store raw responses in cloud storage
     4. Return structured data for in-memory passing to silver stage
     """
 
@@ -255,21 +255,21 @@ class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
         """
         try:
             # Save table data
-            data_path = (
-                f"gs://{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_data.json"
-            )
-            self.gcs_access.upload_json(table_data, data_path)
+            data_path = f"{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_data.json"
+            self.storage.upload_json(table_data, data_path)
 
             # Save table info if available
             if table_info:
-                info_path = f"gs://{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_tableinfo.json"
-                self.gcs_access.upload_json(table_info, info_path)
+                info_path = (
+                    f"{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_tableinfo.json"
+                )
+                self.storage.upload_json(table_info, info_path)
 
             # Save metadata
             metadata_path = (
-                f"gs://{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_metadata.json"
+                f"{self.config.bucket}/bronze/dst/{self.date_pattern}/{table_id}_metadata.json"
             )
-            self.gcs_access.upload_json(metadata, metadata_path)
+            self.storage.upload_json(metadata, metadata_path)
 
             self.log.info(f"Saved DST table {table_id} data to storage")
 

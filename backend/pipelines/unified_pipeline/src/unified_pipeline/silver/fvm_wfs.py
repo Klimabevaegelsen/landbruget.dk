@@ -71,7 +71,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
         dataset_marker (str): Name of the marker dataset
         dataset_smaabiotoper (str): Name of the smaabiotoper dataset
         dataset_organic_areas (str): Name of the organic areas dataset
-        bucket (str): GCS bucket name for storing processed data
+        bucket (str): storage bucket name for storing processed data
         storage_batch_size (int): Batch size for storage operations
         markblokke_years (List[int]): Years to process for Markblokke (2005-2026)
         marker_years (List[int]): Years to process for Marker (2008-2025)
@@ -374,13 +374,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     validates geometries, standardizes column names, and saves the processed data.
 
     The processing includes:
-    1. Reading raw WFS data from GCS
+    1. Reading raw WFS data from cloud storage
     2. Extracting GeoJSON features from each payload and converting to Geos
     3. Validating and transforming geometries
     4. Standardizing column names using the mapping from config
     5. NEW: Municipality assignment for marker data
        (spatial intersection + closest distance fallback)
-    6. Saving processed data to GCS for each year
+    6. Saving processed data to cloud storage for each year
     """
 
     def __init__(self, config: FVMWFSSilverConfig):
@@ -1326,21 +1326,21 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     organic_table = f"fvm_organic_areas_{year}"
 
                     # Check if both datasets exist for this year
-                    marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
-                    organic_path = f"gs://{self.config.bucket}/silver/{organic_table}/"
+                    marker_path = f"{self.config.bucket}/silver/{marker_table}/"
+                    organic_path = f"{self.config.bucket}/silver/{organic_table}/"
 
-                    # Load marker data using GCSDataAccess
+                    # Load marker data using StorageAccess
                     try:
                         # Find the latest timestamped file
                         marker_pattern = f"{marker_path}*/data.parquet"
-                        marker_files = self.gcs_access.list_files(marker_pattern)
+                        marker_files = self.storage.list_files(marker_pattern)
                         if not marker_files:
                             raise FileNotFoundError(
                                 f"No files found matching pattern: {marker_pattern}"
                             )
 
                         latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
-                        self.gcs_access.query_parquet_direct(
+                        self.storage.query_parquet_direct(
                             latest_marker_file, "SELECT *", f"temp_marker_{year}"
                         )
                         marker_count = self.conn.execute(
@@ -1354,18 +1354,18 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         self.log.warning(f"Could not load marker data for {year}: {e}")
                         continue
 
-                    # Load organic data using GCSDataAccess
+                    # Load organic data using StorageAccess
                     try:
                         # Find the latest timestamped file
                         organic_pattern = f"{organic_path}*/data.parquet"
-                        organic_files = self.gcs_access.list_files(organic_pattern)
+                        organic_files = self.storage.list_files(organic_pattern)
                         if not organic_files:
                             raise FileNotFoundError(
                                 f"No files found matching pattern: {organic_pattern}"
                             )
 
                         latest_organic_file = sorted(organic_files)[-1]  # Latest by timestamp
-                        self.gcs_access.query_parquet_direct(
+                        self.storage.query_parquet_direct(
                             latest_organic_file, "SELECT *", f"temp_organic_{year}"
                         )
                         organic_count = self.conn.execute(
@@ -1447,45 +1447,48 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     except Exception:
                         self.log.debug(f"Could not verify SPATIAL_JOIN operator for {year}")
 
-                    # Perform spatial matching to enrich marker fields
-                    # Optimized for DuckDB Spatial PR #545 SPATIAL_JOIN operator
-                    # Using single spatial predicate to trigger SPATIAL_JOIN operator
-                    enrichment_query = f"""
+                    # Two-step approach: SELECT with spatial join (triggers
+                    # SPATIAL_JOIN R-tree operator), then UPDATE from result.
+                    # Single-step UPDATE...FROM doesn't trigger the optimizer.
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE temp_organic_matches_{year} AS
+                        SELECT DISTINCT
+                            m.rowid as marker_rowid,
+                            o.conversion_date,
+                            o.deregistration_date,
+                            o.conversion_status
+                        FROM temp_marker_filtered_{year} m
+                        INNER JOIN temp_organic_filtered_{year} o
+                            ON ST_Contains(m.geometry, ST_Centroid(o.geometry))
+                        WHERE m.field_id = o.field_id
+                    """)
+
+                    matches_updated = self.conn.execute(f"""
                         UPDATE temp_marker_{year} SET
                             is_organic = TRUE,
                             organic_conversion_date = CASE
-                                WHEN organic_matches.conversion_date != ''
-                                THEN TRY_CAST(organic_matches.conversion_date AS TIMESTAMP)
+                                WHEN om.conversion_date != ''
+                                THEN TRY_CAST(om.conversion_date AS TIMESTAMP)
                                 ELSE NULL
                             END,
                             organic_deregistration_date = CASE
-                                WHEN organic_matches.deregistration_date != ''
-                                THEN TRY_CAST(organic_matches.deregistration_date AS TIMESTAMP)
+                                WHEN om.deregistration_date != ''
+                                THEN TRY_CAST(om.deregistration_date AS TIMESTAMP)
                                 ELSE NULL
                             END,
-                            organic_conversion_status = organic_matches.conversion_status
-                        FROM (
-                            SELECT DISTINCT
-                                m.rowid as marker_rowid,
-                                o.conversion_date,
-                                o.deregistration_date,
-                                o.conversion_status
-                            FROM temp_marker_filtered_{year} m
-                            INNER JOIN temp_organic_filtered_{year} o
-                                ON ST_Contains(m.geometry, ST_Centroid(o.geometry))
-                            WHERE m.field_id = o.field_id
-                        ) AS organic_matches
-                        WHERE temp_marker_{year}.rowid = organic_matches.marker_rowid
-                    """
+                            organic_conversion_status = om.conversion_status
+                        FROM temp_organic_matches_{year} om
+                        WHERE temp_marker_{year}.rowid = om.marker_rowid
+                    """).fetchone()[0]
 
-                    matches_updated = self.conn.execute(enrichment_query).fetchone()[0]
+                    self.conn.execute(f"DROP TABLE IF EXISTS temp_organic_matches_{year}")
                     enriched_count += matches_updated
 
                     self.log.info(
                         f"Enriched {matches_updated:,} marker fields with organic data for {year}"
                     )
 
-                    # Save the enriched marker data back to GCS
+                    # Save the enriched marker data back to cloud storage
                     enriched_marker_table = f"enriched_marker_{year}"
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE {enriched_marker_table} AS
@@ -1525,8 +1528,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         """Find the latest GKEA fertilizer data for a specific year."""
         try:
             # Look for GKEA data in fertiliser silver dataset for CVR identification
-            pattern = f"gs://{self.config.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.config.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
+            files = self.storage.list_files(pattern)
 
             if files:
                 # Find the most recent file by sorting (timestamps are in path)
@@ -1579,7 +1582,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 table_name = f"gkea_raw_{year}" if not all_gkea_data_loaded else "gkea_raw_temp"
 
-                self.gcs_access.query_parquet_direct(
+                self.storage.query_parquet_direct(
                     gkea_path,
                     f"""
                     SELECT
@@ -1944,7 +1947,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     def _apply_cvr_updates(
         self, marker_table: str, matches: list, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame
     ) -> int:
-        """Apply CVR updates to the marker table and save back to GCS"""
+        """Apply CVR updates to the marker table and save back to cloud storage"""
         fields_updated = 0
 
         try:
@@ -1995,7 +1998,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     FROM {temp_table}
                 """)
 
-                # Save the updated data back to GCS
+                # Save the updated data back to cloud storage
                 dataset_name = marker_table.replace("final_processed_", "")
                 self._save_data(
                     marker_table,
@@ -2099,21 +2102,21 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         marker_table = f"fvm_marker_{year}"
 
                         # Check if both datasets exist for this year
-                        subsidy_path = f"gs://{self.config.bucket}/silver/{subsidy_table}/"
-                        marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
+                        subsidy_path = f"{self.config.bucket}/silver/{subsidy_table}/"
+                        marker_path = f"{self.config.bucket}/silver/{marker_table}/"
 
-                        # Load subsidy data using GCSDataAccess
+                        # Load subsidy data using StorageAccess
                         try:
                             # Find the latest timestamped file
                             subsidy_pattern = f"{subsidy_path}*/data.parquet"
-                            subsidy_files = self.gcs_access.list_files(subsidy_pattern)
+                            subsidy_files = self.storage.list_files(subsidy_pattern)
                             if not subsidy_files:
                                 raise FileNotFoundError(
                                     f"No files found matching pattern: {subsidy_pattern}"
                                 )
 
                             latest_subsidy_file = sorted(subsidy_files)[-1]  # Latest by timestamp
-                            self.gcs_access.query_parquet_direct(
+                            self.storage.query_parquet_direct(
                                 latest_subsidy_file, "SELECT *", f"temp_subsidy_{year}"
                             )
                             subsidy_count = self.conn.execute(
@@ -2131,14 +2134,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         try:
                             # Find the latest timestamped file
                             marker_pattern = f"{marker_path}*/data.parquet"
-                            marker_files = self.gcs_access.list_files(marker_pattern)
+                            marker_files = self.storage.list_files(marker_pattern)
                             if not marker_files:
                                 raise FileNotFoundError(
                                     f"No files found matching pattern: {marker_pattern}"
                                 )
 
                             latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
-                            self.gcs_access.query_parquet_direct(
+                            self.storage.query_parquet_direct(
                                 latest_marker_file, "SELECT *", f"temp_marker_{year}"
                             )
                             # Filter the loaded data in DuckDB
@@ -2185,25 +2188,28 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
                         """)
 
-                        # Perform spatial matching with field_id validation
-                        # Find marker fields that contain the centroid of subsidy fields
-                        # AND have matching field_id
-                        enrichment_query = f"""
-                            UPDATE temp_subsidy_{year} SET
-                                field_uuid = field_matches.field_uuid
-                            FROM (
-                                SELECT DISTINCT
-                                    s.rowid as subsidy_rowid,
-                                    m.field_uuid
-                                FROM temp_subsidy_filtered_{year} s
-                                INNER JOIN temp_marker_{year} m
-                                    ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
-                                WHERE s.field_id = m.field_id
-                            ) AS field_matches
-                            WHERE temp_subsidy_{year}.rowid = field_matches.subsidy_rowid
-                        """
+                        # Two-step approach: SELECT with spatial join (triggers
+                        # SPATIAL_JOIN R-tree operator), then UPDATE from result.
+                        # Single-step UPDATE...FROM doesn't trigger the optimizer.
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE temp_spatial_matches_{year} AS
+                            SELECT DISTINCT
+                                s.rowid as subsidy_rowid,
+                                m.field_uuid
+                            FROM temp_subsidy_filtered_{year} s
+                            INNER JOIN temp_marker_{year} m
+                                ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
+                            WHERE s.field_id = m.field_id
+                        """)
 
-                        matches_updated = self.conn.execute(enrichment_query).fetchone()[0]
+                        matches_updated = self.conn.execute(f"""
+                            UPDATE temp_subsidy_{year} SET
+                                field_uuid = fm.field_uuid
+                            FROM temp_spatial_matches_{year} fm
+                            WHERE temp_subsidy_{year}.rowid = fm.subsidy_rowid
+                        """).fetchone()[0]
+
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_spatial_matches_{year}")
                         total_enriched += matches_updated
 
                         self.log.info(
@@ -2211,7 +2217,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             f"with field_uuid for {year}"
                         )
 
-                        # Save the enriched subsidy data back to GCS
+                        # Save the enriched subsidy data back to cloud storage
                         enriched_subsidy_table = f"enriched_{dataset_name}_{year}"
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE {enriched_subsidy_table} AS
@@ -2338,17 +2344,17 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 unique_pipeline_name = f"fvm_marker_{unique_suffix}"
 
                 # Save CVR numbers using the collection utility with unique pipeline name
-                cvr_gcs_path = save_pipeline_cvr_numbers(
+                cvr_storage_path = save_pipeline_cvr_numbers(
                     pipeline_name=unique_pipeline_name,
                     cvr_numbers=unique_cvr_numbers,
-                    gcs_access=self.gcs_access,
+                    storage_access=self.storage,
                     bucket=self.config.bucket,
                     timestamp=timestamp,
                 )
 
                 self.log.info(
                     f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers "
-                    f"from FVM marker data to: {cvr_gcs_path} (pipeline: {unique_pipeline_name})"
+                    f"from FVM marker data to: {cvr_storage_path} (pipeline: {unique_pipeline_name})"
                 )
             else:
                 self.log.warning("⚠️ No CVR numbers found in FVM marker data")
@@ -2368,13 +2374,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         try:
             self.log.info("Loading municipality boundaries for spatial assignment")
 
-            # Load kommune boundaries from silver storage using GCSDataAccess
+            # Load kommune boundaries from silver storage using StorageAccess
             try:
-                gcs_path = self._get_latest_silver_path(self.config.kommune_boundaries_dataset)
-                self.log.info(f"Loading municipality boundaries from: {gcs_path}")
+                storage_path = self._get_latest_silver_path(self.config.kommune_boundaries_dataset)
+                self.log.info(f"Loading municipality boundaries from: {storage_path}")
 
-                # Use GCSDataAccess instead of direct DuckDB read_parquet for proper authentication
-                self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", "kommune_boundaries_raw")
+                # Use StorageAccess instead of direct DuckDB read_parquet for proper authentication
+                self.storage.query_parquet_direct(
+                    storage_path, "SELECT *", "kommune_boundaries_raw"
+                )
             except Exception as e:
                 self.log.warning(f"Could not load municipality boundaries: {e}")
                 return
@@ -2597,9 +2605,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
     async def _discover_available_fields_years(self) -> list[int]:
         """
-        Discover available years from fields data in GCS.
+        Discover available years from fields data in cloud storage.
 
-        This method lists the fields data directory in GCS and extracts the years
+        This method lists the fields data directory in cloud storage and extracts the years
         from the MARKER_*.parquet filenames to determine which years have fields
         data available for CVR enrichment.
 
@@ -2607,11 +2615,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             List[int]: List of years for which fields data is available
         """
         try:
-            # Use GCS data access to list files in the fields directory (same pattern as others)
-            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_*.parquet"
+            # Use cloud storage data access to list files in the fields directory (same pattern as others)
+            fields_pattern = f"{self.config.bucket}/silver/fields/*/MARKER_*.parquet"
 
-            # Find all MARKER files using GCSDataAccess
-            marker_files = self.gcs_access.list_files(fields_pattern)
+            # Find all MARKER files using StorageAccess
+            marker_files = self.storage.list_files(fields_pattern)
             if not marker_files:
                 self.log.warning("No fields data files found")
                 return []
@@ -2638,23 +2646,23 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
     async def _get_fields_data_path(self, year: int) -> str:
         """
-        Get the GCS path for fields data for a specific year.
+        Get the storage path for fields data for a specific year.
 
         This method discovers the latest timestamp directory and constructs
-        the full GCS path to the MARKER_{year}.parquet file.
+        the full storage path to the MARKER_{year}.parquet file.
 
         Args:
             year: Year for which to get the fields data path
 
         Returns:
-            str: Full GCS path to the fields data file
+            str: Full storage path to the fields data file
         """
         try:
-            # Use GCS data access to find the latest file for this year (same pattern as others)
-            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_{year}.parquet"
+            # Use cloud storage data access to find the latest file for this year (same pattern as others)
+            fields_pattern = f"{self.config.bucket}/silver/fields/*/MARKER_{year}.parquet"
 
-            # Find all files for this year using GCSDataAccess
-            marker_files = self.gcs_access.list_files(fields_pattern)
+            # Find all files for this year using StorageAccess
+            marker_files = self.storage.list_files(fields_pattern)
             if not marker_files:
                 raise Exception(f"No fields data files found for year {year}")
 
@@ -2689,7 +2697,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             table_name: Name of the FVM marker table to enrich
             year: Year of the data being processed
         """
-        # Discover available years from fields data in GCS
+        # Discover available years from fields data in cloud storage
         fields_available_years = await self._discover_available_fields_years()
 
         if year not in fields_available_years:
@@ -2729,16 +2737,16 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.log.info(f"Found {incomplete_cvr_count:,} records with incomplete CVR numbers")
 
             # Download fields data for this year using the latest available timestamp
-            fields_gcs_path = await self._get_fields_data_path(year)
+            fields_storage_path = await self._get_fields_data_path(year)
 
-            if not fields_gcs_path:
+            if not fields_storage_path:
                 self.log.warning(f"Could not determine fields data path for year {year}")
                 return
 
             try:
-                # Load fields data using GCSDataAccess (same pattern as other parts of the pipeline)
-                self.gcs_access.query_parquet_direct(
-                    fields_gcs_path, "SELECT *", f"fields_data_{year}"
+                # Load fields data using StorageAccess (same pattern as other parts of the pipeline)
+                self.storage.query_parquet_direct(
+                    fields_storage_path, "SELECT *", f"fields_data_{year}"
                 )
 
                 fields_count = self.conn.execute(
@@ -2747,7 +2755,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.log.info(f"Loaded {fields_count:,} records from fields data for year {year}")
 
             except Exception as e:
-                self.log.warning(f"Could not load fields data from {fields_gcs_path}: {e}")
+                self.log.warning(f"Could not load fields data from {fields_storage_path}: {e}")
                 return
 
             # Perform the enrichment join
@@ -2814,18 +2822,18 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
         This method orchestrates the processing of raw multi-year data from the bronze
         layer into structured Geos. It processes Markblokke, Marker, and
-        Smaabiotoper data for all available years and saves the results to Google Cloud Storage.
+        Smaabiotoper data for all available years and saves the results to cloud storage.
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
                         this data will be used instead of reading from storage.
 
         The processing workflow for each layer type and year:
-        1. Read raw data from GCS or use in-memory data
+        1. Read raw data from cloud storage or use in-memory data
         2. Process raw WFS data into Geos with standardized column names
         3. Add year and layer type information to the processed data
         4. Validate geometries and apply any needed transformations
-        5. Save processed data back to GCS with year information
+        5. Save processed data back to cloud storage with year information
 
         Returns:
             Optional[Dict[str, Any]]: Summary information about processed datasets

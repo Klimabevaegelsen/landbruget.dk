@@ -143,8 +143,8 @@ class TestDSTBronze:
     """Test cases for DSTBronze."""
 
     @pytest.fixture
-    def mock_gcs_access(self):
-        """Mock GCS access for testing."""
+    def mock_storage_access(self):
+        """Mock cloud storage access for testing."""
         return Mock()
 
     @pytest.fixture
@@ -166,9 +166,9 @@ class TestDSTBronze:
         dst_bronze.api_client.get_table_info = MagicMock(return_value={"table": "HST77"})
         dst_bronze.api_client.get_table_data = MagicMock(return_value={"value": [1, 2, 3]})
 
-        # Mock GCS access
-        dst_bronze.gcs_access = MagicMock()
-        dst_bronze.gcs_access.upload_json = MagicMock()
+        # Mock cloud storage access
+        dst_bronze.storage = MagicMock()
+        dst_bronze.storage.upload_json = MagicMock()
 
         result = await dst_bronze._fetch_table_data("HST77")
 
@@ -218,10 +218,10 @@ class TestDSTBronze:
         assert result is None
 
     def test_save_table_data(self, dst_bronze):
-        """Test table data saving to GCS."""
-        # Mock GCS access
-        dst_bronze.gcs_access = MagicMock()
-        dst_bronze.gcs_access.upload_json = MagicMock()
+        """Test table data saving to cloud storage."""
+        # Mock cloud storage access
+        dst_bronze.storage = MagicMock()
+        dst_bronze.storage.upload_json = MagicMock()
 
         table_data = {"value": [1, 2, 3]}
         table_info = {"table": "HST77"}
@@ -230,22 +230,21 @@ class TestDSTBronze:
         dst_bronze._save_table_data("HST77", table_data, table_info, metadata)
 
         # Verify all three files were uploaded
-        assert dst_bronze.gcs_access.upload_json.call_count == 3
+        assert dst_bronze.storage.upload_json.call_count == 3
 
         # Check the calls
-        calls = dst_bronze.gcs_access.upload_json.call_args_list
+        calls = dst_bronze.storage.upload_json.call_args_list
         paths = [call[0][1] for call in calls]  # Second argument is the path
 
-        # Verify paths use proper GCS format with bucket name
+        # Verify paths use bare bucket/path format
         assert any(
-            "gs://landbruget-data/bronze/dst/" in path and "HST77_data.json" in path
+            "landbruget-data/bronze/dst/" in path and "HST77_data.json" in path for path in paths
+        )
+        assert any(
+            "landbruget-data/bronze/dst/" in path and "HST77_tableinfo.json" in path
             for path in paths
         )
         assert any(
-            "gs://landbruget-data/bronze/dst/" in path and "HST77_tableinfo.json" in path
-            for path in paths
-        )
-        assert any(
-            "gs://landbruget-data/bronze/dst/" in path and "HST77_metadata.json" in path
+            "landbruget-data/bronze/dst/" in path and "HST77_metadata.json" in path
             for path in paths
         )

@@ -46,100 +46,102 @@ except ImportError as e:
     logging.warning(f"CVR collection not available: {e}")
 
 
-def _get_optimized_gcs_access() -> type | None:
+def _get_optimized_storage_access() -> type | None:
     """
-    Get optimized GCS access with robust import handling.
+    Get optimized cloud storage access with robust import handling.
 
-    Returns GCSDataAccess if available, otherwise None for fallback.
+    Returns StorageAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when common.gcs is properly installed
-        from common.gcs import GCSDataAccess
+        # Primary import path - should work when common.storage is properly installed
+        from common.storage import StorageAccess
 
-        logging.info("Successfully imported optimized GCSDataAccess")
-        return GCSDataAccess
+        logging.info("Successfully imported optimized StorageAccess")
+        return StorageAccess
     except ImportError as e:
-        logging.warning(f"Could not import optimized GCSDataAccess: {e}")
+        logging.warning(f"Could not import optimized StorageAccess: {e}")
         logging.warning(
-            "Falling back to basic storage - ensure common.gcs is installed for optimal performance"
+            "Falling back to basic storage - ensure common.storage is installed for optimal performance"
         )
         return None
 
 
-# Get optimized GCS access class or None if not available
-OptimizedGCSDataAccess = _get_optimized_gcs_access()
+# Get optimized cloud storage access class or None if not available
+OptimizedStorageAccess = _get_optimized_storage_access()
 
 
-class GCSStorage:
+class CloudStorage:
     """Google Cloud Storage backend for arbejdstilsynet_inspections files - OPTIMIZED VERSION."""
 
     def __init__(self, bucket_name, prefix="silver/arbejdstilsynet_inspections"):
         self.bucket_name = bucket_name
         self.prefix = prefix
-        self.is_available = self._check_gcs_available()
+        self.is_available = self._check_storage_available()
 
-        # Initialize optimized GCS access
-        self.gcs_access = None
+        # Initialize optimized cloud storage access
+        self.storage = None
         self.use_optimized = False
 
-        if self.is_available and OptimizedGCSDataAccess:
+        if self.is_available and OptimizedStorageAccess:
             try:
-                self.gcs_access = OptimizedGCSDataAccess()
+                self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
-                logging.info("Arbejdstilsynet Silver GCSStorage: Initialized optimized GCS access")
+                logging.info(
+                    "Arbejdstilsynet Silver CloudStorage: Initialized optimized cloud storage access"
+                )
             except Exception as e:
-                logging.warning(f"Failed to initialize optimized GCS access: {e}")
-                self.gcs_access = None
+                logging.warning(f"Failed to initialize optimized cloud storage access: {e}")
+                self.storage = None
                 self.use_optimized = False
 
-    def _check_gcs_available(self) -> bool:
-        """Check if cloud storage is available (R2/S3 via common.gcs)."""
+    def _check_storage_available(self) -> bool:
+        """Check if cloud storage is available (R2/S3 via common.storage)."""
         try:
-            from common.gcs.filesystem import get_r2_filesystem  # noqa: F401
+            from common.storage.filesystem import get_r2_filesystem  # noqa: F401
 
             return True
         except (OSError, ImportError):
             logging.warning("Cloud storage not available. Using local storage only.")
             return False
 
-    def upload_file(self, local_path, gcs_path=None) -> bool:
-        """Upload a file to GCS bucket using optimized streaming."""
+    def upload_file(self, local_path, storage_path=None) -> bool:
+        """Upload a file to storage bucket using optimized streaming."""
         if not self.is_available:
-            logging.warning("GCS not available, skipping upload")
+            logging.warning("Cloud storage not available, skipping upload")
             return False
 
-        if gcs_path is None:
+        if storage_path is None:
             # Use the timestamp from the local path
             timestamp = os.path.basename(os.path.dirname(local_path))
             filename = os.path.basename(local_path)
-            gcs_path = f"{self.prefix}/{timestamp}/{filename}"
+            storage_path = f"{self.prefix}/{timestamp}/{filename}"
 
         try:
             # Use streaming upload if available
-            if self.use_optimized and self.gcs_access:
-                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
-                fs_path = f"{self.bucket_name}/{gcs_path}"
+            if self.use_optimized and self.storage:
+                full_storage_path = f"{self.bucket_name}/{storage_path}"
+                fs_path = f"{self.bucket_name}/{storage_path}"
 
                 # Stream file directly without loading into memory
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.gcs_access.fs.open(fs_path, "wb") as gcs_file,
+                    self.storage.fs.open(fs_path, "wb") as cloud_file,
                 ):
-                    shutil.copyfileobj(file_obj, gcs_file)
+                    shutil.copyfileobj(file_obj, cloud_file)
 
-                logging.info(f"Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+                logging.info(f"Uploaded {local_path} to {full_storage_path} (optimized streaming)")
                 return True
             # Fallback to s3fs upload if optimized access failed
-            from common.gcs.filesystem import get_r2_filesystem
+            from common.storage.filesystem import get_r2_filesystem
 
             fs = get_r2_filesystem()
-            dest_path = f"{self.bucket_name}/{gcs_path}"
+            dest_path = f"{self.bucket_name}/{storage_path}"
             fs.put(local_path, dest_path)
             logging.info(f"Uploaded {local_path} to {dest_path} (fallback)")
             return True
 
         except Exception as e:
-            logging.error(f"Failed to upload to GCS: {e}")
+            logging.error(f"Failed to upload to cloud storage: {e}")
             return False
 
 
@@ -149,7 +151,7 @@ class SilverPipeline:
     Transforms raw CSV data into cleaned and structured parquet format using vanilla DuckDB.
     """
 
-    def __init__(self, start_date=None, end_date=None, gcs_bucket=None, log_level="INFO"):
+    def __init__(self, start_date=None, end_date=None, storage_bucket=None, log_level="INFO"):
         """Initialize the Silver Pipeline with paths, constants, and logging setup."""
         # Setup logging
         logging.basicConfig(
@@ -161,7 +163,7 @@ class SilverPipeline:
         # Store parameters
         self.start_date = start_date
         self.end_date = end_date
-        self.gcs_bucket = gcs_bucket
+        self.storage_bucket = storage_bucket
 
         # Constants and paths - use pipeline start time consistently
         self.pipeline_start_time = datetime.now()
@@ -685,15 +687,15 @@ class SilverPipeline:
                 )
 
                 # Save CVR numbers using the collection utility
-                cvr_gcs_path = save_pipeline_cvr_numbers(
+                cvr_storage_path = save_pipeline_cvr_numbers(
                     pipeline_name="arbejdstilsynet_inspections",
                     cvr_numbers=list(cvr_numbers),
-                    gcs_access=None,  # Will use default GCS access
-                    bucket=self.gcs_bucket or "landbruget-data",
+                    storage_access=None,  # Will use default cloud storage access
+                    bucket=self.storage_bucket or "landbruget-data",
                     timestamp=self.timestamp,
                 )
 
-                self.logger.info(f"CVR numbers saved to: {cvr_gcs_path}")
+                self.logger.info(f"CVR numbers saved to: {cvr_storage_path}")
                 self.logger.info(
                     f"Arbejdstilsynet CVR collection completed: {len(cvr_numbers)} unique CVR numbers"
                 )
@@ -710,32 +712,32 @@ class SilverPipeline:
             return True
 
     def save_output(self):
-        """Save the transformed data to parquet with enhanced GCS export."""
+        """Save the transformed data to parquet with enhanced cloud storage export."""
         try:
-            # ENHANCED: Try native GCS export first if OptimizedGCSDataAccess is available
-            gcs_export_success = False
-            if self.gcs_bucket and OptimizedGCSDataAccess:
+            # Try native cloud storage export first if OptimizedStorageAccess is available
+            cloud_export_success = False
+            if self.storage_bucket and OptimizedStorageAccess:
                 try:
-                    gcs_access = OptimizedGCSDataAccess()
-                    gcs_path = f"gs://{self.gcs_bucket}/silver/arbejdstilsynet_inspections/{self.timestamp}/workplace_inspections.parquet"
+                    storage_access = OptimizedStorageAccess()
+                    storage_path = f"{self.storage_bucket}/silver/arbejdstilsynet_inspections/{self.timestamp}/workplace_inspections.parquet"
 
                     # Convert pandas DataFrame back to DuckDB table for native export
                     temp_conn = duckdb.connect(":memory:")
                     temp_conn.register("workplace_inspections_temp", self.df)
 
-                    # Use native GCS export with server-side compression
-                    gcs_access.export_to_gcs_native(
+                    # Use native cloud storage export with server-side compression
+                    storage_access.export_to_storage_native(
                         connection=temp_conn,
                         table_name="workplace_inspections_temp",
-                        gcs_path=gcs_path,
+                        storage_path=storage_path,
                         compression="zstd",
                     )
 
-                    self.logger.info(f"Native GCS export successful: {gcs_path}")
-                    gcs_export_success = True
+                    self.logger.info(f"Native cloud storage export successful: {storage_path}")
+                    cloud_export_success = True
                 except Exception as e:
                     self.logger.warning(
-                        f"Native GCS export failed, using local export + upload: {e}"
+                        f"Native cloud storage export failed, using local export + upload: {e}"
                     )
 
             # Save to temp location first (always create local copy)
@@ -749,33 +751,33 @@ class SilverPipeline:
             self.logger.info(f"Silver layer saved locally to: {self.output_parquet}")
 
             # Upload to Google Cloud Storage if bucket name is provided (fallback method)
-            if self.gcs_bucket and not gcs_export_success:
-                self.upload_to_gcs()
+            if self.storage_bucket and not cloud_export_success:
+                self.upload_to_storage()
 
             return True
         except Exception as e:
             self.logger.error(f"Error saving output: {e!s}")
             return False
 
-    def upload_to_gcs(self):
+    def upload_to_storage(self):
         """Upload processed data to Google Cloud Storage."""
         try:
-            if not self.gcs_bucket:
-                self.logger.info("No GCS bucket specified, skipping upload")
+            if not self.storage_bucket:
+                self.logger.info("No storage bucket specified, skipping upload")
                 return True
 
-            self.logger.info(f"Uploading to GCS bucket: {self.gcs_bucket}")
-            gcs = GCSStorage(bucket_name=self.gcs_bucket)
-            success = gcs.upload_file(self.output_parquet)
+            self.logger.info(f"Uploading to storage bucket: {self.storage_bucket}")
+            cloud_storage = CloudStorage(bucket_name=self.storage_bucket)
+            success = cloud_storage.upload_file(self.output_parquet)
 
             if success:
-                self.logger.info("Successfully uploaded to GCS")
+                self.logger.info("Successfully uploaded to cloud storage")
             else:
-                self.logger.warning("Failed to upload to GCS")
+                self.logger.warning("Failed to upload to cloud storage")
 
             return success
         except Exception as e:
-            self.logger.error(f"Error uploading to GCS: {e!s}")
+            self.logger.error(f"Error uploading to cloud storage: {e!s}")
             return False
 
     def generate_schema_documentation(self):
@@ -887,9 +889,9 @@ class SilverPipeline:
             self.cleanup()
 
 
-def main(start_date=None, end_date=None, gcs_bucket=None, log_level="INFO"):
+def main(start_date=None, end_date=None, storage_bucket=None, log_level="INFO"):
     """Main function to run the silver pipeline."""
-    pipeline = SilverPipeline(start_date, end_date, gcs_bucket, log_level)
+    pipeline = SilverPipeline(start_date, end_date, storage_bucket, log_level)
     success = pipeline.run()
 
     if not success:

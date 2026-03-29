@@ -46,7 +46,7 @@ def mock_settings(temp_dir: Path) -> mock.MagicMock:
     settings.silver_path = temp_dir / "silver"
     settings.google_drive_folder_id = "test-folder-id"
     settings.storage_type.value = "local"
-    settings.gcs_bucket = None
+    settings.r2_bucket = None
 
     # Create directories
     os.makedirs(settings.bronze_path, exist_ok=True)

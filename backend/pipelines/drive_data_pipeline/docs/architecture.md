@@ -18,7 +18,7 @@ The Google Drive Data Pipeline follows a medallion architecture with Bronze and 
                           │                  │                  │
                           ▼                  ▼                  ▼
                    ┌────────────┐     ┌────────────┐     ┌────────────┐
-                   │  Metadata  │     │Transformers│     │  Local/GCS │
+                   │  Metadata  │     │Transformers│     │  Local/Cloud │
                    │  Manager   │     │& Validators│     │  Storage   │
                    └────────────┘     └────────────┘     └────────────┘
 ```
@@ -52,7 +52,7 @@ The Google Drive Data Pipeline follows a medallion architecture with Bronze and 
 
 5. **StorageManager**
    - Abstracts storage operations
-   - Supports local filesystem and GCS
+   - Supports local filesystem and cloud storage
    - Manages file organization and paths
    - Handles serialization and deserialization
 

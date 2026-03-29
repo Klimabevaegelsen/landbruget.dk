@@ -172,24 +172,24 @@ class NativeSchemaManager:
             self.logger.warning(f"Could not get data summary for {table_name}: {e}")
             return {}
 
-    def save_schema_to_gcs(
+    def save_schema_to_storage(
         self, table_name: str, schema_info: dict[str, Any], bucket_path: str
     ) -> str:
-        """Save schema information to GCS in JSON format."""
+        """Save schema information to storage in JSON format."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{table_name}_schema_{timestamp}.json"
-        gcs_path = f"{bucket_path.rstrip('/')}/{filename}"
+        storage_path = f"{bucket_path.rstrip('/')}/{filename}"
 
         try:
-            from common.gcs import GCSDataAccess
+            from common.storage import StorageAccess
 
-            gcs_access = GCSDataAccess()
-            gcs_access.upload_json(schema_info, gcs_path)
-            self.logger.info(f"Schema saved to GCS: {gcs_path}")
-            return gcs_path
+            storage_access = StorageAccess()
+            storage_access.upload_json(schema_info, storage_path)
+            self.logger.info(f"Schema saved to storage: {storage_path}")
+            return storage_path
 
         except Exception as e:
-            self.logger.error(f"Failed to save schema to GCS: {e}")
+            self.logger.error(f"Failed to save schema to storage: {e}")
             raise
 
     def save_schema_locally(
@@ -211,8 +211,8 @@ class NativeSchemaManager:
     def get_all_tables_schemas(
         self,
         include_summary: bool = True,
-        save_to_gcs: bool = False,
-        gcs_bucket_path: str | None = None,
+        save_to_storage: bool = False,
+        storage_bucket_path: str | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Get schemas for all user tables in the database."""
         # Get all non-internal tables
@@ -231,9 +231,9 @@ class NativeSchemaManager:
             schema_info = self.get_table_schema(table_name, include_summary)
             all_schemas[table_name] = schema_info
 
-            # Optionally save to GCS
-            if save_to_gcs and gcs_bucket_path:
-                self.save_schema_to_gcs(table_name, schema_info, gcs_bucket_path)
+            # Optionally save to storage
+            if save_to_storage and storage_bucket_path:
+                self.save_schema_to_storage(table_name, schema_info, storage_bucket_path)
 
         return all_schemas
 
@@ -245,7 +245,7 @@ class SchemaMixin:
         self,
         table_name: str,
         include_summary: bool = True,
-        save_to_gcs: bool = True,
+        save_to_storage: bool = True,
         save_locally: bool = False,
     ) -> dict[str, Any]:
         """
@@ -261,11 +261,15 @@ class SchemaMixin:
         schema_manager = NativeSchemaManager(self._duckdb_conn, getattr(self, "logger", None))
         schema_info = schema_manager.get_table_schema(table_name, include_summary)
 
-        # Save to GCS if enabled
-        if save_to_gcs:
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-            gcs_path = f"gs://{bucket_name}/schemas/{self.__class__.__name__}"
-            schema_manager.save_schema_to_gcs(table_name, schema_info, gcs_path)
+        # Save to storage if enabled
+        if save_to_storage:
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET")
+                or os.getenv("R2_BUCKET")
+                or os.getenv("GCS_BUCKET", "landbruget-data")
+            )
+            storage_path = f"{bucket_name}/schemas/{self.__class__.__name__}"
+            schema_manager.save_schema_to_storage(table_name, schema_info, storage_path)
 
         # Save locally if enabled
         if save_locally:

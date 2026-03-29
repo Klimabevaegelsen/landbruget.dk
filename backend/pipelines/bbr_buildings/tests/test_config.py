@@ -1,8 +1,13 @@
 """Tests for BBR Buildings Pipeline configuration."""
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from config import Settings, get_settings
+# Ensure bbr_buildings config is imported (not drive_data_pipeline's)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config.settings import Settings, get_settings
 
 
 def test_settings_creation() -> None:
@@ -59,5 +64,5 @@ def test_cloud_storage_property() -> None:
 
     # Production with bucket
     settings.environment = "production"
-    settings.gcs_bucket = "test-bucket"
+    settings.bucket = "test-bucket"
     assert settings.use_cloud_storage

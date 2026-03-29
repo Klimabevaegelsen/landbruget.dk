@@ -24,9 +24,13 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
         "Comprehensive nitrogen washout estimates using the NLES5 model with real climate data"
     )
     frequency: str = "monthly$"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
-    # Input silver datasets - Updated to match actual GCS structure
+    # Input silver datasets - Updated to match actual cloud storage structure
     soil_types_dataset: str = "soil_types"
     dmi_precipitation_dataset: str = (
         "dmi_acc_precip_dmi_acc_precip"  # DMI accumulated precipitation
@@ -41,8 +45,10 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     catch_crops_dataset: str = "catch_crops"  # Efterafgrøder data (in fertiliser directory)
 
     # Farm-level gødningsregnskab data integration
-    farm_data_source: str = "gcs"  # Source for farm data: "gcs" (GCS bucket parquet files)
-    # Note: farm_data_gcs_path is no longer used - the pipeline now dynamically discovers
+    farm_data_source: str = (
+        "cloud_storage"  # Source for farm data: "cloud_storage" (storage bucket parquet files)
+    )
+    # Note: farm_data_storage_path is no longer used - the pipeline now dynamically discovers
     # the latest timestamped directory for each year (e.g., silver/gr {year}/YYYYMMDD_HHMMSS/)
     enable_farm_data_integration: bool = True  # Enable farm data integration for enhanced accuracy
     farm_data_years: ClassVar[list[int]] = [
@@ -52,7 +58,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
         2021,
         2022,
         2023,
-    ]  # Available farm data years (updated based on GCS tree)
+    ]  # Available farm data years (updated based on cloud storage tree)
     farm_data_cache_table: str = "farm_data_cache"  # DuckDB table name for cached farm data
 
     # Processing configuration - CHUNKED FOR STABILITY
@@ -92,8 +98,8 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # [2019, 2020, 2021, 2022, 2023] (5 years instead of 18 years)
     # target_years: Optional[List[int]] = None
     # NOTE: Updated analysis shows 2023 agricultural fields data IS available
-    # in GCS (fvm_marker_2023)
-    # TEMPORAL EXTENSION: Added 2023 support based on confirmed GCS data
+    # in cloud storage (fvm_marker_2023)
+    # TEMPORAL EXTENSION: Added 2023 support based on confirmed cloud storage data
     # availability
     target_years: ClassVar[list[int]] = [2021, 2022, 2023]
 

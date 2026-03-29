@@ -2,11 +2,11 @@
 """
 Generate baseline metrics for data quality validation.
 
-This script generates baseline metrics from production data in GCS,
+This script generates baseline metrics from production data in cloud storage (R2),
 which are then used for pre-merge validation to detect data regressions.
 
 Usage:
-    python generate_baseline_metrics.py --datasets all --output-path gs://bucket/baselines/main/
+    python generate_baseline_metrics.py --datasets all --output-path bucket/baselines/main/
     python generate_baseline_metrics.py --datasets fvm_marker,chr_herds --output-path ./baselines/
 
 Run on main branch after significant data updates to refresh baselines.
@@ -37,91 +37,91 @@ logger = logging.getLogger(__name__)
 DATASET_CONFIGS = {
     # ==================== SILVER - Core Agricultural ====================
     "agricultural_fields_2024": {
-        "gcs_path": "silver/agricultural_fields_2024",
+        "storage_path": "silver/agricultural_fields_2024",
         "area_column": "area_ha",
         "identifier_columns": ["field_id", "journal_number", "cvr_number"],
         "geometry_column": "geometry",
     },
     "agricultural_fields_2025": {
-        "gcs_path": "silver/agricultural_fields_2025",
+        "storage_path": "silver/agricultural_fields_2025",
         "area_column": "area_ha",
         "identifier_columns": ["field_id", "journal_number", "cvr_number"],
         "geometry_column": "geometry",
     },
     "fvm_marker_2024": {
-        "gcs_path": "silver/fvm_marker_2024",
+        "storage_path": "silver/fvm_marker_2024",
         "area_column": "area_ha",
         "identifier_columns": ["field_id", "cvr_number"],
         "geometry_column": "geometry",
     },
     "fvm_marker_2025": {
-        "gcs_path": "silver/fvm_marker_2025",
+        "storage_path": "silver/fvm_marker_2025",
         "area_column": "area_ha",
         "identifier_columns": ["field_id", "cvr_number"],
         "geometry_column": "geometry",
     },
     # ==================== SILVER - Environment ====================
     "bnbo_status": {
-        "gcs_path": "silver/bnbo_status",
+        "storage_path": "silver/bnbo_status",
         "area_column": None,  # Will detect from schema
         "identifier_columns": [],
         "geometry_column": "geometry",
     },
     "wetlands": {
-        "gcs_path": "silver/wetlands",
+        "storage_path": "silver/wetlands",
         "area_column": None,
         "identifier_columns": [],
         "geometry_column": "geometry",
     },
     "grukos": {
-        "gcs_path": "silver/grukos",
+        "storage_path": "silver/grukos",
         "area_column": None,
         "identifier_columns": [],
         "geometry_column": "geometry",
     },
     "water_projects": {
-        "gcs_path": "silver/water_projects",
+        "storage_path": "silver/water_projects",
         "area_column": None,
         "identifier_columns": [],
         "geometry_column": "geometry",
     },
     # ==================== SILVER - Property/Cadastral ====================
     "cadastral": {
-        "gcs_path": "silver/cadastral",
+        "storage_path": "silver/cadastral",
         "area_column": None,
         "identifier_columns": ["bfe_number"],
         "geometry_column": "geometry",
     },
     "property_owners": {
-        "gcs_path": "silver/property_owners",
+        "storage_path": "silver/property_owners",
         "area_column": None,
         "identifier_columns": ["bfe_nummer", "cvr_nummer"],
         "geometry_column": None,
     },
     # ==================== SILVER - Livestock/CHR ====================
     "svineflytning": {
-        "gcs_path": "silver/svineflytning",
+        "storage_path": "silver/svineflytning",
         "area_column": None,
         "identifier_columns": ["chr_afsender", "chr_modtager"],
         "geometry_column": None,
     },
     # ==================== SILVER - Administrative ====================
     "dagi_kommuner": {
-        "gcs_path": "silver/dagi_kommuner",
+        "storage_path": "silver/dagi_kommuner",
         "area_column": None,
         "identifier_columns": ["kommunekode"],
         "geometry_column": "geometry",
     },
     # ==================== SILVER - Subsidies ====================
     "subsidies": {
-        "gcs_path": "silver/subsidies",
+        "storage_path": "silver/subsidies",
         "area_column": None,
         "identifier_columns": ["cvr"],
         "geometry_column": None,
     },
     # ==================== GOLD - CVR Enrichment ====================
     "cvr_enrichment": {
-        "gcs_path": "gold/cvr_enrichment",
+        "storage_path": "gold/cvr_enrichment",
         "area_column": None,
         "identifier_columns": ["cvr"],
         "geometry_column": None,
@@ -129,52 +129,52 @@ DATASET_CONFIGS = {
     },
     # ==================== GOLD - Field Analysis ====================
     "field_analysis_field_bnbo_2024": {
-        "gcs_path": "gold/field_analysis_field_bnbo_intersections_2024",
+        "storage_path": "gold/field_analysis_field_bnbo_intersections_2024",
         "area_column": "field_area_m2",
         "identifier_columns": ["field_uuid"],
         "geometry_column": None,
     },
     "field_analysis_field_bnbo_2025": {
-        "gcs_path": "gold/field_analysis_field_bnbo_intersections_2025",
+        "storage_path": "gold/field_analysis_field_bnbo_intersections_2025",
         "area_column": "field_area_m2",
         "identifier_columns": ["field_uuid"],
         "geometry_column": None,
     },
     "field_analysis_field_wetland_2024": {
-        "gcs_path": "gold/field_analysis_field_wetland_intersections_2024",
+        "storage_path": "gold/field_analysis_field_wetland_intersections_2024",
         "area_column": "field_area_m2",
         "identifier_columns": ["field_uuid"],
         "geometry_column": None,
     },
     "field_analysis_field_wetland_2025": {
-        "gcs_path": "gold/field_analysis_field_wetland_intersections_2025",
+        "storage_path": "gold/field_analysis_field_wetland_intersections_2025",
         "area_column": "field_area_m2",
         "identifier_columns": ["field_uuid"],
         "geometry_column": None,
     },
     # ==================== GOLD - Pesticides ====================
     "pesticide_compliance": {
-        "gcs_path": "gold/pesticide_compliance",
+        "storage_path": "gold/pesticide_compliance",
         "area_column": None,
         "identifier_columns": ["cvr"],
         "geometry_column": None,
     },
     # ==================== GOLD - Nitrogen ====================
     "nles5_nitrogen_estimation": {
-        "gcs_path": "gold/nles5_nitrogen_estimation_nitrogen_estimates",
+        "storage_path": "gold/nles5_nitrogen_estimation_nitrogen_estimates",
         "area_column": "field_area_m2",
         "identifier_columns": ["field_uuid"],
         "geometry_column": None,
     },
     # ==================== GOLD - Worker Safety ====================
     "worker_safety": {
-        "gcs_path": "gold/worker_safety",
+        "storage_path": "gold/worker_safety",
         "area_column": None,
         "identifier_columns": ["cvr"],
         "geometry_column": None,
     },
     "arbejdstilsynet_inspections": {
-        "gcs_path": "gold/arbejdstilsynet_inspections",
+        "storage_path": "gold/arbejdstilsynet_inspections",
         "area_column": None,
         "identifier_columns": ["cvr"],
         "geometry_column": None,
@@ -182,12 +182,12 @@ DATASET_CONFIGS = {
 }
 
 
-def get_latest_version(gcs_path: str, gcs_bucket: str) -> str | None:
-    """Find the latest version directory in a GCS path."""
-    import gcsfs
+def get_latest_version(storage_path: str, storage_bucket: str) -> str | None:
+    """Find the latest version directory in cloud storage."""
+    from common.storage.filesystem import get_r2_filesystem
 
-    fs = gcsfs.GCSFileSystem()
-    full_path = f"{gcs_bucket}/{gcs_path}"
+    fs = get_r2_filesystem()
+    full_path = f"{storage_bucket}/{storage_path}"
 
     try:
         # List directories (versions are typically YYYYMMDD_HHMMSS format)
@@ -208,23 +208,23 @@ def get_latest_version(gcs_path: str, gcs_bucket: str) -> str | None:
 def generate_metrics_for_dataset(
     dataset_name: str,
     config: dict,
-    gcs_bucket: str,
+    storage_bucket: str,
     conn: duckdb.DuckDBPyConnection,
 ) -> dict | None:
     """Generate baseline metrics for a single dataset."""
     import tempfile
 
-    import gcsfs
+    from common.storage.filesystem import get_r2_filesystem
 
     logger.info(f"Generating metrics for {dataset_name}...")
 
     # Find latest version
-    latest_path = get_latest_version(config["gcs_path"], gcs_bucket)
+    latest_path = get_latest_version(config["storage_path"], storage_bucket)
     if not latest_path:
         logger.warning(f"No data found for {dataset_name}")
         return None
 
-    fs = gcsfs.GCSFileSystem()
+    fs = get_r2_filesystem()
 
     # Find parquet files
     parquet_files = [f for f in fs.ls(latest_path) if f.endswith(".parquet")]
@@ -234,13 +234,13 @@ def generate_metrics_for_dataset(
         return None
 
     # Download to temp file and load into DuckDB
-    gcs_path = parquet_files[0]
-    logger.info(f"Loading from gs://{gcs_path}")
+    storage_path = parquet_files[0]
+    logger.info(f"Loading from {storage_path}")
 
     try:
         with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
             tmp_path = tmp.name
-            fs.get(gcs_path, tmp_path)
+            fs.get(storage_path, tmp_path)
 
         # Clean dataset name for SQL (replace hyphens with underscores)
         sql_table_name = dataset_name.replace("-", "_")
@@ -264,7 +264,7 @@ def generate_metrics_for_dataset(
     # Generate metrics
     metrics = {
         "dataset_name": dataset_name,
-        "source_path": f"gs://{gcs_path}",
+        "source_path": storage_path,
         "generated_at": datetime.utcnow().isoformat(),
     }
 
@@ -364,14 +364,23 @@ def generate_metrics_for_dataset(
 
 
 def save_metrics(metrics: dict, output_path: str) -> str:
-    """Save metrics to local or GCS path."""
+    """Save metrics to local or cloud storage path."""
     dataset_name = metrics["dataset_name"]
 
-    if output_path.startswith("gs://"):
-        import gcsfs
+    # Detect cloud paths: protocol prefix or bare bucket/path (not local filesystem)
+    _is_local = output_path.startswith(("/", "."))
+    _has_protocol = output_path.startswith(("r2://", "s3://"))
+    if _has_protocol or (not _is_local and "/" in output_path):
+        from common.storage.filesystem import get_r2_filesystem
 
-        fs = gcsfs.GCSFileSystem()
-        file_path = f"{output_path}/{dataset_name}/metrics.json"
+        fs = get_r2_filesystem()
+        # Strip legacy protocol prefix if present
+        clean_path = output_path
+        for prefix in ("r2://", "s3://"):
+            if clean_path.startswith(prefix):
+                clean_path = clean_path[len(prefix) :]
+                break
+        file_path = f"{clean_path}/{dataset_name}/metrics.json"
 
         with fs.open(file_path, "w") as f:
             json.dump(metrics, f, indent=2)
@@ -400,13 +409,13 @@ def main():
         "--output-path",
         type=str,
         required=True,
-        help="Output path (local or gs://...)",
+        help="Output path (local or r2://...)",
     )
     parser.add_argument(
-        "--gcs-bucket",
+        "--storage-bucket",
         type=str,
         default="landbruget-data",
-        help="GCS bucket name",
+        help="Storage bucket name",
     )
     parser.add_argument(
         "--commit-sha",
@@ -436,14 +445,14 @@ def main():
     conn.execute("INSTALL httpfs")
     conn.execute("LOAD httpfs")
 
-    # Set up GCS access
+    # Set up cloud storage access
     conn.execute("SET s3_region='auto'")
 
     # Generate metrics for each dataset
     results = {}
     for dataset_name in datasets:
         config = DATASET_CONFIGS[dataset_name]
-        metrics = generate_metrics_for_dataset(dataset_name, config, args.gcs_bucket, conn)
+        metrics = generate_metrics_for_dataset(dataset_name, config, args.storage_bucket, conn)
 
         if metrics:
             # Add commit SHA if provided

@@ -2,7 +2,7 @@
 Bronze layer data ingestion for Wetlands data.
 
 This module handles the extraction of wetlands data from a WFS service.
-It fetches raw data in chunks, processes it, and saves it to Google Cloud Storage
+It fetches raw data in chunks, processes it, and saves it to cloud storage
 for further processing in the silver layer.
 
 The module contains:
@@ -42,7 +42,7 @@ class WetlandsBronzeConfig(BaseJobConfig):
         description (str): Brief description of the data
         url (str): URL for fetching wetlands data
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         batch_size (int): Number of records to fetch in each request
         max_concurrent (int): Maximum number of concurrent requests
         request_timeout (int): Timeout for requests in seconds
@@ -79,7 +79,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
 
     This class is responsible for fetching raw wetlands data from the WFS service.
     It handles pagination, parallel fetching, and error handling, and stores the
-    raw data in Google Cloud Storage for further processing in the silver layer.
+    raw data in cloud storage for further processing in the silver layer.
 
     The class implements retry logic for resilience against transient failures and uses
     semaphores to control the number of concurrent requests to avoid overwhelming the API.
@@ -87,7 +87,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
     Processing flow:
     1. Fetch initial data chunk to determine total number of features
     2. Fetch remaining data in parallel batches based on configuration
-    3. Save raw XML responses to Google Cloud Storage
+    3. Save raw XML responses to cloud storage
     """
 
     def __init__(self, config: WetlandsBronzeConfig):
@@ -307,7 +307,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
 
         This method orchestrates the entire data retrieval process:
         1. Fetches all raw wetlands data from the WFS service
-        2. Saves the retrieved XML data to Google Cloud Storage
+        2. Saves the retrieved XML data to cloud storage
         3. Returns the raw data for in-memory passing to silver stage
 
         Returns:

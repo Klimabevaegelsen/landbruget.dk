@@ -70,7 +70,7 @@ Edit the `.env` file to include the following required variables:
 - `GOOGLE_DRIVE_FOLDER_ID`: The ID of the Google Drive folder to process
 - `GOOGLE_APPLICATION_CREDENTIALS`: Path to Google service account credentials
 - `STORAGE_TYPE`: Storage type (local or gcs)
-- `GCS_BUCKET`: GCS bucket name (if applicable)
+- `GCS_BUCKET`: Storage bucket name (if applicable)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
 - `MAX_WORKERS`: Number of workers for parallel processing
 
@@ -169,7 +169,7 @@ This will run the pipeline with verbose logging and verify that all components a
    - Ensure the service account has access to the folder
 
 4. **Storage Errors**:
-   - For GCS storage, verify that the credentials have the necessary permissions
+   - For cloud storage, verify that the credentials have the necessary permissions
    - For local storage, ensure the application has write access to the data directory
 
 ### Getting Help

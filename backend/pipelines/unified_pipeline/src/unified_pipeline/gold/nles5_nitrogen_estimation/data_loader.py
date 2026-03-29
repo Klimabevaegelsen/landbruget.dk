@@ -33,22 +33,22 @@ class NLES5DataLoader:
         self.processor = processor
         self.config = processor.config
         self.log = processor.log
-        self.gcs_access = processor.gcs_access
+        self.storage = processor.storage_access
         self.db = processor.conn
 
     def _get_available_fvm_marker_years(self) -> list[int]:
         """
-        Get all available fvm_marker years from GCS storage.
+        Get all available fvm_marker years from cloud storage.
 
         Returns:
             List of available years for fvm_marker datasets
         """
         years: set[int] = set()
 
-        # Primary: discover from GCS using the correct fvm_marker path pattern
+        # Primary: discover from cloud storage using the correct fvm_marker path pattern
         try:
-            files = self.gcs_access.list_files(
-                f"gs://{self.config.bucket}/silver/{self.config.agricultural_fields_dataset}_*/*/*"
+            files = self.storage.list_files(
+                f"{self.config.bucket}/silver/{self.config.agricultural_fields_dataset}_*/*/*"
             )
             for file_path in files:
                 match = re.search(
@@ -65,19 +65,19 @@ class NLES5DataLoader:
                     else:
                         years.add(year1)
         except Exception as e:
-            self.log.error(f"Error discovering FVM marker years from GCS: {e}")
+            self.log.error(f"Error discovering FVM marker years from cloud storage: {e}")
 
-        # Secondary: derive from hardcoded known years if GCS discovery failed
+        # Secondary: derive from hardcoded known years if cloud storage discovery failed
         if not years:
             self.log.info(
-                "GCS discovery returned empty, using hardcoded fallback "
-                "years based on GCS tree analysis"
+                "cloud storage discovery returned empty, using hardcoded fallback "
+                "years based on cloud storage tree analysis"
             )
 
-        # Tertiary: use hardcoded fallback if GCS discovery failed (network issues)
+        # Tertiary: use hardcoded fallback if cloud storage discovery failed (network issues)
         if not years:
-            self.log.warning("⚠️ GCS discovery failed - using hardcoded fallback years")
-            # Based on GCS tree analysis, these years are available:
+            self.log.warning("⚠️ cloud storage discovery failed - using hardcoded fallback years")
+            # Based on cloud storage tree analysis, these years are available:
             fallback_years = [
                 2005,
                 2006,
@@ -103,7 +103,9 @@ class NLES5DataLoader:
                 2026,
             ]
             years.update(fallback_years)
-            self.log.info(f"Using hardcoded fallback FVM years from GCS tree: {sorted(years)}")
+            self.log.info(
+                f"Using hardcoded fallback FVM years from cloud storage tree: {sorted(years)}"
+            )
 
         return sorted(years)
 
@@ -115,11 +117,13 @@ class NLES5DataLoader:
             year: The year to read data for
 
         Returns:
-            GCS path to the FVM marker data file, or None if not found
+            storage path to the FVM marker data file, or None if not found
         """
         try:
             # Use dynamic discovery to find the latest timestamped directory for this year
-            base_path = f"gs://{self.config.bucket}/silver/{self.config.agricultural_fields_dataset}_{year}/"
+            base_path = (
+                f"{self.config.bucket}/silver/{self.config.agricultural_fields_dataset}_{year}/"
+            )
             latest_dir = self._get_latest_timestamped_directory(base_path, f"FVM marker {year}")
 
             if not latest_dir:
@@ -133,13 +137,13 @@ class NLES5DataLoader:
             ]
 
             for file_path in possible_files:
-                if self.gcs_access.file_exists(file_path):
+                if self.storage.file_exists(file_path):
                     self.log.info(f"✅ Found FVM marker data for {year}: {file_path}")
                     return file_path
 
             # If specific files not found, try to find any parquet file in the directory
             pattern = f"{latest_dir}*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
             if files:
                 file_path = files[0]
                 self.log.info(f"✅ Found FVM marker data for {year} (any parquet): {file_path}")
@@ -158,13 +162,13 @@ class NLES5DataLoader:
         self, base_path: str, dataset_name: str = "dataset"
     ) -> str | None:
         """
-        Get the latest timestamped directory from a base GCS path.
+        Get the latest timestamped directory from a base storage path.
 
         This method dynamically discovers timestamped directories (format: YYYYMMDD_HHMMSS)
         and returns the path to the most recent one.
 
         Args:
-            base_path: Base GCS path (e.g., "gs://bucket/silver/dataset/")
+            base_path: Base storage path (e.g., "bucket/silver/dataset/")
             dataset_name: Dataset name for logging purposes
 
         Returns:
@@ -182,14 +186,14 @@ class NLES5DataLoader:
             # Try to find files in timestamped subdirectories
             # This will list all files in all subdirectories
             pattern = f"{base_path}*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
                 self.log.warning(f"⚠️ No files found for {dataset_name} using pattern: {pattern}")
                 # Try to list just directories to see what's there
                 try:
                     dir_pattern = f"{base_path}*/"
-                    dirs = self.gcs_access.list_files(dir_pattern)
+                    dirs = self.storage.list_files(dir_pattern)
                     if dirs:
                         self.log.warning(
                             f"   Found {len(dirs)} subdirectories but no parquet files:"
@@ -210,7 +214,7 @@ class NLES5DataLoader:
 
             for file_path in files:
                 # Extract timestamp directory from path like:
-                # gs://.../silver/fertiliser/20250803_205033/file.parquet
+                # bucket/.../silver/fertiliser/20250803_205033/file.parquet
                 match = re.search(r"/(\d{8}_\d{6})/", file_path)
                 if match:
                     timestamp = match.group(1)
@@ -261,10 +265,10 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to fertilizer data directory (contains GKEA and Efterafgrøder files)
+            storage path to fertilizer data directory (contains GKEA and Efterafgrøder files)
         """
         try:
-            base_path = f"gs://{self.config.bucket}/silver/{self.config.fertilizer_dataset}/"
+            base_path = f"{self.config.bucket}/silver/{self.config.fertilizer_dataset}/"
             latest_dir = self._get_latest_timestamped_directory(base_path, "fertilizer")
 
             if latest_dir:
@@ -295,16 +299,16 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to specific fertilizer accounts parquet file, or None if not found
+            storage path to specific fertilizer accounts parquet file, or None if not found
         """
         try:
             # Strategy 1: Try year-specific GR directory first (e.g., "gr 2019/", "gr 2023/")
             if target_year:
-                gr_dir_path = f"gs://{self.config.bucket}/silver/gr {target_year}/"
+                gr_dir_path = f"{self.config.bucket}/silver/gr {target_year}/"
 
                 try:
                     # Get latest timestamped directory within the gr year directory
-                    dirs = self.gcs_access.list_files(f"{gr_dir_path}*/")
+                    dirs = self.storage.list_files(f"{gr_dir_path}*/")
                     if dirs:
                         latest_dir = sorted([d for d in dirs if d.endswith("/")])[-1]
                         self.log.info(f"🔍 Checking year-specific GR directory: {latest_dir}")
@@ -322,7 +326,7 @@ class NLES5DataLoader:
 
                         # Try each pattern
                         for pattern in file_patterns:
-                            files = self.gcs_access.list_files(pattern)
+                            files = self.storage.list_files(pattern)
                             if files:
                                 selected_file = files[0]
                                 self.log.info(
@@ -332,7 +336,7 @@ class NLES5DataLoader:
                                 return selected_file
 
                         # If exact patterns don't match, try wildcard search in the directory
-                        all_files = self.gcs_access.list_files(f"{latest_dir}*.parquet")
+                        all_files = self.storage.list_files(f"{latest_dir}*.parquet")
                         gr_files = [f for f in all_files if "GOEDRK" in f or "B_GOEDRK" in f]
                         if gr_files:
                             selected_file = gr_files[0]
@@ -352,7 +356,7 @@ class NLES5DataLoader:
 
             # List all files in the directory to find fertilizer accounts files
             pattern = f"{fertilizer_dir}*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             # Look for files that match fertilizer accounts pattern (Gødningsregnskaber)
             fertilizer_accounts_files = []
@@ -407,7 +411,7 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to GKEA field plan data
+            storage path to GKEA field plan data
         """
         try:
             # Get the fertiliser base directory (will raise exception if not found)
@@ -432,7 +436,7 @@ class NLES5DataLoader:
             for pattern in patterns:
                 try:
                     self.log.debug(f"Trying pattern: {pattern}")
-                    files = self.gcs_access.list_files(pattern)
+                    files = self.storage.list_files(pattern)
                     if files:
                         # Get the most recent file (by name)
                         latest_file = sorted(files, reverse=True)[0]
@@ -444,9 +448,7 @@ class NLES5DataLoader:
 
             # If specific year not found, try to find any GKEA file
             try:
-                all_gkea_files = self.gcs_access.list_files(
-                    f"{fertiliser_dir}GKEA*_Markplan*.parquet"
-                )
+                all_gkea_files = self.storage.list_files(f"{fertiliser_dir}GKEA*_Markplan*.parquet")
                 if all_gkea_files:
                     # Get the most recent GKEA file
                     latest_file = sorted(all_gkea_files, reverse=True)[0]
@@ -457,7 +459,7 @@ class NLES5DataLoader:
 
             # List all files in the directory to help debug
             try:
-                all_files = self.gcs_access.list_files(f"{fertiliser_dir}*.parquet")
+                all_files = self.storage.list_files(f"{fertiliser_dir}*.parquet")
                 self.log.warning(f"No GKEA files found. Available files in {fertiliser_dir}:")
                 for f in all_files[:10]:  # Show first 10 files
                     self.log.warning(f"  - {f.split('/')[-1]}")
@@ -486,7 +488,7 @@ class NLES5DataLoader:
             target_year: Optional target year to match
 
         Returns:
-            GCS path to catch crops data
+            storage path to catch crops data
         """
         try:
             # Get the fertiliser base directory
@@ -506,7 +508,7 @@ class NLES5DataLoader:
 
             for pattern in patterns:
                 try:
-                    files = self.gcs_access.list_files(pattern)
+                    files = self.storage.list_files(pattern)
                     if files:
                         # Get the most recent file (by name)
                         latest_file = sorted(files, reverse=True)[0]
@@ -518,7 +520,7 @@ class NLES5DataLoader:
 
             # If specific year not found, try to find any Efterafgrøder file
             try:
-                all_catch_files = self.gcs_access.list_files(
+                all_catch_files = self.storage.list_files(
                     f"{fertiliser_dir}Efterafgrøder *.parquet"
                 )
                 if all_catch_files:
@@ -536,17 +538,17 @@ class NLES5DataLoader:
 
         except Exception as e:
             self.log.error(f"Failed to get catch crops data path: {e}")
-            return f"gs://{self.config.bucket}/silver/fertiliser/Efterafgrøder.parquet"
+            return f"{self.config.bucket}/silver/fertiliser/Efterafgrøder.parquet"
 
     def _read_silver_data_from_path(
         self, dataset_name: str, file_path: str, target_table: str
     ) -> bool:
         """
-        Read silver data from a specific GCS path into a DuckDB table.
+        Read silver data from a specific storage path into a DuckDB table.
 
         Args:
             dataset_name: Name of the dataset for logging
-            file_path: GCS path to the data file
+            file_path: storage path to the data file
             target_table: Name of the target DuckDB table
 
         Returns:
@@ -556,7 +558,7 @@ class NLES5DataLoader:
             self.log.info(f"📥 Loading {dataset_name} from: {file_path}")
 
             # Check if file exists
-            if not self.gcs_access.file_exists(file_path):
+            if not self.storage.file_exists(file_path):
                 self.log.error(f"File not found: {file_path}")
                 return False
 
@@ -564,8 +566,8 @@ class NLES5DataLoader:
             if dataset_name == self.config.field_plan_dataset and "GKEA" in file_path:
                 return self._process_gkea_field_plan_data(file_path, target_table)
 
-            # Use the standard GCSDataAccess method to create table from GCS
-            self.gcs_access.create_table_from_gcs(target_table, file_path)
+            # Use the standard StorageAccess method to create table from cloud storage
+            self.storage.create_table_from_storage(target_table, file_path)
 
             # Verify the table was created and has data
             row_count = self.db.execute(f"SELECT COUNT(*) FROM {target_table}").fetchone()[0]
@@ -586,7 +588,7 @@ class NLES5DataLoader:
         2. CSV-like with headers in row 2 (legacy format)
 
         Args:
-            file_path: GCS path to the GKEA field plan file
+            file_path: storage path to the GKEA field plan file
             target_table: Target table name (should be 'field_plan')
 
         Returns:
@@ -644,7 +646,7 @@ class NLES5DataLoader:
         Process GKEA data that already has proper Danish column names.
 
         Args:
-            file_path: GCS path to the GKEA field plan file
+            file_path: storage path to the GKEA field plan file
             target_table: Target table name
             gkea_year: Year extracted from filename
             column_names: List of column names from the parquet file
@@ -738,7 +740,7 @@ class NLES5DataLoader:
         Process GKEA data with legacy format (headers in row 2).
 
         Args:
-            file_path: GCS path to the GKEA field plan file
+            file_path: storage path to the GKEA field plan file
             target_table: Target table name
             gkea_year: Year extracted from filename
             column_names: List of column names from the parquet file
@@ -955,7 +957,8 @@ class NLES5DataLoader:
                             'direct_composite_key' as match_method,
                             1.0 as confidence_score
                         FROM {gkea_table} g
-                        JOIN marker f ON g.field_id = f.field_id
+                        JOIN marker f ON g.cvr_number = f.cvr_number
+                                     AND g.marknummer = f.field_id
 
                         UNION ALL
 
@@ -1089,7 +1092,7 @@ class NLES5DataLoader:
                             )
                             continue
 
-                    # Load from GCS using modern pattern
+                    # Load from cloud storage using modern pattern
                     else:
                         # Special handling for fertilizer and catch crops datasets
                         # (they don't follow standard patterns)
@@ -1113,7 +1116,7 @@ class NLES5DataLoader:
                                 files = []
                         else:
                             # Use dynamic discovery to find the latest timestamped directory
-                            base_path = f"gs://{self.config.bucket}/silver/{dataset_name}/"
+                            base_path = f"{self.config.bucket}/silver/{dataset_name}/"
                             latest_dir = self._get_latest_timestamped_directory(
                                 base_path, dataset_name
                             )
@@ -1126,7 +1129,7 @@ class NLES5DataLoader:
 
                             # Look for data.parquet in the latest directory
                             data_file = f"{latest_dir}data.parquet"
-                            files = [data_file] if self.gcs_access.file_exists(data_file) else []
+                            files = [data_file] if self.storage.file_exists(data_file) else []
 
                         if files:
                             self.log.info(f"Found {dataset_name} in silver layer.")
@@ -1222,8 +1225,8 @@ class NLES5DataLoader:
                                     latest_file = sorted(files, reverse=True)[0]
                                     self.log.info(f"📥 Loading {dataset_name} from: {latest_file}")
 
-                                    # Use the standard GCSDataAccess method
-                                    self.gcs_access.create_table_from_gcs(table_name, latest_file)
+                                    # Use the standard StorageAccess method
+                                    self.storage.create_table_from_storage(table_name, latest_file)
 
                                     # Verify and log
                                     row_count = self.db.execute(
@@ -1296,7 +1299,7 @@ class NLES5DataLoader:
     def _load_dmi_precipitation_data(self) -> bool:
         """Load DMI precipitation data from the latest timestamped directory."""
         try:
-            base_path = f"gs://{self.config.bucket}/silver/{self.config.dmi_precipitation_dataset}/"
+            base_path = f"{self.config.bucket}/silver/{self.config.dmi_precipitation_dataset}/"
             latest_dir = self._get_latest_timestamped_directory(base_path, "DMI precipitation")
 
             if not latest_dir:
@@ -1306,14 +1309,14 @@ class NLES5DataLoader:
             # Look for data.parquet in the latest directory
             data_file = f"{latest_dir}data.parquet"
 
-            if not self.gcs_access.file_exists(data_file):
+            if not self.storage.file_exists(data_file):
                 self.log.warning(f"⚠️ data.parquet not found in {latest_dir}")
                 return False
 
             self.log.info(f"📥 Loading DMI precipitation data from: {data_file}")
             # Drop existing table if it exists to avoid collision
             self.db.execute("DROP TABLE IF EXISTS dmi_precipitation")
-            self.gcs_access.create_table_from_gcs("dmi_precipitation", data_file)
+            self.storage.create_table_from_storage("dmi_precipitation", data_file)
 
             row_count = self.db.execute("SELECT COUNT(*) FROM dmi_precipitation").fetchone()[0]
             self.log.info(f"✅ DMI precipitation data loaded: {row_count:,} rows")
@@ -1326,7 +1329,7 @@ class NLES5DataLoader:
     def _load_dmi_evaporation_data(self) -> bool:
         """Load DMI evaporation data from the latest timestamped directory."""
         try:
-            base_path = f"gs://{self.config.bucket}/silver/{self.config.dmi_evaporation_dataset}/"
+            base_path = f"{self.config.bucket}/silver/{self.config.dmi_evaporation_dataset}/"
             latest_dir = self._get_latest_timestamped_directory(base_path, "DMI evaporation")
 
             if not latest_dir:
@@ -1336,14 +1339,14 @@ class NLES5DataLoader:
             # Look for data.parquet in the latest directory
             data_file = f"{latest_dir}data.parquet"
 
-            if not self.gcs_access.file_exists(data_file):
+            if not self.storage.file_exists(data_file):
                 self.log.warning(f"⚠️ data.parquet not found in {latest_dir}")
                 return False
 
             self.log.info(f"📥 Loading DMI evaporation data from: {data_file}")
             # Drop existing table if it exists to avoid collision
             self.db.execute("DROP TABLE IF EXISTS dmi_evaporation")
-            self.gcs_access.create_table_from_gcs("dmi_evaporation", data_file)
+            self.storage.create_table_from_storage("dmi_evaporation", data_file)
 
             row_count = self.db.execute("SELECT COUNT(*) FROM dmi_evaporation").fetchone()[0]
             self.log.info(f"✅ DMI evaporation data loaded: {row_count:,} rows")
@@ -1569,7 +1572,7 @@ class NLES5DataLoader:
 
     def _load_farm_data_for_year(self, year: int) -> str | None:
         """
-        Load farm data for a specific year from GCS bucket into DuckDB.
+        Load farm data for a specific year from storage bucket into DuckDB.
 
         Args:
             year: Year to load data for
@@ -1578,9 +1581,9 @@ class NLES5DataLoader:
             Table name with farm data or None if not available
         """
         try:
-            # Load gødningsregnskab from GCS bucket
+            # Load gødningsregnskab from storage bucket
             # Dynamically find the latest timestamped directory for this year
-            base_path = f"gs://{self.config.bucket}/silver/gr {year}/"
+            base_path = f"{self.config.bucket}/silver/gr {year}/"
             latest_dir = self._get_latest_timestamped_directory(base_path, f"farm data {year}")
 
             if not latest_dir:
@@ -1591,10 +1594,12 @@ class NLES5DataLoader:
 
             # List available parquet files in the latest directory
             pattern = f"{latest_dir}*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
 
             if not files:
-                self.log.warning(f"No farm data files found for year {year} in GCS: {pattern}")
+                self.log.warning(
+                    f"No farm data files found for year {year} in cloud storage: {pattern}"
+                )
                 return None
 
             # Create temporary table name for this year
@@ -1619,13 +1624,13 @@ class NLES5DataLoader:
             # Load main files
             self.log.info(f"Loading main farm data files: {len(main_files)} files")
             if len(main_files) == 1:
-                self.gcs_access.create_table_from_gcs(main_table, main_files[0])
+                self.storage.create_table_from_storage(main_table, main_files[0])
             else:
                 # Combine multiple main files
                 union_parts = []
                 for i, file_path in enumerate(main_files):
                     temp_table = f"farm_temp_main_{year}_{i}"
-                    self.gcs_access.create_table_from_gcs(temp_table, file_path)
+                    self.storage.create_table_from_storage(temp_table, file_path)
                     union_parts.append(f"SELECT * FROM {temp_table}")
 
                 # Create combined main table
@@ -1640,13 +1645,13 @@ class NLES5DataLoader:
             if animal_files:
                 self.log.info(f"Loading animal farm data files: {len(animal_files)} files")
                 if len(animal_files) == 1:
-                    self.gcs_access.create_table_from_gcs(animal_table, animal_files[0])
+                    self.storage.create_table_from_storage(animal_table, animal_files[0])
                 else:
                     # Combine multiple animal files
                     union_parts = []
                     for i, file_path in enumerate(animal_files):
                         temp_table = f"farm_temp_animal_{year}_{i}"
-                        self.gcs_access.create_table_from_gcs(temp_table, file_path)
+                        self.storage.create_table_from_storage(temp_table, file_path)
                         union_parts.append(f"SELECT * FROM {temp_table}")
 
                     # Create combined animal table
@@ -1699,38 +1704,40 @@ class NLES5DataLoader:
 
     def _find_main_farm_file(self, base_path: Path) -> Path | None:
         """
-        Legacy method for finding main farm data file - no longer used with GCS implementation.
+        Legacy method for finding main farm data file - no longer used with cloud storage implementation.
 
         This method is kept for backward compatibility but should not be called
-        in the GCS-based farm data loading.
+        in the cloud storage-based farm data loading.
         """
-        self.log.warning("_find_main_farm_file called but farm data is now loaded from GCS")
+        self.log.warning(
+            "_find_main_farm_file called but farm data is now loaded from cloud storage"
+        )
         return None
 
     def _load_file_to_duckdb(self, file_path: Path, table_name: str) -> bool:
         """
         Legacy method for loading CSV/Excel files to DuckDB
-        - no longer used with GCS implementation.
+        - no longer used with cloud storage implementation.
 
         This method is kept for backward compatibility but should not be called
-        in the GCS-based farm data loading where parquet files are used directly.
+        in the cloud storage-based farm data loading where parquet files are used directly.
         """
         self.log.warning(
-            "_load_file_to_duckdb called but farm data is now loaded from GCS parquet files"
+            "_load_file_to_duckdb called but farm data is now loaded from cloud storage parquet files"
         )
         return False
 
     def _load_and_combine_animal_data(self, animal_files: list[Path], animal_table: str) -> None:
         """
         Legacy method for loading and combining animal data files
-        - no longer used with GCS implementation.
+        - no longer used with cloud storage implementation.
 
         This method is kept for backward compatibility but should not be called
-        in the GCS-based farm data loading where animal data is handled directly
+        in the cloud storage-based farm data loading where animal data is handled directly
         in _load_farm_data_for_year.
         """
         self.log.warning(
-            "_load_and_combine_animal_data called but farm data is now loaded from GCS"
+            "_load_and_combine_animal_data called but farm data is now loaded from cloud storage"
         )
         return
 
@@ -1844,7 +1851,7 @@ class NLES5DataLoader:
                     yearly_tables.append((year, silver_data[year_dataset]))
                     continue
 
-                # Read from GCS
+                # Read from cloud storage
                 fvm_path = self._read_fvm_marker_data_for_year(year)
                 if not fvm_path:
                     self.log.warning(f"⚠️ No FVM marker data found for year {year}, skipping")
@@ -2045,7 +2052,7 @@ class NLES5DataLoader:
         Add year column to fertilizer data by extracting it from the filename.
 
         Args:
-            file_path: GCS path to the fertilizer file (e.g., "Gødningsregnskaber 2023.parquet")
+            file_path: storage path to the fertilizer file (e.g., "Gødningsregnskaber 2023.parquet")
             table_name: Name of the table to update (e.g., "fertilizer_accounts")
         """
         import re

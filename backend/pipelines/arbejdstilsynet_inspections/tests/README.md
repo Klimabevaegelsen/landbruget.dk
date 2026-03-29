@@ -6,7 +6,7 @@ Comprehensive test coverage for the arbejdstilsynet_inspections pipeline, includ
 
 ```
 tests/
-├── bronze/           # Bronze layer (Playwright scraping, GCS export)
+├── bronze/           # Bronze layer (Playwright scraping, cloud storage export)
 │   └── test_export.py
 ├── silver/           # Silver layer (data transformations)
 │   └── test_transform.py
@@ -57,8 +57,8 @@ tests/
 - ⚠️ `test_csv_download_trigger` - Download button click (mock complexity)
 - ⚠️ `test_csv_file_detection` - Downloaded file detection (mock complexity)
 
-**GCS Streaming (3 tests)**
-- ✅ `test_gcs_streaming_upload` - Stream CSV to GCS
+**Cloud Storage Streaming (3 tests)**
+- ✅ `test_gcs_streaming_upload` - Stream CSV to cloud storage
 - ✅ `test_upload_integrity` - File integrity after upload
 - ✅ `test_metadata_json_creation` - Metadata structure validation
 
@@ -221,7 +221,7 @@ When adding new tests:
 
 1. Follow existing test structure and naming conventions
 2. Use fixtures from `conftest.py`
-3. Mock external dependencies (CVR API, GCS, Playwright)
+3. Mock external dependencies (CVR API, cloud storage, Playwright)
 4. Test both success and failure cases
 5. Document data quality expectations in test docstrings
 6. Ensure tests are deterministic (no random values)

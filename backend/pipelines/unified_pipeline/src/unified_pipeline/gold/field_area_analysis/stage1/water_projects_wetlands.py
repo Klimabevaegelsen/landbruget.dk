@@ -34,8 +34,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Pick the latest Stage 0 partition that contains the required wetland_key column
         def _latest_gold_with_column(dataset: str, required_column: str) -> str:
             """Get the most recent gold partition - assume it has the required column."""
-            pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
-            files = sorted(self.gcs_access.list_files(pattern), reverse=True)
+            pattern = f"{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
+            files = sorted(self.storage.list_files(pattern), reverse=True)
             if not files:
                 raise FileNotFoundError(f"No gold data found for {dataset}")
 
@@ -45,14 +45,14 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             return most_recent
 
         stage0_wetlands_path = _latest_gold_with_column(stage0_wetlands_dataset, "wetland_key")
-        self.gcs_access.query_parquet_direct(stage0_wetlands_path, "SELECT *", "wetlands_raw")
+        self.storage.query_parquet_direct(stage0_wetlands_path, "SELECT *", "wetlands_raw")
         self.log.info(f"✅ Loaded wetlands from {stage0_wetlands_dataset}")
 
         # Load Stage 0 pre-filtered water projects (2.4K → ~500, 80% reduction)
         self.log.info("Loading Stage 0 pre-filtered water projects dataset...")
         stage0_water_projects_dataset = updated_outputs["water_projects_prefiltered"]
         stage0_water_projects_path = self._get_latest_gold_path(stage0_water_projects_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage0_water_projects_path, "SELECT *", "water_projects_raw"
         )
         self.log.info(f"✅ Loaded water projects from {stage0_water_projects_dataset}")
@@ -155,9 +155,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        batch_base_path = (
-            f"gs://{CONFIG.bucket}/gold/field_analysis_wetland_water_coverage/{timestamp}"
-        )
+        batch_base_path = f"{CONFIG.bucket}/gold/field_analysis_wetland_water_coverage/{timestamp}"
 
         total_intersections = 0
 
@@ -265,17 +263,21 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
             self.conn.execute(batch_query)
 
-            # Stream this batch to GCS immediately to avoid memory accumulation
+            # Stream this batch to cloud storage immediately to avoid memory accumulation
             batch_intersections = self.conn.execute(
                 "SELECT COUNT(*) FROM batch_intersections"
             ).fetchone()[0]
 
             if batch_intersections > 0:
-                batch_gcs_path = (
+                batch_storage_path = (
                     f"{batch_base_path}/batch_{batch_num + 1:04d}_intersections.parquet"
                 )
-                self.gcs_access.export_table_to_gcs_direct("batch_intersections", batch_gcs_path)
-                self.log.info(f"  📤 Streamed {batch_intersections:,} intersections to GCS")
+                self.storage.export_table_to_storage_direct(
+                    "batch_intersections", batch_storage_path
+                )
+                self.log.info(
+                    f"  📤 Streamed {batch_intersections:,} intersections to cloud storage"
+                )
 
             # Log batch progress
             batch_stats = self.conn.execute("""
@@ -315,7 +317,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Check if any batch files exist before trying to load them
         try:
             # Load all batch files into final table
-            self.gcs_access.query_multiple_direct(
+            self.storage.query_multiple_direct(
                 batch_pattern, "wetland_water_intersections", "SELECT *"
             )
             self.log.info("✅ Successfully consolidated batch intersection files")

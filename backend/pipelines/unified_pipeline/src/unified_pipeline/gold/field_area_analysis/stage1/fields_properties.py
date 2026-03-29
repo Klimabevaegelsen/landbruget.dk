@@ -41,7 +41,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         updated_outputs = CONFIG.update_outputs_for_year()
         stage0_properties_dataset = updated_outputs["properties_prefiltered"]
         stage0_properties_path = self._get_latest_gold_path(stage0_properties_dataset)
-        self.gcs_access.query_parquet_direct(stage0_properties_path, "SELECT *", "properties_full")
+        self.storage.query_parquet_direct(stage0_properties_path, "SELECT *", "properties_full")
         self.log.info(f"✅ Loaded properties from {stage0_properties_dataset}")
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered properties!")
@@ -521,4 +521,4 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         """Save field-property intersection data - already handled in _execute_stage_processing."""
         # Data is already saved in _execute_stage_processing using save_data_direct
         # This method is required by the abstract base class but no additional saving is needed
-        self.log.info("✅ Field-property intersection data already saved to GCS")
+        self.log.info("✅ Field-property intersection data already saved to cloud storage")

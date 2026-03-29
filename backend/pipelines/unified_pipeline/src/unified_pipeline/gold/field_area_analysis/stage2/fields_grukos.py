@@ -58,7 +58,7 @@ class FieldsGrukosCoverage(FieldAnalysisStageBase):
         self.log.info("Loading Stage 0 pre-filtered Grukos dataset...")
         stage0_grukos_dataset = updated_outputs["grukos_prefiltered"]
         stage0_grukos_path = self._get_latest_gold_path(stage0_grukos_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage0_grukos_path,
             "SELECT *",
             "grukos_prefiltered",
@@ -139,7 +139,7 @@ class FieldsGrukosCoverage(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save field × grukos intersection table to GCS."""
+        """Save field × grukos intersection table to cloud storage."""
         self._save_stage_output("field_grukos_intersections", "field_grukos_intersections")
 
     def _validate_geometric_output(self):

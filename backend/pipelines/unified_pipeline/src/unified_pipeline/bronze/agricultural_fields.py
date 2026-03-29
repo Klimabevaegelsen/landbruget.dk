@@ -2,7 +2,7 @@
 Bronze layer data ingestion for Agricultural Fields data.
 
 This module handles the extraction of agricultural fields data from an ArcGIS REST API.
-It fetches raw data in chunks, processes it, and saves it to Google Cloud Storage
+It fetches raw data in chunks, processes it, and saves it to cloud storage
 for further processing in the silver layer.
 
 The module contains:
@@ -47,7 +47,7 @@ class AgriculturalFieldsBronzeConfig(BaseJobConfig):
         fields_dataset (str): Name of the fields dataset in storage
         blocks_dataset (str): Name of the blocks dataset in storage
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         batch_size (int): Number of records to fetch in each request
         max_concurrent (int): Maximum number of concurrent requests
         storage_batch_size (int): Batch size for storage operations
@@ -102,7 +102,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
 
     This class is responsible for fetching raw agricultural fields data from the ArcGIS API,
     including both field polygons and block polygons. It handles pagination, parallel fetching,
-    and error handling, and stores the raw data in Google Cloud Storage for further processing.
+    and error handling, and stores the raw data in cloud storage for further processing.
 
     The class implements retry logic for resilience against transient failures and uses
     semaphores to control the number of concurrent requests to avoid overwhelming the API.
@@ -110,7 +110,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
     Processing flow:
     1. Determine total record count from the API
     2. Fetch data in parallel batches based on configuration
-    3. Save raw responses to Google Cloud Storage
+    3. Save raw responses to cloud storage
     """
 
     def __init__(self, config: AgriculturalFieldsBronzeConfig):
@@ -218,13 +218,13 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
 
     async def _process_data(self, url: str, dataset: str, year: int) -> str:
         """
-        Process data from the specified URL and save it to Google Cloud Storage.
+        Process data from the specified URL and save it to cloud storage.
 
         This method orchestrates the data retrieval workflow for a specific dataset:
         1. Establishes an HTTP session with proper SSL and timeout configuration
         2. Gets the total count of available features from the API
         3. Fetches data in parallel chunks using _fetch_chunk method
-        4. Combines results and saves them to Google Cloud Storage
+        4. Combines results and saves them to cloud storage
         5. Returns the table name for potential in-memory passing
 
         Args:
@@ -308,7 +308,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             self.conn.execute("DROP TABLE temp_raw_data")
 
             dataset_with_year = f"{dataset}_{year}"
-            self.log.info(f"Saving data to GCS for {dataset_with_year}")
+            self.log.info(f"Saving data to cloud storage for {dataset_with_year}")
 
             # Save using new unified method - table-based
             self.save_data_direct(table_name, dataset_with_year, self.config.bucket, "bronze")

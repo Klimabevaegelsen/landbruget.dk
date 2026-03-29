@@ -47,6 +47,10 @@ from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
 )
+from unified_pipeline.gold.carbon_emissions import (
+    CarbonEmissionsGold,
+    CarbonEmissionsGoldConfig,
+)
 
 # Import new modular CVR enrichment steps from the package directory
 from unified_pipeline.gold.cvr_enrichment.address_geocoding import (
@@ -179,7 +183,7 @@ def validate_pipeline_dependencies(source: cli_models.Source) -> bool:
     log = Logger.get_logger()
 
     # For now, we assume dependencies are satisfied if this function is called
-    # In a more sophisticated implementation, we could check GCS for recent data
+    # In a more sophisticated implementation, we could check cloud storage for recent data
     log.info(
         f"Pipeline {source.value} depends on: {[dep.value for dep in schedule_config.depends_on]}"
     )
@@ -655,6 +659,13 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             cli_models.Stage.all: [
                 # Note: This requires work permits silver data from drive pipeline to be available
                 (WorkPermitsGold, WorkPermitsGoldConfig),
+            ],
+        },
+        cli_models.Source.carbon_emissions: {
+            cli_models.Stage.gold: [(CarbonEmissionsGold, CarbonEmissionsGoldConfig)],
+            cli_models.Stage.all: [
+                # Note: This requires silver datasets: gr (livestock), fvm_marker (fields), fertiliser
+                (CarbonEmissionsGold, CarbonEmissionsGoldConfig),
             ],
         },
         # Note: drive_data and bbr_buildings are external pipelines

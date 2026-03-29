@@ -3,7 +3,7 @@ Main silver processing module for Svineflytning pipeline.
 
 This module provides the main entry point for silver layer processing,
 integrating with the existing pipeline architecture and handling both
-local and GCS data sources.
+local and cloud storage data sources.
 """
 
 import logging
@@ -18,15 +18,19 @@ logger = logging.getLogger(__name__)
 
 def get_latest_bronze_data_path() -> str | None:
     """
-    Get the path to the latest bronze data from GCS.
+    Get the path to the latest bronze data from cloud storage.
 
     Returns:
         String path to the latest bronze data or None if not found
     """
     try:
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
-        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        bucket_name = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
         fs = get_r2_filesystem()
 
         # List all bronze svineflytning directories
@@ -47,9 +51,7 @@ def get_latest_bronze_data_path() -> str | None:
 
         # Sort by timestamp and get the latest
         latest_timestamp = sorted(directories)[-1]
-        latest_path = (
-            f"gs://{bucket_name}/bronze/svineflytning/{latest_timestamp}/svineflytning.json"
-        )
+        latest_path = f"{bucket_name}/bronze/svineflytning/{latest_timestamp}/svineflytning.json"
 
         logger.info(f"Found latest bronze data: {latest_path}")
         return latest_path
@@ -137,8 +139,12 @@ def process_specific_bronze_timestamp(
     Returns:
         Dict containing processing results
     """
-    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-    bronze_path = f"gs://{bucket_name}/bronze/svineflytning/{bronze_timestamp}/svineflytning.json"
+    bucket_name = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
+    bronze_path = f"{bucket_name}/bronze/svineflytning/{bronze_timestamp}/svineflytning.json"
 
     return run_silver_processing(
         bronze_data_path=bronze_path,

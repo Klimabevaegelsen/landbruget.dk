@@ -425,7 +425,7 @@ def test_save_data(
     bnbo_status_silver: BNBOStatusSilver,
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
-    """Test saving data to GCS."""
+    """Test saving data to cloud storage."""
     # Create a sample table in DuckDB
     table_name = "test_bnbo_table"
     bnbo_status_silver.conn.execute(f"""
@@ -448,7 +448,7 @@ def test_save_data_with_empty_dataframe(
     bnbo_status_silver: BNBOStatusSilver,
     silver_config: BNBOStatusSilverConfig,
 ) -> None:
-    """Test saving an empty table to GCS."""
+    """Test saving an empty table to cloud storage."""
     # Create an empty table in DuckDB
     table_name = "test_empty_table"
     bnbo_status_silver.conn.execute(f"""

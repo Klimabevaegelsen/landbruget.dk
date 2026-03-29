@@ -244,9 +244,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     # In GitHub Actions, we only need to process the artifact once
                     break
 
-                # Use GCS temp download for local development
-                self.log.info(f"Local development - downloading from GCS: {input_path}")
-                with self.gcs_access._temp_download(input_path) as temp_file:
+                # Use cloud storage temp download for local development
+                self.log.info(f"Local development - downloading from cloud storage: {input_path}")
+                with self.storage._temp_download(input_path) as temp_file:
                     # Load company data from temp file
                     result = self.conn.execute(
                         """
@@ -751,7 +751,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     @timed(name="Saving financial data")
     def _save_financial_data(self, processed_data: dict[str, Any]) -> str:
         """
-        Save processed financial documents data to GCS using batch processing to avoid memory
+        Save processed financial documents data to cloud storage using batch processing to avoid memory
         issues. Now creates both document metadata table AND comprehensive financial table.
 
         Args:
@@ -1379,7 +1379,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             """)
             self.log.info(f"Created empty tables {metadata_table} and {financial_table}")
 
-        # Save both tables to GCS
+        # Save both tables to cloud storage
         # Save document metadata table (for compatibility)
         self._save_data(
             data=metadata_table,
@@ -1436,9 +1436,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         # No batching - single summary file
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/financial_summary.json"
 
-        self.gcs_access.upload_json(
-            data=summary, gcs_path=f"gs://{self.config.bucket}/{summary_path}"
-        )
+        self.storage.upload_json(data=summary, storage_path=f"{self.config.bucket}/{summary_path}")
 
         self.log.info(f"Saved processing summary to {summary_path}")
 
@@ -1553,9 +1551,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     break
                 continue
 
-        # Save employment table to GCS
+        # Save employment table to storage
         if total_records > 0:
-            self._save_employment_table_to_gcs(table_name, table_suffix, total_records)
+            self._save_employment_table_to_storage(table_name, table_suffix, total_records)
         else:
             self.log.info(f"No {employment_field} records found")
 
@@ -1676,13 +1674,13 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
         return len(employment_records)
 
-    def _save_employment_table_to_gcs(
+    def _save_employment_table_to_storage(
         self, table_name: str, table_suffix: str, total_records: int
     ) -> None:
-        """Save employment table to GCS."""
-        self.log.info(f"💾 Saving {total_records} {table_suffix} employment records to GCS")
+        """Save employment table to storage."""
+        self.log.info(f"💾 Saving {total_records} {table_suffix} employment records to storage")
 
-        # Save to GCS
+        # Save to cloud storage
         self._save_data(
             data=table_name,
             dataset=f"cvr_financial_employment_{table_suffix}",

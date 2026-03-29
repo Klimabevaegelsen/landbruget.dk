@@ -1,5 +1,5 @@
 """
-Main H3 PFAS processor with modular architecture and GCS data loading.
+Main H3 PFAS processor with modular architecture and cloud storage data loading.
 """
 
 import contextlib
@@ -17,7 +17,7 @@ from .spatial_joiner import SpatialJoiner
 
 
 class H3PFASProcessorRefactored:
-    """Refactored H3 PFAS processor with modular architecture and GCS data loading."""
+    """Refactored H3 PFAS processor with modular architecture and cloud storage data loading."""
 
     def __init__(self, config: H3SpatialConfig, local_data_dir: Path | None = None):
         self.config = config
@@ -29,7 +29,7 @@ class H3PFASProcessorRefactored:
         self.coordinate_transformer = None
         self.spatial_joiner = None
         self.area_validator = None
-        self.gcs_access = None
+        self.storage = None
 
         # STATIC DATA CACHING - avoid recomputing for each year
         self._cached_bmd_table = None
@@ -236,10 +236,10 @@ class H3PFASProcessorRefactored:
                 self.log.error(f"❌ Failed to load extension {ext_name}: {e}")
                 raise
 
-        # Initialize GCS access with shared connection
-        from common.gcs import GCSDataAccess
+        # Initialize cloud storage access with shared connection
+        from common.storage import StorageAccess
 
-        self.gcs_access = GCSDataAccess(connection=self.conn)
+        self.storage = StorageAccess(connection=self.conn)
 
         # Initialize helper classes
         self.coordinate_transformer = CoordinateTransformer(self.conn, self.config)
@@ -629,9 +629,9 @@ class H3PFASProcessorRefactored:
         self._monitor_resources(f"cleanup_year_{year}")
 
     async def run_analysis_multi_year(self, years: list[int] | None = None) -> bool:
-        """Run multi-year H3 PFAS analysis from GCS data."""
+        """Run multi-year H3 PFAS analysis from cloud storage data."""
         self.log.info(
-            "🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from GCS"
+            "🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from cloud storage"
         )
 
         # Setup DuckDB
@@ -642,12 +642,12 @@ class H3PFASProcessorRefactored:
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(self.conn, self.config, self.gcs_access)
-        result_saver = H3ResultSaver(self.conn, self.config, self.gcs_access)
+        data_loader = H3DataLoader(self.conn, self.config, self.storage)
+        result_saver = H3ResultSaver(self.conn, self.config, self.storage)
 
         # Load BMD data once for all years (cache for efficiency)
         if self._cached_bmd_table is None:
-            self._cached_bmd_table = data_loader.load_bmd_data_from_gcs()
+            self._cached_bmd_table = data_loader.load_bmd_data_from_storage()
             self._protect_table(self._cached_bmd_table)
         bmd_table = self._cached_bmd_table
 
@@ -686,7 +686,7 @@ class H3PFASProcessorRefactored:
                     self._monitor_resources(f"starting_year_{year}")
 
                     # Process single year
-                    year_records = await self._process_single_year_from_gcs(
+                    year_records = await self._process_single_year_from_storage(
                         year, bmd_table, data_loader, result_saver
                     )
 
@@ -731,8 +731,8 @@ class H3PFASProcessorRefactored:
         return successful_years > 0
 
     async def run_kommune_analysis_multi_year(self, years: list[int] | None = None) -> bool:
-        """Run multi-year kommune-level PFAS analysis from GCS data."""
-        self.log.info("🏛️ Starting multi-year kommune-level PFAS analysis from GCS")
+        """Run multi-year kommune-level PFAS analysis from cloud storage data."""
+        self.log.info("🏛️ Starting multi-year kommune-level PFAS analysis from cloud storage")
 
         # Setup DuckDB
         self.setup_duckdb()
@@ -742,12 +742,12 @@ class H3PFASProcessorRefactored:
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(self.conn, self.config, self.gcs_access)
-        result_saver = H3ResultSaver(self.conn, self.config, self.gcs_access)
+        data_loader = H3DataLoader(self.conn, self.config, self.storage)
+        result_saver = H3ResultSaver(self.conn, self.config, self.storage)
 
         # Load BMD data once for all years (cache for efficiency)
         if self._cached_bmd_table is None:
-            self._cached_bmd_table = data_loader.load_bmd_data_from_gcs()
+            self._cached_bmd_table = data_loader.load_bmd_data_from_storage()
             self._protect_table(self._cached_bmd_table)
         bmd_table = self._cached_bmd_table
 
@@ -792,7 +792,7 @@ class H3PFASProcessorRefactored:
                     self._monitor_resources(f"starting_kommune_year_{year}")
 
                     # Process single year for kommune analysis
-                    year_records = await self._process_single_year_kommune_from_gcs(
+                    year_records = await self._process_single_year_kommune_from_storage(
                         year, bmd_table, kommune_table, data_loader, result_saver
                     )
 
@@ -837,21 +837,21 @@ class H3PFASProcessorRefactored:
         return successful_years > 0
 
     def _load_kommune_boundaries(self) -> str:
-        """Load Danish kommune boundaries from GCS using proper authentication."""
-        self.log.info("🗺️ Loading Danish kommune boundaries from GCS")
+        """Load Danish kommune boundaries from cloud storage using proper authentication."""
+        self.log.info("🗺️ Loading Danish kommune boundaries from cloud storage")
 
         kommune_table = "kommune_boundaries"
 
-        # Load kommune data from GCS using GCSDataAccess for proper authentication
+        # Load kommune data from cloud storage using StorageAccess for proper authentication
         try:
-            # Use existing GCSDataAccess instance with shared DuckDB connection
+            # Use existing StorageAccess instance with shared DuckDB connection
             import tempfile
 
-            gcs_access = self.gcs_access
+            storage_access = self.storage
 
             # Try silver layer first (processed data)
-            silver_files = gcs_access.list_files(
-                f"gs://{self.config.bucket}/silver/dagi_kommuner/*/data.parquet"
+            silver_files = storage_access.list_files(
+                f"{self.config.bucket}/silver/dagi_kommuner/*/data.parquet"
             )
 
             if silver_files:
@@ -859,10 +859,10 @@ class H3PFASProcessorRefactored:
                 latest_file = sorted(silver_files)[-1]
                 self.log.info(f"Using silver layer DAGI kommune data: {latest_file}")
 
-                # Load directly from parquet using GCSDataAccess
+                # Load directly from parquet using StorageAccess
                 try:
-                    # Use GCSDataAccess to create table directly from GCS
-                    gcs_access.create_table_from_gcs("silver_kommuner_raw", latest_file)
+                    # Use StorageAccess to create table directly from cloud storage
+                    storage_access.create_table_from_storage("silver_kommuner_raw", latest_file)
 
                     # Create the kommune_boundaries table from silver data
                     self.conn.execute(f"""
@@ -890,20 +890,20 @@ class H3PFASProcessorRefactored:
                     )
 
             # Fallback to bronze layer JSON data
-            bronze_files = gcs_access.list_files(
-                f"gs://{self.config.bucket}/bronze/dagi_kommuner/*/*.json"
+            bronze_files = storage_access.list_files(
+                f"{self.config.bucket}/bronze/dagi_kommuner/*/*.json"
             )
 
             if not bronze_files:
-                raise ValueError("No DAGI kommune data found in GCS")
+                raise ValueError("No DAGI kommune data found in cloud storage")
 
             # Extract timestamps and find the latest
             timestamps = []
             for file_path in bronze_files:
-                # Extract timestamp from path like "gs://bucket/bronze/dagi_kommuner/20250705_113955/dagi_kommuner.json"
+                # Extract timestamp from path like "bucket/bronze/dagi_kommuner/20250705_113955/dagi_kommuner.json"
                 parts = file_path.split("/")
-                if len(parts) >= 6:  # gs, , bucket, bronze, dagi_kommuner, timestamp, filename
-                    timestamp = parts[5]
+                if len(parts) >= 5:  # bucket, bronze, dagi_kommuner, timestamp, filename
+                    timestamp = parts[3]
                     if timestamp and timestamp.replace("_", "").isdigit():
                         timestamps.append((timestamp, file_path))
 
@@ -914,10 +914,10 @@ class H3PFASProcessorRefactored:
             latest_timestamp, kommune_path = sorted(timestamps, key=lambda x: x[0])[-1]
             self.log.info(f"Using bronze layer DAGI kommune data: {latest_timestamp}")
 
-            # Download the JSON file using GCSDataAccess
+            # Download the JSON file using StorageAccess
             with tempfile.NamedTemporaryFile(mode="w+", suffix=".json", delete=False) as temp_file:
                 # Download the file content using existing download_json method
-                json_data = gcs_access.download_json(kommune_path)
+                json_data = storage_access.download_json(kommune_path)
                 import json
 
                 json_content = json.dumps(json_data)
@@ -956,27 +956,27 @@ class H3PFASProcessorRefactored:
             self.log.info(f"✅ Loaded {count:,} kommune boundaries from bronze layer")
 
         except Exception as e:
-            self.log.error(f"❌ Could not load kommune boundaries from GCS: {e}")
+            self.log.error(f"❌ Could not load kommune boundaries from cloud storage: {e}")
             self.log.error("Kommune boundaries are required for proper PMTiles generation")
             raise ValueError(f"Failed to load kommune boundaries: {e}") from e
 
         return kommune_table
 
-    async def _process_single_year_kommune_from_gcs(
+    async def _process_single_year_kommune_from_storage(
         self, year: int, bmd_table: str, kommune_table: str, data_loader, result_saver
     ) -> int:
-        """Process a single year for kommune-level analysis using GCS data."""
+        """Process a single year for kommune-level analysis using cloud storage data."""
         self.log.info(f"🏛️ Processing kommune-level PFAS analysis for year {year}")
 
         # Step 1: Load and prepare field data (Y+1 pattern)
         field_year = year + 1
-        fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+        fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
 
         # Prepare geometries for fields
         fields_table = self.coordinate_transformer.prepare_geometries(fields_table)
 
         # Step 2: Load pesticide disaggregation for year Y
-        pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+        pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
 
         # Step 3: Join pesticide data with BMD for PFAS detection
         pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
@@ -1149,23 +1149,23 @@ class H3PFASProcessorRefactored:
 
         return results_table
 
-    async def _process_single_year_from_gcs(
+    async def _process_single_year_from_storage(
         self, year: int, bmd_table: str, data_loader, result_saver
     ) -> int:
-        """Process a single year using GCS data with the refactored spatial methodology."""
+        """Process a single year using cloud storage data with the refactored spatial methodology."""
         self.log.info(
-            f"⚙️ Processing H3 PFAS-containing active ingredient exposure for year {year} (GCS data, refactored methodology)"
+            f"⚙️ Processing H3 PFAS-containing active ingredient exposure for year {year} (cloud storage data, refactored methodology)"
         )
 
         # Step 1: Load and prepare field data (Y+1 pattern)
         field_year = year + 1
-        fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+        fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
 
         # Prepare geometries for fields
         fields_table = self.coordinate_transformer.prepare_geometries(fields_table)
 
         # Step 2: Load pesticide disaggregation for year Y
-        pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+        pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
 
         # Step 3: Join pesticide data with BMD for PFAS detection
         pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
@@ -1186,7 +1186,7 @@ class H3PFASProcessorRefactored:
         # Step 6: Validate results
         self._validate_results(results_table)
 
-        # Step 7: Save results to GCS
+        # Step 7: Save results to cloud storage
         result_count = result_saver.save_year_results_kepler_compatible(results_table, year)
 
         # Step 8: Clean up intermediate tables

@@ -5,9 +5,11 @@ services:
     build: .
     container_name: unified-pipeline
     environment:
-      # GCS Configuration
-      - GCS_BUCKET=${GCS_BUCKET:-landbruget-data}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      # Cloud Storage Configuration
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-landbruget-data}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
 
       # Pipeline Configuration
       - SAVE_LOCAL=${SAVE_LOCAL:-false}
@@ -23,8 +25,8 @@ services:
       - DATAFORDELER_PASSWORD=${DATAFORDELER_PASSWORD}
 
     volumes:
-      # Mount GCS credentials if available
-      - ${GOOGLE_APPLICATION_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
+      # Mount credentials if available
+      - ${CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
       # Mount local data directory if saving locally
       - ${LOCAL_DATA_DIR:-./data}:/app/data
       # Mount logs directory
@@ -69,11 +71,13 @@ services:
     build: .
     container_name: unified-pipeline-agricultural-fields
     environment:
-      - GCS_BUCKET=${GCS_BUCKET:-landbruget-data}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-landbruget-data}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
       - SAVE_LOCAL=${SAVE_LOCAL:-false}
     volumes:
-      - ${GOOGLE_APPLICATION_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
+      - ${CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
       - ${LOCAL_DATA_DIR:-./data}:/app/data
       - ${LOG_DIR:-./logs}:/app/logs
     command: >
@@ -94,11 +98,13 @@ services:
     build: .
     container_name: unified-pipeline-bnbo
     environment:
-      - GCS_BUCKET=${GCS_BUCKET:-landbruget-data}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-landbruget-data}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
       - SAVE_LOCAL=${SAVE_LOCAL:-false}
     volumes:
-      - ${GOOGLE_APPLICATION_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
+      - ${CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
       - ${LOCAL_DATA_DIR:-./data}:/app/data
       - ${LOG_DIR:-./logs}:/app/logs
     command: >

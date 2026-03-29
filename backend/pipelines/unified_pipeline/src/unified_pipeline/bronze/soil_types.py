@@ -3,7 +3,7 @@ Bronze layer data ingestion for Soil Types data.
 
 This module handles the extraction of soil types data from a WFS (Web Feature Service) endpoint.
 It fetches raw data from the Danish Environmental Portal's soil types layer and saves it to
-Google Cloud Storage for further processing in the silver layer.
+cloud storage for further processing in the silver layer.
 
 The module contains:
 - SoilTypesBronzeConfig: Configuration class for the data source
@@ -37,7 +37,7 @@ class SoilTypesBronzeConfig(BaseJobConfig):
         layer_name (str): Name of the soil types layer
         dataset (str): Name of the dataset in storage
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         crs (str): Coordinate reference system for the data
     """
 
@@ -62,7 +62,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
     Bronze layer processing for soil types data.
 
     This class is responsible for fetching raw soil types data from the WFS endpoint,
-    processing it into a standardized format, and storing it in Google Cloud Storage
+    processing it into a standardized format, and storing it in cloud storage
     for further processing in the silver layer.
 
     The class handles WFS requests using geopandas and implements proper error handling
@@ -72,7 +72,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
     1. Connect to the WFS endpoint
     2. Fetch the soil types layer data
     3. Process and validate the data
-    4. Save to Google Cloud Storage as GeoParquet
+    4. Save to cloud storage as GeoParquet
     """
 
     def __init__(self, config: SoilTypesBronzeConfig):
@@ -135,7 +135,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
         Run the soil types data processing pipeline.
 
         This method orchestrates the entire process of preparing soil types data
-        fetch parameters and saving metadata to Google Cloud Storage.
+        fetch parameters and saving metadata to cloud storage.
 
         Returns:
             Optional[Any]: The metadata for soil types data that can be
@@ -154,7 +154,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
                 self.log.warning("No soil types metadata to process")
                 return None
 
-            # Save metadata to GCS using new unified method
+            # Save metadata to cloud storage using new unified method
             self._save_data(
                 data=soil_types_metadata,
                 dataset=self.config.dataset,

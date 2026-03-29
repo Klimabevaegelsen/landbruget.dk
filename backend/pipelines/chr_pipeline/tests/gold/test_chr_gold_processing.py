@@ -325,7 +325,7 @@ class TestGoldExports:
     """Test gold layer data export functionality."""
 
     def test_gold_data_exports_to_correct_location(self, tmp_path):
-        """Test that gold data is exported to correct GCS location."""
+        """Test that gold data is exported to correct cloud storage location."""
         export_timestamp = "20240101_120000"
         gold_dir = tmp_path / "gold" / export_timestamp
 

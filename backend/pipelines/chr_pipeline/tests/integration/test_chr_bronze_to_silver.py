@@ -108,7 +108,7 @@ class TestBronzeToSilverFlow:
         with (
             patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config,
             patch(
-                "chr_pipeline.silver.chr_silver_processing.upload_silver_data_to_gcs"
+                "chr_pipeline.silver.chr_silver_processing.upload_silver_data_to_storage"
             ) as mock_upload,
         ):
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent
@@ -195,7 +195,7 @@ class TestBronzeToSilverFlow:
         with (
             patch("chr_pipeline.silver.chr_silver_processing.config") as mock_config,
             patch(
-                "chr_pipeline.silver.chr_silver_processing.upload_silver_data_to_gcs"
+                "chr_pipeline.silver.chr_silver_processing.upload_silver_data_to_storage"
             ) as mock_upload,
         ):
             mock_config.BRONZE_BASE_DIR = bronze_dir.parent

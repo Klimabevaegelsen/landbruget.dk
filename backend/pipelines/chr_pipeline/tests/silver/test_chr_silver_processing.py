@@ -16,7 +16,7 @@ import duckdb
 import pytest
 from chr_pipeline.silver.chr_silver_processing import (
     _save_discovered_cvr_numbers,
-    download_bronze_data_from_gcs,
+    download_bronze_data_from_storage,
     process_chr_data,
 )
 
@@ -151,15 +151,15 @@ class TestSilverOrchestration:
 class TestDataLoading:
     """Test bronze data loading into silver layer."""
 
-    def test_download_bronze_data_from_gcs_success(self, tmp_path):
-        """Test successful download of bronze data from GCS."""
+    def test_download_bronze_data_from_storage_success(self, tmp_path):
+        """Test successful download of bronze data from cloud storage."""
         local_bronze_dir = tmp_path / "bronze"
         bronze_timestamp = "20240101_120000"
 
-        # Mock GCS access
+        # Mock cloud storage access
         with (
             patch("chr_pipeline.silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
-            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess") as mock_gcs_class,
+            patch("chr_pipeline.silver.chr_silver_processing.StorageAccess") as mock_gcs_class,
             patch.dict("os.environ", {"GCS_BUCKET": "test-bucket"}),
         ):
             import io
@@ -178,13 +178,13 @@ class TestDataLoading:
             mock_gcs.fs.open = make_mock_file
             mock_gcs_class.return_value = mock_gcs
 
-            result = download_bronze_data_from_gcs(bronze_timestamp, local_bronze_dir)
+            result = download_bronze_data_from_storage(bronze_timestamp, local_bronze_dir)
 
             assert result is True
             assert local_bronze_dir.exists()
 
     def test_download_bronze_data_missing_bucket(self, tmp_path):
-        """Test that missing GCS_BUCKET environment variable causes failure."""
+        """Test that missing storage bucket environment variable causes failure."""
         local_bronze_dir = tmp_path / "bronze"
         bronze_timestamp = "20240101_120000"
 
@@ -192,7 +192,7 @@ class TestDataLoading:
             patch("chr_pipeline.silver.chr_silver_processing.CVR_COLLECTION_AVAILABLE", True),
             patch.dict("os.environ", {}, clear=True),
         ):
-            result = download_bronze_data_from_gcs(bronze_timestamp, local_bronze_dir)
+            result = download_bronze_data_from_storage(bronze_timestamp, local_bronze_dir)
 
             assert result is False
 
@@ -247,13 +247,13 @@ class TestCVRCollection:
             patch(
                 "chr_pipeline.silver.chr_silver_processing.save_pipeline_cvr_numbers"
             ) as mock_save,
-            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess"),
+            patch("chr_pipeline.silver.chr_silver_processing.StorageAccess"),
         ):
             mock_extract.side_effect = [
                 ["12345678", "87654321"],  # property_owners
                 ["12345678", "11111111"],  # herd_owners
             ]
-            mock_save.return_value = "gs://bucket/cvr/test.json"
+            mock_save.return_value = "bucket/cvr/test.json"
 
             _save_discovered_cvr_numbers(con, silver_dir, export_timestamp)
 
@@ -277,7 +277,7 @@ class TestCVRCollection:
             patch(
                 "chr_pipeline.silver.chr_silver_processing.extract_cvr_numbers_from_table"
             ) as mock_extract,
-            patch("chr_pipeline.silver.chr_silver_processing.GCSDataAccess"),
+            patch("chr_pipeline.silver.chr_silver_processing.StorageAccess"),
         ):
             mock_extract.return_value = []
 

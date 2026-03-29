@@ -52,7 +52,7 @@ class GCSToR2Syncer:
 
     def __init__(
         self,
-        gcs_bucket: str,
+        storage_bucket: str,
         r2_bucket: str,
         r2_account_id: str,
         r2_access_key_id: str,
@@ -63,14 +63,14 @@ class GCSToR2Syncer:
         Initialize syncer with credentials.
 
         Args:
-            gcs_bucket: Source GCS bucket name
+            storage_bucket: Source storage bucket name
             r2_bucket: Destination R2 bucket name
             r2_account_id: Cloudflare R2 account ID
             r2_access_key_id: R2 access key ID
             r2_secret_access_key: R2 secret access key
             logger: Optional logger instance
         """
-        self.gcs_bucket = gcs_bucket
+        self.storage_bucket = storage_bucket
         self.r2_bucket = r2_bucket
         self.r2_account_id = r2_account_id
         self.r2_access_key_id = r2_access_key_id
@@ -169,7 +169,7 @@ class GCSToR2Syncer:
         """
         self.logger.info(f"{'[DRY RUN] ' if dry_run else ''}Syncing {directory}/ directory...")
 
-        source = f"gcs:{self.gcs_bucket}/{directory}"
+        source = f"gcs:{self.storage_bucket}/{directory}"
         destination = f"r2:{self.r2_bucket}/{directory}"
 
         # Build rclone sync command
@@ -251,7 +251,7 @@ class GCSToR2Syncer:
 
         manifest = {
             "generated_at": datetime.utcnow().isoformat() + "Z",
-            "source_bucket": f"gs://{self.gcs_bucket}",
+            "source_bucket": self.storage_bucket,
             "destination_bucket": f"r2://{self.r2_bucket}",
             "sync_stats": self.sync_stats,
             "directories_synced": list(self.sync_stats.keys()),
@@ -321,7 +321,7 @@ class GCSToR2Syncer:
         """
         self.logger.info("=" * 60)
         self.logger.info(f"Starting GCS to R2 sync {'[DRY RUN]' if dry_run else ''}")
-        self.logger.info(f"Source: gs://{self.gcs_bucket}")
+        self.logger.info(f"Source: {self.storage_bucket}")
         self.logger.info(f"Destination: r2://{self.r2_bucket}")
         self.logger.info("=" * 60)
 
@@ -428,7 +428,7 @@ def main() -> int:
 
         # Create syncer
         syncer = GCSToR2Syncer(
-            gcs_bucket=env_vars["GCS_BUCKET"],
+            storage_bucket=env_vars["GCS_BUCKET"],
             r2_bucket=env_vars["R2_BUCKET"],
             r2_account_id=env_vars["R2_ACCOUNT_ID"],
             r2_access_key_id=env_vars["R2_ACCESS_KEY_ID"],

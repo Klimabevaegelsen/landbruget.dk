@@ -12,22 +12,24 @@ from .pmtiles_generator import H3PMTilesGenerator
 
 
 class H3ResultSaver:
-    """Handles saving analysis results to GCS."""
+    """Handles saving analysis results to cloud storage."""
 
-    def __init__(self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, gcs_access=None):
+    def __init__(
+        self, conn: duckdb.DuckDBPyConnection, config: H3SpatialConfig, storage_access=None
+    ):
         self.conn = conn
         self.config = config
-        self.gcs_access = gcs_access
+        self.storage = storage_access
         self.log = logger.bind(component="H3ResultSaver")
 
         # Initialize PMTiles generator
-        self.pmtiles_generator = H3PMTilesGenerator(conn, config, gcs_access)
+        self.pmtiles_generator = H3PMTilesGenerator(conn, config, storage_access)
 
     def save_year_results_kepler_compatible(self, results_table: str, year: int) -> int:
-        """Save results to GCS with Kepler.gl compatibility fixes."""
+        """Save results to cloud storage with Kepler.gl compatibility fixes."""
         self.log.info(
             f"💾 Saving Kepler.gl-compatible H3 pesticide exposure results for year {year} "
-            f"(resolution {self.config.h3_resolution}) to GCS"
+            f"(resolution {self.config.h3_resolution}) to cloud storage"
         )
 
         # Create Kepler.gl compatible version by converting BigInt columns to regular numbers
@@ -84,10 +86,10 @@ class H3ResultSaver:
 
         # Create output path for Kepler-compatible version with resolution in filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path_kepler = f"gs://{self.config.bucket}/gold/h3_pesticide_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pesticide_{year}_res{self.config.h3_resolution}_kepler.parquet"
+        output_path_kepler = f"{self.config.bucket}/gold/h3_pesticide_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pesticide_{year}_res{self.config.h3_resolution}_kepler.parquet"
 
         # Upload Kepler-compatible table
-        self.gcs_access.upload_from_duckdb_table(f"final_results_kepler_{year}", output_path_kepler)
+        self.storage.upload_from_duckdb_table(f"final_results_kepler_{year}", output_path_kepler)
 
         # Also save the original version with BigInt columns
         self.conn.execute(f"""
@@ -99,8 +101,8 @@ class H3ResultSaver:
             ORDER BY h3_cell
         """)
 
-        output_path_original = f"gs://{self.config.bucket}/gold/h3_pesticide_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pesticide_{year}_res{self.config.h3_resolution}.parquet"
-        self.gcs_access.upload_from_duckdb_table(f"final_results_{year}", output_path_original)
+        output_path_original = f"{self.config.bucket}/gold/h3_pesticide_{year}_res{self.config.h3_resolution}/{timestamp}/h3_pesticide_{year}_res{self.config.h3_resolution}.parquet"
+        self.storage.upload_from_duckdb_table(f"final_results_{year}", output_path_original)
 
         # Get count for return
         count = self.conn.execute(f"SELECT COUNT(*) FROM final_results_{year}").fetchone()[0]
@@ -126,8 +128,10 @@ class H3ResultSaver:
     def save_kommune_results(
         self, results_table: str, year: int, kommune_boundaries_table: str = "kommune_boundaries"
     ) -> int:
-        """Save kommune-level results to GCS."""
-        self.log.info(f"💾 Saving kommune-level pesticide exposure results for year {year} to GCS")
+        """Save kommune-level results to cloud storage."""
+        self.log.info(
+            f"💾 Saving kommune-level pesticide exposure results for year {year} to cloud storage"
+        )
 
         # Create final results table
         self.conn.execute(f"""
@@ -189,14 +193,12 @@ class H3ResultSaver:
 
         # Create output paths
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path_parquet = f"gs://{self.config.bucket}/gold/kommune_pesticide_{year}/{timestamp}/kommune_pesticide_{year}.parquet"
-        output_path_csv = f"gs://{self.config.bucket}/gold/kommune_pesticide_{year}/{timestamp}/kommune_pesticide_{year}.csv"
+        output_path_parquet = f"{self.config.bucket}/gold/kommune_pesticide_{year}/{timestamp}/kommune_pesticide_{year}.parquet"
+        output_path_csv = f"{self.config.bucket}/gold/kommune_pesticide_{year}/{timestamp}/kommune_pesticide_{year}.csv"
 
-        # Upload to GCS in both formats
-        self.gcs_access.upload_from_duckdb_table(
-            f"final_kommune_results_{year}", output_path_parquet
-        )
-        self.gcs_access.upload_from_duckdb_table(f"final_kommune_results_{year}", output_path_csv)
+        # Upload to cloud storage in both formats
+        self.storage.upload_from_duckdb_table(f"final_kommune_results_{year}", output_path_parquet)
+        self.storage.upload_from_duckdb_table(f"final_kommune_results_{year}", output_path_csv)
 
         # Get count for return
         count = self.conn.execute(f"SELECT COUNT(*) FROM final_kommune_results_{year}").fetchone()[
@@ -307,9 +309,9 @@ class H3ResultSaver:
             self.log.info("   🎯 Use the *_kepler.parquet file for Kepler.gl visualization")
 
     def save_cumulative_results(self, results_table: str, resolution: int, years: list[int]) -> int:
-        """Save cumulative H3 results to GCS with special 'total' year identifier."""
+        """Save cumulative H3 results to cloud storage with special 'total' year identifier."""
         self.log.info(
-            f"💾 Saving cumulative H3 pesticide exposure results (resolution {resolution}) to GCS"
+            f"💾 Saving cumulative H3 pesticide exposure results (resolution {resolution}) to cloud storage"
         )
         self.log.info(f"   📅 Years included: {years}")
 
@@ -366,10 +368,10 @@ class H3ResultSaver:
 
         # Create output path for Kepler-compatible version with "total" as year identifier
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path_kepler = f"gs://{self.config.bucket}/gold/h3_pesticide_total_res{resolution}/{timestamp}/h3_pesticide_total_res{resolution}_kepler.parquet"
+        output_path_kepler = f"{self.config.bucket}/gold/h3_pesticide_total_res{resolution}/{timestamp}/h3_pesticide_total_res{resolution}_kepler.parquet"
 
         # Upload Kepler-compatible table
-        self.gcs_access.upload_from_duckdb_table(
+        self.storage.upload_from_duckdb_table(
             f"final_cumulative_results_kepler_res{resolution}", output_path_kepler
         )
 
@@ -383,8 +385,8 @@ class H3ResultSaver:
             ORDER BY h3_cell
         """)
 
-        output_path_original = f"gs://{self.config.bucket}/gold/h3_pesticide_total_res{resolution}/{timestamp}/h3_pesticide_total_res{resolution}.parquet"
-        self.gcs_access.upload_from_duckdb_table(
+        output_path_original = f"{self.config.bucket}/gold/h3_pesticide_total_res{resolution}/{timestamp}/h3_pesticide_total_res{resolution}.parquet"
+        self.storage.upload_from_duckdb_table(
             f"final_cumulative_results_res{resolution}", output_path_original
         )
 
@@ -417,8 +419,10 @@ class H3ResultSaver:
         years: list[int],
         kommune_boundaries_table: str = "kommune_boundaries",
     ) -> int:
-        """Save cumulative kommune-level results to GCS with special 'total' year identifier."""
-        self.log.info("💾 Saving cumulative kommune-level pesticide exposure results to GCS")
+        """Save cumulative kommune-level results to cloud storage with special 'total' year identifier."""
+        self.log.info(
+            "💾 Saving cumulative kommune-level pesticide exposure results to cloud storage"
+        )
         self.log.info(f"   📅 Years included: {years}")
 
         # Create final results table
@@ -481,16 +485,14 @@ class H3ResultSaver:
 
         # Create output paths with "total" as year identifier
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path_parquet = f"gs://{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.parquet"
-        output_path_csv = f"gs://{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.csv"
+        output_path_parquet = f"{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.parquet"
+        output_path_csv = f"{self.config.bucket}/gold/kommune_pesticide_total/{timestamp}/kommune_pesticide_total.csv"
 
-        # Upload to GCS in both formats
-        self.gcs_access.upload_from_duckdb_table(
+        # Upload to cloud storage in both formats
+        self.storage.upload_from_duckdb_table(
             "final_cumulative_kommune_results", output_path_parquet
         )
-        self.gcs_access.upload_from_duckdb_table(
-            "final_cumulative_kommune_results", output_path_csv
-        )
+        self.storage.upload_from_duckdb_table("final_cumulative_kommune_results", output_path_csv)
 
         # Get count for return
         count = self.conn.execute(

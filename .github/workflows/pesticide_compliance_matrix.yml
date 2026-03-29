@@ -79,17 +79,17 @@ jobs:
           # Add unified pipeline to path
           sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-          from unified_pipeline.util.gcs_access import GCSDataAccess
+          from unified_pipeline.util.storage_access import StorageAccess
           import duckdb
 
           def discover_pesticide_disaggregation_years():
               """Discover years with pesticide disaggregation data (compliance input)."""
               try:
-                  gcs_access = GCSDataAccess()
+                  storage_access = StorageAccess()
 
                   # Look for pesticide disaggregation data
-                  pattern = f"gs://{os.getenv('R2_BUCKET')}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
-                  files = gcs_access.list_files_with_timestamps(pattern)
+                  pattern = f"{os.getenv('R2_BUCKET')}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+                  files = storage_access.list_files_with_timestamps(pattern)
 
                   years = set()
                   for file_path, timestamp in files:

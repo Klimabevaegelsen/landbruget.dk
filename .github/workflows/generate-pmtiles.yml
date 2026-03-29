@@ -106,12 +106,12 @@ jobs:
           import json
           from unified_pipeline.gold.pmtiles_generator.config import PMTilesGeneratorConfig
           from unified_pipeline.gold.pmtiles_generator.year_detector import DataSourceYearDetector
-          from unified_pipeline.util.gcs_access import GCSDataAccess
+          from unified_pipeline.util.storage_access import StorageAccess
 
           async def detect_years():
               config = PMTilesGeneratorConfig()
-              gcs_access = GCSDataAccess()
-              detector = DataSourceYearDetector(config, gcs_access)
+              storage_access = StorageAccess()
+              detector = DataSourceYearDetector(config, storage_access)
               available_years = await detector.detect_all_available_years()
               years_to_process = detector.get_years_to_process(available_years)
 

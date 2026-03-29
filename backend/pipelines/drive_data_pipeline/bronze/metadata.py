@@ -220,7 +220,7 @@ class MetadataManager:
             # Use storage manager to read file content and calculate checksum if available
             if self.storage_manager:
                 try:
-                    # Try to read file content using storage manager (works for both GCS and local)
+                    # Try to read file content using storage manager (works for both R2 and local)
                     file_content = self.storage_manager.read_file(file_path)
                     current_checksum = calculate_content_checksum(
                         file_content, metadata.checksum_algorithm

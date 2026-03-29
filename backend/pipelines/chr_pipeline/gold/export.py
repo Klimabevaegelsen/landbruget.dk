@@ -3,14 +3,14 @@
 import logging
 from pathlib import Path
 
-# Try to import GCS utilities
+# Try to import cloud storage utilities
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 
 def save_table(output_path: Path, con, table_name: str) -> Path | None:
@@ -41,35 +41,35 @@ def save_table(output_path: Path, con, table_name: str) -> Path | None:
         return None
 
 
-def upload_to_gcs(local_path: Path, gcs_path: str, bucket: str = "landbruget-data") -> bool:
+def upload_to_storage(local_path: Path, storage_path: str, bucket: str = "landbruget-data") -> bool:
     """
-    Upload a local file to Google Cloud Storage.
+    Upload a local file to cloud storage.
 
     Args:
         local_path: Local file path
-        gcs_path: GCS destination path (without gs:// prefix)
-        bucket: GCS bucket name
+        storage_path: Cloud storage destination path (bare bucket/path format)
+        bucket: Storage bucket name
 
     Returns:
         True if successful, False otherwise
     """
-    if not GCS_AVAILABLE:
-        logging.warning("GCS utilities not available, skipping upload")
+    if not STORAGE_AVAILABLE:
+        logging.warning("Cloud storage utilities not available, skipping upload")
         return False
 
     try:
-        gcs = GCSDataAccess()
-        success = gcs.upload_file(str(local_path), f"gs://{bucket}/{gcs_path}")
+        storage = StorageAccess()
+        success = storage.upload_file(str(local_path), f"{bucket}/{storage_path}")
 
         if success:
-            logging.info(f"✅ Uploaded {local_path} to gs://{bucket}/{gcs_path}")
+            logging.info(f"✅ Uploaded {local_path} to {bucket}/{storage_path}")
         else:
-            logging.error(f"❌ Failed to upload {local_path} to GCS")
+            logging.error("❌ Failed to upload to cloud storage")
 
         return success
 
     except Exception as e:
-        logging.error(f"❌ Error uploading to GCS: {e}")
+        logging.error(f"❌ Error uploading to cloud storage: {e}")
         return False
 
 
@@ -77,14 +77,14 @@ def export_gold_table(
     con, table_name: str, timestamp: str, output_dir: Path, upload_to_cloud: bool = True
 ) -> bool:
     """
-    Export a gold table locally and optionally to GCS.
+    Export a gold table locally and optionally to cloud storage.
 
     Args:
         con: DuckDB connection
         table_name: Name of the table to export
-        timestamp: Export timestamp for GCS path
+        timestamp: Export timestamp for storage path
         output_dir: Local output directory
-        upload_to_cloud: Whether to upload to GCS
+        upload_to_cloud: Whether to upload to cloud storage
 
     Returns:
         True if successful, False otherwise
@@ -95,10 +95,10 @@ def export_gold_table(
         if not save_table(local_path, con, table_name):
             return False
 
-        # GCS export
-        if upload_to_cloud and GCS_AVAILABLE:
-            gcs_path = f"gold/chr/{timestamp}/{table_name}.parquet"
-            upload_to_gcs(local_path, gcs_path)
+        # Cloud storage export
+        if upload_to_cloud and STORAGE_AVAILABLE:
+            storage_path = f"gold/chr/{timestamp}/{table_name}.parquet"
+            upload_to_storage(local_path, storage_path)
 
         return True
 

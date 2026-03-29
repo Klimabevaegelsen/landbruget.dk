@@ -7,7 +7,7 @@ are handled in separate downstream steps following the Bronze→Silver→Gold pa
 
 Memory Efficiency:
 - Fetches raw JSON data in batches
-- Saves immediately to GCS with minimal processing
+- Saves immediately to cloud storage with minimal processing
 - Keeps memory usage constant (~50MB) instead of accumulating
 - Defers all parsing/enrichment to separate steps
 """
@@ -264,7 +264,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.log.info("📦 Step 2/4: Creating memory-safe processing batches")
             cvr_batches = self._create_memory_safe_batches(all_cvr_numbers)
 
-            # Step 3: Fetch all CVR batches with raw data streaming to GCS
+            # Step 3: Fetch all CVR batches with raw data streaming to cloud storage
             self.log.info("🌐 Step 3/4: Fetching CVR batches with raw data streaming")
             total_stats = await self._process_all_batches(cvr_batches)
 
@@ -343,7 +343,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 """).fetchall()
             else:
                 # Load CVR numbers directly from R2 using DuckDB (fallback)
-                duckdb_collection_path = collection_path.replace("gs://", "r2://", 1)
+                duckdb_collection_path = "r2://" + collection_path
                 result = self.conn.execute(f"""
                     SELECT cvr_number, collection_metadata
                     FROM read_parquet('{duckdb_collection_path}')
@@ -583,7 +583,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self, cvr_batch: list[str], batch_idx: int, total_batches: int
     ) -> dict[str, Any]:
         """
-        Process a single batch of CVR numbers and immediately save to GCS.
+        Process a single batch of CVR numbers and immediately save to cloud storage.
 
         Args:
             cvr_batch: List of CVR numbers in this batch
@@ -596,8 +596,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Fetch company data for this batch
         company_data = await self._fetch_company_data(cvr_batch)
 
-        # Save raw data immediately to GCS (minimal processing, maximum memory efficiency)
-        self._save_raw_batch_to_gcs(company_data, batch_idx, total_batches)
+        # Save raw data immediately to storage (minimal processing, maximum memory efficiency)
+        self._save_raw_batch_to_storage(company_data, batch_idx, total_batches)
 
         # Return batch stats
         return {
@@ -777,12 +777,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         self.log.debug(f"Appended {len(companies_data)} companies to output tables")
 
-    @timed(name="Saving raw batch to GCS")
-    def _save_raw_batch_to_gcs(
+    @timed(name="Saving raw batch to storage")
+    def _save_raw_batch_to_storage(
         self, company_data: dict[str, Any], batch_idx: int, total_batches: int
     ) -> None:
         """
-        Save raw API response data immediately to GCS with minimal processing.
+        Save raw API response data immediately to storage with minimal processing.
 
         This approach saves raw JSON responses directly, keeping memory usage minimal
         and deferring all processing to separate parsing/enrichment steps.
@@ -833,7 +833,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     [raw_json_list],
                 )
 
-                # Save to GCS immediately
+                # Save to cloud storage immediately
                 # Use subdirectory for GitHub Actions batch part to avoid file collisions
                 timestamp = self.date_pattern
                 ga_batch = self.config.shared_config.batch_number
@@ -841,20 +841,20 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Running as part of split GitHub Actions job - use part subdirectory
-                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
                 else:
                     # Running as single job - use flat structure
-                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
-                self.gcs_access.upload_from_duckdb_table(
+                self.storage.upload_from_duckdb_table(
                     batch_table_name,
-                    raw_gcs_path,
+                    raw_storage_path,
                     compression="zstd",
                     row_group_size=100000,
                 )
 
                 self.log.info(
-                    f"✅ Saved raw batch {batch_idx}/{total_batches} to GCS ({len(raw_json_list)} companies, ~{len(str(raw_json_list)) / 1024 / 1024:.1f}MB)"
+                    f"✅ Saved raw batch {batch_idx}/{total_batches} to cloud storage ({len(raw_json_list)} companies, ~{len(str(raw_json_list)) / 1024 / 1024:.1f}MB)"
                 )
 
         finally:
@@ -1056,12 +1056,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Running as part of split job - use part subdirectory
-                    raw_gcs_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
                 else:
                     # Running as single job - use flat structure
-                    raw_gcs_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                    raw_storage_path = f"r2://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
-                raw_batch_patterns.append(raw_gcs_path)
+                raw_batch_patterns.append(raw_storage_path)
 
             if raw_batch_patterns:
                 # Create consolidated raw data table
@@ -1081,8 +1081,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Save part-specific consolidated file
-                    raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/consolidated.parquet"
-                    self.gcs_access.upload_from_duckdb_table(
+                    raw_final_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/consolidated.parquet"
+                    self.storage.upload_from_duckdb_table(
                         consolidated_table,
                         raw_final_path,
                         compression="zstd",
@@ -1101,8 +1101,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                         self.log.info(f"💾 Saved part {ga_batch} data to artifact: {local_path}")
                 else:
                     # Save to standard bronze location (single job mode)
-                    raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
-                    self.gcs_access.upload_from_duckdb_table(
+                    raw_final_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
+                    self.storage.upload_from_duckdb_table(
                         consolidated_table,
                         raw_final_path,
                         compression="zstd",
@@ -1227,13 +1227,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
                 if ga_batch is not None:
                     # Running as part of split job - use part subdirectory
-                    raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                    raw_batch_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
                 else:
                     # Running as single job - use flat structure
-                    raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                    raw_batch_path = f"{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
                 try:
-                    self.gcs_access.delete_file(raw_batch_path)
+                    self.storage.delete_file(raw_batch_path)
                     deleted_count += 1
                 except Exception:
                     pass  # Ignore deletion errors
@@ -1246,7 +1246,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
     @timed(name="Creating and saving ownership table")
     def _create_and_save_ownership_table(self) -> None:
         """
-        Create ownership table from all company data and save to GCS.
+        Create ownership table from all company data and save to cloud storage.
 
         This method reads from the main companies table and extracts ownership
         data for companies that have formal ownership percentages registered.
@@ -1279,13 +1279,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
     @timed(name="Finalizing data and artifacts")
     def _finalize_data_and_artifacts(self, table_name: str, total_stats: dict[str, Any]) -> None:
         """
-        Save final data to GCS and create GitHub Actions artifacts.
+        Save final data to cloud storage and create GitHub Actions artifacts.
 
         Args:
             table_name: Name of the main companies table
             total_stats: Processing statistics
         """
-        # Save main table to GCS
+        # Save main table to cloud storage
         self._save_data(
             data=table_name,
             dataset="cvr_enrichment_companies",
@@ -1294,7 +1294,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             filename="data.parquet",
         )
 
-        # Save persons table to GCS
+        # Save persons table to cloud storage
         self._save_data(
             data="cvr_persons",
             dataset="cvr_persons",
@@ -1302,7 +1302,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             stage="gold",
         )
 
-        # Save employment table to GCS
+        # Save employment table to cloud storage
         self._save_data(
             data="cvr_employment",
             dataset="cvr_employment",
@@ -1310,7 +1310,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             stage="gold",
         )
 
-        # Create and save ownership table to GCS
+        # Create and save ownership table to cloud storage
         self._create_and_save_ownership_table()
 
         # Save locally for GitHub Actions artifact sharing
@@ -1806,10 +1806,10 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
     def _load_batch_details(self) -> dict[str, Any]:
         """Load batch details from collection step."""
-        batch_details_path = f"gs://{self.config.bucket}/gold/cvr_enrichment_collection/{self.date_pattern}/batch_details.json"
+        batch_details_path = f"{self.config.bucket}/gold/cvr_enrichment_collection/{self.date_pattern}/batch_details.json"
 
         try:
-            return self.gcs_access.download_json(batch_details_path)
+            return self.storage.download_json(batch_details_path)
         except Exception as e:
             self.log.error(f"Failed to load batch details from {batch_details_path}: {e}")
             raise
@@ -1916,8 +1916,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         """Save processing summary data."""
         summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/company_summary.json"
 
-        self.gcs_access.upload_json(
-            data=total_stats, gcs_path=f"gs://{self.config.bucket}/{summary_path}"
+        self.storage.upload_json(
+            data=total_stats, storage_path=f"{self.config.bucket}/{summary_path}"
         )
 
         self.log.info(f"Saved processing summary to {summary_path}")
@@ -1926,7 +1926,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
     @timed(name="Saving company data")
     def _save_company_data_legacy(self, processed_data: dict[str, Any]) -> str:
         """
-        Save processed company data to GCS.
+        Save processed company data to cloud storage.
 
         Args:
             processed_data: Processed company data
@@ -2048,7 +2048,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             """)
             self.log.info(f"Created empty table {table_name}")
 
-        # Save to GCS
+        # Save to cloud storage
         self._save_data(
             data=table_name,
             dataset="cvr_enrichment_companies",
@@ -2365,7 +2365,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info(f"Created ownership table with {ownership_count} ownership records")
         self.log.info(f"Including {current_ownership_count} current ownership relationships")
 
-        # Save ownership table to GCS
+        # Save ownership table to cloud storage
         self._save_data(
             data=ownership_table,
             dataset="cvr_ownership",
@@ -2745,7 +2745,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         for emp_type, count in type_counts:
             self.log.info(f"  {emp_type}: {count} records")
 
-        # Save employment table to GCS
+        # Save employment table to cloud storage
         self._save_data(
             data=employment_table,
             dataset="cvr_employment",

@@ -203,12 +203,12 @@ async def test_fetch_raw_data_error(
 async def test_run_success(mock_fetch_raw_data: AsyncMock, wetlands_bronze: WetlandsBronze) -> None:
     """Test successful run of the pipeline."""
     mock_fetch_raw_data.return_value = ["<xml>data</xml>"]
-    wetlands_bronze._save_raw_data = MagicMock()
+    wetlands_bronze._save_data = MagicMock()
 
     await wetlands_bronze.run()
 
     mock_fetch_raw_data.assert_called_once()
-    wetlands_bronze._save_raw_data.assert_called_once()
+    wetlands_bronze._save_data.assert_called_once()
 
 
 @pytest.mark.asyncio

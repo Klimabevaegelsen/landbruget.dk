@@ -24,10 +24,10 @@ def setup_test_duckdb(
     pesticide_data: dict | list,
 ) -> None:
     """
-    Set up DuckDB with test data directly (synchronous, no GCS access).
+    Set up DuckDB with test data directly (synchronous, no cloud storage access).
 
     This is a test helper that bypasses the async _setup_duckdb method
-    which expects GCS file paths. Instead, it directly loads test data
+    which expects cloud storage file paths. Instead, it directly loads test data
     into DuckDB tables with the expected schema.
 
     Args:
@@ -155,8 +155,8 @@ class TestPesticideDisaggregationGold:
         )
 
     @pytest.fixture
-    def mock_gcs_access(self):
-        """Mock GCS access for testing."""
+    def mock_storage_access(self):
+        """Mock cloud storage access for testing."""
         return Mock()
 
     @pytest.fixture
@@ -224,7 +224,7 @@ class TestPesticideDisaggregationGold:
         assert config.bucket == "test-bucket"
         assert config.dataset == "pesticide_disaggregation"
 
-    def test_processor_initialization(self, config, mock_gcs_access):
+    def test_processor_initialization(self, config, mock_storage_access):
         """Test that processor initializes correctly."""
         processor = PesticideDisaggregationGold(config)
         assert processor.config == config
@@ -232,7 +232,7 @@ class TestPesticideDisaggregationGold:
         assert len(processor._organic_marker_field_ids) == 0
 
     def test_processor_with_complete_data(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test processor with complete agricultural fields and pesticide data."""
         processor = PesticideDisaggregationGold(config)
@@ -260,7 +260,9 @@ class TestPesticideDisaggregationGold:
         ]
         assert len(main_strategy_results) >= 2
 
-    def test_area_tolerance_enforcement(self, config, mock_gcs_access, sample_agricultural_fields):
+    def test_area_tolerance_enforcement(
+        self, config, mock_storage_access, sample_agricultural_fields
+    ):
         """Test that area tolerance is properly enforced during field overlap calculations."""
         # Create pesticide data that exceeds tolerance
         # Sample agricultural fields have:
@@ -301,7 +303,7 @@ class TestPesticideDisaggregationGold:
         assert "2" in processed_pesticide_ids
         assert "1" not in processed_pesticide_ids
 
-    def test_nopesticides_filtering(self, config, mock_gcs_access, sample_agricultural_fields):
+    def test_nopesticides_filtering(self, config, mock_storage_access, sample_agricultural_fields):
         """Test that fields marked as 'nopesticides' are properly filtered out."""
         # Note: The production code checks for nopesticides NOT IN ('1', 'True', 'true', 'TRUE')
         # so we use '1' as a string to ensure filtering works
@@ -331,7 +333,7 @@ class TestPesticideDisaggregationGold:
         assert pending_count == 2  # Should exclude the nopesticides='1' record
 
     def test_spatial_disaggregation_accuracy(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test that spatial disaggregation produces accurate results."""
         processor = PesticideDisaggregationGold(config)
@@ -347,7 +349,7 @@ class TestPesticideDisaggregationGold:
         assert len(results_list) > 0
 
     def test_temporal_disaggregation_accuracy(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test that temporal disaggregation produces accurate results."""
         processor = PesticideDisaggregationGold(config)
@@ -363,7 +365,7 @@ class TestPesticideDisaggregationGold:
         assert len(results_list) > 0
 
     def test_confidence_scoring(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test that confidence scoring follows original formula."""
         processor = PesticideDisaggregationGold(config)
@@ -389,19 +391,19 @@ class TestPesticideDisaggregationGold:
             # For the test data with exact matches, confidence should be 1.0
 
     @pytest.mark.skip(
-        reason="This test requires full GCS mocking and is too complex for unit testing. "
+        reason="This test requires full cloud storage mocking and is too complex for unit testing. "
         "The coverage validation is tested via integration tests."
     )
-    def test_coverage_validation_failure(self, config, mock_gcs_access):
+    def test_coverage_validation_failure(self, config, mock_storage_access):
         """Test that processor handles coverage validation failures gracefully.
 
-        NOTE: This test is skipped because it requires extensive GCS mocking.
+        NOTE: This test is skipped because it requires extensive cloud storage mocking.
         The coverage validation logic is tested via integration tests.
         """
         pass
 
     def test_pesticide_application_aggregation(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test that pesticide applications are properly aggregated by field and period."""
         processor = PesticideDisaggregationGold(config)
@@ -416,7 +418,7 @@ class TestPesticideDisaggregationGold:
         assert processed_count > 0
         assert len(results_list) > 0
 
-    def test_organic_field_identification(self, config, mock_gcs_access):
+    def test_organic_field_identification(self, config, mock_storage_access):
         """Test that organic fields are properly identified and excluded from pesticide
         applications."""
         # Create fields with organic farming indicators
@@ -451,7 +453,7 @@ class TestPesticideDisaggregationGold:
         assert len(organic_ids) == 2
 
     def test_edge_case_handling(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test handling of edge cases like zero-area fields and missing data."""
         # Create a field with zero area
@@ -482,7 +484,7 @@ class TestPesticideDisaggregationGold:
         # Check that results are returned (basic sanity check)
         assert results_list is not None
 
-    def test_no_cvr_matches_optimization(self, config, mock_gcs_access):
+    def test_no_cvr_matches_optimization(self, config, mock_storage_access):
         """Test that processor handles cases with no CVR matches efficiently."""
         # Create field data with CVR numbers that won't match pesticide data
         fields_df = gGeo(
@@ -524,7 +526,7 @@ class TestPesticideDisaggregationGold:
         assert not cvr_matches_available, "Should detect no CVR matches"
 
     def test_all_strategies_execution(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test that all 4 strategies are executed in correct order."""
         processor = PesticideDisaggregationGold(config)
@@ -550,7 +552,7 @@ class TestPesticideDisaggregationGold:
         )
 
     def test_results_schema_compliance(
-        self, config, mock_gcs_access, sample_agricultural_fields, sample_pesticide_applications
+        self, config, mock_storage_access, sample_agricultural_fields, sample_pesticide_applications
     ):
         """Test that results comply with expected schema."""
         processor = PesticideDisaggregationGold(config)

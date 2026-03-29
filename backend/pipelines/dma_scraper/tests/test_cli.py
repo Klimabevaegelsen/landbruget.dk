@@ -28,9 +28,7 @@ class TestDMAScraperCLI:
     def test_help(self):
         result = _run_cli("--help")
         assert result.returncode == 0, f"stderr: {result.stderr}"
-        assert "--stage" in result.stdout
-        assert "bronze" in result.stdout
-        assert "silver" in result.stdout
+        assert "--silver" in result.stdout
         assert "--log-level" in result.stdout
         assert "--total-pages" in result.stdout
         assert "--timestamp" in result.stdout

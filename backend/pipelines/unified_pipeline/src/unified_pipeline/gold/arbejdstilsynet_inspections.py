@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from common.gcs import GCSDataAccess
+from common.storage import StorageAccess
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 
@@ -24,7 +24,11 @@ class ArbjdstilsynetInspectionsGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Clean and standardize workplace inspection data for business analytics"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Input silver dataset
     silver_dataset: str = "arbejdstilsynet_inspections"
@@ -37,7 +41,7 @@ class ArbjdstilsynetInspectionsGold(
 
     def __init__(self, config: ArbjdstilsynetInspectionsGoldConfig):
         super().__init__(config)
-        self.gcs_access = GCSDataAccess()
+        self.storage = StorageAccess()
         self.logger = logging.getLogger(self.__class__.__name__)
 
     async def run(self, silver_data: dict[str, Any] | None = None) -> bool:
@@ -78,7 +82,7 @@ class ArbjdstilsynetInspectionsGold(
             return False
 
     async def _load_silver_data(self, silver_data: dict[str, Any] | None) -> str | None:
-        """Load silver data from in-memory cache or GCS storage.
+        """Load silver data from in-memory cache or cloud storage.
 
         Returns:
             Table name in DuckDB containing the silver data, or None if not found.
@@ -95,12 +99,12 @@ class ArbjdstilsynetInspectionsGold(
                 self.conn.register("silver_inspections_raw", in_memory_data)
                 return "silver_inspections_raw"
 
-            # Fallback to GCS storage
-            self.logger.info("Loading silver data from GCS storage")
+            # Fallback to cloud storage
+            self.logger.info("Loading silver data from cloud storage")
 
             # Find latest silver data using pattern matching
-            pattern = f"gs://{self.config.bucket}/silver/{self.config.silver_dataset}/*/workplace_inspections.parquet"
-            files = self.gcs_access.list_files_with_timestamps(pattern)
+            pattern = f"{self.config.bucket}/silver/{self.config.silver_dataset}/*/workplace_inspections.parquet"
+            files = self.storage.list_files_with_timestamps(pattern)
 
             if not files:
                 self.logger.error(f"No silver data found with pattern: {pattern}")
@@ -435,30 +439,30 @@ class ArbjdstilsynetInspectionsGold(
             return table_name
 
     async def _save_data(self, table_name: str, stage: str) -> str:
-        """Save the gold data to GCS using DuckDB's COPY command."""
+        """Save the gold data to cloud storage using DuckDB's COPY command."""
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             # Define output path
             dataset_path = f"{stage}/{self.config.dataset}/{timestamp}"
             filename = "workplace_inspections_gold.parquet"
-            gcs_path = f"{dataset_path}/{filename}"
-            full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+            storage_path = f"{dataset_path}/{filename}"
+            full_storage_path = f"{self.config.bucket}/{storage_path}"
 
-            self.logger.info(f"Saving gold data to: {full_gcs_path}")
+            self.logger.info(f"Saving gold data to: {full_storage_path}")
 
             # Get record count before saving
             row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
-            # Save to GCS using the base class method
-            self.gcs_access.upload_from_duckdb_table(table_name, full_gcs_path)
+            # Save to cloud storage using the base class method
+            self.storage.upload_from_duckdb_table(table_name, full_storage_path)
 
             self.logger.info(f"Successfully saved {row_count} records to gold layer")
 
             # Log summary statistics
             self._log_summary_stats(table_name)
 
-            return gcs_path
+            return storage_path
 
         except Exception as e:
             self.logger.error(f"Error saving gold data: {e}")

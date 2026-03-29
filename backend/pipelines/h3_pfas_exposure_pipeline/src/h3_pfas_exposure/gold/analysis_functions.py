@@ -11,8 +11,10 @@ from .processor import H3PFASProcessorRefactored
 
 
 async def run_multi_year_analysis(years: list[int] | None = None, h3_resolution: int = 10) -> bool:
-    """Run multi-year H3 PFAS analysis from GCS data."""
-    logger.info("🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from GCS")
+    """Run multi-year H3 PFAS analysis from cloud storage data."""
+    logger.info(
+        "🚀 Starting multi-year H3 PFAS-containing active ingredient analysis from cloud storage"
+    )
 
     # Create configuration optimized for GitHub Actions free tier (16GB RAM, 4 CPUs)
     config = H3SpatialConfig(
@@ -100,12 +102,12 @@ async def run_cumulative_analysis(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Load BMD data once for all analyses
         logger.info("📊 Loading shared BMD data for cumulative analysis")
-        bmd_table = data_loader.load_bmd_data_from_gcs()
+        bmd_table = data_loader.load_bmd_data_from_storage()
         processor._protect_table(bmd_table)
 
         # Load kommune boundaries once if needed
@@ -182,10 +184,10 @@ async def run_cumulative_analysis(
 
                 # Load year-specific data
                 field_year = year + 1
-                fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+                fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
                 fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-                pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+                pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
                 pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
                     pesticide_table, bmd_table, year
                 )
@@ -370,10 +372,10 @@ async def run_cumulative_analysis(
 
                 # Load year-specific data
                 field_year = year + 1
-                fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+                fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
                 fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-                pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+                pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
                 pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
                     pesticide_table, bmd_table, year
                 )
@@ -506,7 +508,7 @@ async def run_cumulative_analysis_optimized(
     include_kommune: bool = False,
 ) -> bool:
     """
-    Run optimized cumulative analysis that loads existing year-specific results from GCS
+    Run optimized cumulative analysis that loads existing year-specific results from cloud storage
     and aggregates them, instead of reprocessing all the raw data.
 
     This is much faster and more efficient than the original cumulative analysis,
@@ -558,8 +560,8 @@ async def run_cumulative_analysis_optimized(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Determine years to process
         if years is None:
@@ -586,19 +588,19 @@ async def run_cumulative_analysis_optimized(
                 # Try multiple patterns to find existing H3 results
                 patterns = [
                     # New standardized format
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
                     # Alternative format with different timestamp structure
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/*_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/*_res{resolution}.parquet",
                     # Legacy format fallback
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}/*/h3_pesticide_{year}_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}/*/h3_pesticide_{year}_res{resolution}.parquet",
                     # Kepler format as fallback (can be used for aggregation)
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_kepler.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_kepler.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.gcs_access.list_files(pattern)
+                        files = processor.storage_access.list_files(pattern)
                         if files:
                             found_file = sorted(files)[-1]  # Get the most recent result
                             logger.info(
@@ -666,12 +668,12 @@ async def run_cumulative_analysis_optimized(
 
             # Load and aggregate each year's results
             for year, file_path in available_year_results:
-                logger.info(f"   📅 Loading results for year {year} from GCS")
+                logger.info("   📅 Loading results from cloud storage")
 
-                # Load year results from GCS
+                # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                    processor.storage_access.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -852,15 +854,15 @@ async def run_cumulative_analysis_optimized(
             available_kommune_results = []
             for year in years:
                 patterns = [
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/*kommune*.parquet",
-                    f"gs://{config.bucket}/gold/kommune_{year}/*/kommune_{year}.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/*kommune*.parquet",
+                    f"{config.bucket}/gold/kommune_{year}/*/kommune_{year}.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.gcs_access.list_files(pattern)
+                        files = processor.storage_access.list_files(pattern)
                         if files:
                             found_file = sorted(files)[-1]
                             logger.info(
@@ -938,12 +940,12 @@ async def run_cumulative_analysis_optimized(
 
                 # Load and aggregate each year's results
                 for year, file_path in available_kommune_results:
-                    logger.info(f"   📅 Loading kommune results for year {year} from GCS")
+                    logger.info("   📅 Loading kommune results from cloud storage")
 
-                    # Load year results from GCS
+                    # Load year results from cloud storage
                     year_table = f"year_kommune_results_{year}"
                     try:
-                        processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                        processor.storage_access.create_table_from_storage(year_table, file_path)
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""
@@ -1135,8 +1137,8 @@ async def run_cumulative_analysis_github_actions_optimized(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Determine years to process
         if years is None:
@@ -1173,16 +1175,16 @@ async def run_cumulative_analysis_github_actions_optimized(
                 # Primary patterns used by GitHub Actions workflow
                 patterns = [
                     # Standard format from individual year jobs
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}.parquet",
                     # Alternative timestamp patterns
-                    f"gs://{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_*.parquet",
+                    f"{config.bucket}/gold/h3_pesticide_{year}_res{resolution}/*/h3_pesticide_{year}_res{resolution}_*.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
                         # List files with timestamps
-                        files = processor.gcs_access.list_files_with_timestamps(pattern)
+                        files = processor.storage_access.list_files_with_timestamps(pattern)
                         if files:
                             # Sort by timestamp (most recent first) and take the freshest
                             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
@@ -1261,12 +1263,12 @@ async def run_cumulative_analysis_github_actions_optimized(
 
             # Load and aggregate each year's results
             for year, file_path in available_year_results:
-                logger.info(f"   📅 Loading fresh results for year {year} from GCS")
+                logger.info("   📅 Loading fresh results from cloud storage")
 
-                # Load year results from GCS
+                # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                    processor.storage_access.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -1441,14 +1443,14 @@ async def run_cumulative_analysis_github_actions_optimized(
             available_kommune_results = []
             for year in years:
                 patterns = [
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
-                    f"gs://{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}_*.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}.parquet",
+                    f"{config.bucket}/gold/kommune_pesticide_{year}/*/kommune_pesticide_{year}_*.parquet",
                 ]
 
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.gcs_access.list_files_with_timestamps(pattern)
+                        files = processor.storage_access.list_files_with_timestamps(pattern)
                         if files:
                             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
                             most_recent_file, timestamp = files_sorted[0]
@@ -1522,12 +1524,14 @@ async def run_cumulative_analysis_github_actions_optimized(
 
                 # Load and aggregate each year's kommune results
                 for year, file_path in available_kommune_results:
-                    logger.info(f"   📅 Loading fresh kommune results for year {year} from GCS")
+                    logger.info("   📅 Loading fresh kommune results from cloud storage")
 
-                    # Load year kommune results from GCS
+                    # Load year kommune results from cloud storage
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
-                        processor.gcs_access.create_table_from_gcs(year_kommune_table, file_path)
+                        processor.storage_access.create_table_from_storage(
+                            year_kommune_table, file_path
+                        )
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""
@@ -1713,12 +1717,12 @@ async def run_combined_analysis(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
         # Load BMD data once for all analyses (shared across all resolutions and modes)
         logger.info("📊 Loading shared BMD data for all analyses")
-        bmd_table = data_loader.load_bmd_data_from_gcs()
+        bmd_table = data_loader.load_bmd_data_from_storage()
         processor._protect_table(bmd_table)
 
         # Load kommune boundaries once if needed
@@ -1744,10 +1748,10 @@ async def run_combined_analysis(
             # Load year-specific data once
             logger.info(f"📊 Loading shared data for year {year}")
             field_year = year + 1
-            fields_table = data_loader.load_and_prepare_fields_from_gcs(field_year, year)
+            fields_table = data_loader.load_and_prepare_fields_from_storage(field_year, year)
             fields_table = processor.coordinate_transformer.prepare_geometries(fields_table)
 
-            pesticide_table = data_loader.load_pesticide_disaggregation_from_gcs(year)
+            pesticide_table = data_loader.load_pesticide_disaggregation_from_storage(year)
             pesticide_pfas_table = data_loader.join_pesticide_with_bmd_pfas(
                 pesticide_table, bmd_table, year
             )
@@ -1820,8 +1824,8 @@ async def run_combined_analysis(
 
 
 async def run_multi_year_kommune_analysis(years: list[int] | None = None) -> bool:
-    """Run multi-year kommune-level PFAS analysis from GCS data."""
-    logger.info("🚀 Starting multi-year kommune-level PFAS analysis from GCS")
+    """Run multi-year kommune-level PFAS analysis from cloud storage data."""
+    logger.info("🚀 Starting multi-year kommune-level PFAS analysis from cloud storage")
 
     # Create configuration optimized for GitHub Actions free tier (16GB RAM, 4 CPUs)
     config = H3SpatialConfig(
@@ -1898,12 +1902,12 @@ async def run_cumulative_analysis_from_artifacts(
     artifacts_dir: str = "downloaded-artifacts",
 ) -> bool:
     """
-    Run cumulative analysis using GCS paths from GitHub Actions artifacts.
+    Run cumulative analysis using cloud storage paths from GitHub Actions artifacts.
 
     This is the most efficient approach for GitHub Actions workflows:
-    1. Individual year jobs save GCS paths as artifacts
+    1. Individual year jobs save cloud storage paths as artifacts
     2. Cumulative job downloads artifacts and reads exact paths
-    3. No GCS searching or pattern matching needed
+    3. No cloud storage searching or pattern matching needed
 
     Args:
         years: List of years to include in cumulative analysis (None = all available)
@@ -1915,7 +1919,7 @@ async def run_cumulative_analysis_from_artifacts(
         bool: True if successful, False otherwise
     """
     logger.info("🚀 Starting GitHub Actions artifact-based cumulative H3 PFAS analysis")
-    logger.info("   📦 Reading GCS paths from workflow artifacts (no searching needed)")
+    logger.info("   📦 Reading cloud storage paths from workflow artifacts (no searching needed)")
 
     if h3_resolutions is None:
         h3_resolutions = [10]
@@ -1956,10 +1960,10 @@ async def run_cumulative_analysis_from_artifacts(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        H3DataLoader(processor.conn, processor.config, processor.gcs_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
+        H3DataLoader(processor.conn, processor.config, processor.storage_access)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
 
-        # Read artifacts to get GCS paths
+        # Read artifacts to get cloud storage paths
         artifacts_path = Path(artifacts_dir)
         if not artifacts_path.exists():
             logger.error(f"❌ Artifacts directory not found: {artifacts_dir}")
@@ -2092,10 +2096,10 @@ async def run_cumulative_analysis_from_artifacts(
             for year, file_path in available_year_results:
                 logger.info(f"   📅 Loading results for year {year} from artifact path")
 
-                # Load year results from GCS
+                # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.gcs_access.create_table_from_gcs(year_table, file_path)
+                    processor.storage_access.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -2339,10 +2343,12 @@ async def run_cumulative_analysis_from_artifacts(
                 for year, file_path in available_kommune_results:
                     logger.info(f"   📅 Loading kommune results for year {year} from artifact path")
 
-                    # Load year kommune results from GCS
+                    # Load year kommune results from cloud storage
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
-                        processor.gcs_access.create_table_from_gcs(year_kommune_table, file_path)
+                        processor.storage_access.create_table_from_storage(
+                            year_kommune_table, file_path
+                        )
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""

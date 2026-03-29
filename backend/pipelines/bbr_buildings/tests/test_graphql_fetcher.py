@@ -3,7 +3,11 @@
 import duckdb
 import pytest
 
-from bronze.bulk_geodanmark_graphql_fetcher import BulkGeoDanmarkGraphQLFetcher
+bulk_geodanmark = pytest.importorskip(
+    "bronze.bulk_geodanmark_graphql_fetcher",
+    reason="bulk_geodanmark_graphql_fetcher not available",
+)
+BulkGeoDanmarkGraphQLFetcher = bulk_geodanmark.BulkGeoDanmarkGraphQLFetcher
 
 
 @pytest.fixture

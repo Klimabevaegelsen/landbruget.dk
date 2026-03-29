@@ -7,15 +7,15 @@ import duckdb
 
 from .config import GOLD_BASE_DIR
 
-# Try to import GCS utilities
+# Try to import cloud storage utilities
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
     from unified_pipeline.util.migration_helpers import migrate_save_data_pattern
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
     migrate_save_data_pattern = None
 
 
@@ -753,13 +753,13 @@ def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> list[st
         return []
 
 
-def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
+def load_data_sources(storage_access: StorageAccess) -> dict[str, bool]:
     """
-    Load all available data sources dynamically using GCS patterns.
-    Uses unified pipeline pattern: shared DuckDB connection with GCSDataAccess.
+    Load all available data sources dynamically using cloud storage patterns.
+    Uses unified pipeline pattern: shared DuckDB connection with StorageAccess.
 
     Args:
-        gcs_access: GCS access instance with shared DuckDB connection
+        storage_access: Cloud storage access instance with shared DuckDB connection
 
     Returns:
         Dict mapping table names to whether they were loaded successfully
@@ -786,9 +786,9 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
 
     for table_name, pattern in data_source_patterns:
         try:
-            # Use GCS pattern matching to find files
-            full_pattern = f"gs://{bucket}/{pattern}"
-            files = gcs_access.list_files(full_pattern)
+            # Use cloud storage pattern matching to find files
+            full_pattern = f"{bucket}/{pattern}"
+            files = storage_access.list_files(full_pattern)
 
             if files:
                 # Filter out old "run_" directories and prioritize proper timestamps
@@ -808,7 +808,7 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
 
                     # Load first file to establish table structure
                     # 🚀 ENHANCED: Using native HMAC acceleration for faster loading
-                    gcs_access.query_parquet_native(valid_files[0], "SELECT *", table_name)
+                    storage_access.query_parquet_native(valid_files[0], "SELECT *", table_name)
 
                     # Union all additional files
                     for i, additional_file in enumerate(valid_files[1:], 1):
@@ -816,10 +816,12 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
                             # Create a temporary table for each additional file
                             temp_table = f"{table_name}_temp_{i}"
                             # 🚀 ENHANCED: Using native HMAC acceleration for faster loading
-                            gcs_access.query_parquet_native(additional_file, "SELECT *", temp_table)
+                            storage_access.query_parquet_native(
+                                additional_file, "SELECT *", temp_table
+                            )
 
                             # Union with main table
-                            gcs_access.duckdb_conn.execute(f"""
+                            storage_access.duckdb_conn.execute(f"""
                                 CREATE OR REPLACE TABLE {table_name} AS
                                 SELECT * FROM {table_name}
                                 UNION ALL
@@ -827,7 +829,7 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
                             """)
 
                             # Drop temp table
-                            gcs_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                            storage_access.duckdb_conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
 
                         except Exception as e:
                             logger.warning(
@@ -835,7 +837,7 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
                             )
 
                     # Get final count
-                    total_rows = gcs_access.duckdb_conn.execute(
+                    total_rows = storage_access.duckdb_conn.execute(
                         f"SELECT COUNT(*) FROM {table_name}"
                     ).fetchone()[0]
                     logger.info(
@@ -846,12 +848,12 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
                     latest_file = valid_files[0]
                     logger.info(f"📥 Loading {table_name} from: {latest_file}")
                     # 🚀 ENHANCED: Using native HMAC acceleration for faster loading
-                    gcs_access.query_parquet_native(latest_file, "SELECT *", table_name)
+                    storage_access.query_parquet_native(latest_file, "SELECT *", table_name)
 
                 loaded_tables[table_name] = True
 
                 # Log column info dynamically using shared connection
-                columns = gcs_access.duckdb_conn.execute(f"DESCRIBE {table_name}").fetchall()
+                columns = storage_access.duckdb_conn.execute(f"DESCRIBE {table_name}").fetchall()
                 logger.info(
                     f"   Columns: {[col[0] for col in columns[:5]]}{'...' if len(columns) > 5 else ''}"
                 )
@@ -866,7 +868,7 @@ def load_data_sources(gcs_access: GCSDataAccess) -> dict[str, bool]:
     # Create empty tables for failed loads to prevent SQL errors
     for table_name, loaded in loaded_tables.items():
         if not loaded:
-            gcs_access.duckdb_conn.execute(
+            storage_access.duckdb_conn.execute(
                 f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE"
             )
 
@@ -996,7 +998,7 @@ def standardize_species_data(con: duckdb.DuckDBPyConnection) -> None:
 def create_veterinary_timeline(
     con: duckdb.DuckDBPyConnection,
     pipeline_run_date: str,
-    gcs_access: GCSDataAccess | None = None,
+    storage_access: StorageAccess | None = None,
 ) -> bool:
     """
     Create comprehensive veterinary timeline combining all sources.
@@ -1004,7 +1006,7 @@ def create_veterinary_timeline(
     Args:
         con: DuckDB connection
         pipeline_run_date: Pipeline run date for SPF-SU disease snapshots
-        gcs_access: GCS access instance (optional)
+        storage_access: Cloud storage access instance (optional)
 
     Returns:
         True if successful, False otherwise
@@ -1012,16 +1014,16 @@ def create_veterinary_timeline(
     try:
         logger.info("🏗️ Creating comprehensive veterinary timeline...")
 
-        # Ensure we have GCS access
-        if gcs_access is None:
-            logger.error("❌ GCS access is required for data loading")
+        # Ensure we have cloud storage access
+        if storage_access is None:
+            logger.error("❌ Cloud storage access is required for data loading")
             return False
 
         # Load all data sources dynamically (using shared connection)
-        loaded_tables = load_data_sources(gcs_access)
+        loaded_tables = load_data_sources(storage_access)
 
-        # Note: now we need to use gcs_access.duckdb_conn instead of con
-        con = gcs_access.duckdb_conn
+        # Note: now we need to use storage_access.duckdb_conn instead of con
+        con = storage_access.duckdb_conn
 
         # Standardize species data across all loaded sources
         standardize_species_data(con)
@@ -1148,7 +1150,7 @@ def create_veterinary_timeline(
 def process_veterinary_timeline(
     export_timestamp: str,
     gold_dir: Path | None = None,
-    gcs_access: GCSDataAccess | None = None,
+    storage_access: StorageAccess | None = None,
     pipeline_run_date: str | None = None,
 ) -> bool:
     """
@@ -1157,7 +1159,7 @@ def process_veterinary_timeline(
     Args:
         export_timestamp: Export timestamp for file naming
         gold_dir: Output directory for gold data (optional)
-        gcs_access: GCS access instance (optional)
+        storage_access: Cloud storage access instance (optional)
         pipeline_run_date: Date for SPF-SU disease snapshots (optional)
 
     Returns:
@@ -1179,20 +1181,20 @@ def process_veterinary_timeline(
         # Initialize DuckDB connection
         con = duckdb.connect()
 
-        # Initialize GCS access with shared connection (unified pipeline pattern)
-        if gcs_access is None and GCS_AVAILABLE:
-            gcs_access = GCSDataAccess(connection=con)
+        # Initialize cloud storage access with shared connection (unified pipeline pattern)
+        if storage_access is None and STORAGE_AVAILABLE:
+            storage_access = StorageAccess(connection=con)
 
         # Create veterinary timeline using dynamic data loading
-        success = create_veterinary_timeline(con, pipeline_run_date, gcs_access)
+        success = create_veterinary_timeline(con, pipeline_run_date, storage_access)
 
         if success:
-            # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
-            if gcs_access and migrate_save_data_pattern:
+            # Export tables using cloud storage pattern (tables are in storage_access.duckdb_conn)
+            if storage_access and migrate_save_data_pattern:
                 bucket = "landbruget-data"
                 # Use subdataset parameter to create separate filenames
                 migrate_save_data_pattern(
-                    gcs_access,
+                    storage_access,
                     "veterinary_timeline",
                     "chr",
                     bucket,
@@ -1203,9 +1205,9 @@ def process_veterinary_timeline(
 
                 # Check if timeline_summary was created
                 try:
-                    gcs_access.duckdb_conn.execute("SELECT COUNT(*) FROM timeline_summary")
+                    storage_access.duckdb_conn.execute("SELECT COUNT(*) FROM timeline_summary")
                     migrate_save_data_pattern(
-                        gcs_access,
+                        storage_access,
                         "timeline_summary",
                         "chr",
                         bucket,
@@ -1217,14 +1219,14 @@ def process_veterinary_timeline(
                     logger.info("ℹ️ No timeline_summary table to export")
             else:
                 # Fallback to local export
-                logger.warning("⚠️ GCS not available, exporting locally only")
+                logger.warning("⚠️ Cloud storage not available, exporting locally only")
                 # Local export logic would go here
 
             logger.info("✅ Veterinary timeline processing completed successfully")
         else:
             logger.error("❌ Veterinary timeline processing failed")
 
-        # Connection will be closed when gcs_access is destroyed
+        # Connection will be closed when storage_access is destroyed
         return success
 
     except Exception as e:

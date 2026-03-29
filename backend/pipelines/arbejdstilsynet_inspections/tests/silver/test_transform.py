@@ -334,7 +334,7 @@ class TestCVRIntegration:
             "summary": {"api_calls": 1, "efficiency_gain": "1.0x"},
         }
         mock_cvr_client.return_value = mock_client
-        mock_save_cvr.return_value = "gs://test-bucket/cvr/test.json"
+        mock_save_cvr.return_value = "test-bucket/cvr/test.json"
 
         pipeline.setup_output_directories()
         pipeline.connect_database()
@@ -365,7 +365,7 @@ class TestCVRIntegration:
             "summary": {"api_calls": 0, "efficiency_gain": "1.0x"},
         }
         mock_cvr_client.return_value = mock_client
-        mock_save_cvr.return_value = "gs://test-bucket/cvr/test.json"
+        mock_save_cvr.return_value = "test-bucket/cvr/test.json"
 
         pipeline.setup_output_directories()
         pipeline.connect_database()
@@ -401,7 +401,7 @@ class TestCVRIntegration:
             "summary": {"api_calls": 1, "efficiency_gain": "2.0x"},
         }
         mock_cvr_client.return_value = mock_client
-        mock_save_cvr.return_value = "gs://test-bucket/cvr/test.json"
+        mock_save_cvr.return_value = "test-bucket/cvr/test.json"
 
         pipeline.setup_output_directories()
         pipeline.connect_database()

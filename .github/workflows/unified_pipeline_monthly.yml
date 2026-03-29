@@ -11,6 +11,7 @@ on:
       source:
         description: "Specific monthly source to run (optional - runs all monthly sources if not specified)"
         required: false
+        default: "all_monthly"
         type: choice
         options:
           - "all_monthly"

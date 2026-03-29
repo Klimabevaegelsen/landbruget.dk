@@ -1,11 +1,11 @@
 """
-Tests for bronze layer Playwright scraping and GCS export.
+Tests for bronze layer Playwright scraping and cloud storage export.
 
 This module tests:
 - Playwright browser automation
 - PowerBI selector stability
 - CSV download triggers
-- GCS streaming uploads
+- Cloud storage streaming uploads
 - Error handling for browser failures
 """
 
@@ -20,23 +20,25 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import contextlib
 
-from bronze.export import BronzePipeline, GCSStorage
+pytest.importorskip("playwright", reason="playwright not installed")
+
+from bronze.export import BronzePipeline, CloudStorage
 
 
 @pytest.fixture
-def mock_gcs_bucket():
-    """Mock GCS bucket for testing."""
+def mock_storage_bucket():
+    """Mock cloud storage bucket for testing."""
     return "test-bucket"
 
 
 @pytest.fixture
-def bronze_pipeline(mock_gcs_bucket):
+def bronze_pipeline(mock_storage_bucket):
     """Create a BronzePipeline instance for testing."""
     with patch.dict("os.environ", {"SOURCE_CSV_URL": "https://test.com"}):
         return BronzePipeline(
             pipeline_name="test_pipeline",
             source_url="https://test.com",
-            gcs_bucket=mock_gcs_bucket,
+            storage_bucket=mock_storage_bucket,
             log_level="ERROR",
         )
 
@@ -268,13 +270,13 @@ class TestPlaywrightAutomation:
         assert b"Header1,Header2" in result[0][1]
 
 
-class TestGCSStreaming:
-    """Tests for GCS streaming uploads."""
+class TestCloudStorageStreaming:
+    """Tests for Cloud storage streaming uploads."""
 
-    def test_gcs_streaming_upload(self):
-        """Test streaming upload to GCS."""
-        # Mock GCS access
-        with patch("bronze.export.OptimizedGCSDataAccess") as mock_gcs_class:
+    def test_cloud_streaming_upload(self):
+        """Test streaming upload to cloud storage."""
+        # Mock cloud storage access
+        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -294,14 +296,14 @@ class TestGCSStreaming:
             mock_fs.open = Mock(return_value=mock_file)
 
             # Test upload
-            gcs_storage = GCSStorage(bucket_name="test-bucket")
-            result = gcs_storage.upload_file(temp_path)
+            cloud_storage = CloudStorage(bucket_name="test-bucket")
+            result = cloud_storage.upload_file(temp_path)
 
             assert result is True
 
     def test_upload_integrity(self):
         """Test file integrity after upload."""
-        with patch("bronze.export.OptimizedGCSDataAccess") as mock_gcs_class:
+        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -329,15 +331,15 @@ class TestGCSStreaming:
             mock_fs.open = Mock(return_value=mock_file)
 
             with patch("shutil.copyfileobj", side_effect=mock_copyfileobj):
-                gcs_storage = GCSStorage(bucket_name="test-bucket")
-                gcs_storage.upload_file(temp_path)
+                cloud_storage = CloudStorage(bucket_name="test-bucket")
+                cloud_storage.upload_file(temp_path)
 
             # Verify content matches
             assert len(uploaded_content) > 0
 
     def test_metadata_json_creation(self):
         """Test metadata structure validation."""
-        with patch("bronze.export.OptimizedGCSDataAccess") as mock_gcs_class:
+        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -370,8 +372,8 @@ class TestGCSStreaming:
 
             # Patch METADATA_AVAILABLE to True
             with patch("bronze.export.METADATA_AVAILABLE", True):
-                gcs_storage = GCSStorage(bucket_name="test-bucket")
-                gcs_storage.upload_file(temp_path)
+                cloud_storage = CloudStorage(bucket_name="test-bucket")
+                cloud_storage.upload_file(temp_path)
 
             # Verify metadata was created
             if metadata_content:

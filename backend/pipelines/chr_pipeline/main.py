@@ -865,14 +865,14 @@ def run_bronze_step(step: str, context: dict[str, Any]) -> dict[str, Any]:
                 f"Animal movements completed: {len(successful_results)}/{len(results)} herds successful"
             )
 
-        # CRITICAL FIX: Finalize consolidated processing to save animal movements data to GCS
+        # CRITICAL FIX: Finalize consolidated processing to save animal movements data to cloud storage
         try:
             from bronze.load_chr_dyr import finalize_consolidated_processing
 
             logger.info("🚀 Finalizing consolidated animal movements processing...")
             success = finalize_consolidated_processing()
             if success:
-                logger.info("✅ Animal movements data successfully saved to GCS")
+                logger.info("✅ Animal movements data successfully saved to cloud storage")
             else:
                 logger.warning("⚠️ Consolidated processing finalization returned False")
         except Exception as e:
@@ -1141,7 +1141,7 @@ def main(
                         f"Found bronze files in current timestamp directory: {bronze_path}"
                     )
 
-            # Check if streaming mode is available for GCS data access
+            # Check if streaming mode is available for cloud storage data access
             bronze_timestamp = bronze_dir_override or EXPORT_TIMESTAMP
             can_use_streaming = (
                 # Force streaming if explicitly requested
@@ -1565,7 +1565,7 @@ def main(
 
                 finalize_export(clear_buffer=clear_buffer_after_export)
                 logging.warning(
-                    "✅ Bronze export finalization completed - consolidated files saved to GCS"
+                    "✅ Bronze export finalization completed - consolidated files saved to cloud storage"
                 )
             except Exception as e:
                 logging.error(f"Error finalizing bronze export: {e}", exc_info=True)

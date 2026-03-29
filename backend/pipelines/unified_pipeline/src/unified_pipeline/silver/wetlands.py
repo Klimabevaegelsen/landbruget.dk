@@ -34,7 +34,7 @@ class WetlandsSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): Name of the dataset in storage
-        bucket (str): GCS bucket name for data storage
+        bucket (str): storage bucket name for data storage
         storage_batch_size (int): Batch size for storage operations
         namespaces (dict[str, str]): XML namespaces used in the wetlands data
         gml_ns (str): GML namespace prefix for XML parsing
@@ -58,7 +58,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
     This class handles the processing of wetlands data from the bronze layer
     to the silver layer. It reads, transforms, and saves the data according to
     the data pipeline architecture. The class handles XML processing, geometry
-    operations, and data storage in GCS.
+    operations, and data storage in cloud storage.
 
     Key functionalities include:
     1. Parsing XML data to extract features and geometries
@@ -75,9 +75,9 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                                             for the processor."""
         super().__init__(config)
 
-        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # ✅ MIGRATION: BaseSource already created StorageAccess and configured DuckDB
         # No need to create another instance or setup DuckDB again
-        self.log.info("✅ WetlandsSilver: Using unified GCS access and DuckDB connection")
+        self.log.info("✅ WetlandsSilver: Using unified cloud storage access and DuckDB connection")
         self.log.info("✅ Optimized for DuckDB-spatial v1.2.2+ with SPATIAL_JOIN operator")
 
     def analyze_geometry(self, geometry_wkt: str) -> dict[str, Any]:
@@ -883,7 +883,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         1. Reads raw data from the bronze layer
         2. Processes XML data into a DuckDB spatial table
         3. Creates a dissolved version with merged adjacent polygons
-        4. Saves both the original and dissolved datasets to GCS
+        4. Saves both the original and dissolved datasets to cloud storage
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
@@ -961,7 +961,7 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
             # coordinate transformation
             dissolved_table_name = f"{self.config.dataset}_dissolved"
 
-            # ✅ MIGRATION: Save both tables to GCS using optimized save methods
+            # ✅ MIGRATION: Save both tables to cloud storage using optimized save methods
             self.save_data_direct(table_name, self.config.dataset, self.config.bucket, "silver")
             self.save_data_direct(
                 dissolved_table_name,

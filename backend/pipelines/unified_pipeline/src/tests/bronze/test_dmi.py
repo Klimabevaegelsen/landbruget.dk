@@ -212,8 +212,8 @@ class TestDMIBronze:
     """Test cases for DMIBronze."""
 
     @pytest.fixture
-    def mock_gcs_access(self):
-        """Mock GCS access for testing."""
+    def mock_storage_access(self):
+        """Mock cloud storage access for testing."""
         return Mock()
 
     @pytest.fixture
@@ -260,9 +260,9 @@ class TestDMIBronze:
             }
         )
 
-        # Mock GCS access
-        dmi_bronze.gcs_access = MagicMock()
-        dmi_bronze.gcs_access.upload_json = MagicMock()
+        # Mock cloud storage access
+        dmi_bronze.storage = MagicMock()
+        dmi_bronze.storage.upload_json = MagicMock()
 
         start_time = datetime.now() - timedelta(days=1)
         end_time = datetime.now()
@@ -326,10 +326,10 @@ class TestDMIBronze:
 
     @patch.dict(os.environ, {"DMI_GOV_CLOUD_API_KEY": "test_api_key"})
     def test_save_parameter_data(self, dmi_bronze):
-        """Test parameter data saving to GCS."""
-        # Mock GCS access
-        dmi_bronze.gcs_access = MagicMock()
-        dmi_bronze.gcs_access.upload_json = MagicMock()
+        """Test parameter data saving to cloud storage."""
+        # Mock cloud storage access
+        dmi_bronze.storage = MagicMock()
+        dmi_bronze.storage.upload_json = MagicMock()
 
         parameter_data = {"features": [{"properties": {"value": 1.5}}]}
         metadata = {"feature_count": 1}
@@ -337,20 +337,19 @@ class TestDMIBronze:
         dmi_bronze._save_parameter_data("pot_evaporation_makkink", parameter_data, metadata)
 
         # Verify both files were uploaded
-        assert dmi_bronze.gcs_access.upload_json.call_count == 2
+        assert dmi_bronze.storage.upload_json.call_count == 2
 
         # Check the calls
-        calls = dmi_bronze.gcs_access.upload_json.call_args_list
+        calls = dmi_bronze.storage.upload_json.call_args_list
         paths = [call[0][1] for call in calls]  # Second argument is the path
 
-        # Verify paths use proper GCS format with bucket name
+        # Verify paths use bare bucket/path format
         assert any(
-            "gs://landbruget-data/bronze/dmi/" in path
-            and "pot_evaporation_makkink_data.json" in path
+            "landbruget-data/bronze/dmi/" in path and "pot_evaporation_makkink_data.json" in path
             for path in paths
         )
         assert any(
-            "gs://landbruget-data/bronze/dmi/" in path
+            "landbruget-data/bronze/dmi/" in path
             and "pot_evaporation_makkink_metadata.json" in path
             for path in paths
         )

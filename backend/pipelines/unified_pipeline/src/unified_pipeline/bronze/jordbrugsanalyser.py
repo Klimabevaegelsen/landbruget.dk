@@ -48,7 +48,7 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
         wfs_url (str): Base URL for the WFS service
         dataset (str): Name of the dataset in storage
         frequency (str): How often the data is updated
-        bucket (str): GCS bucket name for raw data storage
+        bucket (str): storage bucket name for raw data storage
         start_year (int): First year to fetch (2012)
         end_year (int): Last year to fetch (2024)
         batch_size (int): Features per request (0 = unlimited, downloads full dataset)
@@ -107,7 +107,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
     1. For each year from 2012-2024, determine layer name (Marker12, Marker13, etc.)
     2. Get total feature count from WFS service
     3. Fetch data in parallel batches based on configuration
-    4. Save raw WFS responses to Google Cloud Storage
+    4. Save raw WFS responses to cloud storage
     """
 
     def __init__(self, config: JordbrugsanalyserBronzeConfig):
@@ -390,7 +390,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
         This method orchestrates the entire data retrieval process:
         1. Processes marker data for each year from 2012 to 2024
         2. For each year, fetches all available marker features
-        3. Saves raw WFS responses to Google Cloud Storage
+        3. Saves raw WFS responses to cloud storage
         4. Tracks overall execution time for performance monitoring
         Returns the raw data for in-memory passing to silver stage.
 
@@ -455,7 +455,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                                 gc.collect()
 
                                 # Store minimal reference for in-memory passing (just the year)
-                                all_year_data[str(year)] = [f"saved_to_gcs_{dataset_name}"]
+                                all_year_data[str(year)] = [f"saved_to_storage_{dataset_name}"]
 
                             # 🧹 CLEANUP: Clean up any temporary tables and force memory
                             # cleanup after each year

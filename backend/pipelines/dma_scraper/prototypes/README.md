@@ -79,7 +79,7 @@ When adding new prototypes:
 ## Architecture Notes
 
 These prototypes work with data from the main DMA scraper pipeline but operate independently. They:
-- Access scraped PDFs from GCS buckets
+- Access scraped PDFs from cloud storage buckets
 - Use the same CVR identification as the main pipeline
 - Generate independent analysis outputs
 - Do not modify or interfere with production data flows

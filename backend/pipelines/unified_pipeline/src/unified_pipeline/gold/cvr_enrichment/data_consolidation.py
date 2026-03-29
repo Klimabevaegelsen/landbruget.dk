@@ -110,7 +110,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.info("Using silver data passed from previous step")
                 silver_tables = silver_data
             else:
-                self.log.info("Loading silver data from GCS")
+                self.log.info("Loading silver data from cloud storage")
                 silver_tables = self._load_silver_data()
 
             # Step 2: Consolidate into Gold layer format
@@ -393,9 +393,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Save to Gold layer for downstream steps
         companies_path = (
-            f"gs://{self.config.bucket}/gold/cvr_enrichment/{timestamp}/data_parsing.parquet"
+            f"{self.config.bucket}/gold/cvr_enrichment/{timestamp}/data_parsing.parquet"
         )
-        self.gcs_access.upload_from_duckdb_table(
+        self.storage.upload_from_duckdb_table(
             validated_table,
             companies_path,
             compression="zstd",
@@ -405,9 +405,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Also save to legacy location for compatibility
         legacy_companies_path = (
-            f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
+            f"{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
         )
-        self.gcs_access.upload_from_duckdb_table(
+        self.storage.upload_from_duckdb_table(
             validated_table,
             legacy_companies_path,
             compression="zstd",

@@ -311,10 +311,16 @@ class TestSampleDatasetCoordinates:
     def test_all_sample_datasets_coordinate_order(self, duck_conn):
         """Test coordinate order verification across all sample datasets."""
         # Import here to avoid import issues in CI
-        from tests.fixtures.sample_geometries import (
-            get_expected_coordinate_orders,
-            setup_all_sample_datasets,
-        )
+        import importlib
+        import sys
+        from pathlib import Path
+
+        fixtures_dir = Path(__file__).resolve().parent.parent / "fixtures"
+        if str(fixtures_dir.parent) not in sys.path:
+            sys.path.insert(0, str(fixtures_dir.parent))
+        sample_geometries = importlib.import_module("fixtures.sample_geometries")
+        get_expected_coordinate_orders = sample_geometries.get_expected_coordinate_orders
+        setup_all_sample_datasets = sample_geometries.setup_all_sample_datasets
 
         # Create all sample datasets
         dataset_tables = setup_all_sample_datasets(duck_conn)
@@ -345,7 +351,15 @@ class TestSampleDatasetCoordinates:
 
     def test_wrong_coordinates_detection(self, duck_conn):
         """Test that datasets with wrong coordinate order are properly detected."""
-        from tests.fixtures.sample_geometries import create_wrong_coordinate_samples
+        import importlib
+        import sys
+        from pathlib import Path
+
+        fixtures_dir = Path(__file__).resolve().parent.parent / "fixtures"
+        if str(fixtures_dir.parent) not in sys.path:
+            sys.path.insert(0, str(fixtures_dir.parent))
+        sample_geometries = importlib.import_module("fixtures.sample_geometries")
+        create_wrong_coordinate_samples = sample_geometries.create_wrong_coordinate_samples
 
         create_wrong_coordinate_samples(duck_conn)
         verifier = CoordinateOrderVerifier(duck_conn)

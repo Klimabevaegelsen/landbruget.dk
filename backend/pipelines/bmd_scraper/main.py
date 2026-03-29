@@ -14,8 +14,8 @@ from common.cli import PipelineRun, common_options, stage_options
 from common.logging_utils import setup_pipeline_logger
 
 from bronze import BMDScraper
-from bronze.export import GCSStorage
-from silver import BMDTransformer, upload_to_gcs
+from bronze.export import CloudStorage
+from silver import BMDTransformer, upload_to_storage
 
 # Load environment variables
 dotenv.load_dotenv()
@@ -68,12 +68,14 @@ def run_bronze_stage(bronze_dir: Path) -> Path | None:
 
         logger.info(f"Bronze stage: Raw data downloaded to {excel_file_path}")
 
-        # If in production environment, upload to GCS
+        # If in production environment, upload to cloud storage
         if os.getenv("ENVIRONMENT") == "production":
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+            )
             if bucket_name:
-                logger.info(f"Uploading bronze data to GCS bucket {bucket_name}")
-                storage = GCSStorage(bucket_name=bucket_name)
+                logger.info(f"Uploading bronze data to cloud storage bucket {bucket_name}")
+                storage = CloudStorage(bucket_name=bucket_name)
 
                 # Upload the Excel file
                 success = storage.upload_file(excel_file_path)
@@ -84,9 +86,11 @@ def run_bronze_stage(bronze_dir: Path) -> Path | None:
                     storage.upload_file(metadata_path)
 
                 if not success:
-                    logger.warning("Failed to upload to GCS, but continuing with local file")
+                    logger.warning(
+                        "Failed to upload to cloud storage, but continuing with local file"
+                    )
             else:
-                logger.warning("GCS_BUCKET not set, skipping GCS upload")
+                logger.warning("Storage bucket not set, skipping cloud storage upload")
 
         logger.info(f"Bronze stage completed successfully. File saved to {excel_file_path}")
         return Path(excel_file_path)
@@ -165,19 +169,21 @@ def run_silver_stage(bronze_file: Path, silver_dir: Path) -> Path | None:
 
         logger.info(f"Silver stage transformation completed: {parquet_file}")
 
-        # If in production environment, upload to GCS
+        # If in production environment, upload to cloud storage
         if os.getenv("ENVIRONMENT") == "production":
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+            )
             if bucket_name:
-                logger.info(f"Uploading silver data to GCS bucket {bucket_name}")
-                success = upload_to_gcs(parquet_file, bucket_name)
+                logger.info(f"Uploading silver data to cloud storage bucket {bucket_name}")
+                success = upload_to_storage(parquet_file, bucket_name)
 
                 if not success:
                     logger.warning(
-                        "Failed to upload silver data to GCS, but continuing with local file"
+                        "Failed to upload silver data to cloud storage, but continuing with local file"
                     )
             else:
-                logger.warning("GCS_BUCKET not set, skipping GCS upload")
+                logger.warning("Storage bucket not set, skipping cloud storage upload")
 
         return parquet_file
 

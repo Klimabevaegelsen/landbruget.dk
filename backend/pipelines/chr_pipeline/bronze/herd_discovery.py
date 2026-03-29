@@ -5,14 +5,14 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
-# Import GCS access for persistent storage
+# Import cloud storage access for persistent storage
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 from .utils import create_base_request
 from .volume_management import is_high_volume_herd
@@ -304,19 +304,23 @@ def save_discovery_results(
         "version": "1.0",
     }
 
-    if GCS_AVAILABLE:
+    if STORAGE_AVAILABLE:
         try:
             import os
 
-            gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-            config_path = f"gs://{bucket_name}/bronze/chr/config/discovery_results_{year}.json"
+            gcs_data_access = StorageAccess()
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET")
+                or os.getenv("R2_BUCKET")
+                or os.getenv("GCS_BUCKET", "landbruget-data")
+            )
+            config_path = f"{bucket_name}/bronze/chr/config/discovery_results_{year}.json"
 
             gcs_data_access.upload_json(discovery_data, config_path)
             logger.info(f"💾 Saved discovery results to: {config_path}")
 
         except Exception as e:
-            logger.warning(f"Failed to save discovery results to GCS: {e}")
+            logger.warning(f"Failed to save discovery results to cloud storage: {e}")
 
     # Always save locally as backup
     try:
@@ -337,13 +341,17 @@ def save_discovery_results(
 def load_previous_discovery_results(year: int) -> tuple[list[dict], list[int]] | None:
     """Load previous discovery results to avoid re-sampling."""
 
-    if GCS_AVAILABLE:
+    if STORAGE_AVAILABLE:
         try:
             import os
 
-            gcs_data_access = GCSDataAccess()
-            bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
-            config_path = f"gs://{bucket_name}/bronze/chr/config/discovery_results_{year}.json"
+            gcs_data_access = StorageAccess()
+            bucket_name = (
+                os.getenv("STORAGE_BUCKET")
+                or os.getenv("R2_BUCKET")
+                or os.getenv("GCS_BUCKET", "landbruget-data")
+            )
+            config_path = f"{bucket_name}/bronze/chr/config/discovery_results_{year}.json"
 
             if gcs_data_access.file_exists(config_path):
                 discovery_data = gcs_data_access.download_json(config_path)
@@ -364,6 +372,6 @@ def load_previous_discovery_results(year: int) -> tuple[list[dict], list[int]] |
                 logger.info(f"📋 Discovery cache is {age_days} days old, will re-discover")
 
         except Exception as e:
-            logger.warning(f"Failed to load discovery results from GCS: {e}")
+            logger.warning(f"Failed to load discovery results from cloud storage: {e}")
 
     return None

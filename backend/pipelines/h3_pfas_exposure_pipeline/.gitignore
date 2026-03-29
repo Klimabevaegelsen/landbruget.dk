@@ -78,7 +78,7 @@ temp/
 *.tmp
 *.temp
 
-# GCS credentials (if stored locally)
+# Cloud storage credentials (if stored locally)
 service-account.json
 credentials.json
 

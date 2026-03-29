@@ -38,7 +38,7 @@ class GrukosBronzeConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): Name of the dataset being processed
-        bucket (str): GCS bucket name for data storage
+        bucket (str): storage bucket name for data storage
         max_concurrent (int): Maximum number of concurrent WFS requests
         request_timeout (int): Timeout for individual requests in seconds
         batch_size (int): Number of features to fetch per request
@@ -87,7 +87,7 @@ class GrukosBronze(BaseSource[GrukosBronzeConfig], BronzeJobInterface):
     1. Fetching raw data from WFS endpoints
     2. Handling different service types (WFS)
     3. Processing responses and extracting features
-    4. Storing raw data in Google Cloud Storage (GCS)
+    4. Storing raw data in cloud storage
     5. Error handling and retry logic for robustness
     """
 
@@ -100,7 +100,7 @@ class GrukosBronze(BaseSource[GrukosBronzeConfig], BronzeJobInterface):
                                          for the processor.
         """
         super().__init__(config)
-        self.log.info("✅ GrukosBronze: Using unified GCS access and DuckDB connection")
+        self.log.info("✅ GrukosBronze: Using unified cloud storage access and DuckDB connection")
 
     @timed(name="Fetching WFS data")  # type: ignore
     async def fetch_wfs_data(self, layer: str, url: str) -> str | None:
@@ -217,7 +217,7 @@ class GrukosBronze(BaseSource[GrukosBronzeConfig], BronzeJobInterface):
                         ],
                     )
 
-                    # Save to GCS
+                    # Save to cloud storage
                     self._save_data(
                         table_name,
                         f"{self.config.dataset}_{layer.replace(':', '_')}",

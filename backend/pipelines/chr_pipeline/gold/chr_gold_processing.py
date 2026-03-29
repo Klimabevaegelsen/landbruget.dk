@@ -33,8 +33,8 @@ def process_gold_data(
     try:
         logger.info("🥇 Starting CHR Gold Layer Processing...")
 
-        # Note: No need to setup silver directories - we use GCS directly now
-        logger.info("🔍 Using dynamic GCS data discovery - no local silver data required")
+        # Note: No need to setup silver directories - we use cloud storage directly now
+        logger.info("🔍 Using dynamic cloud storage data discovery - no local silver data required")
 
         if gold_dir is None:
             gold_dir = GOLD_BASE_DIR / export_timestamp

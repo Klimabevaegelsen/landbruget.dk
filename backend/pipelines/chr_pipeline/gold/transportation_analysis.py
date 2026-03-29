@@ -5,15 +5,15 @@ from pathlib import Path
 
 import duckdb
 
-# Try to import GCS utilities
+# Try to import cloud storage utilities
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
     from unified_pipeline.util.migration_helpers import migrate_save_data_pattern
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
     migrate_save_data_pattern = None
 
 logger = logging.getLogger(__name__)
@@ -24,13 +24,13 @@ def setup_database(conn: duckdb.DuckDBPyConnection) -> None:
     pass
 
 
-def load_transportation_data_sources(gcs_access) -> dict[str, bool]:
+def load_transportation_data_sources(storage_access) -> dict[str, bool]:
     """
-    Load all transportation data sources dynamically using GCS patterns.
-    Uses unified pipeline pattern: shared DuckDB connection with GCSDataAccess.
+    Load all transportation data sources dynamically using cloud storage patterns.
+    Uses unified pipeline pattern: shared DuckDB connection with StorageAccess.
 
     Args:
-        gcs_access: GCS access instance with shared DuckDB connection
+        storage_access: Cloud storage access instance with shared DuckDB connection
 
     Returns:
         Dict mapping table names to whether they were loaded successfully
@@ -76,9 +76,9 @@ def load_transportation_data_sources(gcs_access) -> dict[str, bool]:
 
     for table_name, pattern in data_source_patterns:
         try:
-            # Use GCS pattern matching to find files
-            full_pattern = f"gs://{bucket}/{pattern}"
-            files = gcs_access.list_files(full_pattern)
+            # Use cloud storage pattern matching to find files
+            full_pattern = f"{bucket}/{pattern}"
+            files = storage_access.list_files(full_pattern)
 
             if files:
                 # Filter out old "run_" directories and prioritize proper timestamps
@@ -92,11 +92,11 @@ def load_transportation_data_sources(gcs_access) -> dict[str, bool]:
                 logger.info(f"📥 Loading {table_name} from: {latest_file}")
 
                 # 🚀 ENHANCED: Use native HMAC acceleration for faster CHR data loading
-                gcs_access.query_parquet_native(latest_file, "SELECT *", table_name)
+                storage_access.query_parquet_native(latest_file, "SELECT *", table_name)
                 loaded_tables[table_name] = True
 
                 # Log row count using shared connection
-                count = gcs_access.duckdb_conn.execute(
+                count = storage_access.duckdb_conn.execute(
                     f"SELECT COUNT(*) FROM {table_name}"
                 ).fetchone()[0]
                 logger.info(f"   ✅ {table_name}: {count:,} records")
@@ -111,7 +111,7 @@ def load_transportation_data_sources(gcs_access) -> dict[str, bool]:
     # Create empty tables for failed loads to prevent SQL errors
     for table_name, loaded in loaded_tables.items():
         if not loaded:
-            gcs_access.duckdb_conn.execute(
+            storage_access.duckdb_conn.execute(
                 f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE"
             )
 
@@ -1310,12 +1310,12 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
         logger.info(f"  {dest_type}: {count:,} movements, {animals_str} animals")
 
 
-def create_transportation_analysis(gcs_access) -> bool:
+def create_transportation_analysis(storage_access) -> bool:
     """
     Create comprehensive transportation analysis combining all sources.
 
     Args:
-        gcs_access: GCS access instance with shared DuckDB connection
+        storage_access: Cloud storage access instance with shared DuckDB connection
 
     Returns:
         True if successful, False otherwise
@@ -1324,10 +1324,10 @@ def create_transportation_analysis(gcs_access) -> bool:
         logger.info("🏗️ Creating comprehensive transportation analysis...")
 
         # Setup database with spatial extension
-        setup_database(gcs_access.duckdb_conn)
+        setup_database(storage_access.duckdb_conn)
 
-        # Load all data sources from GCS
-        loaded_tables = load_transportation_data_sources(gcs_access)
+        # Load all data sources from cloud storage
+        loaded_tables = load_transportation_data_sources(storage_access)
 
         # Log loaded tables
         successful_loads = [table for table, success in loaded_tables.items() if success]
@@ -1353,10 +1353,10 @@ def create_transportation_analysis(gcs_access) -> bool:
             return True  # Return success but skip analysis
 
         # Execute pipeline steps
-        create_comprehensive_certificate_matching(gcs_access.duckdb_conn)
-        perform_cattle_traces_matching(gcs_access.duckdb_conn)
-        create_destination_classifications(gcs_access.duckdb_conn)
-        generate_summary_statistics(gcs_access.duckdb_conn)
+        create_comprehensive_certificate_matching(storage_access.duckdb_conn)
+        perform_cattle_traces_matching(storage_access.duckdb_conn)
+        create_destination_classifications(storage_access.duckdb_conn)
+        generate_summary_statistics(storage_access.duckdb_conn)
 
         logger.info("✅ Transportation analysis created successfully")
         return True
@@ -1367,7 +1367,7 @@ def create_transportation_analysis(gcs_access) -> bool:
 
 
 def process_transportation_analysis(
-    export_timestamp: str, gold_dir: Path | None = None, gcs_access=None
+    export_timestamp: str, gold_dir: Path | None = None, storage_access=None
 ) -> bool:
     """
     Main function to process transportation analysis for gold layer.
@@ -1375,7 +1375,7 @@ def process_transportation_analysis(
     Args:
         export_timestamp: Export timestamp for file naming
         gold_dir: Output directory for gold data (optional)
-        gcs_access: GCS access instance (optional)
+        storage_access: Cloud storage access instance (optional)
 
     Returns:
         True if successful, False otherwise
@@ -1400,22 +1400,22 @@ def process_transportation_analysis(
         conn = duckdb.connect()
         setup_database(conn)
 
-        # Initialize GCS access with shared connection (unified pipeline pattern)
-        if gcs_access is None and GCS_AVAILABLE:
-            gcs_access = GCSDataAccess(connection=conn)
+        # Initialize cloud storage access with shared connection (unified pipeline pattern)
+        if storage_access is None and STORAGE_AVAILABLE:
+            storage_access = StorageAccess(connection=conn)
 
-        if gcs_access is None:
-            logger.error("❌ GCS access is required for data loading")
+        if storage_access is None:
+            logger.error("❌ Cloud storage access is required for data loading")
             return False
 
         # Create transportation analysis using dynamic data loading
-        success = create_transportation_analysis(gcs_access)
+        success = create_transportation_analysis(storage_access)
 
         if success:
             # Check if unified_transportation_dataset table exists before trying to export
             try:
                 table_exists = (
-                    gcs_access.duckdb_conn.execute(
+                    storage_access.duckdb_conn.execute(
                         "SELECT 1 FROM unified_transportation_dataset LIMIT 1"
                     ).fetchone()
                     is not None
@@ -1424,12 +1424,12 @@ def process_transportation_analysis(
                 table_exists = False
 
             if table_exists:
-                # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
-                if gcs_access and migrate_save_data_pattern:
+                # Export tables using cloud storage pattern (tables are in storage_access.duckdb_conn)
+                if storage_access and migrate_save_data_pattern:
                     bucket = "landbruget-data"
                     # Use subdataset parameter to create separate filenames
                     migrate_save_data_pattern(
-                        gcs_access,
+                        storage_access,
                         "unified_transportation_dataset",
                         "chr",
                         bucket,
@@ -1441,14 +1441,14 @@ def process_transportation_analysis(
                     logger.info("✅ Transportation analysis processing completed successfully")
                 else:
                     # Fallback to local export
-                    logger.warning("⚠️ GCS not available, exporting locally only")
+                    logger.warning("⚠️ Cloud storage not available, exporting locally only")
             else:
                 logger.info("✅ Transportation analysis skipped successfully - no data to export")
 
         else:
             logger.error("❌ Transportation analysis processing failed")
 
-        # Connection will be closed when gcs_access is destroyed
+        # Connection will be closed when storage_access is destroyed
         return success
 
     except Exception as e:

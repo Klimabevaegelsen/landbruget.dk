@@ -34,7 +34,7 @@ class DSTZoneMappingConfig(BaseJobConfig):
         type: Type of the component
         description: Brief description of the functionality
         dataset: Name of the output dataset
-        bucket: GCS bucket name for data storage
+        bucket: storage bucket name for data storage
         target_crs: Target coordinate reference system
         dst_mappings: Dictionary defining DST region to DAGI landsdele mappings
     """
@@ -244,12 +244,12 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                         if data_result is not None:
                             # Handle the new return format from base class
-                            if isinstance(data_result, dict) and "gcs_access" in data_result:
-                                # New format: dict with gcs_access instance and table_name
-                                gcs_access = data_result["gcs_access"]
+                            if isinstance(data_result, dict) and "storage_access" in data_result:
+                                # New format: dict with storage_access instance and table_name
+                                storage_access = data_result["storage_access"]
                                 source_table = data_result["table_name"]
-                                # Use the GCS connection for all operations
-                                conn = gcs_access.duckdb_conn
+                                # Use the cloud storage connection for all operations
+                                conn = storage_access.duckdb_conn
                                 # Set the data connection for all subsequent operations
                                 if self.data_conn is None:
                                     self.data_conn = conn
@@ -280,7 +280,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                             name_col = col_mapping.get("name_col", "name")
                             region_col = col_mapping.get("region_col", "NULL")
 
-                            # Copy data from GCS connection to base class connection
+                            # Copy data from cloud storage connection to base class connection
                             # First check what columns are available in the silver data
                             available_silver_columns = [
                                 desc[0]
@@ -358,7 +358,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                     f"SELECT COUNT(*) FROM {layer}"
                                 ).fetchone()[0]
                             else:
-                                # Data is in GCS connection, use optimized transfer
+                                # Data is in cloud storage connection, use optimized transfer
                                 try:
                                     # Export to temporary file and import to main connection
                                     import os
@@ -370,7 +370,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                         temp_path = tmp_file.name
 
                                     # Create a temporary view with the selected columns
-                                    # in the GCS connection
+                                    # in the cloud storage connection
                                     conn.execute(f"""
                                         CREATE OR REPLACE VIEW temp_layer_view AS
                                         SELECT {select_clause}
@@ -441,7 +441,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     self.log.error(f"Error loading DAGI {layer}: {e}")
                     continue
 
-            # Skip validation since GCS connections get closed after each layer
+            # Skip validation since cloud storage connections get closed after each layer
             # The individual layer loading already validated the data successfully
             self.log.info("DAGI data loading completed - skipping validation of closed connections")
 
@@ -467,7 +467,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
         try:
             self.log.info("Creating DST zone lookup table with DuckDB")
 
-            # Always use the base class connection since GCS connections get closed
+            # Always use the base class connection since cloud storage connections get closed
             conn = self.conn
 
             # Create DST mappings table
@@ -554,7 +554,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
     def _create_reference_table(self) -> None:
         """Create a reference table without geometry for easy viewing."""
         try:
-            # Always use the base class connection since GCS connections get closed
+            # Always use the base class connection since cloud storage connections get closed
             conn = self.conn
 
             conn.execute("""

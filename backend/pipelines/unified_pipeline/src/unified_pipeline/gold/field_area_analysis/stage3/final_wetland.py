@@ -37,7 +37,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         # Load field-property intersections from Stage 1C (foundation data)
         stage1c_dataset = updated_outputs["field_property_intersections"]
         stage1c_path = self._get_latest_gold_path(stage1c_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage1c_path,
             "SELECT field_uuid, bfe_number, intersection_geometry as property_geometry",
             "field_property_intersections",
@@ -47,7 +47,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         # Load field-wetland intersections from Stage 2B
         stage2b_wetland_dataset = updated_outputs["field_wetland_intersections"]
         stage2b_wetland_path = self._get_latest_gold_path(stage2b_wetland_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2b_wetland_path, "SELECT *", "field_wetland_intersections"
         )
         self.log.info(f"✅ Loaded field_wetland_intersections from {stage2b_wetland_dataset}")
@@ -55,7 +55,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         # Load field-wetland-water intersections from Stage 2B
         stage2b_water_dataset = updated_outputs["field_wetland_water_intersections"]
         stage2b_water_path = self._get_latest_gold_path(stage2b_water_dataset)
-        self.gcs_access.query_parquet_direct(
+        self.storage.query_parquet_direct(
             stage2b_water_path, "SELECT *", "stage3b_field_wetland_water_intersections"
         )
         self.log.info(f"✅ Loaded field_wetland_water_intersections from {stage2b_water_dataset}")
@@ -181,7 +181,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         }
 
     def _save_output_data(self, result: dict[str, Any]):
-        """Save both geometric intersection tables to GCS."""
+        """Save both geometric intersection tables to cloud storage."""
         # Save property × wetland intersections
         self._save_stage_output("property_wetland_intersections", "property_wetland_intersections")
 

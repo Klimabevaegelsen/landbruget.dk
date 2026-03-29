@@ -4,7 +4,7 @@ Baseline management for data validation.
 This module provides utilities to:
 - Generate baseline metrics from production data
 - Compare current outputs against baselines
-- Store/retrieve baselines from GCS
+- Store/retrieve baselines from cloud storage
 
 Used in pre-merge validation to detect data accuracy regressions.
 """
@@ -80,20 +80,25 @@ class BaselineManager:
         self,
         baseline_path: str | Path,
         tolerance_pct: float = 1.0,
-        gcs_client: Any = None,
+        storage_client: Any = None,
     ):
         """
         Initialize baseline manager.
 
         Args:
-            baseline_path: Local path or GCS path (gs://...) to baselines
+            baseline_path: Local path or cloud storage path (bare bucket/path or r2://...) to baselines
             tolerance_pct: Default tolerance for numerical comparisons
-            gcs_client: Optional GCS client for cloud storage operations
+            storage_client: Optional storage client for cloud storage operations
         """
-        self.baseline_path = Path(baseline_path) if not str(baseline_path).startswith("gs://") else baseline_path
+        _path_str = str(baseline_path)
+        # A cloud path is any path that has a protocol prefix (r2://, s3://)
+        # or is a bare bucket/path that doesn't look like a local filesystem path.
+        _has_protocol = any(_path_str.startswith(p) for p in ("r2://", "s3://"))
+        _is_local = _path_str.startswith(("/", ".")) or (len(_path_str) > 1 and _path_str[1] == ":")
+        self._is_storage = _has_protocol or (not _is_local and "/" in _path_str)
+        self.baseline_path = baseline_path if self._is_storage else Path(baseline_path)
         self.tolerance_pct = tolerance_pct
-        self.gcs_client = gcs_client
-        self._is_gcs = str(baseline_path).startswith("gs://")
+        self.storage_client = storage_client
 
     def generate_metrics_from_parquet(
         self,
@@ -275,8 +280,8 @@ class BaselineManager:
         Returns:
             Path where baseline was saved
         """
-        if self._is_gcs:
-            return self._save_to_gcs(metrics)
+        if self._is_storage:
+            return self._save_to_storage(metrics)
         return self._save_to_local(metrics)
 
     def load_baseline(self, dataset_name: str) -> BaselineMetrics | None:
@@ -289,8 +294,8 @@ class BaselineManager:
         Returns:
             BaselineMetrics or None if not found
         """
-        if self._is_gcs:
-            return self._load_from_gcs(dataset_name)
+        if self._is_storage:
+            return self._load_from_storage(dataset_name)
         return self._load_from_local(dataset_name)
 
     def compare(
@@ -483,22 +488,22 @@ class BaselineManager:
             data = json.load(f)
         return BaselineMetrics.from_dict(data)
 
-    def _save_to_gcs(self, metrics: BaselineMetrics) -> str:
-        """Save baseline to GCS."""
-        import gcsfs
+    def _save_to_storage(self, metrics: BaselineMetrics) -> str:
+        """Save baseline to cloud storage."""
+        from common.storage.filesystem import get_r2_filesystem
 
-        fs = gcsfs.GCSFileSystem()
+        fs = get_r2_filesystem()
         path = f"{self.baseline_path}/{metrics.dataset_name}/metrics.json"
         with fs.open(path, "w") as f:
             json.dump(metrics.to_dict(), f, indent=2)
         logger.info(f"Saved baseline to {path}")
         return path
 
-    def _load_from_gcs(self, dataset_name: str) -> BaselineMetrics | None:
-        """Load baseline from GCS."""
-        import gcsfs
+    def _load_from_storage(self, dataset_name: str) -> BaselineMetrics | None:
+        """Load baseline from cloud storage."""
+        from common.storage.filesystem import get_r2_filesystem
 
-        fs = gcsfs.GCSFileSystem()
+        fs = get_r2_filesystem()
         path = f"{self.baseline_path}/{dataset_name}/metrics.json"
         try:
             with fs.open(path) as f:

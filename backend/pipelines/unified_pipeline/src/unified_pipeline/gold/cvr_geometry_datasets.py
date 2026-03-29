@@ -25,7 +25,11 @@ class CVRGeometryDatasetsConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Link geometries (points and polygons) to CVR numbers for spatial analysis"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Phase 1: Point geometries
     process_address_points: bool = Field(
@@ -62,8 +66,8 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
 
     def __init__(self, config: CVRGeometryDatasetsConfig):
         super().__init__(config)
-        # Note: Not using GCSDataAccess for now since we're working with local files
-        # self.gcs_access = GCSDataAccess()
+        # Note: Not using StorageAccess for now since we're working with local files
+        # self.storage = StorageAccess()
 
     async def run(self, silver_data: dict[str, Any] | None = None) -> bool:
         """
@@ -324,7 +328,7 @@ class CVRGeometryDatasets(BaseSource[CVRGeometryDatasetsConfig], GoldJobInterfac
         }
 
     async def _save_results(self, results: dict[str, Any]) -> None:
-        """Save processing results to GCS."""
+        """Save processing results to cloud storage."""
 
         timestamp = self.date_pattern
 

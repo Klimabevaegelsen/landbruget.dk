@@ -34,7 +34,11 @@ class CadastralBronzeConfig(BaseJobConfig):
     type: str = "wfs"
     description: str = "Cadastral parcels from WFS"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     batch_size: int = 25000  # Increased from 10k to 25k for fewer API calls
     max_concurrent: int = 8  # Increased from 5 to 8 for better parallelism
@@ -560,7 +564,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
         This is the main entry point that orchestrates the entire process:
         1. Fetches raw data from the WFS service
-        2. Saves the raw data to Google Cloud Storage
+        2. Saves the raw data to cloud storage
         3. Returns the processed data for in-memory passing to silver stage
 
         Returns:

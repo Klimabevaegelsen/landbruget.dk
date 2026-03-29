@@ -49,12 +49,16 @@ class StoetteoplysningerSilverConfig(BaseJobConfig):
     type: str = "transformation"
     description: str = "EU CAP payment data - EAGF and EAFRD funds"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Bronze source
     bronze_path: str = Field(
         default="bronze/subsidies/stoetteoplysninger.naturerhverv.dk_*.parquet",
-        description="GCS path pattern for bronze data",
+        description="Storage path pattern for bronze data",
     )
 
     # Column mappings (source → standardized)
@@ -139,7 +143,7 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
             raise
 
     async def _load_bronze_data(self, bronze_data: Any | None = None) -> None:
-        """Load bronze data from GCS or memory."""
+        """Load bronze data from cloud storage or memory."""
         if bronze_data is not None:
             self.log.info("Using in-memory bronze data")
             if hasattr(bronze_data, "to_pandas"):
@@ -149,12 +153,12 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
                 # DataFrame or dict
                 self.conn.register("raw_stoetteoplysninger", bronze_data)
         else:
-            # Load from GCS
+            # Load from cloud storage
             self.log.info(f"Loading bronze data from: {self.config.bronze_path}")
-            pattern = f"gs://{self.config.bucket}/{self.config.bronze_path}"
+            pattern = f"{self.config.bucket}/{self.config.bronze_path}"
 
             # Find latest file
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
             if not files:
                 raise FileNotFoundError(f"No bronze files found matching: {pattern}")
 
@@ -351,10 +355,10 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
         return summary
 
     async def _save_silver_data(self) -> str:
-        """Save silver data to GCS."""
+        """Save silver data to cloud storage."""
         output_path = f"silver/{self.config.dataset}"
 
-        self.log.info(f"Saving silver data to: gs://{self.config.bucket}/{output_path}")
+        self.log.info(f"Saving silver data to: {self.config.bucket}/{output_path}")
 
         # Export to parquet
         self._save_data(
@@ -364,4 +368,4 @@ class StoetteoplysningerSilver(BaseSource[StoetteoplysningerSilverConfig], Silve
             stage="silver",
         )
 
-        return f"gs://{self.config.bucket}/{output_path}"
+        return f"{self.config.bucket}/{output_path}"

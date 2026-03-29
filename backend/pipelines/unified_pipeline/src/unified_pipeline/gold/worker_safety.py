@@ -28,10 +28,14 @@ class WorkerSafetyGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Clean worker safety data by CVR, year, and injury type"
     frequency: str = "weekly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Input silver datasets
-    worker_safety_dataset: str = "worker safety"  # Note: space in dataset name as per GCS path
+    worker_safety_dataset: str = "worker safety"  # Note: space in dataset name as per storage path
 
     # Processing configuration
     start_year: int = Field(default=2020, description="Start year for analysis")
@@ -86,7 +90,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             raise
 
     async def _load_silver_data(self, silver_data: dict[str, Any] | None) -> None:
-        """Load worker safety silver data from GCS.
+        """Load worker safety silver data from cloud storage.
 
         Supports two formats:
         1. Two-file format: worker_safety_2020-2024_mv.parquet + _skadeart.parquet
@@ -94,7 +98,9 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         """
 
         if silver_data:
-            self.log.warning("In-memory data passing not implemented for worker safety - using GCS")
+            self.log.warning(
+                "In-memory data passing not implemented for worker safety - using cloud storage"
+            )
 
         # Get latest silver data path
         silver_path = self._get_latest_silver_path(self.config.worker_safety_dataset)
@@ -105,7 +111,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
 
         # List all parquet files in the directory
         pattern = f"{silver_path}/worker_safety*.parquet"
-        available_files = self.gcs_access.list_files(pattern)
+        available_files = self.storage.list_files(pattern)
         filenames = [f.split("/")[-1] for f in available_files]
         self.log.info(f"Available silver files: {filenames}")
 
@@ -118,13 +124,13 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         if has_mv and has_skadeart:
             # Original two-file format
             self.log.info("Loading two-file format (mv + skadeart)")
-            with self.gcs_access._temp_download(mv_path) as temp_mv_file:
+            with self.storage._temp_download(mv_path) as temp_mv_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE worker_safety_raw AS
                     SELECT * FROM read_parquet('{temp_mv_file}')
                 """)
 
-            with self.gcs_access._temp_download(skadeart_path) as temp_skadeart_file:
+            with self.storage._temp_download(skadeart_path) as temp_skadeart_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS
                     SELECT * FROM read_parquet('{temp_skadeart_file}')
@@ -134,7 +140,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             single_file = available_files[-1]  # Latest file
             self.log.info(f"Loading single-file format: {single_file}")
 
-            with self.gcs_access._temp_download(single_file) as temp_file:
+            with self.storage._temp_download(single_file) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE worker_safety_single AS
                     SELECT * FROM read_parquet('{temp_file}')
@@ -366,35 +372,33 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
 
         # Save clean structured data
         clean_data_path = f"{output_dir}/worker_safety_clean.parquet"
-        await self._save_table_to_gcs("worker_safety_clean", clean_data_path)
+        await self._save_table_to_storage("worker_safety_clean", clean_data_path)
 
         self.log.info("✅ Clean worker safety data saved successfully")
 
         return {"worker_safety_clean": clean_data_path}
 
-    async def _save_table_to_gcs(self, table_name: str, gcs_path: str) -> None:
-        """Save a DuckDB table to GCS as parquet."""
+    async def _save_table_to_storage(self, table_name: str, storage_path: str) -> None:
+        """Save a DuckDB table to storage as parquet."""
 
-        # Upload directly from DuckDB table to GCS (more efficient)
-        full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
-        self.gcs_access.upload_from_duckdb_table(table_name, full_gcs_path)
+        # Upload directly from DuckDB table to storage (more efficient)
+        full_storage_path = f"{self.config.bucket}/{storage_path}"
+        self.storage.upload_from_duckdb_table(table_name, full_storage_path)
 
-        self.log.info(f"✅ Saved {table_name} to {full_gcs_path}")
+        self.log.info(f"✅ Saved {table_name} to {full_storage_path}")
 
     def _get_latest_silver_path(self, dataset: str) -> str | None:
         """Get the latest silver data directory path for a dataset."""
         try:
             # Try specific _mv files first (original two-file format)
-            pattern = (
-                f"gs://{self.config.bucket}/silver/{dataset}/*/worker_safety_2020-2024_mv.parquet"
-            )
-            files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.config.bucket}/silver/{dataset}/*/worker_safety_2020-2024_mv.parquet"
+            files = self.storage.list_files(pattern)
 
             if not files:
                 # Fall back to any worker_safety parquet files
                 # (drive pipeline may produce a single file without _mv/_skadeart suffix)
-                pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/worker_safety*.parquet"
-                files = self.gcs_access.list_files(pattern)
+                pattern = f"{self.config.bucket}/silver/{dataset}/*/worker_safety*.parquet"
+                files = self.storage.list_files(pattern)
 
             if not files:
                 self.log.warning(f"No worker safety files found for dataset: {dataset}")

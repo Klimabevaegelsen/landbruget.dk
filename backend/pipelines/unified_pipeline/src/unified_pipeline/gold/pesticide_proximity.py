@@ -36,7 +36,11 @@ class PesticideProximityGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "Spatial proximity analysis for disaggregated pesticide applications"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Distance thresholds for proximity analysis
     building_proximity_distance_m: float = Field(
@@ -205,8 +209,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
     def _get_pesticide_disaggregation_files(self) -> dict[int, str]:
         """Get mapping of years to pesticide disaggregation file paths."""
-        pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/*.parquet"
-        files = self.gcs_access.list_files(pattern)
+        pattern = f"{self.config.bucket}/gold/pesticide_disaggregation_*/*/*.parquet"
+        files = self.storage.list_files(pattern)
 
         year_files = {}
         for file_path in files:
@@ -244,9 +248,9 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info(f"📁 Disaggregation Data Path: {file_path}")
 
         try:
-            # Load the parquet file into a table using proper GCS access
+            # Load the parquet file into a table using proper cloud storage access
             table_name = "current_disaggregation"
-            self.gcs_access.create_table_from_gcs(table_name, file_path)
+            self.storage.create_table_from_storage(table_name, file_path)
 
             # Check the loaded data
             count_result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
@@ -698,17 +702,17 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dataset_name = f"{self.config.dataset}_{year}_{year + 1}"
         output_path = (
-            f"gs://{self.config.bucket}/gold/{dataset_name}/{timestamp}/"
+            f"{self.config.bucket}/gold/{dataset_name}/{timestamp}/"
             f"pesticide_proximity_{year}_{year + 1}.parquet"
         )
 
         self.log.info(f"💾 Saving {record_count:,} proximity records to: {output_path}")
 
-        # Export results to GCS
-        self.gcs_access.upload_from_duckdb_table("proximity_results", output_path)
+        # Export results to cloud storage
+        self.storage.upload_from_duckdb_table("proximity_results", output_path)
 
         self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
-        self.log.info(f"📁 Proximity GCS Path: {output_path}")
+        self.log.info(f"📁 Proximity Storage Path: {output_path}")
 
     def get_schema_info(self) -> dict[str, Any]:
         """Return schema information for the proximity analysis output."""

@@ -105,7 +105,7 @@ Examples:
         logger.info("🚀 Starting gold processing...")
         success = process_gold_data(
             export_timestamp=gold_timestamp,
-            silver_dir=None,  # Auto-detect from GCS/local
+            silver_dir=None,  # Auto-detect from cloud storage/local
         )
 
         if success:

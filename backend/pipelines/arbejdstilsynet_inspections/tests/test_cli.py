@@ -49,7 +49,7 @@ class TestCLI:
         assert "--log-level" in result.stdout
         assert "--start-date" in result.stdout
         assert "--end-date" in result.stdout
-        assert "--gcs-bucket" in result.stdout
+        assert "--storage-bucket" in result.stdout
 
     def test_invalid_stage_rejected(self):
         """An invalid --stage value should cause a non-zero exit."""

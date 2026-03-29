@@ -122,7 +122,7 @@ class DMAPermitAnalyzer:
             # Fallback to landbrugsdata-1 if that's your project
             return "landbrugsdata-1"
 
-    def discover_all_afgoerelser_pdfs(self, cvr: str, base_gcs_path: str) -> list[str]:
+    def discover_all_afgoerelser_pdfs(self, cvr: str, base_storage_path: str) -> list[str]:
         """
         Discover all afgørelser PDF files for a given CVR across multiple possible folder structures
         """
@@ -134,7 +134,7 @@ class DMAPermitAnalyzer:
             )
 
             # Method 1: Try direct CVR folder
-            direct_path = f"{base_gcs_path}/{cvr}/pdfs/"
+            direct_path = f"{base_storage_path}/{cvr}/pdfs/"
             try:
                 result = subprocess.run(
                     ["gsutil", "ls", direct_path], capture_output=True, text=True, check=True
@@ -153,7 +153,7 @@ class DMAPermitAnalyzer:
             try:
                 # List all subdirectories in base path
                 result = subprocess.run(
-                    ["gsutil", "ls", f"{base_gcs_path}/"],
+                    ["gsutil", "ls", f"{base_storage_path}/"],
                     capture_output=True,
                     text=True,
                     check=True,
@@ -207,7 +207,7 @@ class DMAPermitAnalyzer:
                                 continue  # This subdirectory doesn't have the expected structure
 
             except subprocess.CalledProcessError:
-                logger.warning(f"Could not list subdirectories in {base_gcs_path}")
+                logger.warning(f"Could not list subdirectories in {base_storage_path}")
 
             # Remove duplicates and sort
             all_afgoerelser_files = sorted(set(all_afgoerelser_files))
@@ -221,7 +221,7 @@ class DMAPermitAnalyzer:
         except Exception as e:
             logger.error(f"Error discovering PDFs for CVR {cvr}: {e}")
             # Fallback to just the first file in direct path
-            return [f"{base_gcs_path}/{cvr}/pdfs/afgoerelser_0.pdf"]
+            return [f"{base_storage_path}/{cvr}/pdfs/afgoerelser_0.pdf"]
 
     def extract_first_pages_pdf(self, pdf_path: str, num_pages: int = 2) -> bytes:
         """
@@ -277,21 +277,24 @@ class DMAPermitAnalyzer:
             with open(pdf_path, "rb") as f:
                 return f.read()
 
-    def download_pdf_temporarily(self, gcs_path: str) -> str:
-        """Download a PDF from GCS to a temporary file"""
+    def download_pdf_temporarily(self, storage_path: str) -> str:
+        """Download a PDF from cloud storage to a temporary file"""
         try:
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
                 temp_path = temp_file.name
 
             # Download using gsutil
             result = subprocess.run(
-                ["gsutil", "cp", gcs_path, temp_path], capture_output=True, text=True, check=True
+                ["gsutil", "cp", storage_path, temp_path],
+                capture_output=True,
+                text=True,
+                check=True,
             )
 
             if result.returncode == 0:
-                logger.info(f"📥 Downloaded {gcs_path} to {temp_path}")
+                logger.info(f"📥 Downloaded {storage_path} to {temp_path}")
                 return temp_path
-            logger.error(f"Failed to download {gcs_path}: {result.stderr}")
+            logger.error(f"Failed to download {storage_path}: {result.stderr}")
             return None
 
         except Exception as e:
@@ -992,7 +995,7 @@ Returner kun JSON i følgende præcise format:
             }
 
     def analyze_dma_permits_for_company(
-        self, cvr: str, company_name: str, base_gcs_path: str
+        self, cvr: str, company_name: str, base_storage_path: str
     ) -> dict:
         """
         Analyze ALL afgørelser PDFs for a company with parallel processing and facility grouping
@@ -1000,7 +1003,7 @@ Returner kun JSON i følgende præcise format:
         logger.info(f"🚀 Starting enhanced DMA permit analysis for {company_name} (CVR: {cvr})")
 
         # Discover all afgørelser PDFs for this CVR
-        pdf_paths = self.discover_all_afgoerelser_pdfs(cvr, base_gcs_path)
+        pdf_paths = self.discover_all_afgoerelser_pdfs(cvr, base_storage_path)
 
         if not pdf_paths:
             return {
@@ -1114,7 +1117,7 @@ def main():
     analyzer = DMAPermitAnalyzer()
     results = []
 
-    base_gcs_path = "gs://landbruget-data/bronze/dma/20250705_054247/20250705_054247"
+    base_storage_path = "landbruget-data/bronze/dma/20250705_054247/20250705_054247"
 
     for company in test_companies:
         cvr = company["cvr"]
@@ -1124,7 +1127,7 @@ def main():
         logger.info(f"\n📄 Analyzing Rank #{rank}: {name} (CVR: {cvr})")
 
         try:
-            result = analyzer.analyze_dma_permits_for_company(cvr, name, base_gcs_path)
+            result = analyzer.analyze_dma_permits_for_company(cvr, name, base_storage_path)
             results.append(result)
 
             # Log summary of findings with new facility-based structure

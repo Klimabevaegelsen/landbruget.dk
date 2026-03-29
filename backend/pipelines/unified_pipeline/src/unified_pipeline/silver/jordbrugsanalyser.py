@@ -41,7 +41,7 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
         description (str): Brief description of the processing
         dataset (str): Name of the dataset in storage
         bronze_dataset (str): Name of the bronze dataset to read from
-        bucket (str): GCS bucket name for data storage
+        bucket (str): storage bucket name for data storage
         start_year (int): First year to process (2012)
         end_year (int): Last year to process (2024)
     """
@@ -88,7 +88,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
     This class is responsible for processing raw agricultural marker data from the
     bronze layer. It parses WFS XML responses, extracts feature attributes and
     geometries, applies data cleaning and validation, and stores the processed
-    data in Google Cloud Storage.
+    data in cloud storage.
 
     The class handles:
     - XML parsing of WFS FeatureCollection responses
@@ -102,7 +102,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
     2. Parse XML and extract features with attributes and geometries
     3. Apply field mapping and data type conversions
     4. Validate and clean the data
-    5. Save processed tables to Google Cloud Storage
+    5. Save processed tables to cloud storage
     """
 
     def __init__(self, config: JordbrugsanalyserSilverConfig):
@@ -518,7 +518,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
         2. Parses WFS XML responses and extracts features
         3. Applies data cleaning and validation
         4. Creates tables with proper geometries and field mapping
-        5. Saves processed data to Google Cloud Storage
+        5. Saves processed data to cloud storage
 
         Args:
             bronze_data: Optional in-memory data from bronze stage. If provided,
@@ -554,10 +554,12 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                         self.log.info(f"Saving {total_features:,} features for year {year}")
 
                         # ✅ OPTIMIZED: Save directly without DataFrame conversion
-                        gcs_path = self.save_data_direct(
+                        storage_path = self.save_data_direct(
                             processed_table, dataset_name, self.config.bucket, "silver"
                         )
-                        self.log.info(f"Year {year}: Silver data saved successfully to {gcs_path}")
+                        self.log.info(
+                            f"Year {year}: Silver data saved successfully to {storage_path}"
+                        )
 
                         # Log some statistics using DuckDB
                         total_area = (

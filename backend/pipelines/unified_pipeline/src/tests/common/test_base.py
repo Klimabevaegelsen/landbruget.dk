@@ -2,7 +2,7 @@
 Tests for the base classes in the unified pipeline.
 
 This module tests the core functionality of BaseJobConfig and BaseSource
-classes to ensure they work correctly with the unified GCS access architecture
+classes to ensure they work correctly with the unified cloud storage access architecture
 and DuckDB-based data processing.
 """
 
@@ -21,7 +21,7 @@ backend_dir = test_file_path.parents[5]  # Go up 5 levels from test file to back
 if backend_dir.exists() and str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from common.gcs import GCSDataAccess  # noqa: E402
+from common.storage import StorageAccess  # noqa: E402
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource  # noqa: E402
 
@@ -47,10 +47,10 @@ class MockSource(BaseSource[MockJobConfig]):
 
 # Fixtures
 @pytest.fixture
-def mock_gcs_access():
-    """Create a mock GCS access layer for testing."""
-    with patch("unified_pipeline.common.base.GCSDataAccess") as mock_class:
-        mock_instance = MagicMock(spec=GCSDataAccess)
+def mock_storage_access():
+    """Create a mock cloud storage access layer for testing."""
+    with patch("unified_pipeline.common.base.StorageAccess") as mock_class:
+        mock_instance = MagicMock(spec=StorageAccess)
         mock_class.return_value = mock_instance
 
         # Mock DuckDB connection
@@ -60,7 +60,7 @@ def mock_gcs_access():
 
         # Mock common methods
         mock_instance.upload_from_duckdb_table.return_value = None
-        mock_instance.create_table_from_gcs.return_value = None
+        mock_instance.create_table_from_storage.return_value = None
         mock_instance.list_files.return_value = []
         mock_instance.file_exists.return_value = True
         mock_instance.upload_json.return_value = None
@@ -75,12 +75,12 @@ def test_config() -> MockJobConfig:
 
 
 @pytest.fixture
-def test_source(test_config: MockJobConfig, mock_gcs_access) -> MockSource:
-    """Create a test source for testing with mocked GCS access."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+def test_source(test_config: MockJobConfig, mock_storage_access) -> MockSource:
+    """Create a test source for testing with mocked cloud storage access."""
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
-        # Replace gcs_access with mock after initialization
-        source.gcs_access = mock_gcs_access
+        # Replace storage with mock after initialization
+        source.storage = mock_storage_access
         return source
 
 
@@ -107,9 +107,9 @@ def test_base_job_config_defaults() -> None:
 
 
 # Tests for BaseSource
-def test_base_source_initialization(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_base_source_initialization(test_config: MockJobConfig, mock_storage_access) -> None:
     """Test that BaseSource can be initialized with unified architecture."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         # Test that attributes are correctly set
@@ -126,16 +126,16 @@ def test_base_source_initialization(test_config: MockJobConfig, mock_gcs_access)
 
 def test_unified_connection_architecture(test_source: MockSource) -> None:
     """Test that the unified connection architecture works correctly."""
-    # Verify that gcs_access and conn are properly connected
+    # Verify that storage_access and conn are properly connected
     assert hasattr(test_source, "conn")
-    assert hasattr(test_source, "gcs_access")
+    assert hasattr(test_source, "storage")
     assert test_source.conn is not None
-    assert test_source.gcs_access is not None
+    assert test_source.storage is not None
 
 
-def test_duckdb_connection_is_functional(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_duckdb_connection_is_functional(test_config: MockJobConfig, mock_storage_access) -> None:
     """Test that the DuckDB connection can execute queries."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         # Test that we can execute a simple query
@@ -153,50 +153,50 @@ def test_save_data_table_name(test_source: MockSource, test_config: MockJobConfi
     test_source.conn.execute(f"CREATE TABLE {table_name} (id INTEGER, name VARCHAR)")
     test_source.conn.execute(f"INSERT INTO {table_name} VALUES (1, 'test')")
 
-    # Mock the gcs_access upload method
-    test_source.gcs_access.upload_from_duckdb_table = MagicMock()
+    # Mock the storage upload method
+    test_source.storage.upload_from_duckdb_table = MagicMock()
 
     # Test saving with table name
     test_source._save_data(table_name, test_config.dataset, test_config.bucket, "silver")
 
     # Verify the upload method was called
-    test_source.gcs_access.upload_from_duckdb_table.assert_called_once()
+    test_source.storage.upload_from_duckdb_table.assert_called_once()
 
 
 def test_save_data_json(test_source: MockSource, test_config: MockJobConfig) -> None:
     """Test saving JSON data."""
     json_data = {"key": "value", "number": 123}
 
-    # Mock the gcs_access upload method
-    test_source.gcs_access.upload_json = MagicMock()
+    # Mock the storage upload method
+    test_source.storage.upload_json = MagicMock()
 
     # Test saving with JSON data
     test_source._save_data(json_data, test_config.dataset, test_config.bucket, "silver")
 
     # Verify the upload method was called
-    test_source.gcs_access.upload_json.assert_called_once()
+    test_source.storage.upload_json.assert_called_once()
 
 
 def test_save_data_list(test_source: MockSource, test_config: MockJobConfig) -> None:
     """Test saving list data as JSON."""
     list_data = [{"key": "value1"}, {"key": "value2"}]
 
-    # Mock the gcs_access upload method
-    test_source.gcs_access.upload_json = MagicMock()
+    # Mock the storage upload method
+    test_source.storage.upload_json = MagicMock()
 
     # Test saving with list data
     test_source._save_data(list_data, test_config.dataset, test_config.bucket, "silver")
 
     # Verify the upload method was called
-    test_source.gcs_access.upload_json.assert_called_once()
+    test_source.storage.upload_json.assert_called_once()
 
 
-def test_save_data_local(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_save_data_local(test_config: MockJobConfig, mock_storage_access) -> None:
     """Test saving data locally."""
     # Create config with save_local=True
     local_config = MockJobConfig(save_local=True)
 
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(local_config)
 
         # Create a test table
@@ -209,7 +209,7 @@ def test_save_data_local(test_config: MockJobConfig, mock_gcs_access) -> None:
         source._save_data(table_name, local_config.dataset, local_config.bucket, "silver")
 
         # Verify that upload_from_duckdb_table was NOT called (since save_local=True)
-        mock_gcs_access.upload_from_duckdb_table.assert_not_called()
+        mock_storage_access.upload_from_duckdb_table.assert_not_called()
 
 
 def test_save_data_invalid_stage(test_source: MockSource, test_config: MockJobConfig) -> None:
@@ -228,8 +228,8 @@ def test_save_data_subdataset(test_source: MockSource, test_config: MockJobConfi
     test_source.conn.execute(f"CREATE TABLE {table_name} (id INTEGER, name VARCHAR)")
     test_source.conn.execute(f"INSERT INTO {table_name} VALUES (1, 'test')")
 
-    # Mock the gcs_access upload method
-    test_source.gcs_access.upload_from_duckdb_table = MagicMock()
+    # Mock the storage upload method
+    test_source.storage.upload_from_duckdb_table = MagicMock()
 
     # Test saving with subdataset
     test_source._save_data(
@@ -237,16 +237,18 @@ def test_save_data_subdataset(test_source: MockSource, test_config: MockJobConfi
     )
 
     # Verify the upload method was called with correct path
-    test_source.gcs_access.upload_from_duckdb_table.assert_called_once()
-    call_args = test_source.gcs_access.upload_from_duckdb_table.call_args
+    test_source.storage.upload_from_duckdb_table.assert_called_once()
+    call_args = test_source.storage.upload_from_duckdb_table.call_args
     # The path should include the subdataset name
     assert "test_dataset_sub" in call_args[0][1]
 
 
 # Integration test for unified architecture
-def test_shared_connection_between_components(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_shared_connection_between_components(
+    test_config: MockJobConfig, mock_storage_access
+) -> None:
     """Test that components share the same DuckDB connection."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         # Create source
         source = MockSource(test_config)
 
@@ -261,9 +263,9 @@ def test_shared_connection_between_components(test_config: MockJobConfig, mock_g
         assert result[0] == 42
 
 
-def test_cleanup_resources(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_cleanup_resources(test_config: MockJobConfig, mock_storage_access) -> None:
     """Test that cleanup_resources method works correctly."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         # Create some temporary tables
@@ -283,9 +285,9 @@ def test_cleanup_resources(test_config: MockJobConfig, mock_gcs_access) -> None:
         assert "tmp_test2" not in table_names
 
 
-def test_get_memory_usage(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_get_memory_usage(test_config: MockJobConfig, mock_storage_access) -> None:
     """Test that get_memory_usage returns proper structure."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         memory_info = source.get_memory_usage()
@@ -296,9 +298,9 @@ def test_get_memory_usage(test_config: MockJobConfig, mock_gcs_access) -> None:
         assert "system" in memory_info or "error" in memory_info
 
 
-def test_read_bronze_data_with_memory_data(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_read_bronze_data_with_memory_data(test_config: MockJobConfig, mock_storage_access) -> None:
     """Test _read_bronze_data with in-memory data passing."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         # Test with table name
@@ -309,9 +311,11 @@ def test_read_bronze_data_with_memory_data(test_config: MockJobConfig, mock_gcs_
         assert result == "existing_table"
 
 
-def test_read_bronze_data_with_list_of_strings(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_read_bronze_data_with_list_of_strings(
+    test_config: MockJobConfig, mock_storage_access
+) -> None:
     """Test _read_bronze_data with list of XML strings."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         # Test with list of strings (like XML payloads)
@@ -328,9 +332,9 @@ def test_read_bronze_data_with_list_of_strings(test_config: MockJobConfig, mock_
         assert count == 2
 
 
-def test_read_bronze_data_with_dict_list(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_read_bronze_data_with_dict_list(test_config: MockJobConfig, mock_storage_access) -> None:
     """Test _read_bronze_data with list of dictionaries."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         # Test with list of dicts
@@ -347,9 +351,11 @@ def test_read_bronze_data_with_dict_list(test_config: MockJobConfig, mock_gcs_ac
         assert count == 2
 
 
-def test_configure_duckdb_spatial_extension(test_config: MockJobConfig, mock_gcs_access) -> None:
+def test_configure_duckdb_spatial_extension(
+    test_config: MockJobConfig, mock_storage_access
+) -> None:
     """Test that DuckDB spatial extension is configured."""
-    with patch("unified_pipeline.common.base.GCSDataAccess", return_value=mock_gcs_access):
+    with patch("unified_pipeline.common.base.StorageAccess", return_value=mock_storage_access):
         source = MockSource(test_config)
 
         # Try to use spatial function - should work if spatial extension is loaded

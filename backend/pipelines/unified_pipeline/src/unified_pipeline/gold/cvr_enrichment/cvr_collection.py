@@ -78,7 +78,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
 
         # Initialize CVR collection manager
         self.cvr_collection_manager = CVRCollectionManager(
-            gcs_access=self.gcs_access, bucket=self.config.bucket
+            storage_access=self.storage, bucket=self.config.bucket
         )
 
         # Initialize batch manager
@@ -281,7 +281,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
     @timed(name="Saving collection data")
     def _save_collection_data(self, batch_data: dict[str, Any]) -> str:
         """
-        Save collection data to GCS.
+        Save collection data to cloud storage.
 
         Args:
             batch_data: Collection data with batches
@@ -330,7 +330,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
                 )
             """)
 
-        # Save to GCS
+        # Save to cloud storage
         self._save_data(
             data=table_name, dataset=self.config.dataset, bucket=self.config.bucket, stage="gold"
         )
@@ -376,8 +376,8 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
             "created_timestamp": batch_data["batch_timestamp"],
         }
 
-        self.gcs_access.upload_json(
-            data=batch_details, gcs_path=f"gs://{self.config.bucket}/{batch_details_path}"
+        self.storage.upload_json(
+            data=batch_details, storage_path=f"{self.config.bucket}/{batch_details_path}"
         )
 
         self.log.info(f"Saved batch details to {batch_details_path}")
@@ -386,8 +386,8 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         """Save invalid CVR numbers for analysis."""
         invalid_cvrs_path = f"gold/{self.config.dataset}/{self.date_pattern}/invalid_cvrs.json"
 
-        self.gcs_access.upload_json(
-            data=invalid_cvrs, gcs_path=f"gs://{self.config.bucket}/{invalid_cvrs_path}"
+        self.storage.upload_json(
+            data=invalid_cvrs, storage_path=f"{self.config.bucket}/{invalid_cvrs_path}"
         )
 
         self.log.info(f"Saved {len(invalid_cvrs)} invalid CVR numbers to {invalid_cvrs_path}")
@@ -396,8 +396,8 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         """Save pipeline sources mapping."""
         sources_path = f"gold/{self.config.dataset}/{self.date_pattern}/pipeline_sources.json"
 
-        self.gcs_access.upload_json(
-            data=pipeline_sources, gcs_path=f"gs://{self.config.bucket}/{sources_path}"
+        self.storage.upload_json(
+            data=pipeline_sources, storage_path=f"{self.config.bucket}/{sources_path}"
         )
 
         self.log.info(f"Saved pipeline sources mapping to {sources_path}")

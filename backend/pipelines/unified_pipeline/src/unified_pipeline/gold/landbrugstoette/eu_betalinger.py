@@ -27,7 +27,11 @@ class LandbrugstoetteEUGoldConfig(BaseJobConfig):
     type: str = "gold"
     description: str = "EU CAP payments - EAGF (Pillar 1) and EAFRD (Pillar 2)"
     frequency: str = "yearly"
-    bucket: str = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+    bucket: str = (
+        os.getenv("STORAGE_BUCKET")
+        or os.getenv("R2_BUCKET")
+        or os.getenv("GCS_BUCKET", "landbruget-data")
+    )
 
     # Silver input dataset
     silver_dataset: str = Field(
@@ -113,18 +117,18 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
             self.log.info("Using in-memory silver data")
             self.conn.register("stoetteoplysninger_silver", silver_data[self.config.silver_dataset])
         else:
-            # Load from GCS
-            pattern = f"gs://{self.config.bucket}/silver/{self.config.silver_dataset}/**/*.parquet"
+            # Load from cloud storage
+            pattern = f"{self.config.bucket}/silver/{self.config.silver_dataset}/**/*.parquet"
             self.log.info(f"Loading silver data from: {pattern}")
 
-            files = self.gcs_access.list_files(pattern)
+            files = self.storage.list_files(pattern)
             if not files:
                 raise FileNotFoundError(f"No silver files found: {pattern}")
 
             latest_file = sorted(files)[-1]
             self.log.info(f"Loading: {latest_file}")
 
-            with self.gcs_access._temp_download(latest_file) as temp_file:
+            with self.storage._temp_download(latest_file) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE stoetteoplysninger_silver AS
                     SELECT * FROM read_parquet('{temp_file}')
@@ -280,8 +284,8 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
         return validation
 
     async def _save_gold_data(self) -> dict[str, str]:
-        """Save gold tables to GCS."""
-        self.log.info("Saving gold data to GCS")
+        """Save gold tables to cloud storage."""
+        self.log.info("Saving gold data to cloud storage")
 
         output_paths = {}
 
@@ -293,7 +297,7 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
             bucket=self.config.bucket,
             stage="gold",
         )
-        output_paths["detail"] = f"gs://{self.config.bucket}/{detail_path}"
+        output_paths["detail"] = f"{self.config.bucket}/{detail_path}"
 
         # Save CVR summary
         summary_path = f"gold/{self.config.dataset}_cvr_summary"
@@ -303,7 +307,7 @@ class LandbrugstoetteEUGold(BaseSource[LandbrugstoetteEUGoldConfig], GoldJobInte
             bucket=self.config.bucket,
             stage="gold",
         )
-        output_paths["cvr_summary"] = f"gs://{self.config.bucket}/{summary_path}"
+        output_paths["cvr_summary"] = f"{self.config.bucket}/{summary_path}"
 
         self.log.info(f"Saved gold data: {output_paths}")
 

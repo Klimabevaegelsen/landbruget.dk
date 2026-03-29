@@ -16,7 +16,7 @@ embedded as "x, y" strings in the station data. The silver layer:
 3. Creates Point geometries in EPSG:25832
 4. Filters to surface water only (Vandløb, Sø)
 5. Validates coordinates within Denmark bounds
-6. Saves as parquet to GCS
+6. Saves as parquet to cloud storage
 """
 
 from datetime import datetime
@@ -35,7 +35,7 @@ class KemidataSurfaceWaterSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset: Name of the dataset in storage
-        bucket: GCS bucket name
+        bucket: storage bucket name
         source_crs: Source coordinate reference system
     """
 
@@ -55,16 +55,16 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
     def __init__(self, config: KemidataSurfaceWaterSilverConfig):
         super().__init__(config)
 
-    def _load_stations_from_gcs(self, stations_path: str) -> list[dict]:
+    def _load_stations_from_storage(self, stations_path: str) -> list[dict]:
         """
-        Load station search results from GCS and extract coordinate mapping.
+        Load station search results from storage and extract coordinate mapping.
 
         Returns list of station dicts with id, name, x, y, mediaName.
         """
-        gcs_uri = f"gs://{self.config.bucket}/{stations_path}"
-        self.log.info(f"Loading station data from {gcs_uri}")
+        storage_uri = f"{self.config.bucket}/{stations_path}"
+        self.log.info(f"Loading station data from {storage_uri}")
 
-        search_result = self.gcs_access.download_json(gcs_uri)
+        search_result = self.storage.download_json(storage_uri)
 
         stations = search_result.get("stations", [])
         parsed = []
@@ -94,21 +94,21 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
         return parsed
 
     @timed(name="Loading CSV into DuckDB")
-    def _load_csv_from_gcs(self, csv_path: str) -> str:
+    def _load_csv_from_storage(self, csv_path: str) -> str:
         """
-        Load the Kemidata CSV export from GCS directly into a DuckDB table.
+        Load the Kemidata CSV export from storage directly into a DuckDB table.
 
-        Uses DuckDB's registered cloud filesystem (configured by GCSDataAccess)
+        Uses DuckDB's registered cloud filesystem (configured by StorageAccess)
         to read the CSV without temp files or in-memory buffering.
 
         Returns the table name.
         """
-        gcs_uri = f"gs://{self.config.bucket}/{csv_path}"
-        self.log.info(f"Loading CSV from {gcs_uri}")
+        storage_uri = f"{self.config.bucket}/{csv_path}"
+        self.log.info(f"Loading CSV from {storage_uri}")
 
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE raw_kemidata AS
-            SELECT * FROM read_csv_auto('{gcs_uri}',
+            SELECT * FROM read_csv_auto('{storage_uri}',
                 header=true,
                 all_varchar=true,
                 ignore_errors=true
@@ -292,7 +292,7 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
 
         Args:
             bronze_data: Optional manifest dict from bronze stage.
-                If None, looks for latest manifest in GCS.
+                If None, looks for latest manifest in cloud storage.
 
         Returns:
             Success info with statistics, or None on failure.
@@ -313,18 +313,18 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
                     stations_path = bronze_data.get("stations_path")
                 else:
                     # Find latest manifest
-                    self.log.info("No bronze data — reading from GCS")
+                    self.log.info("No bronze data — reading from cloud storage")
                     manifest_pattern = (
-                        f"gs://{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
+                        f"{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
                     )
-                    manifest_files = self.gcs_access.list_files(manifest_pattern)
+                    manifest_files = self.storage.list_files(manifest_pattern)
                     if not manifest_files:
                         self.log.error("No manifest files found. Run bronze stage first.")
                         return None
 
                     latest = sorted(manifest_files, reverse=True)[0]
                     self.log.info(f"Reading manifest from {latest}")
-                    manifest = self.gcs_access.download_json(latest)
+                    manifest = self.storage.download_json(latest)
                     csv_path = manifest.get("csv_path")
                     stations_path = manifest.get("stations_path")
 
@@ -335,10 +335,10 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
                 # Load station coordinates
                 stations = []
                 if stations_path:
-                    stations = self._load_stations_from_gcs(stations_path)
+                    stations = self._load_stations_from_storage(stations_path)
 
                 # Load CSV
-                self._load_csv_from_gcs(csv_path)
+                self._load_csv_from_storage(csv_path)
 
                 # Transform
                 table_name = self._transform_data(stations)
@@ -355,7 +355,7 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
                     FROM {table_name}
                 """).fetchone()
 
-                # Save to GCS silver layer
+                # Save to cloud storage silver layer
                 self._save_data_with_metadata(
                     data=table_name,
                     dataset=self.config.dataset,

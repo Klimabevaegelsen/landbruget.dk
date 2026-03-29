@@ -10,6 +10,9 @@ dependencies = []
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+exclude-newer = "7 days"
+
 [tool.uv.workspace]
 members = [
     "backend/common",
@@ -46,6 +49,7 @@ select = [
     "LOG",    # flake8-logging (proper logging patterns)
     "S",      # flake8-bandit (security checks)
     "ERA",    # eradicate (commented-out code)
+    "TID",    # flake8-tidy-imports (banned legacy imports)
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
@@ -62,6 +66,13 @@ ignore = [
 "test_*.py" = ["S101", "T20"]
 "*_test.py" = ["S101", "T20"]
 "conftest.py" = ["S101"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"common.gcs".msg = "Use `common.storage` instead (#844)"
+"common.gcs.core".msg = "Use `common.storage.core` instead (#844)"
+"common.gcs.core.GCSDataAccess".msg = "Use `common.storage.StorageAccess` instead (#844)"
+"common.gcs.filesystem".msg = "Use `common.storage.filesystem` instead (#844)"
+"common.gcs.monitoring".msg = "Use `common.storage.monitoring` instead (#844)"
 
 [tool.ruff.format]
 quote-style = "double"
@@ -107,5 +118,5 @@ addopts = [
 ]
 markers = [
     "pre_merge: marks tests that must pass before merging to main",
-    "gcs_required: marks tests that require GCS access",
+    "cloud_required: marks tests that require cloud storage access",
 ]

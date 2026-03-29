@@ -8,12 +8,10 @@ def test_storage_path_prefers_r2_bucket(monkeypatch):
     monkeypatch.setenv("GCS_BUCKET", "gcs-bucket")
 
     paths = StoragePath()
-    assert paths.silver("unified_pipeline", "dataset.parquet") == (
-        "gs://r2-bucket/silver/unified_pipeline/dataset.parquet"
-    )
+    assert paths.silver("unified_pipeline", "dataset.parquet") == ("r2-bucket/silver/unified_pipeline/dataset.parquet")
 
 
-def test_storage_path_falls_back_to_gcs_bucket(monkeypatch):
+def test_storage_path_falls_back_to_legacy_bucket_env(monkeypatch):
     from common.storage_interface import StoragePath
 
     monkeypatch.delenv("R2_BUCKET", raising=False)
@@ -21,7 +19,7 @@ def test_storage_path_falls_back_to_gcs_bucket(monkeypatch):
 
     paths = StoragePath()
     assert paths.bronze("chr_pipeline", "20260307_120000", "raw.parquet") == (
-        "gs://legacy-gcs-bucket/bronze/chr_pipeline/20260307_120000/raw.parquet"
+        "legacy-gcs-bucket/bronze/chr_pipeline/20260307_120000/raw.parquet"
     )
 
 
@@ -32,4 +30,4 @@ def test_storage_path_uses_default_bucket_when_env_missing(monkeypatch):
     monkeypatch.delenv("GCS_BUCKET", raising=False)
 
     paths = StoragePath()
-    assert paths.raw("gold", "example.parquet") == f"gs://{DEFAULT_BUCKET}/gold/example.parquet"
+    assert paths.raw("gold", "example.parquet") == f"{DEFAULT_BUCKET}/gold/example.parquet"

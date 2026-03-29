@@ -15,32 +15,32 @@ import duckdb
 logger = logging.getLogger("bmd_pipeline.silver.transform")
 
 
-def _get_optimized_gcs_access():
+def _get_optimized_storage_access():
     """
-    Get optimized GCS access with robust import handling.
+    Get optimized cloud storage access with robust import handling.
 
-    Returns GCSDataAccess if available, otherwise None for fallback.
+    Returns StorageAccess if available, otherwise None for fallback.
     """
     try:
-        from common.gcs import GCSDataAccess
+        from common.storage import StorageAccess
 
-        logger.info("✅ Successfully imported optimized GCSDataAccess")
-        return GCSDataAccess
+        logger.info("✅ Successfully imported optimized StorageAccess")
+        return StorageAccess
     except ImportError as e:
-        logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        logger.warning(f"⚠️ Could not import optimized StorageAccess: {e}")
         logger.warning(
-            "⚠️ Falling back to basic storage - ensure common.gcs is installed "
+            "⚠️ Falling back to basic storage - ensure common.storage is installed "
             "for optimal performance"
         )
         return None
 
 
-# Get optimized GCS access class or None if not available
-OptimizedGCSDataAccess = _get_optimized_gcs_access()
+# Get optimized cloud storage access class or None if not available
+OptimizedStorageAccess = _get_optimized_storage_access()
 
 
-class OptimizedGCSStorage:
-    """Optimized GCS storage for BMD silver layer with fallback support."""
+class OptimizedCloudStorage:
+    """Optimized cloud storage for BMD silver layer with fallback support."""
 
     def __init__(self, bucket_name: str, prefix: str = "silver/bmd"):
         self.bucket_name = bucket_name
@@ -48,13 +48,15 @@ class OptimizedGCSStorage:
         self.use_optimized = False
 
         # Try to use optimized storage
-        if OptimizedGCSDataAccess:
+        if OptimizedStorageAccess:
             try:
-                self.gcs_access = OptimizedGCSDataAccess()
+                self.storage = OptimizedStorageAccess()
                 self.use_optimized = True
-                logger.info(f"✅ BMD Silver: Using optimized GCS access for bucket: {bucket_name}")
+                logger.info(
+                    f"✅ BMD Silver: Using optimized cloud storage access for bucket: {bucket_name}"
+                )
             except Exception as e:
-                logger.warning(f"⚠️ Failed to initialize optimized GCS access: {e}")
+                logger.warning(f"⚠️ Failed to initialize optimized cloud storage access: {e}")
                 self._init_fallback(bucket_name)
         else:
             self._init_fallback(bucket_name)
@@ -62,7 +64,7 @@ class OptimizedGCSStorage:
     def _init_fallback(self, bucket_name: str):
         """Initialize fallback storage using s3fs/R2."""
         try:
-            from common.gcs.filesystem import get_r2_filesystem
+            from common.storage.filesystem import get_r2_filesystem
 
             self._fallback_fs = get_r2_filesystem()
             self._fallback_bucket = bucket_name
@@ -70,35 +72,35 @@ class OptimizedGCSStorage:
         except (OSError, ImportError) as e:
             raise RuntimeError(f"Cloud storage not available: {e}") from e
 
-    def upload_file(self, local_path: Path, gcs_path: str | None = None) -> bool:
-        """Upload file to GCS with optimized or fallback method."""
+    def upload_file(self, local_path: Path, storage_path: str | None = None) -> bool:
+        """Upload file to cloud storage with optimized or fallback method."""
         try:
-            if gcs_path is None:
+            if storage_path is None:
                 timestamp = local_path.parent.name
                 filename = local_path.name
-                gcs_path = f"{self.prefix}/{timestamp}/{filename}"
+                storage_path = f"{self.prefix}/{timestamp}/{filename}"
 
             if self.use_optimized:
                 # Use optimized upload
                 import shutil
 
-                full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
+                full_storage_path = f"{self.bucket_name}/{storage_path}"
                 with (
                     open(local_path, "rb") as file_obj,
-                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                    self.storage.fs.open(full_storage_path, "wb") as cloud_file,
                 ):
-                    shutil.copyfileobj(file_obj, gcs_file)
-                logger.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized)")
+                    shutil.copyfileobj(file_obj, cloud_file)
+                logger.info(f"✅ Uploaded {local_path} to {full_storage_path} (optimized)")
             else:
                 # Use s3fs/R2 fallback upload
-                dest_path = f"{self._fallback_bucket}/{gcs_path}"
+                dest_path = f"{self._fallback_bucket}/{storage_path}"
                 self._fallback_fs.put(str(local_path), dest_path)
                 logger.info(f"Uploaded {local_path} to {dest_path} (fallback)")
 
             return True
 
         except Exception as e:
-            logger.error(f"Failed to upload to GCS: {e}")
+            logger.error(f"Failed to upload to cloud storage: {e}")
             return False
 
 
@@ -687,7 +689,7 @@ class BMDTransformer:
 
     def save_parquet(self, table_name: str) -> Path:
         """
-        Save the processed data as a Parquet file with enhanced GCS export.
+        Save the processed data as a Parquet file with enhanced cloud storage export.
 
         Args:
             table_name: Name of the DuckDB table
@@ -702,30 +704,30 @@ class BMDTransformer:
         logger.info(f"Saving Parquet file to {output_path}")
 
         try:
-            # 🚀 ENHANCED: Try native GCS export first if OptimizedGCSDataAccess is available
-            gcs_export_success = False
-            if OptimizedGCSDataAccess:
+            # Try native cloud storage export first if OptimizedStorageAccess is available
+            cloud_export_success = False
+            if OptimizedStorageAccess:
                 try:
-                    gcs_access = OptimizedGCSDataAccess()
+                    storage_access = OptimizedStorageAccess()
                     bucket_name = os.getenv("R2_BUCKET") or os.getenv(
                         "GCS_BUCKET", "landbruget-data"
                     )
-                    gcs_path = (
+                    storage_path = (
                         f"r2://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
                     )
 
-                    # Use native GCS export with server-side compression
-                    gcs_access.export_to_gcs_native(
+                    # Use native cloud storage export with server-side compression
+                    storage_access.export_to_storage_native(
                         connection=self.conn,
                         table_name=table_name,
-                        gcs_path=gcs_path,
+                        storage_path=storage_path,
                         compression="zstd",
                     )
 
-                    logger.info(f"✅ Native GCS export successful: {gcs_path}")
-                    gcs_export_success = True
+                    logger.info(f"✅ Native cloud storage export successful: {storage_path}")
+                    cloud_export_success = True
                 except Exception as e:
-                    logger.warning(f"Native GCS export failed, using local export: {e}")
+                    logger.warning(f"Native cloud storage export failed, using local export: {e}")
 
             # Always create local file as well (for compatibility)
             self.conn.execute(f"""
@@ -741,7 +743,7 @@ class BMDTransformer:
             metadata_path = self.output_dir / "metadata.json"
             self.silver_metadata["output_file"] = str(output_path)
             self.silver_metadata["output_size_bytes"] = os.path.getsize(output_path)
-            self.silver_metadata["gcs_native_export"] = gcs_export_success
+            self.silver_metadata["cloud_native_export"] = cloud_export_success
 
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(self.silver_metadata, f, indent=2, ensure_ascii=False)
@@ -795,19 +797,19 @@ class BMDTransformer:
                 self.conn = None
 
 
-def upload_to_gcs(local_path: Path, bucket_name: str) -> bool:
+def upload_to_storage(local_path: Path, bucket_name: str) -> bool:
     """
-    Upload silver data to Google Cloud Storage.
+    Upload silver data to cloud storage.
 
     Args:
         local_path: Path to the local file
-        bucket_name: GCS bucket name
+        bucket_name: Storage bucket name
 
     Returns:
         True if upload successful, False otherwise
     """
     try:
-        storage = OptimizedGCSStorage(bucket_name=bucket_name, prefix="silver/bmd")
+        storage = OptimizedCloudStorage(bucket_name=bucket_name, prefix="silver/bmd")
 
         # Upload the Parquet file
         success = storage.upload_file(local_path)
@@ -819,5 +821,5 @@ def upload_to_gcs(local_path: Path, bucket_name: str) -> bool:
 
         return success
     except Exception as e:
-        logger.exception(f"Error uploading to GCS: {e}")
+        logger.exception(f"Error uploading to cloud storage: {e}")
         return False

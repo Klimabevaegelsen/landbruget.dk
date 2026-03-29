@@ -33,7 +33,7 @@ class DSTSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): Primary dataset name for silver data collection
-        bucket (str): GCS bucket name for storing processed data
+        bucket (str): storage bucket name for storing processed data
         table_ids (List[str]): List of DST table IDs to process
     """
 
@@ -51,11 +51,11 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
     multiple table types with specific processing logic for each.
 
     The processing includes:
-    1. Reading raw data from GCS or in-memory bronze data
+    1. Reading raw data from cloud storage or in-memory bronze data
     2. Parsing JSONSTAT format data using DuckDB
     3. Applying table-specific transformations
     4. Standardizing data types and column names
-    5. Saving processed data to GCS
+    5. Saving processed data to cloud storage
     """
 
     def __init__(self, config: DSTSilverConfig):
@@ -89,8 +89,8 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
         # Fallback to storage if no in-memory data
         try:
             # List all bronze data files for this table
-            pattern = f"gs://{self.config.bucket}/bronze/dst/*/{table_id}_data.json"
-            bronze_files = self.gcs_access.list_files(pattern)
+            pattern = f"{self.config.bucket}/bronze/dst/*/{table_id}_data.json"
+            bronze_files = self.storage.list_files(pattern)
 
             if not bronze_files:
                 self.log.warning(f"No bronze data files found for table {table_id}")
@@ -100,10 +100,10 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
             bronze_files.sort(reverse=True)
             latest_file = bronze_files[0]
 
-            self.log.info(f"Loading latest bronze data from GCS: {latest_file}")
+            self.log.info(f"Loading latest bronze data from cloud storage: {latest_file}")
 
             # Load the data
-            table_data = self.gcs_access.download_json(latest_file)
+            table_data = self.storage.download_json(latest_file)
 
             # Try to load metadata and table info
             metadata = None
@@ -111,13 +111,13 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
 
             try:
                 metadata_file = latest_file.replace("_data.json", "_metadata.json")
-                metadata = self.gcs_access.download_json(metadata_file)
+                metadata = self.storage.download_json(metadata_file)
             except Exception as e:
                 self.log.warning(f"Could not load metadata for {table_id}: {e}")
 
             try:
                 info_file = latest_file.replace("_data.json", "_tableinfo.json")
-                table_info = self.gcs_access.download_json(info_file)
+                table_info = self.storage.download_json(info_file)
             except Exception as e:
                 self.log.warning(f"Could not load table info for {table_id}: {e}")
 
@@ -129,7 +129,7 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
             }
 
         except Exception as e:
-            self.log.error(f"Failed to load bronze data from GCS for {table_id}: {e}")
+            self.log.error(f"Failed to load bronze data from cloud storage for {table_id}: {e}")
             return None
 
     @timed(name="Loading DST JSON into DuckDB")

@@ -11,7 +11,7 @@ The module consists of two main components:
 - WaterProjectsSilver: Implementation of Silver processing logic
 
 The process reads in bronze layer data, transforms it into Geos,
-validates geometries, and stores the processed data in GCS.
+validates geometries, and stores the processed data in cloud storage.
 """
 
 import json
@@ -47,7 +47,7 @@ class WaterProjectsSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset (str): Name of the water projects dataset
-        bucket (str): GCS bucket name for storing processed data
+        bucket (str): storage bucket name for storing processed data
         storage_batch_size (int): Batch size for storage operations
         namespaces (dict[str, str]): XML namespaces used in the data
         gml_ns (str): GML namespace string
@@ -92,17 +92,17 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
     Silver layer processing for Water Projects data.
     This class transforms raw water projects data from the bronze layer into
     structured Geos, validates geometries, and saves the processed data
-    to Google Cloud Storage (GCS).
+    to cloud storage.
     It handles both XML and JSON data formats, extracting features and converting
     them into Geos with appropriate geometries and attributes.
 
     The processing includes:
-    1. Reading raw data from GCS
+    1. Reading raw data from cloud storage
     2. Extracting features from XML or JSON payloads
     3. Parsing geometries and calculating areas
     4. Standardizing attribute names and types
     5. Dissolving geometries based on status categories
-    6. Saving processed data back to GCS
+    6. Saving processed data back to cloud storage
     """
 
     def __init__(self, config: WaterProjectsSilverConfig):
@@ -114,9 +114,11 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                                                 for the processor."""
         super().__init__(config)
 
-        # ✅ MIGRATION: BaseSource already created GCSDataAccess and configured DuckDB
+        # ✅ MIGRATION: BaseSource already created StorageAccess and configured DuckDB
         # No need to create another instance or setup DuckDB again
-        self.log.info("✅ WaterProjectsSilver: Using unified GCS access and DuckDB connection")
+        self.log.info(
+            "✅ WaterProjectsSilver: Using unified cloud storage access and DuckDB connection"
+        )
 
     def get_first_namespace(self, root: ET.Element) -> str | None:
         """

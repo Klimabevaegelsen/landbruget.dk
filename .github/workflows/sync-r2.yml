@@ -76,6 +76,7 @@ jobs:
       - name: Configure environment variables
         working-directory: backend/scripts
         env:
+          STORAGE_BUCKET: ${{ secrets.R2_BUCKET }}
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}

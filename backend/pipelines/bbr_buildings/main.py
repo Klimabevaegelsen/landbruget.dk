@@ -43,13 +43,13 @@ try:
 except ImportError:
     PSUTIL_AVAILABLE = False
 
-# Add this import for GCS operations
+# Add this import for storage operations
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
+    STORAGE_AVAILABLE = False
 
 
 def check_memory_usage() -> None:
@@ -866,15 +866,15 @@ def run_bronze_layer_bulk(
     return_data: bool = False,
 ) -> dict | None:
     """
-    Execute bronze layer processing - raw data collection and upload to GCS.
+    Execute bronze layer processing - raw data collection and upload to storage.
 
     Bronze layer responsibility:
     - Download raw GeoDanmark buildings data
     - Download raw INSPIRE BBR data
-    - Upload both to GCS immediately
+    - Upload both to storage immediately
     - Return metadata for coordination
     """
-    logger.info("🚀 Starting bronze layer - raw data collection and GCS upload")
+    logger.info("🚀 Starting bronze layer - raw data collection and storage upload")
 
     output_dir = args.output_dir / "bronze"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -910,8 +910,8 @@ def run_bronze_layer_bulk(
         file_size_gb = Path(geodanmark_path).stat().st_size / (1024**3)
         logger.info(f"   Found: {geodanmark_path} ({file_size_gb:.1f}GB)")
 
-    # Step 2: INSPIRE BBR raw data - read from GCS or local artifacts
-    logger.info("🏢 Step 2: Loading INSPIRE BBR data from artifacts or GCS...")
+    # Step 2: INSPIRE BBR raw data - read from storage or local artifacts
+    logger.info("🏢 Step 2: Loading INSPIRE BBR data from artifacts or storage...")
     building_ids = []
 
     # Try to load from local artifacts first (for GitHub Actions workflow)
@@ -933,7 +933,7 @@ def run_bronze_layer_bulk(
         logger.info(f"✅ Found attributes file: {inspire_attributes_file}")
 
     # In GitHub Actions, the data should already be available via artifacts
-    # No need to re-download or upload to GCS here - that's done by the fetch jobs
+    # No need to re-download or upload to storage here - that's done by the fetch jobs
 
     # Set GitHub Actions outputs for coordination with silver layer
     if "GITHUB_OUTPUT" in os.environ:
@@ -945,7 +945,7 @@ def run_bronze_layer_bulk(
             )
         logger.info("✅ Set GitHub Actions outputs for silver layer coordination")
 
-    logger.info("✅ Bronze layer completed - raw data uploaded to GCS")
+    logger.info("✅ Bronze layer completed - raw data uploaded to storage")
 
     if return_data:
         return {
@@ -957,17 +957,21 @@ def run_bronze_layer_bulk(
     return None
 
 
-def _upload_bronze_data_to_gcs(
+def _upload_bronze_data_to_storage(
     building_ids: list, attributes_df: DataFrame | None, timestamp: str, logger: logging.Logger
 ) -> None:
-    """Upload bronze data to GCS for silver layer consumption."""
-    if not GCS_AVAILABLE:
-        logger.warning("⚠️ GCS not available - skipping bronze data upload")
+    """Upload bronze data to storage for silver layer consumption."""
+    if not STORAGE_AVAILABLE:
+        logger.warning("⚠️ Storage not available - skipping bronze data upload")
         return
 
     try:
-        gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        storage_access = StorageAccess()
+        bucket_name = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
 
         # Upload building IDs as JSON
         building_ids_path = (
@@ -976,7 +980,7 @@ def _upload_bronze_data_to_gcs(
         import json
 
         building_ids_json = json.dumps(building_ids, indent=2)
-        gcs_access.upload_json_string(building_ids_json, building_ids_path)
+        storage_access.upload_json_string(building_ids_json, building_ids_path)
         logger.info(f"✅ Uploaded building IDs to {building_ids_path}")
 
         # Upload attributes as Parquet if available
@@ -998,29 +1002,29 @@ def _upload_bronze_data_to_gcs(
             attributes_df.to_parquet(parquet_buffer, index=False)
             parquet_buffer.seek(0)
 
-            with gcs_access.fs.open(attributes_path, "wb") as f:
+            with storage_access.fs.open(attributes_path, "wb") as f:
                 f.write(parquet_buffer.getvalue())
 
             logger.info(f"✅ Uploaded attributes to {attributes_path}")
 
     except Exception as e:
-        logger.warning(f"⚠️ Failed to upload bronze data to GCS: {e}")
+        logger.warning(f"⚠️ Failed to upload bronze data to storage: {e}")
         logger.warning("Silver layer will need to process locally")
 
 
-def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[list, any]:
-    """Load INSPIRE BBR bronze data from GCS."""
-    if not GCS_AVAILABLE:
-        logger.error("❌ GCS not available - cannot load bronze data")
+def _load_latest_inspire_bronze_data_from_storage(logger: logging.Logger) -> tuple[list, any]:
+    """Load INSPIRE BBR bronze data from storage."""
+    if not STORAGE_AVAILABLE:
+        logger.error("❌ Storage not available - cannot load bronze data")
         return [], None
 
-    bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
+    bucket_name = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")
     if not bucket_name:
-        logger.error("❌ R2_BUCKET/GCS_BUCKET not set - cannot load bronze data")
+        logger.error("❌ STORAGE_BUCKET/R2_BUCKET/GCS_BUCKET not set - cannot load bronze data")
         return [], None
 
     try:
-        from common.gcs.filesystem import get_r2_filesystem
+        from common.storage.filesystem import get_r2_filesystem
 
         fs = get_r2_filesystem()
 
@@ -1074,15 +1078,19 @@ def _load_latest_inspire_bronze_data_from_gcs(logger: logging.Logger) -> tuple[l
         return [], None
 
 
-def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None = None) -> str:
-    """Load GeoDanmark data from GCS and return local path."""
-    if not GCS_AVAILABLE:
-        logger.error("❌ GCS not available - cannot load GeoDanmark data")
+def _load_geodanmark_data_from_storage(logger: logging.Logger, timestamp: str | None = None) -> str:
+    """Load GeoDanmark data from storage and return local path."""
+    if not STORAGE_AVAILABLE:
+        logger.error("❌ Storage not available - cannot load GeoDanmark data")
         return None
 
     try:
-        gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        storage_access = StorageAccess()
+        bucket_name = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
 
         # Determine which timestamp to use
         if timestamp:
@@ -1094,7 +1102,7 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
             prefix = f"{bucket_name}/bronze/bbr_buildings/geodanmark/"
 
             # List all files in the geodanmark directory
-            files = list(gcs_access.fs.ls(prefix))
+            files = list(storage_access.fs.ls(prefix))
 
             if not files:
                 logger.error(f"❌ No GeoDanmark bronze data found in {prefix}")
@@ -1119,24 +1127,27 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
             target_timestamp = max(timestamps)
             logger.info(f"📂 Loading GeoDanmark data from latest timestamp: {target_timestamp}")
 
-        # GeoDanmark file path in GCS
-        geodanmark_gcs_path = f"{bucket_name}/bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
+        # GeoDanmark file path in storage
+        geodanmark_storage_path = f"{bucket_name}/bronze/bbr_buildings/geodanmark/{target_timestamp}/geodanmark_buildings_complete.geoparquet"
 
         # Check if file exists
-        if not gcs_access.fs.exists(geodanmark_gcs_path):
-            logger.error(f"❌ GeoDanmark data not found: {geodanmark_gcs_path}")
+        if not storage_access.fs.exists(geodanmark_storage_path):
+            logger.error(f"❌ GeoDanmark data not found: {geodanmark_storage_path}")
             return None
 
         # Download to local temporary file
         local_path = "data/geodanmark_buildings_complete.geoparquet"
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
-        logger.info(f"📥 Downloading GeoDanmark data from {geodanmark_gcs_path}...")
+        logger.info(f"📥 Downloading GeoDanmark data from {geodanmark_storage_path}...")
 
         # Download using fsspec
         import shutil
 
-        with gcs_access.fs.open(geodanmark_gcs_path, "rb") as src, open(local_path, "wb") as dst:
+        with (
+            storage_access.fs.open(geodanmark_storage_path, "rb") as src,
+            open(local_path, "wb") as dst,
+        ):
             shutil.copyfileobj(src, dst)
 
         # Verify download
@@ -1150,7 +1161,7 @@ def _load_geodanmark_data_from_gcs(logger: logging.Logger, timestamp: str | None
         return local_path
 
     except Exception as e:
-        logger.error(f"❌ Failed to load GeoDanmark data from GCS: {e}")
+        logger.error(f"❌ Failed to load GeoDanmark data from storage: {e}")
         return None
 
 
@@ -1165,10 +1176,10 @@ def run_silver_layer(
     Execute silver layer processing - joins, transformations, and final output.
 
     Silver layer responsibility:
-    - Read bronze data from GCS (GeoDanmark and INSPIRE BBR)
+    - Read bronze data from storage (GeoDanmark and INSPIRE BBR)
     - Perform UUID-based joins between INSPIRE BBR and GeoDanmark
     - Apply transformations and data quality checks
-    - Upload final processed data to GCS
+    - Upload final processed data to storage
     """
     logger.info("🚀 Starting silver layer - data processing and joins")
 
@@ -1191,10 +1202,10 @@ def run_silver_layer(
 
     logger.info(f"📊 Loaded {len(building_ids):,} building IDs for UUID join")
 
-    # Step 2: Load GeoDanmark data from GCS
-    geodanmark_path = _load_geodanmark_data_from_gcs(logger, bronze_timestamp)
+    # Step 2: Load GeoDanmark data from storage
+    geodanmark_path = _load_geodanmark_data_from_storage(logger, bronze_timestamp)
     if not geodanmark_path:
-        logger.error("❌ GeoDanmark data not found in GCS")
+        logger.error("❌ GeoDanmark data not found in storage")
         return None
 
     # Step 3: Perform UUID join (core silver layer processing)
@@ -1262,8 +1273,8 @@ def run_silver_layer(
     except Exception as e:
         logger.warning(f"⚠️ BuildingProcessor failed, continuing without enrichment: {e}")
 
-    # Step 5: Upload silver results to GCS
-    _upload_silver_data_to_gcs(silver_output_dir, timestamp, logger)
+    # Step 5: Upload silver results to storage
+    _upload_silver_data_to_storage(silver_output_dir, timestamp, logger)
 
     # Step 6: Set GitHub Actions outputs
     if "GITHUB_OUTPUT" in os.environ:
@@ -1284,7 +1295,7 @@ def run_silver_layer(
 def _load_bronze_data(
     bronze_data: dict[str, Any] | None, bronze_timestamp: str, logger: logging.Logger
 ) -> tuple[list, DataFrame | None]:
-    """Load bronze data from various sources (in-memory, GCS, artifacts)."""
+    """Load bronze data from various sources (in-memory, storage, artifacts)."""
     building_ids = []
     attributes_df = None
 
@@ -1296,10 +1307,12 @@ def _load_bronze_data(
         attributes_df = inspire_data.get("attributes_df")
         return building_ids, attributes_df
 
-    # Try GCS if we have a timestamp
+    # Try storage if we have a timestamp
     if bronze_timestamp:
-        logger.info(f"📤 Attempting to load bronze data from GCS (timestamp: {bronze_timestamp})")
-        building_ids, attributes_df = _load_bronze_data_from_gcs(bronze_timestamp, logger)
+        logger.info(
+            f"📤 Attempting to load bronze data from storage (timestamp: {bronze_timestamp})"
+        )
+        building_ids, attributes_df = _load_bronze_data_from_storage(bronze_timestamp, logger)
         if building_ids:
             return building_ids, attributes_df
 
@@ -1347,24 +1360,28 @@ def _load_bronze_data(
     return [], None
 
 
-def _load_bronze_data_from_gcs(
+def _load_bronze_data_from_storage(
     timestamp: str, logger: logging.Logger
 ) -> tuple[list, DataFrame | None]:
-    """Load bronze data from GCS."""
-    if not GCS_AVAILABLE:
-        logger.warning("⚠️ GCS not available - cannot load from GCS")
+    """Load bronze data from storage."""
+    if not STORAGE_AVAILABLE:
+        logger.warning("⚠️ Storage not available - cannot load from storage")
         return [], None
 
     try:
-        gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        storage_access = StorageAccess()
+        bucket_name = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
 
         # Load building IDs from INSPIRE subdirectory
         building_ids_path = (
             f"{bucket_name}/bronze/bbr_buildings/inspire/{timestamp}/inspire_building_ids.json"
         )
-        building_ids = gcs_access.download_json(building_ids_path)
-        logger.info(f"✅ Loaded {len(building_ids):,} building IDs from GCS")
+        building_ids = storage_access.download_json(building_ids_path)
+        logger.info(f"✅ Loaded {len(building_ids):,} building IDs from storage")
 
         # Try to load attributes from INSPIRE subdirectory
         attributes_df = None
@@ -1375,31 +1392,35 @@ def _load_bronze_data_from_gcs(
 
             import pandas as pd
 
-            with gcs_access.fs.open(attributes_path, "rb") as f:
+            with storage_access.fs.open(attributes_path, "rb") as f:
                 attributes_df = pd.read_parquet(f)
-            logger.info(f"✅ Loaded {len(attributes_df):,} attribute records from GCS")
+            logger.info(f"✅ Loaded {len(attributes_df):,} attribute records from storage")
 
         except Exception as e:
-            logger.info(f"📂 No attributes found in GCS: {e}")
+            logger.info(f"📂 No attributes found in storage: {e}")
 
         return building_ids, attributes_df
 
     except Exception as e:
-        logger.warning(f"⚠️ Failed to load bronze data from GCS: {e}")
+        logger.warning(f"⚠️ Failed to load bronze data from storage: {e}")
         return [], None
 
 
-def _upload_silver_data_to_gcs(
+def _upload_silver_data_to_storage(
     silver_output_dir: Path, timestamp: str, logger: logging.Logger
 ) -> None:
-    """Upload silver results to GCS."""
-    if not GCS_AVAILABLE:
-        logger.warning("⚠️ GCS not available - skipping silver data upload")
+    """Upload silver results to storage."""
+    if not STORAGE_AVAILABLE:
+        logger.warning("⚠️ Storage not available - skipping silver data upload")
         return
 
     try:
-        gcs_access = GCSDataAccess()
-        bucket_name = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
+        storage_access = StorageAccess()
+        bucket_name = (
+            os.getenv("STORAGE_BUCKET")
+            or os.getenv("R2_BUCKET")
+            or os.getenv("GCS_BUCKET", "landbruget-data")
+        )
 
         # Upload processed files (with coordinate fixes) if available
         processed_dir = silver_output_dir / "processed"
@@ -1414,14 +1435,17 @@ def _upload_silver_data_to_gcs(
                 else:
                     target_name = file_path.name
 
-                gcs_path = f"{bucket_name}/silver/bbr_buildings/{timestamp}/{target_name}"
+                storage_path = f"{bucket_name}/silver/bbr_buildings/{timestamp}/{target_name}"
 
                 import shutil
 
-                with open(file_path, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+                with (
+                    open(file_path, "rb") as src,
+                    storage_access.fs.open(storage_path, "wb") as dst,
+                ):
                     shutil.copyfileobj(src, dst)
 
-                logger.info(f"✅ Uploaded {file_path.name} -> {target_name} to {gcs_path}")
+                logger.info(f"✅ Uploaded {file_path.name} -> {target_name} to {storage_path}")
 
         # Also upload any remaining files from main directory (like inspire_attributes.parquet)
         for file_path in silver_output_dir.glob("*.parquet"):
@@ -1429,17 +1453,17 @@ def _upload_silver_data_to_gcs(
             if processed_dir.exists() and file_path.name == "joined_buildings.parquet":
                 continue
 
-            gcs_path = f"{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
+            storage_path = f"{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
 
             import shutil
 
-            with open(file_path, "rb") as src, gcs_access.fs.open(gcs_path, "wb") as dst:
+            with open(file_path, "rb") as src, storage_access.fs.open(storage_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
-            logger.info(f"✅ Uploaded {file_path.name} to {gcs_path}")
+            logger.info(f"✅ Uploaded {file_path.name} to {storage_path}")
 
     except Exception as e:
-        logger.warning(f"⚠️ Failed to upload silver data to GCS: {e}")
+        logger.warning(f"⚠️ Failed to upload silver data to storage: {e}")
 
 
 if __name__ == "__main__":

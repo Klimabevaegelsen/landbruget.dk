@@ -20,8 +20,8 @@ class TestDSTIntegration:
     """Integration tests for DST pipeline."""
 
     @pytest.fixture
-    def mock_gcs_access(self):
-        """Mock GCS access for testing."""
+    def mock_storage_access(self):
+        """Mock cloud storage access for testing."""
         return MagicMock()
 
     @pytest.fixture
@@ -44,13 +44,13 @@ class TestDSTIntegration:
 
     @pytest.mark.asyncio
     async def test_dst_bronze_to_silver_integration(
-        self, mock_gcs_access, dst_bronze_config, dst_silver_config
+        self, mock_storage_access, dst_bronze_config, dst_silver_config
     ):
         """Test integration between DST bronze and silver layers.
 
         Note: This test mocks the _find_latest_bronze_data method to avoid
-        actual GCS access. In a real integration test, you would either:
-        1. Use a test GCS bucket with pre-loaded test data
+        actual cloud storage access. In a real integration test, you would either:
+        1. Use a test storage bucket with pre-loaded test data
         2. Run against the actual data sources
         """
 
@@ -91,7 +91,7 @@ class TestDSTIntegration:
         assert result is None or isinstance(result, dict)
 
     @pytest.mark.asyncio
-    async def test_dst_silver_storage_fallback(self, mock_gcs_access, dst_silver_config):
+    async def test_dst_silver_storage_fallback(self, mock_storage_access, dst_silver_config):
         """Test DST silver fallback to storage when no bronze data provided."""
 
         silver = DSTSilver(dst_silver_config)
@@ -107,9 +107,17 @@ class TestDSTIntegration:
 class TestDMIIntegration:
     """Integration tests for DMI pipeline."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_base_storage(self):
+        """Mock StorageAccess to avoid R2 credential requirements."""
+        with patch("unified_pipeline.common.base.StorageAccess") as mock_class:
+            mock_instance = MagicMock()
+            mock_class.return_value = mock_instance
+            yield mock_instance
+
     @pytest.fixture
-    def mock_gcs_access(self):
-        """Mock GCS access for testing."""
+    def mock_storage_access(self):
+        """Mock cloud storage access for testing."""
         return MagicMock()
 
     @pytest.fixture
@@ -134,11 +142,11 @@ class TestDMIIntegration:
     @pytest.mark.integration
     @pytest.mark.slow
     async def test_dmi_bronze_to_silver_in_memory(
-        self, mock_gcs_access, dmi_bronze_config, dmi_silver_config
+        self, mock_storage_access, dmi_bronze_config, dmi_silver_config
     ):
         """Test DMI bronze-to-silver pipeline with in-memory data passing.
 
-        Note: This test processes real data from GCS for parameters not in bronze_data,
+        Note: This test processes real data from cloud storage for parameters not in bronze_data,
         so it may take several minutes to complete.
         """
         # Create bronze instance
@@ -165,9 +173,9 @@ class TestDMIIntegration:
             }
         )
 
-        # Mock GCS access for bronze
-        bronze.gcs_access = MagicMock()
-        bronze.gcs_access.upload_json = MagicMock()
+        # Mock cloud storage access for bronze
+        bronze.storage = MagicMock()
+        bronze.storage.upload_json = MagicMock()
 
         # Run bronze stage
         bronze_data = await bronze.run()
@@ -178,8 +186,8 @@ class TestDMIIntegration:
         # Create silver instance
         silver = DMISilver(dmi_silver_config)
 
-        # Mock GCS access for silver
-        silver.gcs_access = MagicMock()
+        # Mock cloud storage access for silver
+        silver.storage = MagicMock()
         silver._save_data = MagicMock()
 
         # Run silver stage with in-memory bronze data
@@ -194,20 +202,20 @@ class TestDMIIntegration:
     @pytest.mark.asyncio
     @pytest.mark.integration
     @pytest.mark.slow
-    async def test_dmi_silver_storage_fallback(self, mock_gcs_access, dmi_silver_config):
+    async def test_dmi_silver_storage_fallback(self, mock_storage_access, dmi_silver_config):
         """Test DMI silver pipeline with storage fallback (no in-memory data).
 
-        Note: This test processes real data from GCS, so it may take several minutes.
+        Note: This test processes real data from cloud storage, so it may take several minutes.
         """
         # Create silver instance
         silver = DMISilver(dmi_silver_config)
 
-        # Mock GCS access to simulate storage fallback
-        silver.gcs_access = MagicMock()
-        silver.gcs_access.list_files = MagicMock(
+        # Mock cloud storage access to simulate storage fallback
+        silver.storage = MagicMock()
+        silver.storage.list_files = MagicMock(
             return_value=["bronze/dmi/20241201_120000/pot_evaporation_makkink_data.json"]
         )
-        silver.gcs_access.download_json = MagicMock(
+        silver.storage.download_json = MagicMock(
             return_value={
                 "features": [
                     {
@@ -232,17 +240,17 @@ class TestDMIIntegration:
         assert silver_data is not None
         assert "pot_evaporation_makkink" in silver_data
 
-        # Verify that GCS was accessed for bronze data
-        silver.gcs_access.list_files.assert_called()
-        silver.gcs_access.download_json.assert_called()
+        # Verify that cloud storage was accessed for bronze data
+        silver.storage.list_files.assert_called()
+        silver.storage.download_json.assert_called()
 
     @pytest.mark.asyncio
     @pytest.mark.integration
     @pytest.mark.slow
-    async def test_dmi_silver_handles_bronze_errors(self, mock_gcs_access, dmi_silver_config):
+    async def test_dmi_silver_handles_bronze_errors(self, mock_storage_access, dmi_silver_config):
         """Test DMI silver pipeline handles bronze data with errors gracefully.
 
-        Note: This test may process real data from GCS for parameters not in bronze_data.
+        Note: This test may process real data from cloud storage for parameters not in bronze_data.
         """
         # Create silver instance
         silver = DMISilver(dmi_silver_config)

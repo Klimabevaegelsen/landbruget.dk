@@ -80,7 +80,7 @@ class TestPipelineCLIHelp:
         assert "--log-level" in result.stdout
         assert "--start-date" in result.stdout
         assert "--end-date" in result.stdout
-        assert "--gcs-bucket" in result.stdout
+        assert "--storage-bucket" in result.stdout
 
     def test_svineflytning_help(self):
         result = _run_help("svineflytning_pipeline")

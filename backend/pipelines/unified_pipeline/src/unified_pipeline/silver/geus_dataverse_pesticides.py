@@ -4,7 +4,7 @@ Silver layer processing for GEUS Dataverse Pesticides and PFAS data.
 This module handles the transformation of raw .rds data from the bronze layer
 into clean, structured parquet format. It reads the R Data Serialization files,
 converts them to pandas DataFrames, standardizes column names, creates geometries,
-and saves as parquet to GCS.
+and saves as parquet to cloud storage.
 
 Data source:
 - Input: AM_pest.rds (Annual Mean pesticide concentrations) - 633 substances, 4.2M+ analyses
@@ -47,7 +47,7 @@ class GEUSDataversePesticidesSilverConfig(BaseJobConfig):
 
     Attributes:
         dataset: Name of the dataset in storage
-        bucket: GCS bucket name for data storage
+        bucket: storage bucket name for data storage
         source_crs: Source coordinate reference system (already in EPSG:25832)
     """
 
@@ -66,11 +66,11 @@ class GEUSDataversePesticidesSilver(
     into clean parquet format with standardized schema.
 
     Processing flow:
-    1. Read .rds file from GCS (via manifest path or direct)
+    1. Read .rds file from cloud storage (via manifest path or direct)
     2. Convert to DataFrame using pyreadr
     3. Standardize column names
     4. Create Point geometries from coordinates
-    5. Save as parquet to GCS silver layer
+    5. Save as parquet to cloud storage silver layer
     """
 
     def __init__(self, config: GEUSDataversePesticidesSilverConfig):
@@ -93,12 +93,12 @@ class GEUSDataversePesticidesSilver(
             self.log.error(f"Failed to setup DuckDB spatial extension: {e}")
             raise
 
-    def _download_rds_from_gcs(self, rds_path: str) -> Path:
+    def _download_rds_from_storage(self, rds_path: str) -> Path:
         """
-        Download .rds file from GCS to a temporary local file.
+        Download .rds file from storage to a temporary local file.
 
         Args:
-            rds_path: Relative path to .rds file in GCS
+            rds_path: Relative path to .rds file in storage
 
         Returns:
             Path to the downloaded temporary file
@@ -113,10 +113,10 @@ class GEUSDataversePesticidesSilver(
 
         # Download using s3fs (R2) directly (binary read)
         with (
-            self.gcs_access.fs.open(storage_path, "rb") as gcs_file,
+            self.storage.fs.open(storage_path, "rb") as cloud_file,
             tmp_path.open("wb") as local_file,
         ):
-            local_file.write(gcs_file.read())
+            local_file.write(cloud_file.read())
 
         self.log.info(f"Downloaded .rds to {tmp_path}")
         return tmp_path
@@ -418,7 +418,7 @@ class GEUSDataversePesticidesSilver(
 
         Args:
             bronze_data: Optional manifest dict from bronze stage with 'rds_path' and
-                        'pfas_rds_path' keys. If None, will look for latest manifest in GCS.
+                        'pfas_rds_path' keys. If None, will look for latest manifest in cloud storage.
 
         Returns:
             Success information including dataset name and statistics,
@@ -451,12 +451,12 @@ class GEUSDataversePesticidesSilver(
                         f"Using bronze manifest: pest={pest_rds_path}, pfas={pfas_rds_path}"
                     )
                 else:
-                    # Find latest manifest in GCS
-                    self.log.info("No bronze data passed - reading from GCS")
+                    # Find latest manifest in cloud storage
+                    self.log.info("No bronze data passed - reading from cloud storage")
                     manifest_pattern = (
-                        f"gs://{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
+                        f"{self.config.bucket}/bronze/{self.config.dataset}/*/manifest.json"
                     )
-                    manifest_files = self.gcs_access.list_files(manifest_pattern)
+                    manifest_files = self.storage.list_files(manifest_pattern)
 
                     if not manifest_files:
                         self.log.error(
@@ -469,7 +469,7 @@ class GEUSDataversePesticidesSilver(
                     latest_manifest = sorted(manifest_files, reverse=True)[0]
                     self.log.info(f"Reading manifest from {latest_manifest}")
 
-                    manifest = self.gcs_access.download_json(latest_manifest)
+                    manifest = self.storage.download_json(latest_manifest)
                     pest_rds_path = manifest.get("pest_rds_path") or manifest.get("rds_path")
                     pfas_rds_path = manifest.get("pfas_rds_path")
 
@@ -479,7 +479,7 @@ class GEUSDataversePesticidesSilver(
 
                 # === Process Pesticide Data ===
                 self.log.info("=== Processing Pesticide Data ===")
-                tmp_pest_path = self._download_rds_from_gcs(pest_rds_path)
+                tmp_pest_path = self._download_rds_from_storage(pest_rds_path)
                 pest_df = self._convert_rds_to_dataframe(tmp_pest_path)
                 pest_table = self._transform_data(pest_df)
                 self._validate_geometries(pest_table)
@@ -495,7 +495,7 @@ class GEUSDataversePesticidesSilver(
                     FROM {pest_table}
                 """).fetchone()
 
-                # Save pesticide data to GCS silver layer
+                # Save pesticide data to cloud storage silver layer
                 self._save_data_with_metadata(
                     data=pest_table,
                     dataset=self.config.dataset,
@@ -508,7 +508,7 @@ class GEUSDataversePesticidesSilver(
                 pfas_stats = None
                 if pfas_rds_path:
                     self.log.info("=== Processing PFAS Data ===")
-                    tmp_pfas_path = self._download_rds_from_gcs(pfas_rds_path)
+                    tmp_pfas_path = self._download_rds_from_storage(pfas_rds_path)
                     pfas_df = self._convert_rds_to_dataframe(tmp_pfas_path)
                     pfas_table = self._transform_pfas_data(pfas_df)
                     self._validate_geometries(pfas_table)
@@ -524,7 +524,7 @@ class GEUSDataversePesticidesSilver(
                         FROM {pfas_table}
                     """).fetchone()
 
-                    # Save PFAS data to GCS silver layer (as subdataset)
+                    # Save PFAS data to cloud storage silver layer (as subdataset)
                     self._save_data_with_metadata(
                         data=pfas_table,
                         dataset=f"{self.config.dataset}_pfas",

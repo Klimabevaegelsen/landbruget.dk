@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from .gcs_data_access import GCSDataAccess
+from .gcs_data_access import StorageAccess
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +60,11 @@ class IncrementalProcessor:
     - Tracking data freshness and completeness
     """
 
-    def __init__(self, gcs_access: GCSDataAccess | None = None, supabase_client=None):
+    def __init__(self, storage_access: StorageAccess | None = None, supabase_client=None):
         """Initialize the incremental processor."""
-        self.gcs_access = gcs_access or GCSDataAccess()
+        self.storage = storage_access or StorageAccess()
         self.supabase = supabase_client
-        self.duckdb_conn = self.gcs_access.duckdb_conn
+        self.duckdb_conn = self.storage.duckdb_conn
 
     def merge_parquet_files(
         self,
@@ -77,8 +77,8 @@ class IncrementalProcessor:
         Merge multiple parquet files into a single output file with deduplication.
 
         Args:
-            source_paths: List of GCS paths to parquet files to merge
-            output_path: GCS path for the merged output file
+            source_paths: List of storage paths to parquet files to merge
+            output_path: storage path for the merged output file
             deduplication_columns: Columns to use for deduplication (if None, no deduplication)
             partition_columns: Columns to partition by (optional)
 
@@ -336,7 +336,7 @@ class IncrementalProcessor:
         try:
             # Check what data is available in the bronze timestamp
             bronze_path = f"bronze/{pipeline_name}/{bronze_timestamp}/"
-            files = self.gcs_access.list_files(bronze_path)
+            files = self.storage.list_files(bronze_path)
 
             # Analyze file availability
             for file_path in files:
@@ -474,8 +474,8 @@ class IncrementalProcessor:
 
 def get_incremental_processor(supabase_client=None) -> IncrementalProcessor:
     """Get a configured incremental processor instance."""
-    gcs_access = GCSDataAccess()
-    return IncrementalProcessor(gcs_access=gcs_access, supabase_client=supabase_client)
+    storage_access = StorageAccess()
+    return IncrementalProcessor(storage_access=storage_access, supabase_client=supabase_client)
 
 
 def merge_chr_parquet_files(
@@ -485,8 +485,8 @@ def merge_chr_parquet_files(
     Convenience function to merge CHR parquet files with standard deduplication.
 
     Args:
-        source_paths: List of GCS paths to CHR parquet files
-        output_path: GCS path for merged output
+        source_paths: List of storage paths to CHR parquet files
+        output_path: storage path for merged output
         remove_duplicates: Whether to deduplicate based on CHR number and date
 
     Returns:
@@ -508,8 +508,8 @@ def merge_vetstat_parquet_files(
     Convenience function to merge VetStat parquet files with standard deduplication.
 
     Args:
-        source_paths: List of GCS paths to VetStat parquet files
-        output_path: GCS path for merged output
+        source_paths: List of storage paths to VetStat parquet files
+        output_path: storage path for merged output
         remove_duplicates: Whether to deduplicate based on CHR number and product
 
     Returns:
