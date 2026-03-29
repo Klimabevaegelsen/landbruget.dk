@@ -1447,38 +1447,41 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     except Exception:
                         self.log.debug(f"Could not verify SPATIAL_JOIN operator for {year}")
 
-                    # Perform spatial matching to enrich marker fields
-                    # Optimized for DuckDB Spatial PR #545 SPATIAL_JOIN operator
-                    # Using single spatial predicate to trigger SPATIAL_JOIN operator
-                    enrichment_query = f"""
+                    # Two-step approach: SELECT with spatial join (triggers
+                    # SPATIAL_JOIN R-tree operator), then UPDATE from result.
+                    # Single-step UPDATE...FROM doesn't trigger the optimizer.
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE temp_organic_matches_{year} AS
+                        SELECT DISTINCT
+                            m.rowid as marker_rowid,
+                            o.conversion_date,
+                            o.deregistration_date,
+                            o.conversion_status
+                        FROM temp_marker_filtered_{year} m
+                        INNER JOIN temp_organic_filtered_{year} o
+                            ON ST_Contains(m.geometry, ST_Centroid(o.geometry))
+                        WHERE m.field_id = o.field_id
+                    """)
+
+                    matches_updated = self.conn.execute(f"""
                         UPDATE temp_marker_{year} SET
                             is_organic = TRUE,
                             organic_conversion_date = CASE
-                                WHEN organic_matches.conversion_date != ''
-                                THEN TRY_CAST(organic_matches.conversion_date AS TIMESTAMP)
+                                WHEN om.conversion_date != ''
+                                THEN TRY_CAST(om.conversion_date AS TIMESTAMP)
                                 ELSE NULL
                             END,
                             organic_deregistration_date = CASE
-                                WHEN organic_matches.deregistration_date != ''
-                                THEN TRY_CAST(organic_matches.deregistration_date AS TIMESTAMP)
+                                WHEN om.deregistration_date != ''
+                                THEN TRY_CAST(om.deregistration_date AS TIMESTAMP)
                                 ELSE NULL
                             END,
-                            organic_conversion_status = organic_matches.conversion_status
-                        FROM (
-                            SELECT DISTINCT
-                                m.rowid as marker_rowid,
-                                o.conversion_date,
-                                o.deregistration_date,
-                                o.conversion_status
-                            FROM temp_marker_filtered_{year} m
-                            INNER JOIN temp_organic_filtered_{year} o
-                                ON ST_Contains(m.geometry, ST_Centroid(o.geometry))
-                            WHERE m.field_id = o.field_id
-                        ) AS organic_matches
-                        WHERE temp_marker_{year}.rowid = organic_matches.marker_rowid
-                    """
+                            organic_conversion_status = om.conversion_status
+                        FROM temp_organic_matches_{year} om
+                        WHERE temp_marker_{year}.rowid = om.marker_rowid
+                    """).fetchone()[0]
 
-                    matches_updated = self.conn.execute(enrichment_query).fetchone()[0]
+                    self.conn.execute(f"DROP TABLE IF EXISTS temp_organic_matches_{year}")
                     enriched_count += matches_updated
 
                     self.log.info(
@@ -2185,24 +2188,28 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
                         """)
 
-                        # Perform field_id equi-join first, then spatial validation
-                        # This avoids a brute-force spatial scan across all pairs
-                        enrichment_query = f"""
-                            UPDATE temp_subsidy_{year} SET
-                                field_uuid = field_matches.field_uuid
-                            FROM (
-                                SELECT DISTINCT
-                                    s.rowid as subsidy_rowid,
-                                    m.field_uuid
-                                FROM temp_subsidy_filtered_{year} s
-                                INNER JOIN temp_marker_{year} m
-                                    ON s.field_id = m.field_id
-                                WHERE ST_Contains(m.geometry, ST_Centroid(s.geometry))
-                            ) AS field_matches
-                            WHERE temp_subsidy_{year}.rowid = field_matches.subsidy_rowid
-                        """
+                        # Two-step approach: SELECT with spatial join (triggers
+                        # SPATIAL_JOIN R-tree operator), then UPDATE from result.
+                        # Single-step UPDATE...FROM doesn't trigger the optimizer.
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE temp_spatial_matches_{year} AS
+                            SELECT DISTINCT
+                                s.rowid as subsidy_rowid,
+                                m.field_uuid
+                            FROM temp_subsidy_filtered_{year} s
+                            INNER JOIN temp_marker_{year} m
+                                ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
+                            WHERE s.field_id = m.field_id
+                        """)
 
-                        matches_updated = self.conn.execute(enrichment_query).fetchone()[0]
+                        matches_updated = self.conn.execute(f"""
+                            UPDATE temp_subsidy_{year} SET
+                                field_uuid = fm.field_uuid
+                            FROM temp_spatial_matches_{year} fm
+                            WHERE temp_subsidy_{year}.rowid = fm.subsidy_rowid
+                        """).fetchone()[0]
+
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_spatial_matches_{year}")
                         total_enriched += matches_updated
 
                         self.log.info(
