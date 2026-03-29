@@ -2185,9 +2185,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
                         """)
 
-                        # Perform spatial matching with field_id validation
-                        # Find marker fields that contain the centroid of subsidy fields
-                        # AND have matching field_id
+                        # Perform field_id equi-join first, then spatial validation
+                        # This avoids a brute-force spatial scan across all pairs
                         enrichment_query = f"""
                             UPDATE temp_subsidy_{year} SET
                                 field_uuid = field_matches.field_uuid
@@ -2197,8 +2196,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                                     m.field_uuid
                                 FROM temp_subsidy_filtered_{year} s
                                 INNER JOIN temp_marker_{year} m
-                                    ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
-                                WHERE s.field_id = m.field_id
+                                    ON s.field_id = m.field_id
+                                WHERE ST_Contains(m.geometry, ST_Centroid(s.geometry))
                             ) AS field_matches
                             WHERE temp_subsidy_{year}.rowid = field_matches.subsidy_rowid
                         """
