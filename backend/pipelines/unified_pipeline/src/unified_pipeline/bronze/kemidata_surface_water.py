@@ -288,6 +288,68 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                 await asyncio.sleep(wait)
         return 0  # unreachable, but satisfies type checker
 
+    async def _download_by_date_range(
+        self,
+        session: aiohttp.ClientSession,
+        session_id: str,
+        params: list[dict],
+        cloud_file: Any,
+        batch_counter: int,
+    ) -> int:
+        """
+        Download a parameter that exceeds 200k records by splitting into yearly date ranges.
+
+        Kemidata has data from ~1990 to present. We split into 5-year windows to stay
+        under the 200k record limit per download.
+        """
+        current_year = datetime.now().year
+        # 5-year windows from 1980 to present
+        windows = []
+        start = 1980
+        while start <= current_year:
+            end = min(start + 4, current_year)
+            windows.append((f"{start}-01-01", f"{end}-12-31"))
+            start = end + 1
+
+        total_bytes = 0
+        for win_idx, (from_date, to_date) in enumerate(windows, 1):
+            self.log.info(f"      Date range {win_idx}/{len(windows)}: {from_date} to {to_date}")
+            body = self._build_download_body(session_id, params)
+            body["period"] = {
+                "showLastResult": False,
+                "fromDate": from_date,
+                "toDate": to_date,
+            }
+            try:
+                win_bytes = await self._download_batch_with_retry(
+                    session, body, cloud_file, batch_counter + win_idx, 3
+                )
+                total_bytes += win_bytes
+            except Exception as win_exc:
+                if "200000 records" not in str(win_exc):
+                    raise
+                # Even 5-year window too big — split into individual years
+                self.log.warning(
+                    f"      Window {from_date}–{to_date} still exceeds 200k, "
+                    f"splitting into individual years..."
+                )
+                y_start = int(from_date[:4])
+                y_end = int(to_date[:4])
+                for year in range(y_start, y_end + 1):
+                    yr_body = self._build_download_body(session_id, params)
+                    yr_body["period"] = {
+                        "showLastResult": False,
+                        "fromDate": f"{year}-01-01",
+                        "toDate": f"{year}-12-31",
+                    }
+                    self.log.info(f"        Year {year}")
+                    yr_bytes = await self._download_batch_with_retry(
+                        session, yr_body, cloud_file, batch_counter + year, 3
+                    )
+                    total_bytes += yr_bytes
+
+        return total_bytes
+
     async def _download_csv_to_storage(
         self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
     ) -> tuple[str, int]:
@@ -332,23 +394,46 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                     )
                     total_bytes += batch_bytes
                 except Exception as exc:
-                    if "200000 records" not in str(exc) or len(batch) <= 1:
+                    if "200000 records" not in str(exc):
                         raise
-                    # Batch exceeds 200k record limit — split into individual params
-                    self.log.warning(
-                        f"  Batch {idx} exceeds 200k record limit, "
-                        f"splitting {len(batch)} params into individual downloads..."
-                    )
-                    for sub_idx, param in enumerate(batch, 1):
-                        batch_counter += 1
-                        sub_body = self._build_download_body(session_id, [param])
-                        self.log.info(
-                            f"    Sub-batch {sub_idx}/{len(batch)}: {param.get('name', 'unknown')}"
+                    if len(batch) <= 1:
+                        # Single param exceeds 200k — split by date range
+                        self.log.warning(
+                            "  Single parameter exceeds 200k limit, splitting by date range..."
                         )
-                        sub_bytes = await self._download_batch_with_retry(
-                            session, sub_body, cloud_file, batch_counter, max_retries
+                        sub_bytes = await self._download_by_date_range(
+                            session, session_id, batch, cloud_file, batch_counter
                         )
                         total_bytes += sub_bytes
+                    else:
+                        # Batch exceeds 200k — split into individual params
+                        self.log.warning(
+                            f"  Batch {idx} exceeds 200k record limit, "
+                            f"splitting {len(batch)} params into individual downloads..."
+                        )
+                        for sub_idx, param in enumerate(batch, 1):
+                            batch_counter += 1
+                            sub_body = self._build_download_body(session_id, [param])
+                            self.log.info(
+                                f"    Sub-batch {sub_idx}/{len(batch)}: "
+                                f"{param.get('name', 'unknown')}"
+                            )
+                            try:
+                                sub_bytes = await self._download_batch_with_retry(
+                                    session, sub_body, cloud_file, batch_counter, max_retries
+                                )
+                                total_bytes += sub_bytes
+                            except Exception as sub_exc:
+                                if "200000 records" not in str(sub_exc):
+                                    raise
+                                self.log.warning(
+                                    f"    Single param {param.get('name', 'unknown')} "
+                                    f"exceeds 200k, splitting by date range..."
+                                )
+                                dr_bytes = await self._download_by_date_range(
+                                    session, session_id, [param], cloud_file, batch_counter
+                                )
+                                total_bytes += dr_bytes
 
         size_mb = total_bytes / (1024 * 1024)
         self.log.info(f"Streamed CSV to storage: {size_mb:.1f} MB → {storage_path}")
