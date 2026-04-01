@@ -22,7 +22,7 @@ export function highlightField(
       'source-layer': SOURCE_LAYER,
       type: 'line',
       paint: {
-        'line-color': 'oklch(55% 0.15 142)',
+        'line-color': '#3a9d5d',
         'line-width': 3,
         'line-opacity': 1,
       },
