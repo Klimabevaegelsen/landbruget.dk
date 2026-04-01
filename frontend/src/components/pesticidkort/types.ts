@@ -1,0 +1,54 @@
+export type PesticideGrade = 'A' | 'B' | 'C' | 'D' | 'E';
+
+export interface GradeInfo {
+  grade: PesticideGrade;
+  label: string;
+  description: string;
+}
+
+export interface NearbyFieldSummary {
+  field_uuid: string;
+  crop_name: string;
+  area_hectares: number;
+  distance_m: number;
+  is_organic: boolean;
+  kommune: string;
+  total_pesticide_belastning: number;
+  total_pesticide_applications: number;
+  pfas_applications: number;
+  pfas_products_detail?: string;
+  diquat_applications: number;
+  diquat_products_detail?: string;
+  glyphosate_applications: number;
+  glyphosate_products_detail?: string;
+  other_applications: number;
+  other_products_detail?: string;
+  residential_buildings_proximity?: string;
+  educational_facilities_proximity?: string;
+  water_distance_proximity?: string;
+  bnbo_area_hectares?: number;
+  total_pfas_active_ingredient_kg?: number;
+  total_glyphosate_active_ingredient_kg?: number;
+}
+
+export interface PesticideReport {
+  address: string;
+  lat: number;
+  lng: number;
+  radius_m: number;
+  year: number;
+  grade: GradeInfo;
+  score: number;
+  fields_count: number;
+  pfas_fields_count: number;
+  nearest_field_m: number;
+  fields: NearbyFieldSummary[];
+  has_bnbo_overlap: boolean;
+  has_violations: boolean;
+}
+
+export interface AddressResult {
+  lat: number;
+  lng: number;
+  address: string;
+}
