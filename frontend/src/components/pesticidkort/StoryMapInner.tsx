@@ -89,8 +89,8 @@ function applyPaintMode(
     map.setPaintProperty('fields-fill', 'fill-color', [
       'case',
       ['>', ['coalesce', ['get', 'pfas_applications'], 0], 0],
-      'oklch(65% 0.15 45)',
-      'oklch(85% 0.03 250)',
+      '#d06a3a',
+      '#dfe6f2',
     ]);
     map.setPaintProperty('fields-fill', 'fill-opacity', 0.8);
   } else if (mode === 'burden') {
@@ -99,17 +99,17 @@ function applyPaintMode(
       ['linear'],
       ['coalesce', ['get', 'total_pesticide_belastning'], 0],
       0,
-      'oklch(75% 0.12 142)',
+      '#6abf69',
       2,
-      'oklch(80% 0.14 100)',
+      '#d4c54a',
       5,
-      'oklch(70% 0.16 65)',
+      '#d89135',
       10,
-      'oklch(60% 0.18 25)',
+      '#c4512c',
     ]);
     map.setPaintProperty('fields-fill', 'fill-opacity', 0.7);
   } else {
-    map.setPaintProperty('fields-fill', 'fill-color', 'oklch(55% 0.15 142)');
+    map.setPaintProperty('fields-fill', 'fill-color', '#3a9d5d');
     map.setPaintProperty('fields-fill', 'fill-opacity', 0.5);
   }
 }

@@ -53,7 +53,7 @@ export function ProximityRings({ lat, lng, radiusM }: ProximityRingsProps) {
         id="proximity-rings-fill"
         type="fill"
         paint={{
-          'fill-color': 'oklch(55% 0.15 250)',
+          'fill-color': '#3f6ab3',
           'fill-opacity': isVisible ? 0.04 : 0,
           'fill-opacity-transition': { duration: 650, delay: 50 },
         }}
@@ -62,7 +62,7 @@ export function ProximityRings({ lat, lng, radiusM }: ProximityRingsProps) {
         id="proximity-rings-line"
         type="line"
         paint={{
-          'line-color': 'oklch(55% 0.15 250)',
+          'line-color': '#3f6ab3',
           'line-width': 1.5,
           'line-dasharray': [4, 3],
           'line-opacity': isVisible ? 0.5 : 0,
