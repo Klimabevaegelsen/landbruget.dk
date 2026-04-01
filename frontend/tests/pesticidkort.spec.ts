@@ -1,0 +1,121 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Pesticidkort', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/pesticidkort');
+  });
+
+  test('should load landing page with heading, address input, year timeline, and explore button', async ({
+    page,
+  }) => {
+    await expect(page.locator('h1')).toBeVisible();
+
+    await expect(
+      page.locator('[data-testid="address-autocomplete-input"]')
+    ).toBeVisible();
+
+    await expect(page.locator('[data-testid="year-timeline"]')).toBeVisible();
+
+    await expect(
+      page.locator('[data-testid="explore-map-button"]')
+    ).toBeVisible();
+  });
+
+  test('should show year dots for 2015-2023 and clicking changes active year', async ({
+    page,
+  }) => {
+    await expect(page.locator('[data-testid="year-timeline"]')).toBeVisible();
+
+    for (let year = 2015; year <= 2023; year++) {
+      await expect(
+        page.locator(`[data-testid="year-dot-${year}"]`)
+      ).toBeVisible();
+    }
+
+    // Click a different year and verify it becomes active
+    const yearDot2018 = page.locator('[data-testid="year-dot-2018"]');
+    await yearDot2018.click();
+    await expect(yearDot2018).toHaveAttribute('aria-current', 'true');
+  });
+
+  test('should navigate to explore map mode and back to landing', async ({
+    page,
+  }) => {
+    const exploreButton = page.locator('[data-testid="explore-map-button"]');
+    await expect(exploreButton).toBeVisible();
+    await exploreButton.click();
+
+    // Verify we are in explore mode — back button should appear
+    const backButton = page.locator('[data-testid="explore-back-button"]');
+    await expect(backButton).toBeVisible({ timeout: 10000 });
+
+    // Navigate back to landing
+    await backButton.click();
+    await expect(
+      page.locator('[data-testid="address-autocomplete-input"]')
+    ).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should load directly into report mode via URL params', async ({
+    page,
+  }) => {
+    await page.goto(
+      '/pesticidkort?lat=55.6761&lng=12.5683&addr=K%C3%B8benhavn&y=2022'
+    );
+
+    // Report container should be visible
+    await expect(page.locator('[data-testid="personal-report"]')).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Share button should be available in report mode
+    await expect(
+      page.locator('[data-testid="share-report-button"]')
+    ).toBeVisible();
+  });
+
+  test('should show mode toggle defaulting to citizen', async ({ page }) => {
+    await expect(page.locator('[data-testid="mode-toggle"]')).toBeVisible();
+
+    const citizenButton = page.locator('[data-testid="mode-citizen-button"]');
+    await expect(citizenButton).toBeVisible();
+    await expect(citizenButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('should adapt landing page to mobile viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    await expect(page.locator('h1')).toBeVisible();
+
+    await expect(
+      page.locator('[data-testid="address-autocomplete-input"]')
+    ).toBeVisible();
+
+    await expect(page.locator('[data-testid="year-timeline"]')).toBeVisible();
+
+    await expect(
+      page.locator('[data-testid="explore-map-button"]')
+    ).toBeVisible();
+
+    // Ensure no horizontal overflow on mobile
+    const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    expect(bodyWidth).toBeLessThanOrEqual(viewportWidth + 1);
+  });
+
+  test('should have address input visible and focusable', async ({ page }) => {
+    const input = page.locator('[data-testid="address-autocomplete-input"]');
+    await expect(input).toBeVisible();
+    await input.focus();
+    await expect(input).toBeFocused();
+
+    // Verify it accepts text input
+    await input.fill('Nørrebrogade');
+    await expect(input).toHaveValue('Nørrebrogade');
+  });
+
+  test('should have correct page title', async ({ page }) => {
+    const title = await page.title();
+    expect(title.toLowerCase()).toContain('pesticid');
+  });
+});

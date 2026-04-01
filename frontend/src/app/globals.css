@@ -10,6 +10,27 @@
   }
 }
 
+@keyframes fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide-up {
+  animation: fade-slide-up 420ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-slide-up {
+    animation: none;
+  }
+}
+
 @keyframes blink {
   50% {
     border-color: transparent;
@@ -29,6 +50,13 @@
 }
 
 @layer utilities {
+  .font-display {
+    font-family: var(--font-fraunces), Georgia, serif;
+    font-variation-settings:
+      'SOFT' 40,
+      'WONK' 0;
+  }
+
   .animate-typing {
     animation:
       typing 2s steps(20, end),
