@@ -1,0 +1,3 @@
+[mcp_servers.agentlint]
+command = "npx"
+args = ["-y", "@agent-lint/mcp"]

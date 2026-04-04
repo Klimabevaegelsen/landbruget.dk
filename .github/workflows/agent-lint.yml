@@ -1,0 +1,26 @@
+name: Agent Lint
+
+on:
+  pull_request:
+    paths:
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - '.claude/rules/**'
+      - '.claude/skills/**'
+      - '.claude/commands/**'
+      - '.claude/agents/**'
+      - '.cursor/rules/**'
+
+jobs:
+  lint:
+    name: Agent Context Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Scan agent context artifacts
+        run: npx -y @agent-lint/cli scan --json

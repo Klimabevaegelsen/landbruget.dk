@@ -266,6 +266,10 @@ data_samples/
 # Claude Code local settings (not committed, agent-specific)
 .claude/settings.local.json
 
+# agentlint (transient scan reports)
+.agentlint-report.md
+.agentlint-backup/
+
 # Vercel
 .vercel
 
