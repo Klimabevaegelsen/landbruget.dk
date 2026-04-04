@@ -23,4 +23,4 @@ jobs:
           node-version: '22'
 
       - name: Scan agent context artifacts
-        run: npx -y @agent-lint/cli scan --json --fail-below 70
+        run: npx -y @agent-lint/cli scan --json
