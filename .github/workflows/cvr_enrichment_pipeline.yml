@@ -659,7 +659,7 @@ jobs:
     name: "Financial Documents"
     runs-on: ubuntu-latest
     needs: [cvr_collection, data_consolidation]
-    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'financial_documents')) || inputs.run_only_step == 'financial_documents') }}
+    if: ${{ !cancelled() && github.event_name != 'schedule' && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'financial_documents')) || inputs.run_only_step == 'financial_documents') }}
 
     steps:
       - name: Checkout code
@@ -748,7 +748,7 @@ jobs:
     name: "Address Geocoding"
     runs-on: ubuntu-latest
     needs: [cvr_collection, data_consolidation, pnumber_fetching]
-    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'address_geocoding')) || inputs.run_only_step == 'address_geocoding') }}
+    if: ${{ !cancelled() && github.event_name != 'schedule' && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'address_geocoding')) || inputs.run_only_step == 'address_geocoding') }}
 
     steps:
       - name: Checkout code
@@ -903,7 +903,10 @@ jobs:
       - name: Determine overall status
         id: status
         run: |
-          if [[ "${{ needs.address_geocoding.result }}" == "success" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" && "${{ needs.data_consolidation.result }}" == "success" ]]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=CVR Enrichment weekly schedule completed successfully (long-tail steps intentionally skipped)." >> $GITHUB_OUTPUT
+          elif [[ "${{ needs.address_geocoding.result }}" == "success" ]]; then
             echo "status=success" >> $GITHUB_OUTPUT
             echo "message=CVR Enrichment Pipeline completed successfully! 🎉" >> $GITHUB_OUTPUT
           elif [[ "${{ needs.cvr_collection.result }}" == "failure" ]]; then

@@ -1556,6 +1556,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 "🧠 Starting agricultural CVR identification using GKEA pattern matching..."
             )
 
+            def _resolve_column(columns: list[str], candidates: list[str]) -> str | None:
+                """Resolve the first matching column name using case-insensitive lookup."""
+                normalized = {c.lower(): c for c in columns}
+                for candidate in candidates:
+                    match = normalized.get(candidate.lower())
+                    if match:
+                        return match
+                return None
+
             # Process each field year and find corresponding GKEA data
             all_gkea_data_loaded = False
 
@@ -1571,29 +1580,78 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 # Load GKEA data for this year with proper column naming
                 self.log.info(f"📊 Loading GKEA fertilizer data for year {year} from {gkea_path}")
 
-                # Use correct column names based on year and file structure
-                if year in [2021, 2022, 2023]:
-                    gkea_column_name = f"gkea{year}_markplan_goedningskvote"
-                else:  # 2024 and future years
-                    gkea_column_name = f"gkea{year}_markplan_med_goedningsoplysninger"
-
-                # Area column varies by year
-                area_column = "column_6" if year == 2021 else "column_4"
-
                 table_name = f"gkea_raw_{year}" if not all_gkea_data_loaded else "gkea_raw_temp"
+                raw_table_name = f"{table_name}_source"
 
+                # Load source data first, then resolve year/schema-specific columns dynamically.
                 self.storage.query_parquet_direct(
                     gkea_path,
-                    f"""
-                    SELECT
-                        column_1 as cvr_number,
-                        {gkea_column_name} as gkea_journal_number,
-                        TRY_CAST({area_column} AS DOUBLE) as area_ha,
-                        column_10 as hovedafgroede,
-                        {year} as data_year
-                    """,
-                    table_name,
+                    "SELECT *",
+                    raw_table_name,
                 )
+
+                source_columns = [
+                    col[0] for col in self.conn.execute(f"DESCRIBE {raw_table_name}").fetchall()
+                ]
+                if not source_columns:
+                    self.log.warning(f"No columns found in GKEA data for year {year} - skipping")
+                    self.conn.execute(f"DROP TABLE IF EXISTS {raw_table_name}")
+                    continue
+
+                # Known historical column variants (CSV-style column_* and named parquet schemas).
+                cvr_col = _resolve_column(
+                    source_columns,
+                    ["column_1", "cvr", "cvr_nr", "cvr_number", "cvrnummer"],
+                )
+                journal_col = _resolve_column(
+                    source_columns,
+                    [
+                        f"gkea{year}_markplan_goedningskvote",
+                        f"gkea{year}_markplan_med_goedningsoplysninger",
+                        "gkea_journal_number",
+                        "journalnr",
+                        "journal_number",
+                        "journal",
+                    ],
+                )
+                area_col = _resolve_column(
+                    source_columns,
+                    ["column_6", "column_4", "areal", "area_ha", "field_area", "markareal"],
+                )
+                crop_col = _resolve_column(
+                    source_columns,
+                    ["column_10", "hovedafgroede", "crop_code", "afgroede", "afgroedekode"],
+                )
+
+                missing = [
+                    name
+                    for name, value in [
+                        ("cvr", cvr_col),
+                        ("journal", journal_col),
+                        ("area", area_col),
+                        ("crop", crop_col),
+                    ]
+                    if value is None
+                ]
+                if missing:
+                    self.log.warning(
+                        f"GKEA year {year} missing required columns ({', '.join(missing)}); "
+                        "skipping CVR identification for this year"
+                    )
+                    self.conn.execute(f"DROP TABLE IF EXISTS {raw_table_name}")
+                    continue
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name} AS
+                    SELECT
+                        CAST("{cvr_col}" AS VARCHAR) as cvr_number,
+                        CAST("{journal_col}" AS VARCHAR) as gkea_journal_number,
+                        TRY_CAST("{area_col}" AS DOUBLE) as area_ha,
+                        CAST("{crop_col}" AS VARCHAR) as hovedafgroede,
+                        {year} as data_year
+                    FROM {raw_table_name}
+                """)
+                self.conn.execute(f"DROP TABLE IF EXISTS {raw_table_name}")
 
                 # Apply filtering after loading the data
                 self.conn.execute(f"""

@@ -382,7 +382,13 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         total_bytes = 0
         max_retries = 3
         batch_counter = 0
-        with self.storage.fs.open(storage_path, "wb") as cloud_file:
+        # R2 multipart uploads can fail with uneven chunks unless fixed block sizes are enforced.
+        with self.storage.fs.open(
+            storage_path,
+            "wb",
+            block_size=8 * 1024 * 1024,
+            fixed_block_size=True,
+        ) as cloud_file:
             for idx, batch in enumerate(batches, 1):
                 batch_counter += 1
                 self.log.info(f"  Download batch {idx}/{len(batches)} ({len(batch)} parameters)")
