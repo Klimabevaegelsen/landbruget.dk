@@ -1,4 +1,4 @@
-import { TooltipProps } from 'recharts';
+import { DefaultTooltipContentProps, TooltipProps } from 'recharts';
 import {
   NameType,
   ValueType,
@@ -7,6 +7,10 @@ import {
 interface CustomTooltipProps extends TooltipProps<ValueType, NameType> {
   unit?: string;
 }
+
+type TooltipEntry = NonNullable<
+  DefaultTooltipContentProps<ValueType, NameType>['payload']
+>[number];
 
 export function CustomTooltip({
   active,
@@ -21,7 +25,7 @@ export function CustomTooltip({
   return (
     <div className="bg-background border-border rounded-lg border p-4 shadow-md">
       <p className="text-base font-semibold">{label}</p>
-      {payload.map((entry, index) => {
+      {payload.map((entry: TooltipEntry, index: number) => {
         const colorStyle = { color: entry.color };
         return (
           <p

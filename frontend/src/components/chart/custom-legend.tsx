@@ -1,7 +1,9 @@
-import { Payload } from 'recharts/types/component/DefaultLegendContent';
+import { DefaultLegendContentProps } from 'recharts';
+
+type LegendPayload = NonNullable<DefaultLegendContentProps['payload']>[number];
 
 interface CustomLegendProps {
-  payload?: Payload[];
+  payload?: LegendPayload[];
   onLegendClick?: (dataKey: string) => void;
 }
 

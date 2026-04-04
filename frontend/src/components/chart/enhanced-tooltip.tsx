@@ -1,6 +1,6 @@
 'use client';
 
-import { TooltipProps } from 'recharts';
+import { DefaultTooltipContentProps, TooltipProps } from 'recharts';
 import {
   NameType,
   ValueType,
@@ -12,6 +12,10 @@ interface EnhancedTooltipProps extends TooltipProps<ValueType, NameType> {
   chartType?: string;
   showComparison?: boolean;
 }
+
+type TooltipEntry = NonNullable<
+  DefaultTooltipContentProps<ValueType, NameType>['payload']
+>[number];
 
 export function EnhancedTooltip({
   active,
@@ -47,7 +51,7 @@ export function EnhancedTooltip({
 
         {/* Data entries */}
         <div className="space-y-2">
-          {payload.map((entry, index) => {
+          {payload.map((entry: TooltipEntry, index: number) => {
             const value = entry.value as number;
             const previousValue = entry.payload?.previousValue as
               | number
@@ -102,7 +106,7 @@ export function EnhancedTooltip({
                 <div className="flex items-center space-x-2">
                   <span className="text-foreground font-mono text-sm font-medium">
                     {payload
-                      .reduce((sum, entry) => {
+                      .reduce((sum: number, entry: TooltipEntry) => {
                         const value = entry.value as number;
                         return sum + (typeof value === 'number' ? value : 0);
                       }, 0)
@@ -138,7 +142,7 @@ export function CompactTooltip({
     <div className="bg-background min-w-[160px] rounded-lg border px-3 py-2 shadow-sm">
       <div className="text-foreground mb-1 text-xs font-medium">{label}</div>
       <div className="space-y-1">
-        {payload.map((entry, index) => {
+        {payload.map((entry: TooltipEntry, index: number) => {
           const dotStyle = { backgroundColor: entry.color };
           return (
             <div
