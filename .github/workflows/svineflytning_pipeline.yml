@@ -90,6 +90,11 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libxml2-dev libxmlsec1-dev libxmlsec1-openssl
+
       - name: Install dependencies
         run: |
           # Install unified pipeline dependencies FIRST (needed for R2 access)
@@ -99,6 +104,20 @@ jobs:
           # Install svineflytning pipeline dependencies
           cd ../svineflytning_pipeline
           uv pip install --system -e .
+
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec lxml xmlsec
+
+      - name: Validate XML dependencies
+        run: |
+          python - <<'PY'
+          import lxml.etree as ET
+          import xmlsec
+          print("lxml runtime libxml:", ET.LIBXML_VERSION)
+          print("lxml compiled libxml:", ET.LIBXML_COMPILED_VERSION)
+          print("xmlsec version:", xmlsec.__version__)
+          PY
 
       - name: "Set up environment variables"
         env:

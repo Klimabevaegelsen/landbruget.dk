@@ -103,6 +103,12 @@ jobs:
       - name: Run GCS to R2 sync
         if: ${{ !inputs.skip_sync }}
         working-directory: backend/scripts
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           echo "🚀 Starting GCS to R2 sync..."
           echo "⏰ Started at: $(date)"
