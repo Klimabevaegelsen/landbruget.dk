@@ -31,9 +31,9 @@ export function AllocationBar({
         {dosage} L
       </td>
       <td className="py-2 pl-4">
-        <div className="bg-muted h-4 w-full overflow-hidden rounded-sm">
+        <div className="bg-primary/10 h-4 w-full overflow-hidden rounded-sm">
           <div
-            className="bg-muted-foreground/40 h-full rounded-sm transition-all duration-300"
+            className="bg-primary/40 h-full rounded-sm transition-all duration-300"
             style={widthStyle}
           />
         </div>

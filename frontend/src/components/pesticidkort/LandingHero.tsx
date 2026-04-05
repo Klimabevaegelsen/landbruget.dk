@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'motion/react';
 import { AddressAutocomplete } from '@/components/pesticidkort/AddressAutocomplete';
 import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
 import {
@@ -31,16 +32,8 @@ export function LandingHero({
       variants={staggerContainer(!!reducedMotion)}
       initial={reducedMotion ? false : 'hidden'}
       animate="visible"
-      className="bg-background relative flex min-h-screen flex-col overflow-hidden px-6 sm:px-8"
+      className="bg-primary/[0.02] relative flex min-h-screen flex-col overflow-hidden px-6 sm:px-8"
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10"
-      >
-        <div className="bg-primary/20 absolute top-[-12rem] left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full blur-3xl" />
-        <div className="bg-warning/20 absolute right-[-8rem] bottom-[-8rem] h-[22rem] w-[22rem] rounded-full blur-3xl" />
-        <div className="bg-info/15 absolute top-1/3 left-[-10rem] h-[20rem] w-[20rem] rounded-full blur-3xl" />
-      </div>
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center py-16">
         <motion.p
           variants={fadeSlideUp}
@@ -74,34 +67,35 @@ export function LandingHero({
           <YearTimeline year={year} onChange={onYearChange} />
         </motion.div>
 
-        <motion.button
+        <motion.div
           variants={fadeSlideUp}
-          onClick={onExploreMap}
-          data-testid="explore-map-button"
-          className="text-primary mt-2 flex min-h-[44px] w-fit items-center text-sm font-medium underline-offset-4 hover:underline"
+          className="mt-6 flex items-center gap-3 text-sm"
         >
-          Eller udforsk kortet direkte
-        </motion.button>
-
-        <motion.button
-          variants={fadeSlideUp}
-          onClick={() => router.push('/markanalyse')}
-          data-testid="go-expert-button"
-          className="text-muted-foreground mt-5 flex min-h-[44px] w-fit items-center text-sm underline-offset-4 hover:underline"
-        >
-          Arbejder du professionelt med data? Gå til ekspertvisning
-        </motion.button>
+          <button
+            onClick={onExploreMap}
+            data-testid="explore-map-button"
+            className="text-primary flex min-h-[44px] items-center font-medium underline-offset-4 hover:underline"
+          >
+            Udforsk kortet
+          </button>
+          <span className="text-border">·</span>
+          <button
+            onClick={() => router.push('/markanalyse')}
+            data-testid="go-expert-button"
+            className="text-muted-foreground flex min-h-[44px] items-center underline-offset-4 hover:underline"
+          >
+            Ekspertvisning
+          </button>
+          <span className="text-border">·</span>
+          <Link
+            href="/pesticidanalyse/metode"
+            data-testid="methodology-link"
+            className="text-muted-foreground flex min-h-[44px] items-center underline-offset-4 hover:underline"
+          >
+            Om metoden
+          </Link>
+        </motion.div>
       </div>
-
-      <motion.footer
-        variants={fadeSlideUp}
-        className="text-muted-foreground mx-auto w-full max-w-2xl border-t pt-6 pb-8"
-      >
-        <p className="text-xs leading-relaxed">
-          Data fra Miljøstyrelsen, Landbrugsstyrelsen, Geodatastyrelsen og 18+
-          andre offentlige kilder. Sidst opdateret 2023.
-        </p>
-      </motion.footer>
     </motion.main>
   );
 }

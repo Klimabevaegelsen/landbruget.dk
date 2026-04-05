@@ -39,3 +39,9 @@ export function getBarColor(decile: number): string {
   if (decile <= 6) return 'oklch(70% 0.14 85)';
   return 'oklch(60% 0.18 25)';
 }
+
+export function getBurdenLabel(decile: number): string {
+  if (decile <= 3) return 'under gns.';
+  if (decile <= 6) return 'omkring gns.';
+  return 'over gns.';
+}

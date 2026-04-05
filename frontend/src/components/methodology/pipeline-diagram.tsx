@@ -4,6 +4,7 @@ interface PipelineStage {
   name: string;
   label: string;
   description: string;
+  accent: string;
 }
 
 const STAGES: PipelineStage[] = [
@@ -11,16 +12,19 @@ const STAGES: PipelineStage[] = [
     name: 'bronze',
     label: 'Bronze',
     description: 'Rå data fra offentlige kilder, uændret',
+    accent: 'bg-primary/10 text-primary/70',
   },
   {
     name: 'silver',
     label: 'Silver',
     description: 'Renset, valideret og standardiseret',
+    accent: 'bg-primary/15 text-primary/80',
   },
   {
     name: 'gold',
     label: 'Gold',
     description: 'Fordelt til markniveau og analyseklar',
+    accent: 'bg-primary/20 text-primary',
   },
 ];
 
@@ -44,7 +48,12 @@ export function PipelineDiagram({
                 activeStage && activeStage !== stage.name && 'opacity-50'
               )}
             >
-              <div className="text-muted-foreground mb-1 text-xs font-semibold tracking-widest uppercase">
+              <div
+                className={cn(
+                  'mb-2 inline-block rounded-full px-3 py-1 text-xs font-semibold tracking-widest uppercase',
+                  stage.accent
+                )}
+              >
                 {stage.label}
               </div>
               <div className="text-muted-foreground max-w-[150px] text-[13px] leading-snug">
@@ -52,7 +61,7 @@ export function PipelineDiagram({
               </div>
             </div>
             {i < STAGES.length - 1 && (
-              <span className="text-border mt-1">&rarr;</span>
+              <span className="text-primary/40 mt-1">→</span>
             )}
           </div>
         ))}

@@ -11,12 +11,14 @@ Data source:
 - Files:
   - AM_pest.rds (Annual Mean pesticide concentrations) - 633 substances, 4.2M+ analyses
   - AM_pfas.rds (Annual Mean PFAS concentrations) - 26 substances, 397k analyses
+  - clean_dataset_with_metadata_20251002.rds (Sample-level clean dataset) - ~9.4M analyses
 - Format: R Data Serialization format (.rds)
 
 Key advantages over WFS:
 - 633 pesticide substances + 26 PFAS substances (vs 6-8 via WFS)
 - 4.6M+ total analyses (vs ~50k via WFS)
 - Full temporal data 1981-2025 with reliable PROEVEAAR column
+- Sample-level clean dataset with individual analyses, LOQ substitution, and monitoring flags
 - Pre-processed annual means ready for analysis
 """
 
@@ -47,6 +49,7 @@ class GEUSDataversePesticidesBronzeConfig(BaseJobConfig):
         description: Brief description of the data
         pest_url: Direct download URL for the AM_pest.rds file
         pfas_url: Direct download URL for the AM_pfas.rds file
+        clean_url: Direct download URL for the clean dataset (sample-level, Deliverable 2)
         frequency: How often the data is updated (annual for VP4 dataset)
         bucket: storage bucket name for raw data storage
         source_crs: Coordinate reference system of source data
@@ -63,6 +66,7 @@ class GEUSDataversePesticidesBronzeConfig(BaseJobConfig):
     # Direct download URLs from https://doi.org/10.22008/FK2/IHVDXL
     pest_url: str = "https://dataverse.geus.dk/api/access/datafile/99149"  # AM_pest.rds
     pfas_url: str = "https://dataverse.geus.dk/api/access/datafile/99150"  # AM_pfas.rds
+    clean_url: str = "https://dataverse.geus.dk/api/access/datafile/99142"  # clean_dataset_with_metadata_20251002.rds
     frequency: str = "annual"
     bucket: str = "landbruget-data"
     source_crs: str = "EPSG:25832"  # Data uses UTM32 EUREF89 coordinates
@@ -187,21 +191,25 @@ class GEUSDataversePesticidesBronze(
                 timeout=timeout,
             ) as session:
                 try:
-                    # Download both .rds files
+                    # Download all .rds files
                     pest_content = await self._download_rds_file(
                         session, self.config.pest_url, "AM_pest.rds"
                     )
                     pfas_content = await self._download_rds_file(
                         session, self.config.pfas_url, "AM_pfas.rds"
                     )
+                    clean_content = await self._download_rds_file(
+                        session, self.config.clean_url, "clean_dataset.rds"
+                    )
 
                     # Save to cloud storage
                     pest_path = self._save_rds_to_storage(pest_content, "AM_pest.rds")
                     pfas_path = self._save_rds_to_storage(pfas_content, "AM_pfas.rds")
+                    clean_path = self._save_rds_to_storage(clean_content, "clean_dataset.rds")
 
                     # Create manifest for silver layer
                     run_timestamp = self.date_pattern
-                    total_size = len(pest_content) + len(pfas_content)
+                    total_size = len(pest_content) + len(pfas_content) + len(clean_content)
                     manifest = {
                         "dataset": self.config.dataset,
                         "bucket": self.config.bucket,
@@ -209,15 +217,19 @@ class GEUSDataversePesticidesBronze(
                         "run_timestamp": run_timestamp,
                         "source_doi": "https://doi.org/10.22008/FK2/IHVDXL",
                         "downloaded_at": datetime.now().isoformat(),
-                        # Pesticide data
+                        # Pesticide data (AM - Deliverable 3)
                         "pest_url": self.config.pest_url,
                         "pest_file_size_bytes": len(pest_content),
                         "rds_path": pest_path,  # Backwards compatible
                         "pest_rds_path": pest_path,
-                        # PFAS data
+                        # PFAS data (AM - Deliverable 3)
                         "pfas_url": self.config.pfas_url,
                         "pfas_file_size_bytes": len(pfas_content),
                         "pfas_rds_path": pfas_path,
+                        # Clean dataset (sample-level - Deliverable 2)
+                        "clean_url": self.config.clean_url,
+                        "clean_file_size_bytes": len(clean_content),
+                        "clean_rds_path": clean_path,
                     }
 
                     # Save manifest to cloud storage
@@ -236,7 +248,7 @@ class GEUSDataversePesticidesBronze(
 
                             pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
                                 source_key="geus_dataverse_pesticides",
-                                record_count=2,  # Two files
+                                record_count=3,  # Three files: AM_pest, AM_pfas, clean_dataset
                                 processing_duration=processing_duration,
                             )
 
@@ -253,7 +265,8 @@ class GEUSDataversePesticidesBronze(
                         f"GEUS Dataverse bronze job completed successfully. "
                         f"Downloaded {total_size / (1024 * 1024):.1f} MB total "
                         f"(pest: {len(pest_content) / (1024 * 1024):.1f} MB, "
-                        f"pfas: {len(pfas_content) / (1024 * 1024):.1f} MB)"
+                        f"pfas: {len(pfas_content) / (1024 * 1024):.1f} MB, "
+                        f"clean: {len(clean_content) / (1024 * 1024):.1f} MB)"
                     )
 
                     return manifest

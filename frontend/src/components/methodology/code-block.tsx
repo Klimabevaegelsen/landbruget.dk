@@ -18,16 +18,14 @@ export function CodeBlock({
   return (
     <div
       className={cn(
-        'my-4 overflow-hidden rounded border border-border',
+        'border-primary/20 my-4 overflow-hidden rounded border',
         className
       )}
       data-testid="code-block"
     >
       {title && (
-        <div className="border-border bg-muted border-b px-4 py-1.5">
-          <span className="text-muted-foreground font-mono text-xs">
-            {title}
-          </span>
+        <div className="border-primary/20 bg-primary/[0.04] border-b px-4 py-1.5">
+          <span className="text-primary/60 font-mono text-xs">{title}</span>
         </div>
       )}
       <pre className="bg-card overflow-x-auto p-4">

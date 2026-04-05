@@ -4,6 +4,8 @@ import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { AddressAutocomplete } from '@/components/pesticidkort/AddressAutocomplete';
 import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
+import { MapLegend } from '@/components/pesticidkort/MapLegend';
+import { MapOnboardingHint } from '@/components/pesticidkort/MapOnboardingHint';
 import type { AddressResult } from '@/components/pesticidkort/types';
 
 const ExploreMap = dynamic(
@@ -52,6 +54,9 @@ export function ExploreMapView({
       <div className="absolute inset-0" role="region" aria-label="Pesticidkort">
         <ExploreMap year={year} />
       </div>
+
+      <MapLegend />
+      <MapOnboardingHint />
 
       <div className="absolute top-0 right-0 left-0 z-20 px-4 pt-3">
         <div className="mx-auto flex max-w-lg items-center gap-2">

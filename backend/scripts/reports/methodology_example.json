@@ -1,0 +1,49 @@
+{
+  "year": 2022,
+  "fieldYear": 2023,
+  "cvr": "41996528",
+  "cropName": "Ukendt",
+  "pesticide": {
+    "name": "Roundup PowerMax (tid. MON 79991)",
+    "registrationNumber": "48-47",
+    "totalDose": 51.165,
+    "unit": "2",
+    "reportedAreaHa": 38.47
+  },
+  "fields": [
+    {
+      "fieldUuid": "0D402F86-D47F-5D56-8777-0B0A65FEEC9F",
+      "fieldId": "0D402F86-D47F-5D56-8777-0B0A65FEEC9F",
+      "areaHa": 16.24,
+      "allocatedDose": 21.599,
+      "centroid": [
+        524750.212229,
+        6124268.4184
+      ]
+    },
+    {
+      "fieldUuid": "9F926B9C-1622-52CD-8C0C-26FA79A790DA",
+      "fieldId": "9F926B9C-1622-52CD-8C0C-26FA79A790DA",
+      "areaHa": 14.43,
+      "allocatedDose": 19.192,
+      "centroid": [
+        524199.749619,
+        6123120.088228
+      ]
+    },
+    {
+      "fieldUuid": "9E860EB7-9194-515A-8B9A-AD21D62D2736",
+      "fieldId": "9E860EB7-9194-515A-8B9A-AD21D62D2736",
+      "areaHa": 7.8,
+      "allocatedDose": 10.374,
+      "centroid": [
+        525079.530258,
+        6124549.631957
+      ]
+    }
+  ],
+  "confidence": 1.0,
+  "areaDeviationPct": 0.0,
+  "allocationMethod": "Proportional arealfordeling",
+  "municipality": "Haderslev"
+}

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { LandingHero } from '@/components/pesticidkort/LandingHero';
 import { ReportMapView } from '@/components/pesticidkort/ReportMapView';
 import { ExploreMapView } from '@/components/pesticidkort/ExploreMapView';

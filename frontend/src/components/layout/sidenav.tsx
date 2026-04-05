@@ -2,13 +2,12 @@
 
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { LucideIcon } from 'lucide-react';
 
 import { useHashStore } from '@/stores/hashStore';
 
-// Custom hook for media query
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
 
@@ -38,6 +37,79 @@ export interface NavigationGroup {
   icon?: LucideIcon;
 }
 
+function NavLink({
+  item,
+  currentHash,
+  isCollapsed,
+  indent,
+  onClick,
+}: {
+  item: NavigationItem;
+  currentHash: string;
+  isCollapsed: boolean;
+  indent: 'pl-3' | 'pl-6';
+  onClick: () => void;
+}) {
+  const itemHash = item.href.split('#')[1];
+  const isCurrent = currentHash === '#' + itemHash;
+  return (
+    <div
+      className={cn(
+        isCurrent
+          ? 'text-foreground font-bold'
+          : 'text-foreground hover:text-foreground font-medium hover:font-semibold',
+        'group flex cursor-pointer gap-x-3 p-4 pl-0'
+      )}
+      onClick={onClick}
+    >
+      <div className={cn(indent, isCurrent && 'border-primary border-l-2')}>
+        {!isCollapsed && item.name}
+      </div>
+    </div>
+  );
+}
+
+function NavItemWithSubs({
+  item,
+  currentHash,
+  isCollapsed,
+  onItemClick,
+  onSubItemClick,
+}: {
+  item: NavigationItem;
+  currentHash: string;
+  isCollapsed: boolean;
+  onItemClick: (item: NavigationItem) => void;
+  onSubItemClick: (item: NavigationItem) => void;
+}) {
+  return (
+    <li key={item.id}>
+      <NavLink
+        item={item}
+        currentHash={currentHash}
+        isCollapsed={isCollapsed}
+        indent="pl-3"
+        onClick={() => onItemClick(item)}
+      />
+      {item.subItems && (
+        <ul>
+          {item.subItems.map((subItem) => (
+            <li key={subItem.id}>
+              <NavLink
+                item={subItem}
+                currentHash={currentHash}
+                isCollapsed={isCollapsed}
+                indent="pl-6"
+                onClick={() => onSubItemClick(subItem)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 function SidenavClient({
   navigation,
   groupedNavigation,
@@ -53,7 +125,6 @@ function SidenavClient({
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [isCollapsed, setIsCollapsed] = useState(isMobile);
 
-  // Update isCollapsed when screen size changes
   useEffect(() => {
     setIsCollapsed(isMobile);
   }, [isMobile]);
@@ -94,7 +165,6 @@ function SidenavClient({
     if (hash) {
       setCurrentHash('#' + hash);
 
-      // replace the current url with the new hash without reloading the page
       window.history.pushState({}, '', item.href);
 
       const element = document.getElementById(hash);
@@ -153,8 +223,7 @@ function SidenavClient({
             )}
           >
             {groupedNavigation
-              ? // Render grouped navigation
-                groupedNavigation.map((group, groupIndex) => (
+              ? groupedNavigation.map((group, groupIndex) => (
                   <div
                     key={group.name}
                     className={groupIndex > 0 ? 'mt-6' : ''}
@@ -165,137 +234,28 @@ function SidenavClient({
                         {group.name}
                       </h3>
                     </div>
-                    {group.items.map((item) => {
-                      const itemHash = item.href.split('#')[1];
-                      const isCurrent = currentHash === '#' + itemHash;
-
-                      return (
-                        <li key={item.id}>
-                          <div
-                            className={cn(
-                              isCurrent
-                                ? 'text-foreground font-bold'
-                                : 'text-foreground hover:text-foreground font-medium hover:font-semibold',
-                              'group flex cursor-pointer gap-x-3 p-4 pl-0'
-                            )}
-                            onClick={() => {
-                              handleClick(item);
-                            }}
-                          >
-                            <div
-                              className={cn(
-                                'pl-3',
-                                isCurrent && 'border-primary border-l-2'
-                              )}
-                            >
-                              {!isCollapsed && item.name}
-                            </div>
-                          </div>
-                          {item.subItems && (
-                            <ul className="">
-                              {item.subItems.map((subItem) => {
-                                const subItemHash = subItem.href.split('#')[1];
-                                const isSubCurrent =
-                                  currentHash === '#' + subItemHash;
-
-                                return (
-                                  <li key={subItem.id}>
-                                    <div
-                                      className={cn(
-                                        isSubCurrent
-                                          ? 'text-foreground font-bold'
-                                          : 'text-foreground hover:text-foreground font-medium hover:font-semibold',
-                                        'group flex cursor-pointer gap-x-3 p-4 pl-0'
-                                      )}
-                                      onClick={() => {
-                                        handleClick(subItem, true);
-                                      }}
-                                    >
-                                      <div
-                                        className={cn(
-                                          'pl-6',
-                                          isSubCurrent &&
-                                            'border-primary border-l-2'
-                                        )}
-                                      >
-                                        {!isCollapsed && subItem.name}
-                                      </div>
-                                    </div>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </li>
-                      );
-                    })}
+                    {group.items.map((item) => (
+                      <NavItemWithSubs
+                        key={item.id}
+                        item={item}
+                        currentHash={currentHash}
+                        isCollapsed={isCollapsed}
+                        onItemClick={handleClick}
+                        onSubItemClick={(sub) => handleClick(sub, true)}
+                      />
+                    ))}
                   </div>
                 ))
-              : // Render ungrouped navigation (original behavior)
-                navigation?.map((item) => {
-                  const itemHash = item.href.split('#')[1];
-                  const isCurrent = currentHash === '#' + itemHash;
-
-                  return (
-                    <li key={item.id}>
-                      <div
-                        className={cn(
-                          isCurrent
-                            ? 'text-foreground font-bold'
-                            : 'text-foreground hover:text-foreground font-medium hover:font-semibold',
-                          'group flex cursor-pointer gap-x-3 p-4 pl-0'
-                        )}
-                        onClick={() => {
-                          handleClick(item);
-                        }}
-                      >
-                        <div
-                          className={cn(
-                            'pl-3',
-                            isCurrent && 'border-primary border-l-2'
-                          )}
-                        >
-                          {!isCollapsed && item.name}
-                        </div>
-                      </div>
-                      {item.subItems && (
-                        <ul className="">
-                          {item.subItems.map((subItem) => {
-                            const subItemHash = subItem.href.split('#')[1];
-                            const isSubCurrent =
-                              currentHash === '#' + subItemHash;
-
-                            return (
-                              <li key={subItem.id}>
-                                <div
-                                  className={cn(
-                                    isSubCurrent
-                                      ? 'text-foreground font-bold'
-                                      : 'text-foreground hover:text-foreground font-medium hover:font-semibold',
-                                    'group flex cursor-pointer gap-x-3 p-4 pl-0'
-                                  )}
-                                  onClick={() => {
-                                    handleClick(subItem, true);
-                                  }}
-                                >
-                                  <div
-                                    className={cn(
-                                      'pl-6',
-                                      isSubCurrent &&
-                                        'border-primary border-l-2'
-                                    )}
-                                  >
-                                    {!isCollapsed && subItem.name}
-                                  </div>
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
+              : navigation?.map((item) => (
+                  <NavItemWithSubs
+                    key={item.id}
+                    item={item}
+                    currentHash={currentHash}
+                    isCollapsed={isCollapsed}
+                    onItemClick={handleClick}
+                    onSubItemClick={(sub) => handleClick(sub, true)}
+                  />
+                ))}
           </motion.ul>
         )}
       </AnimatePresence>
@@ -303,7 +263,6 @@ function SidenavClient({
   );
 }
 
-// Server component wrapper
 export function Sidenav(props: {
   navigation?: NavigationItem[];
   groupedNavigation?: NavigationGroup[];
