@@ -1,4 +1,4 @@
-import type { Variants } from 'framer-motion';
+import type { Variants } from 'motion/react';
 
 const EASE_OUT_QUART: [number, number, number, number] = [0.25, 1, 0.5, 1];
 

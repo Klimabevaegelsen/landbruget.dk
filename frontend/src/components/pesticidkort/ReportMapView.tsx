@@ -94,10 +94,6 @@ export function ReportMapView({
 
   const reportPanel = (
     <>
-      <div className="px-6 pt-2">
-        <ModeToggle mode="citizen" onChange={handleModeChange} />
-        <YearTimeline year={year} onChange={onYearChange} compact />
-      </div>
       {report ? (
         <PersonalReport
           report={report}
@@ -106,15 +102,15 @@ export function ReportMapView({
         />
       ) : (
         <div aria-live="polite" className="space-y-4 px-6 py-5">
-          <div className="bg-muted h-5 w-32 animate-pulse rounded" />
-          <div className="bg-muted h-20 w-full animate-pulse rounded-xl" />
-          <div className="bg-muted h-24 w-full animate-pulse rounded-xl" />
-          <div className="bg-muted h-24 w-full animate-pulse rounded-xl" />
-          <p className="text-muted-foreground text-xs">
-            Indlæser pesticidrapport...
-          </p>
+          <div className="bg-muted h-8 w-32 animate-pulse rounded" />
+          <div className="bg-muted h-20 animate-pulse rounded-xl" />
+          <div className="bg-muted h-24 animate-pulse rounded-xl" />
         </div>
       )}
+      <div className="border-border border-t px-6 py-3">
+        <ModeToggle mode="citizen" onChange={handleModeChange} />
+        <YearTimeline year={year} onChange={onYearChange} compact />
+      </div>
     </>
   );
 

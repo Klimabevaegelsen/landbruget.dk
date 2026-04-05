@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { Scrollama, Step } from 'react-scrollama';
+import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
 
 interface ScrollyStep {
@@ -46,19 +47,32 @@ export function ScrollySection({
             offset={offset}
             onStepEnter={({ data }) => setActiveStepId(data as string)}
           >
-            {steps.map((step) => (
-              <Step key={step.id} data={step.id}>
-                <div
-                  className={cn(
-                    'mb-48 min-h-[40vh] transition-opacity duration-500',
-                    activeStepId === step.id ? 'opacity-100' : 'opacity-30'
-                  )}
-                  data-testid={`scrolly-step-${step.id}`}
-                >
-                  {step.content}
-                </div>
-              </Step>
-            ))}
+            {steps.map((step) => {
+              const isActive = activeStepId === step.id;
+              return (
+                <Step key={step.id} data={step.id}>
+                  <div
+                    className="mb-48 min-h-[40vh]"
+                    data-testid={`scrolly-step-${step.id}`}
+                  >
+                    <motion.div
+                      animate={{
+                        opacity: isActive ? 1 : 0.25,
+                        y: isActive ? 0 : 8,
+                        scale: isActive ? 1 : 0.98,
+                      }}
+                      transition={{
+                        type: 'spring',
+                        stiffness: 200,
+                        damping: 30,
+                      }}
+                    >
+                      {step.content}
+                    </motion.div>
+                  </div>
+                </Step>
+              );
+            })}
           </Scrollama>
         </div>
       </div>

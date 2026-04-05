@@ -5,6 +5,9 @@ export interface StoryChapter {
   mapZoom: number;
   showLayers: ('fields-fill' | 'proximity-rings')[];
   paintMode: 'burden' | 'pfas' | 'default';
+  visual?: 'standard' | 'stat-callout' | 'warning-accent' | 'grade-display';
+  statKey?: string;
+  statSuffix?: string;
 }
 
 /**
@@ -19,6 +22,7 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     mapZoom: 14,
     showLayers: ['fields-fill', 'proximity-rings'],
     paintMode: 'default',
+    visual: 'standard',
   },
   {
     id: 'sprayed',
@@ -27,6 +31,9 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     mapZoom: 14,
     showLayers: ['fields-fill'],
     paintMode: 'burden',
+    visual: 'stat-callout',
+    statKey: 'total_burden',
+    statSuffix: 'B/ha',
   },
   {
     id: 'pfas',
@@ -35,6 +42,7 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     mapZoom: 14,
     showLayers: ['fields-fill'],
     paintMode: 'pfas',
+    visual: 'warning-accent',
   },
   {
     id: 'proximity',
@@ -43,6 +51,9 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     mapZoom: 15,
     showLayers: ['fields-fill', 'proximity-rings'],
     paintMode: 'default',
+    visual: 'stat-callout',
+    statKey: 'distance',
+    statSuffix: 'm',
   },
   {
     id: 'score',
@@ -51,6 +62,8 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     mapZoom: 13,
     showLayers: ['fields-fill'],
     paintMode: 'burden',
+    visual: 'grade-display',
+    statKey: 'grade',
   },
 ];
 

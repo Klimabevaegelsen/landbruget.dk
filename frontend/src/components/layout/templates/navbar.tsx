@@ -14,7 +14,7 @@ import {
   MagnifyingGlassIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/solid';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Logo } from '@/components/layout/templates/logo';
 import Link from 'next/link';
 import { Container } from '@/components/layout/container';

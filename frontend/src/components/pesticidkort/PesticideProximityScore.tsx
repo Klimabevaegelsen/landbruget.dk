@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'motion/react';
 import type { PesticideGrade } from '@/components/pesticidkort/types';
 import { getGradeColor, getGradeBgColor } from '@/lib/pesticide-score';
 
@@ -48,7 +48,7 @@ export function PesticideProximityScore({
             {description}
           </p>
           <p className="text-muted-foreground mt-2 text-xs">
-            Karakterskala: A = lav belastning, E = høj belastning.
+            Skala: A = laveste relative belastning, E = højeste.
           </p>
         </div>
       </div>
@@ -88,8 +88,8 @@ export function PesticideProximityScore({
         })}
       </div>
       <div className="text-muted-foreground mt-1.5 flex justify-between text-[10px]">
-        <span>A (lav)</span>
-        <span>E (høj)</span>
+        <span>A (lavest)</span>
+        <span>E (højest)</span>
       </div>
     </div>
   );

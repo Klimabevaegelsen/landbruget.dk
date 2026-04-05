@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Input } from './ui/input';
 import { cn } from '@/lib/utils';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/solid';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -102,13 +102,11 @@ function SearchOverlay({
   onClose: () => void;
   borderless?: boolean;
 }) {
-  // Tabs for categories - restricted to CVR and company name only
   const tabs = ['Alle', 'CVR', 'Firmanavn'];
   const [activeTab, setActiveTab] = useState(0);
 
   const { searchResults, isLoading, error } = useSearch(search, activeTab);
 
-  // Close on Escape
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
@@ -117,7 +115,6 @@ function SearchOverlay({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  // Close on click outside
   const overlayRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -253,7 +250,6 @@ function SearchResultCard({
   const { showLoadingToast } = useLoadingToast();
 
   const handleClick = () => {
-    // Show loading toast
     showLoadingToast(
       'Indlæser virksomhed',
       `Henter data for ${result.name}...`

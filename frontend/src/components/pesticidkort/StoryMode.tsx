@@ -61,6 +61,8 @@ export function StoryMode({ report, onClose }: StoryModeProps) {
             index={i}
             title={ch.title}
             body={interpolateChapter(ch.body, data)}
+            chapter={ch}
+            data={data}
             onEnterView={() => handleChapterEnter(i)}
           />
         ))}

@@ -46,7 +46,7 @@ export function Figure({
     >
       {children}
       <figcaption className="text-muted-foreground mt-3 text-[13px] leading-snug">
-        <strong className="text-foreground/70 font-semibold">
+        <strong className="text-primary/70 font-semibold">
           Figur {number}.
         </strong>{' '}
         {caption}
@@ -83,9 +83,9 @@ export function SectionHeader({ id, number, title }: SectionHeaderProps) {
   return (
     <h2
       id={id}
-      className="border-border text-foreground mt-16 mb-4 border-b pb-3 text-2xl font-semibold tracking-tight"
+      className="font-display border-border text-foreground mt-16 mb-4 border-b pb-3 text-2xl font-semibold tracking-tight"
     >
-      <span className="text-muted-foreground mr-2">{number}</span>
+      <span className="text-primary/60 mr-2">{number}</span>
       {title}
     </h2>
   );
@@ -99,8 +99,11 @@ interface SubsectionHeaderProps {
 
 export function SubsectionHeader({ id, number, title }: SubsectionHeaderProps) {
   return (
-    <h3 id={id} className="text-foreground mt-10 mb-2 text-lg font-semibold">
-      <span className="text-muted-foreground mr-2">{number}</span>
+    <h3
+      id={id}
+      className="font-display text-foreground mt-10 mb-2 text-lg font-semibold"
+    >
+      <span className="text-primary/50 mr-2">{number}</span>
       {title}
     </h3>
   );

@@ -11,8 +11,12 @@ interface BottomSheetProps {
   children: React.ReactNode;
 }
 
-const PEEK_HEIGHT = 140;
+const PEEK_HEIGHT = 180;
 const HALF_FRACTION = 0.5;
+const FULL_HEIGHT_INSET = 48;
+const HANDLE_HEIGHT = 40;
+const SNAP_PEEK_THRESHOLD = 0.25;
+const SNAP_FULL_THRESHOLD = 0.7;
 
 export function BottomSheet({
   state,
@@ -28,7 +32,7 @@ export function BottomSheet({
     const vh = window.innerHeight;
     if (s === 'peek') return PEEK_HEIGHT;
     if (s === 'half') return vh * HALF_FRACTION;
-    return vh - 48;
+    return vh - FULL_HEIGHT_INSET;
   }, []);
 
   useEffect(() => {
@@ -40,7 +44,7 @@ export function BottomSheet({
     sheetRef.current.style.setProperty('--sheet-height', `${currentHeight}px`);
     contentRef.current.style.setProperty(
       '--sheet-content-height',
-      `${Math.max(0, currentHeight - 40)}px`
+      `${Math.max(0, currentHeight - HANDLE_HEIGHT)}px`
     );
   }, [currentHeight]);
 
@@ -56,7 +60,7 @@ export function BottomSheet({
     if (!dragStartRef.current) return;
     const dy = dragStartRef.current.y - e.clientY;
     const newH = Math.max(PEEK_HEIGHT, dragStartRef.current.height + dy);
-    setCurrentHeight(Math.min(newH, window.innerHeight - 48));
+    setCurrentHeight(Math.min(newH, window.innerHeight - FULL_HEIGHT_INSET));
   }, []);
 
   const handlePointerUp = useCallback(() => {
@@ -65,8 +69,8 @@ export function BottomSheet({
     const fraction = currentHeight / vh;
     dragStartRef.current = null;
 
-    if (fraction < 0.25) onStateChange('peek');
-    else if (fraction < 0.7) onStateChange('half');
+    if (fraction < SNAP_PEEK_THRESHOLD) onStateChange('peek');
+    else if (fraction < SNAP_FULL_THRESHOLD) onStateChange('half');
     else onStateChange('full');
   }, [currentHeight, onStateChange]);
 

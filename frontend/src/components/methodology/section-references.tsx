@@ -10,7 +10,7 @@ export function SectionReferences() {
 
       <ReferenceList />
 
-      <div className="text-muted-foreground border-border mt-8 border-t pt-6 text-[13px]">
+      <div className="text-muted-foreground border-primary/20 mt-8 border-t pt-6 text-[13px]">
         <p>
           Landbruget.dk er et offentligt transparensprojekt. Al kildekode og
           databehandlingslogik er tilgængelig for uafhængig verifikation.

@@ -26,10 +26,10 @@ export function DeepDive({
     <Accordion type="single" collapsible className={cn('my-6', className)}>
       <AccordionItem
         value="detail"
-        className="border-border bg-card rounded border px-4"
+        className="border-primary/20 bg-primary/[0.03] rounded border px-4"
       >
         <AccordionTrigger
-          className="text-muted-foreground hover:text-foreground text-[13px] hover:no-underline"
+          className="text-primary/70 hover:text-primary text-[13px] hover:no-underline"
           data-testid={testId ?? 'deep-dive-trigger'}
         >
           {title}

@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -137,11 +138,12 @@ export function CompanyListView({
         {companies.map((company) => (
           <div
             key={company.cvr_number}
-            className={`cursor-pointer rounded-lg border p-4 transition-all hover:shadow-md ${
+            className={cn(
+              'cursor-pointer rounded-lg border p-4 transition-all hover:shadow-md',
               selectedCompany?.cvr_number === company.cvr_number
                 ? 'border-primary bg-primary/10'
                 : 'border-border hover:border-border/80'
-            }`}
+            )}
             onClick={() => onCompanySelect(company)}
           >
             <div className="mb-2 flex items-start justify-between">

@@ -11,11 +11,11 @@ const GRADE_COLORS: Record<PesticideGrade, string> = {
 };
 
 const GRADE_LABELS: Record<PesticideGrade, string> = {
-  A: 'Minimal belastning',
-  B: 'Lav belastning',
-  C: 'Moderat belastning',
-  D: 'Høj belastning',
-  E: 'Kritisk belastning',
+  A: 'Laveste femtedel',
+  B: 'Under gennemsnit',
+  C: 'Omkring gennemsnit',
+  D: 'Over gennemsnit',
+  E: 'Højeste femtedel',
 };
 
 function isValidGrade(value: string): value is PesticideGrade {

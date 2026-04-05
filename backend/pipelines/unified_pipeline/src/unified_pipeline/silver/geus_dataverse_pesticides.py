@@ -9,9 +9,10 @@ and saves as parquet to cloud storage.
 Data source:
 - Input: AM_pest.rds (Annual Mean pesticide concentrations) - 633 substances, 4.2M+ analyses
 - Input: AM_pfas.rds (Annual Mean PFAS concentrations) - 26 substances, 397k analyses
+- Input: clean_dataset.rds (Sample-level clean dataset, Deliverable 2) - ~9.4M analyses
 - Output: Parquet files with standardized schema and Point geometries
 
-Key columns in pesticide output:
+Key columns in pesticide output (AM):
 - year: Sample year (PROEVEAAR)
 - stofnr: Substance code
 - stof_tekst: Substance name in Danish
@@ -20,6 +21,15 @@ Key columns in pesticide output:
 - groundwater_body: Grundvandsforekomst ID
 - x, y: Coordinates in EPSG:25832
 - geometry: Point geometry
+
+Key columns in clean dataset output (sample-level):
+- year, sample_date, sample_id: Temporal and sample identification
+- stofnr, stof_tekst: Substance identification
+- concentration: Sample-level concentration (µg/L, with ½ LOQ substitution)
+- maengde: Alias for concentration (backward compatibility)
+- chemical_monitoring, investigative_monitoring, surveillance_monitoring: Monitoring flags
+- dgu_nr, groundwater_body, data_type: Borehole and hydrogeological context
+- x, y, geometry: Coordinates in EPSG:25832
 
 Key columns in PFAS output:
 - year: Sample year (PROEVEAAR)
@@ -382,6 +392,205 @@ class GEUSDataversePesticidesSilver(
 
         return "pfas_transformed"
 
+    def _build_clean_select_sql(self, group_filter: str | None = None) -> str:
+        """
+        Build the SELECT SQL for clean dataset transform.
+
+        Args:
+            group_filter: Optional GROUP value to filter on (e.g. 'pest').
+                         If None, includes all groups with a parameter_group column.
+
+        Returns:
+            SQL string for CREATE TABLE
+        """
+        where_clauses = [
+            "XUTM32EUREF89 IS NOT NULL",
+            "YUTM32EUREF89 IS NOT NULL",
+            "PROEVEAAR >= 1980",
+            "PROEVEAAR <= 2030",
+        ]
+        extra_col = ""
+        if group_filter:
+            where_clauses.append(f"\"GROUP\" = '{group_filter}'")
+        else:
+            extra_col = '"GROUP" as parameter_group,'
+
+        where_sql = " AND ".join(where_clauses)
+
+        return f"""
+            SELECT
+                -- Temporal
+                CAST(PROEVEAAR AS INTEGER) as year,
+                CAST(PROEVEDATO AS VARCHAR) as sample_date,
+                CAST(PROEVEID AS BIGINT) as sample_id,
+
+                -- Substance identification
+                CAST(STOFKODE AS INTEGER) as stofnr,
+                STOFNAVN as stof_tekst,
+                KORT_NAVN as kort_navn,
+                CASNUMBER as cas_number,
+
+                -- Measurement (sample-level, with LOQ substitution)
+                CAST(value AS DOUBLE) as concentration,
+                CAST(value AS DOUBLE) as maengde,  -- backward compat alias
+                ENHED as enhed,
+                {extra_col}
+
+                -- Location coordinates
+                CAST(XUTM32EUREF89 AS DOUBLE) as x,
+                CAST(YUTM32EUREF89 AS DOUBLE) as y,
+
+                -- Borehole identifiers
+                DGUNR as dgu_nr,
+                CAST(BORID AS INTEGER) as borid,
+                INDTAGSID as indtagsid,
+                BORID_INDTAGSID as borid_indtagsid,
+
+                -- Borehole physical properties
+                CAST(BORINGSDYBDE AS DOUBLE) as borehole_depth_m,
+                CAST(TERRAENKOTE AS DOUBLE) as terrain_elevation_m,
+                CAST(INDTAG_TOP AS DOUBLE) as intake_top_m,
+                CAST(INDTAG_BUND AS DOUBLE) as intake_bottom_m,
+
+                -- Hydrogeological context
+                Grundvandsforekomst as groundwater_body,
+                REDOXVANDTYPE as redox_water_type,
+                Depth as depth_category,
+
+                -- Monitoring metadata (NOT dropped like in AM transform)
+                DATATYPE as data_type,
+                euProgrammeCode as eu_programme_code,
+                euMonitoringSiteCode as eu_monitoring_site_code,
+                chemicalMonitoring as chemical_monitoring,
+                investigativeMonitoring as investigative_monitoring,
+                surveillanceMonitoring as surveillance_monitoring,
+
+                -- Create geometry from coordinates
+                ST_Point(
+                    CAST(XUTM32EUREF89 AS DOUBLE),
+                    CAST(YUTM32EUREF89 AS DOUBLE)
+                ) as geometry
+
+            FROM raw_clean
+            WHERE {where_sql}
+        """
+
+    @timed(name="Transforming clean dataset (sample-level)")
+    def _transform_clean_data(self, df: Any) -> tuple[str, str]:
+        """
+        Transform the clean dataset (Deliverable 2) into DuckDB tables.
+
+        Produces two tables:
+        1. Pesticide-only (GROUP = 'pest') for correlation analysis
+        2. All parameter groups (pest, pfas, nitrate, mfs, etc.) for comprehensive output
+
+        Args:
+            df: pandas DataFrame from clean_dataset.rds file
+
+        Returns:
+            Tuple of (pest_table_name, all_groups_table_name)
+        """
+        self.conn.register("raw_clean", df)
+
+        columns = list(df.columns)
+        self.log.info(f"Clean dataset columns: {columns}")
+        self.log.info(f"Clean dataset total rows: {len(df):,}")
+
+        # Log parameter group distribution before filtering
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE _clean_groups AS
+            SELECT "GROUP" as grp, COUNT(*) as cnt
+            FROM raw_clean
+            GROUP BY "GROUP"
+            ORDER BY cnt DESC
+        """)
+        groups = self.conn.execute("SELECT * FROM _clean_groups").fetchall()
+        self.log.info("Parameter groups in clean dataset:")
+        for grp, cnt in groups:
+            self.log.info(f"  - {grp}: {cnt:,}")
+
+        # 1. Pesticide-only table
+        pest_sql = self._build_clean_select_sql(group_filter="pest")
+        self.conn.execute(f"CREATE OR REPLACE TABLE clean_pest_transformed AS {pest_sql}")
+
+        # 2. All parameter groups table
+        all_sql = self._build_clean_select_sql(group_filter=None)
+        self.conn.execute(f"CREATE OR REPLACE TABLE clean_all_transformed AS {all_sql}")
+
+        # Get pest statistics
+        stats = self.conn.execute("""
+            SELECT
+                COUNT(*) as total_records,
+                COUNT(DISTINCT stofnr) as unique_substances,
+                COUNT(DISTINCT dgu_nr) as unique_boreholes,
+                COUNT(DISTINCT sample_id) as unique_samples,
+                MIN(year) as min_year,
+                MAX(year) as max_year,
+                COUNT(DISTINCT year) as years_covered
+            FROM clean_pest_transformed
+        """).fetchone()
+
+        self.log.info(
+            f"Clean pesticide data: {stats[0]:,} records, "
+            f"{stats[1]} substances, {stats[2]:,} boreholes, "
+            f"{stats[3]:,} samples, years {stats[4]}-{stats[5]} ({stats[6]} years)"
+        )
+
+        # Get all-groups statistics
+        all_stats = self.conn.execute("""
+            SELECT
+                COUNT(*) as total_records,
+                COUNT(DISTINCT parameter_group) as groups,
+                COUNT(DISTINCT dgu_nr) as unique_boreholes,
+                MIN(year) as min_year,
+                MAX(year) as max_year
+            FROM clean_all_transformed
+        """).fetchone()
+
+        self.log.info(
+            f"Clean all-groups data: {all_stats[0]:,} records, "
+            f"{all_stats[1]} parameter groups, {all_stats[2]:,} boreholes, "
+            f"years {all_stats[3]}-{all_stats[4]}"
+        )
+
+        # Log concentration distribution to help determine detection threshold
+        dist = self.conn.execute("""
+            SELECT
+                COUNT(*) as total,
+                COUNT(CASE WHEN concentration = 0 THEN 1 END) as zero,
+                COUNT(CASE WHEN concentration > 0 AND concentration <= 0.005 THEN 1 END) as lte_005,
+                COUNT(CASE WHEN concentration > 0.005 AND concentration <= 0.01 THEN 1 END) as lte_01,
+                COUNT(CASE WHEN concentration > 0.01 AND concentration <= 0.015 THEN 1 END) as lte_015,
+                COUNT(CASE WHEN concentration > 0.015 AND concentration <= 0.1 THEN 1 END) as lte_01ug,
+                COUNT(CASE WHEN concentration > 0.1 THEN 1 END) as above_01ug
+            FROM clean_pest_transformed
+        """).fetchone()
+
+        self.log.info(
+            f"Concentration distribution: total={dist[0]:,}, "
+            f"zero={dist[1]:,}, (0,0.005]={dist[2]:,}, (0.005,0.01]={dist[3]:,}, "
+            f"(0.01,0.015]={dist[4]:,}, (0.015,0.1]={dist[5]:,}, >0.1={dist[6]:,}"
+        )
+
+        # Log top substances
+        top_substances = self.conn.execute("""
+            SELECT stof_tekst, COUNT(*) as count
+            FROM clean_pest_transformed
+            GROUP BY stof_tekst
+            ORDER BY count DESC
+            LIMIT 10
+        """).fetchall()
+
+        self.log.info("Top 10 substances by analysis count (clean dataset):")
+        for substance, count in top_substances:
+            self.log.info(f"  - {substance}: {count:,}")
+
+        # Clean up
+        self.conn.execute("DROP TABLE IF EXISTS _clean_groups")
+        self.conn.unregister("raw_clean")
+
+        return "clean_pest_transformed", "clean_all_transformed"
+
     @timed(name="Validating geometries")
     def _validate_geometries(self, table_name: str) -> None:
         """
@@ -429,8 +638,10 @@ class GEUSDataversePesticidesSilver(
 
             pest_rds_path = None
             pfas_rds_path = None
+            clean_rds_path = None
             tmp_pest_path = None
             tmp_pfas_path = None
+            tmp_clean_path = None
 
             try:
                 # Get the .rds file paths from bronze manifest
@@ -442,13 +653,15 @@ class GEUSDataversePesticidesSilver(
                     # Support both old (rds_path) and new (pest_rds_path) manifest formats
                     pest_rds_path = bronze_data.get("pest_rds_path") or bronze_data.get("rds_path")
                     pfas_rds_path = bronze_data.get("pfas_rds_path")
+                    clean_rds_path = bronze_data.get("clean_rds_path")
 
                     if not pest_rds_path:
                         self.log.error("Bronze manifest missing 'rds_path' or 'pest_rds_path'")
                         return None
 
                     self.log.info(
-                        f"Using bronze manifest: pest={pest_rds_path}, pfas={pfas_rds_path}"
+                        f"Using bronze manifest: pest={pest_rds_path}, pfas={pfas_rds_path}, "
+                        f"clean={clean_rds_path}"
                     )
                 else:
                     # Find latest manifest in cloud storage
@@ -472,6 +685,7 @@ class GEUSDataversePesticidesSilver(
                     manifest = self.storage.download_json(latest_manifest)
                     pest_rds_path = manifest.get("pest_rds_path") or manifest.get("rds_path")
                     pfas_rds_path = manifest.get("pfas_rds_path")
+                    clean_rds_path = manifest.get("clean_rds_path")
 
                     if not pest_rds_path:
                         self.log.error("Manifest missing 'rds_path' or 'pest_rds_path'")
@@ -535,6 +749,61 @@ class GEUSDataversePesticidesSilver(
                 else:
                     self.log.warning("No PFAS data path in manifest - skipping PFAS processing")
 
+                # === Process Clean Dataset (sample-level, Deliverable 2) ===
+                clean_stats = None
+                clean_all_stats = None
+                if clean_rds_path:
+                    self.log.info("=== Processing Clean Dataset (sample-level) ===")
+                    tmp_clean_path = self._download_rds_from_storage(clean_rds_path)
+                    clean_df = self._convert_rds_to_dataframe(tmp_clean_path)
+                    clean_pest_table, clean_all_table = self._transform_clean_data(clean_df)
+                    self._validate_geometries(clean_pest_table)
+                    self._validate_geometries(clean_all_table)
+
+                    # Get clean pesticide statistics
+                    clean_stats = self.conn.execute(f"""
+                        SELECT
+                            COUNT(*) as total_records,
+                            COUNT(DISTINCT stofnr) as unique_substances,
+                            COUNT(DISTINCT dgu_nr) as unique_boreholes,
+                            MIN(year) as min_year,
+                            MAX(year) as max_year
+                        FROM {clean_pest_table}
+                    """).fetchone()
+
+                    # Get clean all-groups statistics
+                    clean_all_stats = self.conn.execute(f"""
+                        SELECT
+                            COUNT(*) as total_records,
+                            COUNT(DISTINCT parameter_group) as unique_groups,
+                            COUNT(DISTINCT dgu_nr) as unique_boreholes,
+                            MIN(year) as min_year,
+                            MAX(year) as max_year
+                        FROM {clean_all_table}
+                    """).fetchone()
+
+                    # Save clean pesticide data to silver layer
+                    self._save_data_with_metadata(
+                        data=clean_pest_table,
+                        dataset="geus_clean_pesticides",
+                        source_key="geus_clean_pesticides",
+                        bucket=self.config.bucket,
+                        stage="silver",
+                    )
+
+                    # Save all-groups data (pest + pfas + nitrate + mfs + etc.)
+                    self._save_data_with_metadata(
+                        data=clean_all_table,
+                        dataset="geus_clean_all",
+                        source_key="geus_clean_all",
+                        bucket=self.config.bucket,
+                        stage="silver",
+                    )
+                else:
+                    self.log.warning(
+                        "No clean dataset path in manifest - skipping clean dataset processing"
+                    )
+
                 self.log.info("GEUS Dataverse silver job completed successfully")
 
                 # Build result with statistics for both datasets
@@ -565,6 +834,22 @@ class GEUSDataversePesticidesSilver(
                         "year_range": f"{pfas_stats[3]}-{pfas_stats[4]}",
                     }
 
+                if clean_stats:
+                    result["statistics"]["clean_pesticides"] = {
+                        "total_records": clean_stats[0],
+                        "unique_substances": clean_stats[1],
+                        "unique_boreholes": clean_stats[2],
+                        "year_range": f"{clean_stats[3]}-{clean_stats[4]}",
+                    }
+
+                if clean_all_stats:
+                    result["statistics"]["clean_all"] = {
+                        "total_records": clean_all_stats[0],
+                        "unique_groups": clean_all_stats[1],
+                        "unique_boreholes": clean_all_stats[2],
+                        "year_range": f"{clean_all_stats[3]}-{clean_all_stats[4]}",
+                    }
+
                 return result
 
             except Exception as e:
@@ -580,3 +865,5 @@ class GEUSDataversePesticidesSilver(
                     tmp_pest_path.unlink(missing_ok=True)
                 if tmp_pfas_path and tmp_pfas_path.exists():
                     tmp_pfas_path.unlink(missing_ok=True)
+                if tmp_clean_path and tmp_clean_path.exists():
+                    tmp_clean_path.unlink(missing_ok=True)

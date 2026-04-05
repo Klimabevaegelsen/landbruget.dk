@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { SubsectionHeader } from '@/components/methodology/article-layout';
 
 export function PerspectivesGroundwater() {
@@ -31,6 +32,15 @@ export function PerspectivesGroundwater() {
         på markniveau gør det muligt at identificere præcist, hvilke marker med
         dokumenteret pesticidanvendelse der ligger i eller grænser op til
         BNBO-zonerne.
+      </p>
+      <p>
+        <Link
+          href="/pesticidanalyse/grundvand"
+          data-testid="grundvand-methodology-link"
+          className="text-primary font-medium underline-offset-4 hover:underline"
+        >
+          L&aelig;s den fulde metode for grundvandsanalysen &rarr;
+        </Link>
       </p>
     </>
   );

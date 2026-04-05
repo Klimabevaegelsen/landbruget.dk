@@ -8,6 +8,7 @@ import {
   getCropEmoji,
   getBurdenDecile,
   getBarColor,
+  getBurdenLabel,
 } from '@/components/pesticidkort/field-utils';
 import {
   FieldProximity,
@@ -32,9 +33,11 @@ export function FieldCard({ field, onSelect }: FieldCardProps) {
       data-testid={`field-card-${field.field_uuid}`}
       className={cn(
         'border-border border-b py-4 transition-colors',
-        isHighRisk && 'border-l-[3px] pl-3',
-        hasPfas && 'border-l-warning',
-        !hasPfas && isHighRisk && 'border-l-destructive/40'
+        field.is_organic && 'bg-success/[0.04]',
+        hasPfas && 'border-l-[3px] border-l-warning bg-warning/[0.04]',
+        !hasPfas &&
+          isHighRisk &&
+          'border-l-[3px] border-l-destructive/40 bg-destructive/[0.03] pl-3'
       )}
     >
       <button
@@ -74,8 +77,9 @@ export function FieldCard({ field, onSelect }: FieldCardProps) {
               }
             />
           </div>
-          <span className="text-muted-foreground w-8 text-right text-[11px] tabular-nums">
-            {field.total_pesticide_belastning.toFixed(1)}
+          <span className="text-muted-foreground text-right text-[11px] tabular-nums">
+            {field.total_pesticide_belastning.toFixed(1)} B/ha (
+            {getBurdenLabel(decile)})
           </span>
         </div>
       </button>
