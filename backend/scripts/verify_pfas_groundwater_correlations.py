@@ -53,7 +53,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("verify_pfas_correlations")
 
-BUCKET = "landbruget-data"
+BUCKET = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET", "landbruget-data")
 
 # ---------------------------------------------------------------------------
 # PFAS Detection thresholds (per-substance half-LOQ values)
