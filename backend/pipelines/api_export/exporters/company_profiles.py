@@ -61,6 +61,18 @@ class CompanyProfilesExporter(BaseExporter):
         stats = {"basic_files": 0, "full_files": 0, "files_written": 0}
 
         self._load_tables()
+
+        # companies table is required — skip entire exporter if missing
+        available = {
+            r[0]
+            for r in self.conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+            ).fetchall()
+        }
+        if "companies" not in available:
+            logger.warning("Companies table not loaded — skipping company profiles exporter")
+            return stats
+
         self._precompute_aggregates()
 
         stats["basic_files"] = self._generate_basic_files()
