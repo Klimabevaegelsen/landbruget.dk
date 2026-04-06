@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Share2, BookOpen } from 'lucide-react';
-import { useMemo } from 'react';
 import { PesticideProximityScore } from '@/components/pesticidkort/PesticideProximityScore';
 import { SummaryStats } from '@/components/pesticidkort/SummaryStats';
 import { AlertCallout } from '@/components/pesticidkort/AlertCallout';
@@ -14,6 +13,7 @@ import { handleShare } from '@/components/pesticidkort/share-report';
 interface PersonalReportProps {
   report: PesticideReport;
   histogram: HistogramBin[];
+  selectedFieldUuid?: string | null;
   onFieldSelect?: (fieldUuid: string) => void;
   onOpenStory?: () => void;
 }
@@ -21,20 +21,10 @@ interface PersonalReportProps {
 export function PersonalReport({
   report,
   histogram,
+  selectedFieldUuid,
   onFieldSelect,
   onOpenStory,
 }: PersonalReportProps) {
-  const { fields } = report;
-  const pfasFieldsInRadius = useMemo(
-    () => fields.filter((f) => f.pfas_applications > 0),
-    [fields]
-  );
-  const bnboFields = useMemo(
-    () =>
-      fields.filter((f) => f.bnbo_area_hectares && f.bnbo_area_hectares > 0),
-    [fields]
-  );
-
   return (
     <div
       data-testid="personal-report"
@@ -73,30 +63,38 @@ export function PersonalReport({
 
       <SummaryStats
         fieldsCount={report.fields_count}
-        pfasFieldsCount={report.pfas_fields_count}
+        avgBurden={report.avg_burden}
         nearestFieldM={report.nearest_field_m}
       />
 
-      {(pfasFieldsInRadius.length > 0 || bnboFields.length > 0) && (
+      <FieldList
+        fields={report.fields}
+        histogram={histogram}
+        selectedFieldUuid={selectedFieldUuid}
+        onFieldSelect={onFieldSelect}
+      />
+
+      {(report.pfas_fields_count > 0 || report.has_bnbo_overlap) && (
         <div className="space-y-3">
-          {pfasFieldsInRadius.length > 0 && (
+          {report.has_bnbo_overlap && (
+            <AlertCallout
+              type="bnbo"
+              count={
+                report.fields.filter(
+                  (f) => f.bnbo_area_hectares && f.bnbo_area_hectares > 0
+                ).length
+              }
+            />
+          )}
+          {report.pfas_fields_count > 0 && (
             <AlertCallout
               type="pfas"
-              count={pfasFieldsInRadius.length}
+              count={report.pfas_fields_count}
               distanceM={report.radius_m}
             />
           )}
-          {bnboFields.length > 0 && (
-            <AlertCallout type="bnbo" count={bnboFields.length} />
-          )}
         </div>
       )}
-
-      <FieldList
-        fields={fields}
-        histogram={histogram}
-        onFieldSelect={onFieldSelect}
-      />
 
       <footer className="text-muted-foreground pt-4 pb-4">
         <p className="text-xs leading-relaxed">

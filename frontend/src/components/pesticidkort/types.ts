@@ -41,6 +41,7 @@ export interface PesticideReport {
   score: number;
   fields_count: number;
   pfas_fields_count: number;
+  avg_burden: number;
   nearest_field_m: number;
   fields: NearbyFieldSummary[];
   has_bnbo_overlap: boolean;
