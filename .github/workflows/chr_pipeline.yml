@@ -208,6 +208,10 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
 
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
+
 
       - name: Set up environment variables
         env:
@@ -360,6 +364,10 @@ jobs:
           # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
+
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
 
 
       - name: Download context artifact
@@ -541,6 +549,10 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
 
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
+
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -704,6 +716,10 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
 
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
+
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -838,6 +854,10 @@ jobs:
           # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
+
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
 
 
       - name: Download context artifact with herd details
@@ -1004,6 +1024,10 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
 
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
+
 
       - name: Download context artifact
         uses: actions/download-artifact@v8
@@ -1148,6 +1172,10 @@ jobs:
           # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
+
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
 
 
       - name: Download context artifact
@@ -1330,6 +1358,10 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
 
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
+
 
       - name: Download bronze timestamp artifact
         uses: actions/download-artifact@v8
@@ -1423,6 +1455,10 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
 
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
+
       - name: Run silver processing (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
         env:
@@ -1497,6 +1533,10 @@ jobs:
           # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
+
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
 
       - name: Set up environment variables
         env:
@@ -1706,6 +1746,10 @@ jobs:
           # Install CHR pipeline dependencies (build lxml from source to match system libxml2)
           cd ../chr_pipeline
           uv pip install --system --no-binary lxml -e .
+
+          # Force rebuild of XML stack against the same system libraries.
+          # This prevents lxml/xmlsec libxml2 ABI mismatches at runtime.
+          uv pip install --system --force-reinstall --no-binary=lxml,xmlsec "lxml>=5.2,<5.4" "xmlsec==1.3.17"
 
 
       - name: Set up environment variables
