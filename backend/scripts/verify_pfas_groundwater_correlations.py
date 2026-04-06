@@ -669,21 +669,28 @@ class DataLoader:
         """Read parquet directly from R2 using DuckDB native auth."""
         # Try multiple path patterns — data may be stored with timestamped subdirectories
         # e.g. silver/grukos/20260406_130709/data.parquet
+        # Use union_by_name=true and hive_partitioning=false to handle schema differences
+        # across timestamp dirs (e.g. older runs may have extra columns like 'municipality')
+        read_opts = "union_by_name=true, hive_partitioning=false"
         paths = [
             f"r2://{BUCKET}/{r2_prefix}/*.parquet",
             f"r2://{BUCKET}/{r2_prefix}/data.parquet",
             f"r2://{BUCKET}/{r2_prefix}/*/*.parquet",
             f"r2://{BUCKET}/{r2_prefix}/*/data.parquet",
         ]
+        last_err = None
         for path in paths:
             try:
-                self.conn.execute(f"CREATE TABLE {table_name} AS SELECT {extra_select} FROM read_parquet('{path}')")
+                self.conn.execute(
+                    f"CREATE TABLE {table_name} AS SELECT {extra_select} FROM read_parquet('{path}', {read_opts})"
+                )
                 return self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            except Exception:
+            except Exception as e:
+                last_err = e
                 # Drop table if partially created
                 self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                 continue
-        raise RuntimeError(f"Could not read {r2_prefix} from R2")
+        raise RuntimeError(f"Could not read {r2_prefix} from R2: {last_err}")
 
     def _read_via_wrangler(self, r2_prefix: str, table_name: str, extra_select: str) -> int:
         """Download parquet files via wrangler, then read from local disk."""
