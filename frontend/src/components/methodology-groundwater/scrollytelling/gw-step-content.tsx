@@ -4,7 +4,7 @@ import { ScrollyCard } from '@/components/methodology/scrolly-card';
 import { ESPE_WELL } from '@/components/methodology-groundwater/scrollytelling/scrolly-constants';
 
 const CAVEAT =
-  'Illustrativt eksempel\u00a0\u2014 se afsnit\u00a06.5 om begr\u00e6nsninger';
+  'Illustrativt eksempel\u00a0— se afsnit\u00a06.5 om begrænsninger';
 
 export function IntroCard() {
   return (

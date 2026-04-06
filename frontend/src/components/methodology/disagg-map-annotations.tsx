@@ -46,10 +46,7 @@ export function DisaggMapAnnotations({ step }: DisaggMapAnnotationsProps) {
           />
         ))}
       {step === 'match' && (
-        <DisaggPulsingLabel
-          lng={EXAMPLE.center[0]}
-          lat={EXAMPLE.center[1] + 0.015}
-        />
+        <DisaggPulsingLabel lng={EXAMPLE.center[0]} lat={EXAMPLE.center[1]} />
       )}
       {showDoseLabels &&
         F.map((f) => (

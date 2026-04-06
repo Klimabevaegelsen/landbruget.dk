@@ -28,14 +28,14 @@ export function GwEspeAnnotations({ step }: GwEspeAnnotationsProps) {
           lng={ESPE_CENTER.lng}
           lat={ESPE_CENTER.lat + 0.02}
           text="Espe Opland"
-          subtext="~8 km\u00b2 indvindingsomr\u00e5de"
+          subtext={'~8 km² indvindingsområde'}
         />
       )}
       {step === 'kilden' && (
         <MapLabel
           lng={ESPE_CENTER.lng + 0.015}
           lat={ESPE_CENTER.lat - 0.005}
-          text="6 marker \u00b7 42,2 ha"
+          text="6 marker · 42,2 ha"
           subtext="Fighter 480 (bentazon)"
         />
       )}
@@ -43,7 +43,7 @@ export function GwEspeAnnotations({ step }: GwEspeAnnotationsProps) {
         <MapLabel
           lng={ESPE_CENTER.lng}
           lat={ESPE_CENTER.lat}
-          text="~1,5 \u00e5r til grundvand"
+          text="~1,5 år til grundvand"
           variant="muted"
         />
       )}
@@ -53,7 +53,7 @@ export function GwEspeAnnotations({ step }: GwEspeAnnotationsProps) {
           lat={ESPE_WELL.lat}
           dgu={ESPE_WELL.dgu}
           value={String(ESPE_WELL.detection.conc)}
-          unit="\u00b5g/L bentazon"
+          unit="µg/L bentazon"
           depth={`${ESPE_WELL.depthM} m`}
         />
       )}

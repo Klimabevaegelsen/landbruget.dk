@@ -22,13 +22,13 @@ export const WELLS = [
 ] as const;
 
 export const EXAMPLE_FIELD = {
-  uuid: '534793F5-84D4-5FBF-8BAC-91C63E494474',
-  crop: 'Vinterhvede',
-  areaHa: 62.9,
+  uuid: 'B58C6FDD-CE3B-560D-8293-74EDA2FB3EFA',
+  crop: 'Vinterraps',
+  areaHa: 5.2,
   products: [
-    { name: 'DFF', ingredient: 'diflufenican' },
+    { name: 'Belkar', ingredient: 'halauxifen-methyl (CF₃)' },
     { name: 'Propulse SE 250', ingredient: 'fluopyram + prothioconazol' },
-    { name: 'Mavrik 2F', ingredient: 'tau-fluvalinat' },
+    { name: 'Mavrik', ingredient: 'tau-fluvalinat' },
   ],
 } as const;
 
@@ -58,11 +58,11 @@ import type { ScrollyViewState } from '@/components/methodology-groundwater/scro
 
 export const VIEWS: Record<PfasScrollyStepId, ScrollyViewState> = {
   skjult: { lng: 10.5, lat: 56.0, zoom: 6.5 },
-  skrydstrup: { lng: 9.251, lat: 55.248, zoom: 13.5 },
-  byggeklodser: { lng: 9.251, lat: 55.248, zoom: 14.5 },
+  skrydstrup: { lng: 9.255, lat: 55.248, zoom: 13 },
+  byggeklodser: { lng: 9.255, lat: 55.248, zoom: 13.5 },
   evighed: { lng: 9.251, lat: 55.248, zoom: 13.5 },
   glasset: { lng: 9.250338, lat: 55.247566, zoom: 15 },
   overalt: { lng: 10.5, lat: 56.0, zoom: 6.5 },
-  blindvinkel: { lng: 8.82, lat: 55.91, zoom: 11 },
+  blindvinkel: { lng: 8.83, lat: 55.915, zoom: 11.5 },
   spoergsmaalet: { lng: 10.5, lat: 56.0, zoom: 6.5 },
 };

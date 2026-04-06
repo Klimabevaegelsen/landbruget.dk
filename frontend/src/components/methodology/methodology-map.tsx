@@ -101,9 +101,18 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
             id="method-heatmap"
             type="heatmap"
             paint={{
-              'heatmap-intensity': 0.6,
-              'heatmap-radius': 30,
-              'heatmap-opacity': 0.5,
+              'heatmap-weight': [
+                'interpolate',
+                ['linear'],
+                ['get', 'weight'],
+                0,
+                0,
+                55000,
+                1,
+              ],
+              'heatmap-intensity': 0.8,
+              'heatmap-radius': 35,
+              'heatmap-opacity': 0.6,
             }}
           />
         </Source>

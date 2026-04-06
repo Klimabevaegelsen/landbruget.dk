@@ -22,8 +22,24 @@ export function GwMapAnnotations({ step }: GwMapAnnotationsProps) {
       )}
       {step === 'billede' && (
         <>
-          <MapLabel lng={10.46} lat={55.2} text="Espe" />
-          <MapLabel lng={9.15} lat={55.49} text="Vejen" />
+          <MapLabel
+            lng={10.46}
+            lat={55.2}
+            text="Espe"
+            subtext="490 µg/L bentazon"
+          />
+          <MapLabel
+            lng={9.15}
+            lat={55.49}
+            text="Vejen"
+            subtext="3,2 µg/L metabolit"
+          />
+          <MapLabel
+            lng={10.5}
+            lat={56.0}
+            text="3.154 oplande analyseret"
+            subtext="Pesticider → grundvand"
+          />
         </>
       )}
       <div className="absolute top-3 left-3 z-10">
