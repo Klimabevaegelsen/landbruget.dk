@@ -3,7 +3,7 @@
 import { ScrollyCard } from '@/components/methodology/scrolly-card';
 
 const CAVEAT =
-  'Illustrativt eksempel\u00a0\u2014 se afsnit\u00a06.5 om begr\u00e6nsninger';
+  'Illustrativt eksempel\u00a0— se afsnit\u00a06.5 om begrænsninger';
 
 export function McpaCard() {
   return (

@@ -25,6 +25,7 @@ import {
 import { CatchmentLayers } from '@/components/methodology-groundwater/scrollytelling/catchment-layers';
 import { GwTerrainExtrusion } from '@/components/methodology-groundwater/scrollytelling/gw-terrain-extrusion';
 import { GwMapAnnotations } from '@/components/methodology-groundwater/scrollytelling/gw-map-annotations';
+import { GwVadoseAnimation } from '@/components/methodology-groundwater/scrollytelling/gw-vadose-animation';
 
 function buildGeo(
   catchment: typeof ESPE_CATCHMENT | typeof VEJEN_CATCHMENT,
@@ -49,9 +50,13 @@ function buildGeo(
 
 interface GroundwaterScrollyMapProps {
   step: ScrollyStepId;
+  showVadose?: boolean;
 }
 
-export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
+export function GroundwaterScrollyMap({
+  step,
+  showVadose = false,
+}: GroundwaterScrollyMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
   const { mapStyle, getMapStyle } = useMapTheme();
@@ -142,6 +147,12 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
           />
         </Marker>
       )}
+      <GwVadoseAnimation
+        variant={
+          step === 'mcpa' || step === 'fortidslevn' ? 'mcpa' : 'bentazon'
+        }
+        visible={showVadose}
+      />
       <GwMapAnnotations step={step} />
     </Map>
   );

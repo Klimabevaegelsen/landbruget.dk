@@ -75,7 +75,7 @@ export function GwDegradationGraphic({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.4 }}
-          className="bg-card/90 w-52 rounded-lg border p-3 shadow-sm backdrop-blur-sm"
+          className="bg-card/90 w-44 rounded-lg border p-2.5 shadow-sm backdrop-blur-sm"
           data-testid="degradation-graphic"
         >
           <p className="text-muted-foreground mb-2 text-[9px] font-medium tracking-wider uppercase">

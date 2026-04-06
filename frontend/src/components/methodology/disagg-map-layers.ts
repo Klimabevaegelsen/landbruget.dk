@@ -63,19 +63,38 @@ export function updateStepPaint(map: MapInstance, step: DisaggStepId) {
   const highlight = HIGHLIGHT_STEPS.has(step);
   const burden = BURDEN_STEPS.has(step);
   const color = burden ? BURDEN_COLOR : '#6abf69';
+  const isScale = step === 'scale';
+  const closeUp = highlight && !isScale;
 
-  map.setPaintProperty('fields-fill', 'fill-opacity', highlight ? 0.1 : 0.08);
+  // Surrounding fields: light green fill + visible dark-green borders in close-up
+  map.setPaintProperty(
+    'fields-fill',
+    'fill-color',
+    isScale ? BURDEN_COLOR : '#d4e4c1'
+  );
+  map.setPaintProperty(
+    'fields-fill',
+    'fill-opacity',
+    isScale ? 0.6 : closeUp ? 0.5 : 0.08
+  );
+  map.setPaintProperty(
+    'fields-outline',
+    'line-color',
+    closeUp ? '#4a6741' : '#5f6b80'
+  );
   map.setPaintProperty(
     'fields-outline',
     'line-opacity',
-    highlight ? 0.15 : 0.06
+    isScale ? 0.4 : closeUp ? 0.8 : 0.06
   );
-  map.setPaintProperty('fields-outline', 'line-width', 0.5);
+  map.setPaintProperty('fields-outline', 'line-width', closeUp ? 1.5 : 0.5);
+
+  // Highlighted example fields
   map.setPaintProperty('method-highlight-fill', 'fill-color', color);
   map.setPaintProperty(
     'method-highlight-fill',
     'fill-opacity',
-    highlight ? 0.7 : step === 'scale' ? 0.4 : 0.12
+    highlight ? 0.7 : isScale ? 0 : 0.12
   );
   map.setPaintProperty('method-highlight', 'line-opacity', highlight ? 1 : 0);
 }

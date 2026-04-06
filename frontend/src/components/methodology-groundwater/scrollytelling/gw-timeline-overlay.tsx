@@ -23,14 +23,14 @@ const BENTAZON = {
   startYear: 2016,
   endYear: 2019,
   midpoint: null as null | { year: number; label: string },
-  startLabel: 'Fighter 480 spr\u00f8jtet',
+  startLabel: 'Fighter 480 sprøjtet',
   endContext: 'Fund i boring',
-  endLabel: '490 \u00b5g/L',
+  endLabel: '490 µg/L',
   endSub: 'DGU 155. 1899',
-  transport: '~1,5 \u00e5rs transport',
+  transport: '~1,5 års transport',
   duration: 2.5,
   endColor: 'text-destructive',
-  samples: [{ year: 2019, conc: '490 \u00b5g/L', detected: true }],
+  samples: [{ year: 2019, conc: '490 µg/L', detected: true }],
 } as const;
 
 /**
@@ -42,19 +42,18 @@ const MCPA = {
   endYear: 2021,
   midpoint: null as null | { year: number; label: string },
   startLabel: 'MCPA anvendt',
-  endContext: 'Seneste pr\u00f8ve',
-  endLabel: '3,2 \u00b5g/L',
+  endContext: 'Seneste prøve',
+  endLabel: '3,2 µg/L',
   endSub: 'DGU 132. 1056',
-  transport:
-    'Persistent i 23+ \u00e5r \u2014 alle pr\u00f8ver over gr\u00e6nsev\u00e6rdi',
+  transport: 'Persistent i 23+ år — alle prøver over grænseværdi',
   duration: 3.5,
   endColor: 'text-primary',
   samples: [
-    { year: 1998, conc: '5,0 \u00b5g/L', detected: true },
-    { year: 2012, conc: '3,4 \u00b5g/L', detected: true },
-    { year: 2015, conc: '3,1 \u00b5g/L', detected: true },
-    { year: 2018, conc: '3,0 \u00b5g/L', detected: true },
-    { year: 2021, conc: '3,2 \u00b5g/L', detected: true },
+    { year: 1998, conc: '5,0 µg/L', detected: true },
+    { year: 2012, conc: '3,4 µg/L', detected: true },
+    { year: 2015, conc: '3,1 µg/L', detected: true },
+    { year: 2018, conc: '3,0 µg/L', detected: true },
+    { year: 2021, conc: '3,2 µg/L', detected: true },
   ],
 } as const;
 

@@ -8,7 +8,7 @@ export const ESPE_WELL = {
   lng: 10.42178,
   lat: 55.20651,
   depthM: 6,
-  detection: { date: '2019-05-10', conc: 490, unit: '\u00b5g/L' },
+  detection: { date: '2019-05-10', conc: 490, unit: 'µg/L' },
 } as const;
 
 export const VEJEN_WELL = {
@@ -16,7 +16,7 @@ export const VEJEN_WELL = {
   lng: 9.15636,
   lat: 55.49367,
   depthM: 19.3,
-  detection: { date: '2021-10-14', conc: 3.2, unit: '\u00b5g/L' },
+  detection: { date: '2021-10-14', conc: 3.2, unit: 'µg/L' },
 } as const;
 
 export type ScrollyStepId =
@@ -39,29 +39,29 @@ export interface ScrollyViewState {
 
 export const VIEWS: Record<ScrollyStepId, ScrollyViewState> = {
   intro: { lng: 10.5, lat: 56.0, zoom: 6.5, pitch: 0, bearing: 0 },
-  espe: { lng: 10.454, lat: 55.205, zoom: 13, pitch: 0, bearing: 0 },
-  kilden: { lng: 10.463, lat: 55.201, zoom: 13.5, pitch: 0, bearing: 0 },
-  rejsen: { lng: 10.46, lat: 55.204, zoom: 13.5, pitch: 60, bearing: -20 },
+  espe: { lng: 10.454, lat: 55.205, zoom: 12, pitch: 0, bearing: 0 },
+  kilden: { lng: 10.454, lat: 55.205, zoom: 12.5, pitch: 0, bearing: 0 },
+  rejsen: { lng: 10.46, lat: 55.204, zoom: 12.5, pitch: 50, bearing: -15 },
   fundet: {
     lng: ESPE_WELL.lng,
     lat: ESPE_WELL.lat,
-    zoom: 14.5,
-    pitch: 60,
-    bearing: -20,
+    zoom: 13.5,
+    pitch: 50,
+    bearing: -15,
   },
   mcpa: {
     lng: VEJEN_WELL.lng,
     lat: VEJEN_WELL.lat,
-    zoom: 13,
-    pitch: 60,
-    bearing: -20,
+    zoom: 12,
+    pitch: 50,
+    bearing: -15,
   },
   fortidslevn: {
     lng: VEJEN_WELL.lng,
     lat: VEJEN_WELL.lat,
-    zoom: 14,
-    pitch: 60,
-    bearing: -20,
+    zoom: 13,
+    pitch: 50,
+    bearing: -15,
   },
   billede: { lng: 10.5, lat: 56.0, zoom: 6.5, pitch: 0, bearing: 0 },
 };

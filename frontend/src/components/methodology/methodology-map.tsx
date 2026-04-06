@@ -76,7 +76,13 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     }
   }, [step, ready]);
 
-  if (!pmtilesUrl) return null;
+  if (!pmtilesUrl) {
+    return (
+      <div className="bg-muted flex h-full w-full items-center justify-center">
+        <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
+      </div>
+    );
+  }
 
   const showHeatmap = step === 'context';
   const showMunicipality = step === 'location';
@@ -101,9 +107,18 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
             id="method-heatmap"
             type="heatmap"
             paint={{
-              'heatmap-intensity': 0.6,
-              'heatmap-radius': 30,
-              'heatmap-opacity': 0.5,
+              'heatmap-weight': [
+                'interpolate',
+                ['linear'],
+                ['get', 'weight'],
+                0,
+                0,
+                55000,
+                1,
+              ],
+              'heatmap-intensity': 0.8,
+              'heatmap-radius': 35,
+              'heatmap-opacity': 0.6,
             }}
           />
         </Source>

@@ -27,7 +27,7 @@ export function GwVejenAnnotations({ step }: GwVejenAnnotationsProps) {
           lng={VEJEN_CENTER.lng}
           lat={VEJEN_CENTER.lat + 0.02}
           text="Vejen Forsyning"
-          subtext="MCPA \u2192 metabolit"
+          subtext="MCPA → metabolit"
         />
       )}
       {step === 'fortidslevn' && (
@@ -42,7 +42,7 @@ export function GwVejenAnnotations({ step }: GwVejenAnnotationsProps) {
             lat={VEJEN_WELL.lat}
             dgu={VEJEN_WELL.dgu}
             value={String(VEJEN_WELL.detection.conc)}
-            unit="\u00b5g/L metabolit"
+            unit="µg/L metabolit"
             depth={`${VEJEN_WELL.depthM} m`}
           />
         </>

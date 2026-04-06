@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import {
   SKRYDSTRUP_CATCHMENT,
-  HADERSLEV_FIELDS,
+  SKRYDSTRUP_FIELDS,
 } from '@/components/methodology-pfas/scrollytelling/scrolly-geo-data';
 import {
   WELLS,
@@ -25,6 +25,7 @@ interface PfasScrollyMapProps {
 }
 
 const CATCHMENT_STEPS = new Set<PfasScrollyStepId>([
+  'skrydstrup',
   'byggeklodser',
   'evighed',
   'glasset',
@@ -47,7 +48,7 @@ export function PfasScrollyMap({ step }: PfasScrollyMapProps) {
   const showUnmonitored = step === 'blindvinkel';
 
   const skrydstrupGeo = useMemo(
-    () => buildGeo(SKRYDSTRUP_CATCHMENT, HADERSLEV_FIELDS),
+    () => buildGeo(SKRYDSTRUP_CATCHMENT, SKRYDSTRUP_FIELDS),
     []
   );
   const unmonitoredGeo = useMemo(() => buildUnmonitoredGeo(), []);
@@ -100,7 +101,7 @@ export function PfasScrollyMap({ step }: PfasScrollyMapProps) {
           id="sonder-felding"
           data={unmonitoredGeo}
           catchmentColor="#94a3b8"
-          fieldColor="#94a3b8"
+          fieldColor="#86a879"
         />
       )}
       <CatchmentChoropleth visible={showNational} voidMode={showUnmonitored} />

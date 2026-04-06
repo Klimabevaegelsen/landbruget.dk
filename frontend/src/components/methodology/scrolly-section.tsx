@@ -32,7 +32,7 @@ export function ScrollySection({
     >
       <div className="flex flex-col lg:flex-row lg:gap-8">
         {/* Sticky visualization pane */}
-        <div className="mb-8 lg:sticky lg:top-24 lg:mb-0 lg:h-[calc(100vh-8rem)] lg:w-1/2">
+        <div className="sticky top-4 z-10 mb-8 h-[50dvh] lg:top-24 lg:mb-0 lg:h-[calc(100dvh-8rem)] lg:w-1/2">
           <div
             className="bg-card h-full overflow-hidden rounded-xl border shadow-sm"
             data-testid="scrolly-sticky-figure"
