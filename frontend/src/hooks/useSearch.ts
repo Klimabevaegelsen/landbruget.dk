@@ -1,33 +1,29 @@
-import { useEffect, useState, useCallback } from 'react';
-import { apiFetch } from '@/services/supabase/config';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLoadingToast } from '@/hooks/useLoadingToast';
+import {
+  SearchIndexEntry,
+  loadSearchIndex,
+  searchIndex,
+  getCachedIndex,
+} from '@/hooks/search-index';
 
-interface SearchResult {
-  name: string;
-  cvr: string;
-  address: string;
-  type: string;
-  id: string;
-}
-
-interface SearchResponse {
-  results: SearchResult[];
-  total: number;
-  query: string;
-  searchType?: string;
-}
+export type { SearchResult } from '@/hooks/search-index';
 
 interface UseSearchOptions {
   debounceMs?: number;
 }
 
 interface UseSearchReturn {
-  searchResults: SearchResult[];
+  searchResults: {
+    name: string;
+    cvr: string;
+    address: string;
+    type: string;
+    id: string;
+  }[];
   isLoading: boolean;
   error: string | null;
 }
-
-export type { SearchResult };
 
 export function useSearch(
   query: string,
@@ -35,11 +31,25 @@ export function useSearch(
   options: UseSearchOptions = {}
 ): UseSearchReturn {
   const { debounceMs = 300 } = options;
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<
+    UseSearchReturn['searchResults']
+  >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const indexRef = useRef<SearchIndexEntry[] | null>(getCachedIndex());
 
   const { showLoadingToast, hideLoadingToast } = useLoadingToast();
+
+  // Preload search index on mount
+  useEffect(() => {
+    loadSearchIndex()
+      .then((entries) => {
+        indexRef.current = entries;
+      })
+      .catch(() => {
+        // Will retry on search
+      });
+  }, []);
 
   const performSearch = useCallback(
     async (q: string) => {
@@ -49,11 +59,15 @@ export function useSearch(
         return;
       }
 
-      showLoadingToast('Søger', `Søger efter "${q.trim()}"...`);
       setIsLoading(true);
       setError(null);
 
       try {
+        if (!indexRef.current) {
+          showLoadingToast('Indlæser', 'Henter søgeindeks...');
+          indexRef.current = await loadSearchIndex();
+        }
+
         const searchTypeMap: { [key: number]: string } = {
           0: 'auto',
           1: 'cvr',
@@ -61,16 +75,8 @@ export function useSearch(
         };
 
         const searchType = searchTypeMap[activeTab] || 'auto';
-        const response = await apiFetch(
-          `/functions/v1/search?q=${encodeURIComponent(q.trim())}&type=${searchType}&limit=20`
-        );
-
-        if (!response.ok) {
-          throw new Error('Search failed');
-        }
-
-        const data: SearchResponse = await response.json();
-        setSearchResults(data.results || []);
+        const results = searchIndex(indexRef.current, q.trim(), searchType);
+        setSearchResults(results);
       } catch (err) {
         console.error('Search error:', err);
         setError('Søgning fejlede. Prøv igen.');
@@ -83,7 +89,6 @@ export function useSearch(
     [activeTab, showLoadingToast, hideLoadingToast]
   );
 
-  // Debounced search
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       performSearch(query);
@@ -92,7 +97,6 @@ export function useSearch(
     return () => clearTimeout(timeoutId);
   }, [query, performSearch, debounceMs]);
 
-  // Re-search when tab changes
   useEffect(() => {
     if (query && query.trim().length >= 2) {
       performSearch(query);

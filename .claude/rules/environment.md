@@ -3,15 +3,16 @@
 ## Frontend (`.env.local`)
 
 ```bash
-NEXT_PUBLIC_API_URL=<supabase_project_url>
-NEXT_PUBLIC_API_KEY=<supabase_anon_key>
+NEXT_PUBLIC_DATA_URL=<r2_cdn_public_url>
 ```
 
 ## Backend (`.env`)
 
 ```bash
-SUPABASE_URL=<supabase_project_url>
-SUPABASE_KEY=<supabase_service_role_key>
+R2_BUCKET=<r2_bucket_name>
+R2_ACCESS_KEY_ID=<r2_access_key>
+R2_SECRET_ACCESS_KEY=<r2_secret_key>
+R2_ACCOUNT_ID=<cloudflare_account_id>
 GCS_BUCKET=<gcs_bucket_name>
 GCS_CREDENTIALS=<path_to_service_account_json>
 ```
@@ -20,8 +21,7 @@ GCS_CREDENTIALS=<path_to_service_account_json>
 
 ```bash
 cd frontend && npm run dev                    # Should start on :3000
-cd backend && source venv/bin/activate && python -c "import supabase; print('OK')"
-supabase status                               # Should show linked project
+cd backend && source venv/bin/activate && python -c "import duckdb; print('OK')"
 ```
 
 ## Common Failures
@@ -29,21 +29,16 @@ supabase status                               # Should show linked project
 ### Frontend Not Starting
 - Check Node version: `node --version` (18+)
 - Clear cache: `rm -rf .next node_modules && npm install`
-- Verify `.env.local` exists with Supabase credentials
+- Verify `.env.local` exists with `NEXT_PUBLIC_DATA_URL`
 - Check port: `lsof -i :3000`
 
-### Supabase Connection Issues
-- `supabase status` to check link
-- `SUPABASE_URL` should end with `.supabase.co`
-- `SUPABASE_KEY` should be a long string (not empty)
-- Test: `supabase db pull`
-
-### Migration Failures
-- Check SQL syntax in migration file
-- Verify order: `ls supabase/migrations/`
-- Reset local (destructive): `supabase db reset`
+### R2 Data Access Issues
+- Verify `NEXT_PUBLIC_DATA_URL` points to the correct R2 public URL
+- Check R2 bucket permissions (public read access required)
+- Test: `curl -s $NEXT_PUBLIC_DATA_URL/homepage-rankings.json | head`
 
 ### Pipeline Environment
 - Always activate: `cd backend && source venv/bin/activate`
 - Install deps: `pip install -r requirements.txt`
+- R2: Set `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID`
 - GCS: `export GOOGLE_APPLICATION_CREDENTIALS="/path/to/sa.json"`

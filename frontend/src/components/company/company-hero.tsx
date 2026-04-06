@@ -1,7 +1,7 @@
 'use client';
 
-import { CompanyResponse } from '@/services/supabase/types';
-import type { BasicCompanyInfo } from '@/services/supabase/company-basic';
+import { CompanyResponse } from '@/services/data/types';
+import type { BasicCompanyInfo } from '@/services/data/company-basic';
 import { Container } from '@/components/layout/container';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';

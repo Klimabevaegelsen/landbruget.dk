@@ -103,7 +103,7 @@ export function MunicipalityDetailsModal({
 
       try {
         const response = await fetch(
-          `/api/supabase/functions/municipality-details?municipality=${encodeURIComponent(municipality)}&category=${category}&year=${year}&limit=20`
+          `/api/data/municipality-details?municipality=${encodeURIComponent(municipality)}&category=${category}&year=${year}&limit=20`
         );
 
         if (!response.ok) {

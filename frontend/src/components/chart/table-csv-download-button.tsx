@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
-import { BaseDataGrid } from '@/services/supabase/types';
+import { BaseDataGrid } from '@/services/data/types';
 import { downloadTableAsCSV } from '@/lib/csv-download';
 
 interface TableCSVDownloadButtonProps {

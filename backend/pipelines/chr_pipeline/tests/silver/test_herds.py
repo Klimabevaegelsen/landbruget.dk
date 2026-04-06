@@ -56,9 +56,7 @@ class TestHerdsTable:
         assert (silver_dir / "herds.parquet").exists()
 
         # Verify data
-        row = con.execute(
-            "SELECT herd_number, chr_number, species_name, is_organic FROM herds"
-        ).fetchone()
+        row = con.execute("SELECT herd_number, chr, species_name, is_organic FROM herds").fetchone()
         assert row is not None
         assert row[0] == 123456
         assert row[1] == 123456
@@ -127,9 +125,7 @@ class TestHerdsTable:
         assert result is not None
 
         # Verify CHR number handling
-        rows = con.execute(
-            "SELECT herd_number, chr_number FROM herds ORDER BY herd_number"
-        ).fetchall()
+        rows = con.execute("SELECT herd_number, chr FROM herds ORDER BY herd_number").fetchall()
         assert len(rows) == 2
         assert rows[0][1] == 123456
         # Invalid CHR should be NULL (TRY_CAST of 'INVALID' to BIGINT yields NULL)

@@ -72,7 +72,7 @@ def create_property_vet_events_table(
                 COALESCE(
                     TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT),
                     NULL
-                ) AS chr_number,
+                ) AS chr,
                 -- Species code as INTEGER
                 COALESCE(
                     TRY_CAST(NULLIF(TRIM(CAST(species_code_raw AS VARCHAR)), '') AS INTEGER),

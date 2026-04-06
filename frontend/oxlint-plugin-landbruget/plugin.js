@@ -371,6 +371,7 @@ const TEST_COVERAGE_ALLOWLIST = new Set([
   'src/hooks/useLoadingToast.ts',
   'src/hooks/useSearch.ts',
   // Hooks with unit tests (remove once coverage is verified)
+  'src/hooks/search-index.ts',
   'src/hooks/useCompanyCache.ts',
   'src/hooks/useMapTheme.ts',
   'src/hooks/useRankingsCache.ts',
@@ -387,10 +388,6 @@ const TEST_COVERAGE_ALLOWLIST = new Set([
   'src/lib/server-cache.ts',
   'src/lib/utils.ts',
   // Services without unit tests
-  'src/services/supabase/climate.ts',
-  'src/services/supabase/company-basic.ts',
-  'src/services/supabase/company.ts',
-  'src/services/supabase/config.ts',
   // Services with unit tests (remove once coverage is verified)
   'src/services/pmtiles-cache-service.ts',
 ]);

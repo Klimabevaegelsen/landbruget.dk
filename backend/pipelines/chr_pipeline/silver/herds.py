@@ -53,7 +53,7 @@ def create_herds_table(
             SELECT
                 -- Integer fields with safe casting
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
-                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(species_code_raw AS VARCHAR)), '') AS INTEGER), NULL) AS species_code,
                 NULLIF(TRIM(CAST(species_name_raw AS VARCHAR)), '') AS species_name,
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(usage_type_code_raw AS VARCHAR)), '') AS INTEGER), NULL) AS usage_type_code,
@@ -357,7 +357,7 @@ def create_herd_sizes_table(
                 uuid() AS size_id,
                 -- Integer fields with safe casting
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
-                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(species_code_raw AS VARCHAR)), '') AS INTEGER), NULL) AS species_code,
                 NULLIF(TRIM(CAST(species_name_raw AS VARCHAR)), '') AS species_name,
                 NULLIF(TRIM(CAST(category_raw AS VARCHAR)), '') AS category,

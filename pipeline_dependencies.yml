@@ -249,6 +249,22 @@ pipelines:
     outputs:
       - gold/cvr_enrichment
 
+  api_export:
+    workflow: api_export_pipeline.yml
+    description: "Pre-compute JSON API files from gold-layer parquet, upload to R2 CDN"
+    upstream:
+      - cvr_enrichment # gold/cvr_enrichment (search index, company profiles)
+      - field_production # gold/field_production (homepage rankings, municipality data)
+      - pesticide_disaggregation # gold/pesticide_disaggregation (pesticide analysis)
+      - worker_safety # gold/worker_safety
+      - work_permits # gold/work_permits
+    downstream: []
+    paths:
+      - backend/pipelines/api_export/**
+    outputs:
+      - R2 api/v1/*.json (homepage, search, companies, municipalities, pesticides)
+    notes: "Replaces Supabase edge functions. Runs after gold-layer pipelines complete."
+
   # ── TIER 3: Terminal ──
 
   generate_pmtiles:

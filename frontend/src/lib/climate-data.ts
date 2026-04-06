@@ -1,1 +1,1 @@
-export { getClimateEmissions } from '@/services/supabase/climate';
+export { getClimateEmissions } from '@/services/data/climate';

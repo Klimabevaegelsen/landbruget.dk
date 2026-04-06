@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
-import { DocumentationLink } from '@/services/supabase/types';
+import { DocumentationLink } from '@/services/data/types';
 import { BookOpen } from 'lucide-react';
 
 interface DocumentationAccordionProps {

@@ -2,7 +2,7 @@
  * Utility functions for chart components
  */
 
-import { PageBuilderItem, IteratedSection } from '@/services/supabase/types';
+import { PageBuilderItem, IteratedSection } from '@/services/data/types';
 
 export type MissingDataType =
   | 'nitrate'

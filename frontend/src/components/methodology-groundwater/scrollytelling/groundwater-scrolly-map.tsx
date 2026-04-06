@@ -10,6 +10,7 @@ import {
   VEJEN_CATCHMENT,
   VEJEN_FIELDS,
 } from '@/components/methodology-groundwater/scrollytelling/scrolly-geo-data';
+import { buildGeo } from '@/components/methodology-groundwater/scrollytelling/build-geo';
 import {
   ESPE_WELL,
   VEJEN_WELL,
@@ -26,27 +27,6 @@ import { CatchmentLayers } from '@/components/methodology-groundwater/scrollytel
 import { GwTerrainExtrusion } from '@/components/methodology-groundwater/scrollytelling/gw-terrain-extrusion';
 import { GwMapAnnotations } from '@/components/methodology-groundwater/scrollytelling/gw-map-annotations';
 import { GwVadoseAnimation } from '@/components/methodology-groundwater/scrollytelling/gw-vadose-animation';
-
-function buildGeo(
-  catchment: typeof ESPE_CATCHMENT | typeof VEJEN_CATCHMENT,
-  fields: typeof ESPE_FIELDS | typeof VEJEN_FIELDS
-): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: { kind: 'catchment' },
-        geometry: catchment as unknown as GeoJSON.Geometry,
-      },
-      ...fields.features.map((f) => ({
-        type: 'Feature' as const,
-        properties: { ...f.properties, kind: 'field' },
-        geometry: f.geometry as unknown as GeoJSON.Geometry,
-      })),
-    ],
-  };
-}
 
 interface GroundwaterScrollyMapProps {
   step: ScrollyStepId;

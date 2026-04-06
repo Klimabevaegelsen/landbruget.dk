@@ -16,15 +16,17 @@ npm run format:check  # Check formatting without modifying
 
 ## Data Fetching
 
-We do NOT use the Supabase JS client. All HTTP goes through `apiFetch()` in `services/supabase/config.ts`:
+All data is served from pre-computed JSON on R2 CDN. Fetching goes through `dataFetch()` in `services/data/config.ts`:
 
 ```typescript
-import { apiFetch } from '@/services/supabase/config';
-const response = await apiFetch('/rest/v1/table?column=eq.value');
+import { dataFetch } from '@/services/data/config';
+const data = await dataFetch<CompanyData>('/companies/12345678.json');
 ```
 
-- Service modules in `services/supabase/` wrap `apiFetch()` per domain (climate, company, etc.)
-- Components never import Supabase or fetch directly — use hooks or services
+- Service modules in `services/data/` wrap `dataFetch()` per domain (climate, company, etc.)
+- Server-side caching in `lib/server-cache.ts` uses `unstable_cache` with weekly revalidation
+- API routes in `app/api/data/` proxy cached R2 data to the client
+- Components never fetch directly — use hooks or services
 - Environment vars accessed via `lib/env.ts`, not `process.env` directly
 
 ## Component Patterns
@@ -65,7 +67,7 @@ src/
 │   └── ui/        # 48 Radix-based primitives (all 'use client')
 ├── hooks/         # Custom hooks (caching, navigation, toasts)
 ├── lib/           # Utilities (cn, env, cache-utils, csv-download)
-├── services/      # Data layer (supabase/config.ts = apiFetch)
+├── services/      # Data layer (data/config.ts = dataFetch from R2 CDN)
 ├── stores/        # Zustand (minimal — hashStore only)
 ├── types/         # .d.ts for third-party type defs only
 └── content/       # Static content
@@ -90,7 +92,7 @@ Config: `frontend/.oxlintrc.json` | Plugin: `frontend/oxlint-plugin-landbruget/p
 
 ## Common Mistakes to Avoid
 
-- Using Supabase JS client — use `apiFetch()` instead
+- Using Supabase JS client — use `dataFetch()` from `services/data/config.ts` instead
 - Using ESLint — use `oxlint` (`npm run lint`)
 - Using Prettier — use `oxfmt` (`npm run format`)
 - Putting business logic in components — use hooks or services

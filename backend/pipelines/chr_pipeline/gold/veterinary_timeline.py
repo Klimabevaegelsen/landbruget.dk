@@ -248,9 +248,9 @@ def match_fires_to_properties(con: duckdb.DuckDBPyConnection, max_distance_m: in
             WITH address_matches AS (
                 SELECT
                     f.*,
-                    p.chr_number,
+                    p.chr,
                     p.address as property_address,
-                    p.municipality_name as property_municipality,
+                    p.municipality as property_municipality,
                     p.geo_coord_x_source as property_x,
                     p.geo_coord_y_source as property_y,
                     -- Calculate Euclidean distance in meters (UTM coordinates are in meters)
@@ -278,7 +278,7 @@ def match_fires_to_properties(con: duckdb.DuckDBPyConnection, max_distance_m: in
                         OR LOWER(f.fire_street) LIKE '%' || LOWER(SPLIT_PART(p.address, ' ', 1)) || '%')
                     AND p.geo_coord_x_source IS NOT NULL
                     AND p.geo_coord_y_source IS NOT NULL
-                    AND LOWER(p.municipality_name) = LOWER(f.fire_municipality)
+                    AND LOWER(p.municipality) = LOWER(f.fire_municipality)
             ),
             best_matches AS (
                 SELECT *,

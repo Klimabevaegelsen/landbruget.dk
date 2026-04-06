@@ -1,6 +1,6 @@
 'use client';
 
-import { BaseDataGrid } from '@/services/supabase/types';
+import { BaseDataGrid } from '@/services/data/types';
 import { DynamicDataTable } from '@/components/table/dynamic-table';
 import { ColumnDef } from '@tanstack/react-table';
 import {

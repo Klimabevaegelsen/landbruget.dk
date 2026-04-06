@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   BasicCompanyInfo,
   getBasicCompanyById,
-} from '@/services/supabase/company-basic';
-import { getCompanyById } from '@/services/supabase/company';
-import { CompanyResponse } from '@/services/supabase/types';
+} from '@/services/data/company-basic';
+import { getCompanyById } from '@/services/data/company';
+import { CompanyResponse } from '@/services/data/types';
 import { toast } from 'sonner';
 
 const COMPANY_NAVIGATION_LOADING_TOAST_ID = 'company-navigation-loading';

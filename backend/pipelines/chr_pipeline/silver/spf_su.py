@@ -76,7 +76,7 @@ def create_spf_su_herds_table(
             SELECT
                 uuid() AS spf_su_id,
                 -- Basic identifiers: cast to string, trim, nullif empty, then cast to int64
-                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(owner_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS owner_number,
                 -- Farm information
@@ -194,7 +194,7 @@ def create_spf_su_health_controls_table(
             SELECT
                 uuid() AS health_control_id,
                 -- Basic identifiers
-                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
                 -- Disease information
                 NULLIF(TRIM(CAST(disease_code_raw AS VARCHAR)), '') AS disease_code,
@@ -295,7 +295,7 @@ def create_spf_su_salmonella_data_table(
             SELECT
                 uuid() AS salmonella_id,
                 -- Basic identifiers
-                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                 COALESCE(TRY_CAST(NULLIF(TRIM(CAST(herd_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS herd_number,
                 -- Salmonella information
                 TRY_CAST(salmonella_date_raw AS TIMESTAMP) AS salmonella_date,

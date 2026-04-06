@@ -306,7 +306,7 @@ class TestDataValidation:
 
         # Valid 6-digit CHR should be preserved
         valid_chr_count = con.execute(
-            "SELECT COUNT(*) FROM herds WHERE chr_number IS NOT NULL"
+            "SELECT COUNT(*) FROM herds WHERE chr IS NOT NULL"
         ).fetchone()[0]
         assert valid_chr_count >= 1
 

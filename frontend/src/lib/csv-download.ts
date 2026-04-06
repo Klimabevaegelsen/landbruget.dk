@@ -8,7 +8,7 @@ import {
   GeoJSONLayer,
   Timeline,
   BaseDataGrid,
-} from '@/services/supabase/types';
+} from '@/services/data/types';
 
 /**
  * Converts chart data to CSV format

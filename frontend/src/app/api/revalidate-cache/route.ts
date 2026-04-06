@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
           'municipality-rankings',
           'pesticide-analysis',
           'pesticide-company-details',
+          'burden-histogram',
         ];
 
     console.log('🔄 Manual cache invalidation requested for tags:', tags);
@@ -91,6 +92,7 @@ export async function GET() {
       'municipality-rankings',
       'pesticide-analysis',
       'pesticide-company-details',
+      'burden-histogram',
     ],
     cache_strategy: '7-day server cache + manual Tuesday invalidation',
     next_tuesday_copenhagen: nextTuesday.toLocaleString('da-DK', {

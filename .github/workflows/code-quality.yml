@@ -428,6 +428,7 @@ jobs:
           "property_owners_sftp"
           "svineflytning_pipeline"
           "base"
+          "api_export"
         )
 
         TESTED=0

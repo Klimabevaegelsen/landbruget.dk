@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
-import { MapChart } from '@/services/supabase/types';
+import { MapChart } from '@/services/data/types';
 import { downloadMapAsCSV } from '@/lib/csv-download';
 
 interface MapCSVDownloadButtonProps {

@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
-import { ChartData } from '@/services/supabase/types';
+import { ChartData } from '@/services/data/types';
 import { downloadChartAsCSV } from '@/lib/csv-download';
 
 interface CSVDownloadButtonProps {

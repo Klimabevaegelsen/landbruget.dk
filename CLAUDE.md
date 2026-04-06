@@ -6,10 +6,11 @@ Public transparency project: organize Danish agricultural data and make it unive
 
 - **Frontend**: Next.js 16, React 19, TypeScript, Tailwind CSS 4, MapLibre GL
 - **Backend**: Python 3.11+, DuckDB, Pandas, GeoPandas
-- **Database**: Supabase (PostgreSQL 15 + PostGIS)
+- **Data**: Pre-computed JSON on Cloudflare R2 CDN (via `api_export` pipeline)
+- **Database**: Supabase (PostgreSQL 15 + PostGIS) — used for CHR incremental tracking only
 - **Linting**: oxlint (frontend), ruff (backend)
 - **Testing**: Playwright E2E (frontend), Pytest (backend)
-- **Infra**: GCS/R2 (data), Vercel (deploy), GitHub Actions (CI/CD)
+- **Infra**: R2 (data CDN), GCS (raw data), Vercel (deploy), GitHub Actions (CI/CD)
 
 ## Quick Start
 
@@ -31,9 +32,8 @@ cd backend && source venv/bin/activate
 python -m pytest                     # Run tests
 cd pipelines/<name> && python main.py  # Run pipeline
 
-# Database
-supabase migration new <name>        # New migration
-supabase db push                     # Push migrations
+# Data Export (R2 CDN)
+cd pipelines/api_export && python main.py  # Export all JSON to R2
 ```
 
 ## Before ANY Commit
@@ -46,7 +46,7 @@ cd backend && python -m pytest
 ## Reference
 
 - **Rules**: `.claude/rules/` — architecture, data-quality, environment, git-workflow, pipelines, security, testing
-- **Skills**: `.claude/skills/` — data-pipeline, playwright-testing, supabase-migration, code-review, gcs-data-catalog
+- **Skills**: `.claude/skills/` — data-pipeline, playwright-testing, code-review, gcs-data-catalog
 - **Commands**: `.claude/commands/` — run-tests, run-pipeline, db-migrate, fix-lint, validate-data, create-pr, new-component
 - **Pipeline docs**: `docs/PIPELINE_INDEX.md`
 - **Troubleshooting**: `docs/troubleshooting/`

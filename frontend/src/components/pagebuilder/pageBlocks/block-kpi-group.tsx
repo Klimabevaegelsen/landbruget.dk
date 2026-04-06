@@ -1,4 +1,4 @@
-import { KPIGroup } from '@/services/supabase/types';
+import { KPIGroup } from '@/services/data/types';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { useCategoryDataContext } from './CategoryDataContext';

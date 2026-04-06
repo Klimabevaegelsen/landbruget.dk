@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: '/api/supabase/functions/homepage-rankings',
+        source: '/api/data/homepage-rankings',
         headers: [
           {
             key: 'Cache-Control',
@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: '/api/supabase/functions/kommuner',
+        source: '/api/data/kommuner',
         headers: [
           {
             key: 'Cache-Control',

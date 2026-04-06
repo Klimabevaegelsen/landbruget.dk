@@ -1,4 +1,4 @@
-import { ClimateBreakdown } from '@/services/supabase/types';
+import { ClimateBreakdown } from '@/services/data/types';
 import { getClimateEmissions } from '@/lib/climate-data';
 import { CarbonAccountingBreakdown } from '@/components/climate';
 

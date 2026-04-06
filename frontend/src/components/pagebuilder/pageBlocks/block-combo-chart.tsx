@@ -9,10 +9,7 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
-import {
-  ComboChart as ComboChartType,
-  ChartData,
-} from '@/services/supabase/types';
+import { ComboChart as ComboChartType, ChartData } from '@/services/data/types';
 import { useEffect, useState } from 'react';
 import { CustomLegend, DocumentationAccordion } from '@/components/chart';
 import {

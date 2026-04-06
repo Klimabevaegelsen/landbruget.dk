@@ -42,7 +42,7 @@ def create_antibiotic_usage_table(
             SELECT
                 CAST(NULL AS VARCHAR) as usage_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
-                CAST(NULL AS BIGINT) as chr_number,
+                CAST(NULL AS BIGINT) as chr,
                 CAST(NULL AS INTEGER) as year,
                 CAST(NULL AS INTEGER) as month,
                 CAST(NULL AS INTEGER) as species_code,
@@ -81,7 +81,7 @@ def create_antibiotic_usage_table(
                 SELECT
                     CAST(NULL AS VARCHAR) as usage_id,
                     CAST(NULL AS VARCHAR) as cvr_number,
-                    CAST(NULL AS BIGINT) as chr_number,
+                    CAST(NULL AS BIGINT) as chr,
                     CAST(NULL AS INTEGER) as year,
                     CAST(NULL AS INTEGER) as month,
                     CAST(NULL AS INTEGER) as species_code,
@@ -162,7 +162,7 @@ def create_antibiotic_usage_table(
                 COALESCE(
                     TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT),
                     NULL
-                ) AS chr_number,
+                ) AS chr,
                 -- Year and month
                 COALESCE(
                     TRY_CAST(NULLIF(TRIM(CAST(year_raw AS VARCHAR)), '') AS INTEGER),

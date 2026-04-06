@@ -1,5 +1,5 @@
 import { CompanyProgressive } from '@/components/company/company-progressive';
-import { getBasicCompanyById } from '@/services/supabase/company-basic';
+import { getBasicCompanyById } from '@/services/data/company-basic';
 import { notFound } from 'next/navigation';
 
 type Props = {

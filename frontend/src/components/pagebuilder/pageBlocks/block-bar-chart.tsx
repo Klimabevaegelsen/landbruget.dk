@@ -15,7 +15,7 @@ import {
   ChartData,
   HorizontalStackedBarChart,
   StackedBarChart,
-} from '@/services/supabase/types';
+} from '@/services/data/types';
 import { useEffect, useState } from 'react';
 import { CustomLegend, DocumentationAccordion } from '@/components/chart';
 import {

@@ -88,9 +88,7 @@ export function HomepageRankings() {
           limit: '20',
         });
 
-        const response = await fetch(
-          `/api/supabase/functions/homepage-rankings?${params}`
-        );
+        const response = await fetch(`/api/data/homepage-rankings?${params}`);
 
         if (!response.ok) {
           throw new Error(

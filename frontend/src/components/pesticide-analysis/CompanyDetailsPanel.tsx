@@ -19,8 +19,6 @@ import {
   PesticideProduct,
 } from './types';
 
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/env';
-
 interface CompanyDetailsPanelProps {
   company: CompanySummary;
 }
@@ -33,7 +31,7 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
   // Fetch detailed company data
   useEffect(() => {
     const fetchDetails = async () => {
-      if (!SUPABASE_URL || !company.cvr_number) return;
+      if (!company.cvr_number) return;
 
       setLoading(true);
       setError(null);
@@ -45,13 +43,7 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
 
       try {
         const response = await fetch(
-          `${SUPABASE_URL}/functions/v1/pesticide-company-details?cvr=${company.cvr_number}`,
-          {
-            headers: {
-              Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-          }
+          `/api/data/pesticide-company-details?cvr=${company.cvr_number}`
         );
 
         if (!response.ok) {

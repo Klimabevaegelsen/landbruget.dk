@@ -1,4 +1,4 @@
-import { InfoCard } from '@/services/supabase/types';
+import { InfoCard } from '@/services/data/types';
 import { DocumentationAccordion } from '@/components/chart';
 
 export function BlockInfoCard({ infoCard }: { infoCard: InfoCard }) {

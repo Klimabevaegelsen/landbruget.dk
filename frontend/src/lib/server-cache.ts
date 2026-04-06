@@ -1,286 +1,104 @@
 /**
- * Server-side caching utilities using Next.js unstable_cache
- * These functions cache data on the server until Tuesday updates
+ * Server-side data fetching from R2 CDN.
+ * Replaces server-cache.ts (Supabase edge functions) with direct R2 JSON fetches.
+ * Data is static, updated weekly by the api_export pipeline.
  */
 
 import { unstable_cache } from 'next/cache';
 
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/env';
+import { DATA_URL } from '@/lib/env';
 
-/**
- * Cached server-side fetch for homepage statistics
- * Revalidates every Tuesday when data updates
- */
+async function fetchR2Json<T>(path: string): Promise<T> {
+  const url = `${DATA_URL}${path}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`R2 fetch failed: ${url} (${response.status})`);
+  }
+  return response.json() as Promise<T>;
+}
+
 export const getCachedHomepageStatistics = unstable_cache(
   async () => {
-    try {
-      const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/homepage-statistics`,
-        {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Supabase error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Failed to fetch homepage statistics:', error);
-
-      // Return fallback data
-      return {
-        total_data_points: 29104178,
-        total_companies: 46126,
-        last_updated: new Date().toISOString(),
-        formatted: {
-          data_points: '29.104.178',
-          companies: '46.126',
-        },
-        fallback: true,
-      };
-    }
+    return await fetchR2Json('/homepage/statistics.json');
   },
-  ['homepage-statistics'], // Cache key
-  {
-    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
-    tags: ['homepage-stats'], // Cache tags for manual invalidation
-  }
+  ['homepage-statistics'],
+  { revalidate: 604800, tags: ['homepage-stats'] }
 );
 
-/**
- * Cached server-side fetch for homepage rankings
- * Revalidates every Tuesday when data updates
- */
 export const getCachedHomepageRankings = unstable_cache(
   async (
     category: string = 'all',
-    limit: string = '20',
-    rankingId: string = ''
+    _limit: string = '20',
+    _rankingId: string = ''
   ) => {
-    try {
-      const functionUrl = new URL(
-        '/functions/v1/homepage-rankings',
-        SUPABASE_URL
-      );
-      functionUrl.searchParams.set('category', category);
-      functionUrl.searchParams.set('limit', limit);
-      if (rankingId) {
-        functionUrl.searchParams.set('rankingId', rankingId);
+    // Pre-computed JSON per category; limit/rankingId filtering done client-side
+    const data = await fetchR2Json<{
+      rankings: {
+        items: { cvr_number: string; company_id?: string }[];
+        [k: string]: unknown;
+      }[];
+      [k: string]: unknown;
+    }>(`/homepage/rankings/${category}.json`);
+    // Map cvr_number to company_id for frontend compatibility
+    for (const ranking of data.rankings ?? []) {
+      for (const item of ranking.items ?? []) {
+        item.company_id = item.cvr_number;
       }
-
-      const response = await fetch(functionUrl.toString(), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          apikey: SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Supabase error: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(
-        `Failed to fetch homepage rankings (${category}${rankingId ? `, ranking: ${rankingId}` : ''}):`,
-        error
-      );
-      throw error; // Re-throw to let API route handle the error
     }
+    return data;
   },
-  ['homepage-rankings'], // Cache key - will be combined with parameters
-  {
-    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
-    tags: ['homepage-rankings'], // Cache tags for manual invalidation
-  }
+  ['homepage-rankings'],
+  { revalidate: 604800, tags: ['homepage-rankings'] }
 );
 
-/**
- * Cached server-side fetch for municipality rankings
- * Revalidates every Tuesday when data updates
- */
 export const getCachedMunicipalityRankings = unstable_cache(
   async (
     category: string = 'all',
-    year: string = '2024',
-    limit: string = '100'
+    _year: string = '2024',
+    _limit: string = '100'
   ) => {
-    try {
-      const functionUrl = new URL('/functions/v1/kommuner', SUPABASE_URL);
-      functionUrl.searchParams.set('category', category);
-      functionUrl.searchParams.set('year', year);
-      functionUrl.searchParams.set('limit', limit);
-
-      const response = await fetch(functionUrl.toString(), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          apikey: SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Supabase error: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(
-        `Failed to fetch municipality rankings (${category}, ${year}):`,
-        error
-      );
-      throw error; // Re-throw to let API route handle the error
-    }
+    return fetchR2Json(`/municipalities/rankings/${category}.json`);
   },
-  ['municipality-rankings'], // Cache key
-  {
-    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
-    tags: ['municipality-rankings'], // Cache tags for manual invalidation
-  }
+  ['municipality-rankings'],
+  { revalidate: 604800, tags: ['municipality-rankings'] }
 );
 
-/**
- * Cached server-side fetch for pesticide analysis
- * Revalidates every Tuesday when data updates
- */
+export const getCachedMunicipalityDetails = unstable_cache(
+  async (municipality: string, category: string = 'land_use') => {
+    const safeMuni = encodeURIComponent(municipality);
+    return fetchR2Json(`/municipalities/details/${safeMuni}_${category}.json`);
+  },
+  ['municipality-details'],
+  { revalidate: 604800, tags: ['municipality-rankings'] }
+);
+
 export const getCachedPesticideAnalysis = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
-    try {
-      const functionUrl = new URL(
-        '/functions/v1/pesticide-analysis',
-        SUPABASE_URL
-      );
-
-      // Add all search parameters
-      for (const [key, value] of Object.entries(searchParams)) {
-        functionUrl.searchParams.set(key, value);
-      }
-
-      const response = await fetch(functionUrl.toString(), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          apikey: SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Supabase error: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Failed to fetch pesticide analysis:', error);
-      throw error; // Re-throw to let API route handle the error
-    }
+    const municipality = searchParams.geography;
+    const path = municipality
+      ? `/pesticides/analysis/${encodeURIComponent(municipality)}.json`
+      : '/pesticides/analysis/index.json';
+    return fetchR2Json(path);
   },
-  ['pesticide-analysis'], // Cache key
-  {
-    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
-    tags: ['pesticide-analysis'], // Cache tags for manual invalidation
-  }
+  ['pesticide-analysis'],
+  { revalidate: 604800, tags: ['pesticide-analysis'] }
 );
 
-/**
- * Cached server-side fetch for pesticide company details
- * Revalidates every Tuesday when data updates
- */
 export const getCachedPesticideCompanyDetails = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
-    try {
-      const functionUrl = new URL(
-        '/functions/v1/pesticide-company-details',
-        SUPABASE_URL
-      );
-
-      // Add all search parameters
-      for (const [key, value] of Object.entries(searchParams)) {
-        functionUrl.searchParams.set(key, value);
-      }
-
-      const response = await fetch(functionUrl.toString(), {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          apikey: SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Supabase error: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Failed to fetch pesticide company details:', error);
-      throw error; // Re-throw to let API route handle the error
-    }
+    const cvr = searchParams.cvr;
+    if (!cvr) throw new Error('CVR required');
+    return fetchR2Json(`/pesticides/companies/${cvr}.json`);
   },
-  ['pesticide-company-details'], // Cache key
-  {
-    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
-    tags: ['pesticide-company-details'], // Cache tags for manual invalidation
-  }
+  ['pesticide-company-details'],
+  { revalidate: 604800, tags: ['pesticide-company-details'] }
 );
 
-/**
- * Cached server-side fetch for national burden histogram.
- * Calls the get_burden_histogram RPC via PostgREST.
- */
 export const getCachedBurdenHistogram = unstable_cache(
   async (year: number) => {
-    try {
-      const response = await fetch(
-        `${SUPABASE_URL}/rest/v1/rpc/get_burden_histogram`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            apikey: SUPABASE_ANON_KEY,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ p_year: year }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Supabase error: ${response.status} ${response.statusText}`
-        );
-      }
-
-      return (await response.json()) as {
-        bin_start: number;
-        field_count: number;
-      }[];
-    } catch (error) {
-      console.error('Failed to fetch burden histogram:', error);
-      return [];
-    }
+    return await fetchR2Json<{ bin_start: number; field_count: number }[]>(
+      `/pesticides/burden-histogram-${year}.json`
+    );
   },
   ['burden-histogram'],
   {
@@ -288,24 +106,18 @@ export const getCachedBurdenHistogram = unstable_cache(
     tags: ['burden-histogram'],
   }
 );
-
-/**
- * Manual cache invalidation functions for Tuesday data updates
- * Call these when you update data on Tuesdays
- */
 export const invalidateAllCaches = async () => {
   const { revalidateTag } = await import('next/cache');
-
-  revalidateTag('homepage-stats', 'max');
-  revalidateTag('homepage-rankings', 'max');
-  revalidateTag('municipality-rankings', 'max');
-  revalidateTag('pesticide-analysis', 'max');
-  revalidateTag('pesticide-company-details', 'max');
+  revalidateTag('homepage-stats', 'page');
+  revalidateTag('homepage-rankings', 'page');
+  revalidateTag('municipality-rankings', 'page');
+  revalidateTag('pesticide-analysis', 'page');
+  revalidateTag('pesticide-company-details', 'page');
+  revalidateTag('burden-histogram', 'page');
 };
 
 export const invalidateHomepageCache = async () => {
   const { revalidateTag } = await import('next/cache');
-
-  revalidateTag('homepage-stats', 'max');
-  revalidateTag('homepage-rankings', 'max');
+  revalidateTag('homepage-stats', 'page');
+  revalidateTag('homepage-rankings', 'page');
 };
