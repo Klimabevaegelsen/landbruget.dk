@@ -21,21 +21,22 @@ export function MethodologyPageContent() {
       <SectionLimitations />
       <SectionReferences />
 
-      <footer className="border-border mt-16 border-t pt-8 pb-8">
-        <div className="bg-primary/[0.04] rounded-lg p-5">
-          <p className="font-display text-foreground text-lg font-semibold">
+      <footer className="mt-20 pb-8">
+        <div className="border-border border-t pt-10">
+          <p className="font-display text-foreground text-[20px] font-semibold tracking-tight">
             Tjek din egen adresse
           </p>
-          <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-            Se hvilke pesticider der bruges tæt på dit hjem — baseret på
-            offentlige data fra 92 % af alle danske marker.
+          <p className="text-muted-foreground mt-2 max-w-[480px] text-[15px] leading-relaxed">
+            Se hvilke pesticider der bruges t&aelig;t p&aring; dit hjem &mdash;
+            baseret p&aring; offentlige data fra 92&nbsp;% af alle danske
+            marker.
           </p>
           <Link
             href="/pesticidkort"
             data-testid="methodology-cta-pesticidkort"
-            className="bg-primary text-primary-foreground mt-4 inline-block rounded-full px-5 py-2 text-sm font-medium"
+            className="bg-primary text-primary-foreground mt-5 inline-block rounded-full px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
           >
-            Åbn pesticidkortet →
+            &Aring;bn pesticidkortet &rarr;
           </Link>
         </div>
       </footer>

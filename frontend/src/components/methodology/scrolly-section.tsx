@@ -47,7 +47,7 @@ export function ScrollySection({
             offset={offset}
             onStepEnter={({ data }) => setActiveStepId(data as string)}
           >
-            {steps.map((step) => {
+            {steps.map((step, i) => {
               const isActive = activeStepId === step.id;
               return (
                 <Step key={step.id} data={step.id}>
@@ -57,16 +57,18 @@ export function ScrollySection({
                   >
                     <motion.div
                       animate={{
-                        opacity: isActive ? 1 : 0.25,
-                        y: isActive ? 0 : 8,
-                        scale: isActive ? 1 : 0.98,
+                        opacity: isActive ? 1 : 0.15,
+                        y: isActive ? 0 : 6,
                       }}
                       transition={{
                         type: 'spring',
-                        stiffness: 200,
-                        damping: 30,
+                        stiffness: 180,
+                        damping: 28,
                       }}
                     >
+                      <div className="text-muted-foreground mb-2 text-[11px] font-medium tracking-widest uppercase">
+                        Trin {i + 1} / {steps.length}
+                      </div>
                       {step.content}
                     </motion.div>
                   </div>

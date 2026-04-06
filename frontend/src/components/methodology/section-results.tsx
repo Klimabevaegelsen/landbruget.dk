@@ -11,18 +11,10 @@ export function SectionResults() {
       <SectionHeader id="perspectives" number="4" title="Perspektiver" />
 
       <p>
-        Denne metodes unikke bidrag er rumligt: Den placerer pesticidanvendelse
-        på individuelle marker i stedet for på regnearksniveau hos virksomheden.
-        Denne geografiske præcision åbner for analyser, der ellers er umulige.
-        Nedenfor beskrives fem forsknings- og forvaltningsområder, hvor data på
-        markniveau kan bidrage med ny indsigt.
-      </p>
-      <p>
-        Det er vigtigt at understrege, at fordelingen fungerer som et{' '}
-        <em>vejledende værktøj</em>. Den estimerer, <em>hvor</em> pesticider med
-        stor sandsynlighed er anvendt &ndash; den er ikke en præcis
-        eksponeringsmodel. Resultaterne er udgangspunkter for videre
-        undersøgelse, ikke kausale beviser.
+        Denne metodes store styrke er geografien: Den flytter pesticiddata fra
+        anonyme regneark ud p&aring; landkortet. Selvom resultaterne er
+        estimater og udgangspunkter (ikke kausale beviser), &aring;bner de for
+        helt nye typer af analyser.
       </p>
 
       <PerspectivesGroundwater />

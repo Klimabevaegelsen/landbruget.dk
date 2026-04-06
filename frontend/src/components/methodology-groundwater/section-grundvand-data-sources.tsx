@@ -10,11 +10,9 @@ export function SectionGrundvandDataSources() {
       <SectionHeader id="data" number="2" title="Datakilder" />
 
       <p>
-        Analysen bygger p&aring; tre offentlige datas&aelig;t fra den danske
-        statsforvaltning, der tilsammen d&aelig;kker b&aring;de de udpegede
-        beskyttelsesomr&aring;der og den faktiske grundvandskvalitet. Alle data
-        hentes i maskinl&aelig;sbart format og processeres gennem vores
-        tretrins-forl&oslash;b (Bronze&ndash;Silver&ndash;Gold).
+        Analysen bygger p&aring; tre offentlige datas&aelig;t. Alle data hentes
+        i maskinl&aelig;sbart format og renses gennem en standardiseret
+        datapipeline.
       </p>
 
       <DatasourceGrukos />

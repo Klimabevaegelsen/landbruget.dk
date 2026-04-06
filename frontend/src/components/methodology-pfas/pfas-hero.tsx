@@ -29,15 +29,15 @@ export function PfasHero() {
         PFAS og grundvand
         <br />
         <span className="text-primary">
-          fra fluorpesticid til evighedskemikalie
+          fra spr&oslash;jtemiddel til evighedskemikalie
         </span>
       </h1>
 
       <p className="text-muted-foreground mt-6 max-w-[620px] text-lg leading-relaxed">
-        Fluorholdige pesticider nedbrydes til trifluoreddikesyre (TFA) &ndash;
-        et PFAS-stof der findes i 100&nbsp;% af de overv&aring;gede
-        grundvandsoplande. Men kun 36&nbsp;% af oplandene er overv&aring;get for
-        PFAS overhovedet.
+        Fluorholdige spr&oslash;jtemidler nedbrydes til trifluoreddikesyre (TFA)
+        &ndash; et PFAS-stof, der findes i 100&nbsp;% af de overv&aring;gede
+        grundvandsoplande. Problemet er blot, at kun 36&nbsp;% af oplandene
+        overhovedet bliver overv&aring;get for PFAS.
       </p>
 
       <div className="text-muted-foreground mt-4 flex gap-4 text-[13px]">

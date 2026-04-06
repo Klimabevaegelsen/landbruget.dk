@@ -10,40 +10,40 @@ export function SectionPfasLimitations() {
       />
 
       <p className="mb-4">
-        Analysen har flere v&aelig;sentlige begr&aelig;nsninger:
+        Vores analyse har en r&aelig;kke v&aelig;sentlige forbehold:
       </p>
 
       <ul className="list-disc space-y-3 pl-6">
         <li>
-          <strong>Overv&aring;gningsbias</strong> &ndash; Kun 36&nbsp;% af
-          oplandene har PFAS-m&aring;linger. De overv&aring;gede oplande er ikke
-          tilf&aelig;ldigt udvalgt, s&aring; resultaterne kan ikke direkte
-          generaliseres til de uoverv&aring;gede.
+          <strong>Massiv blind vinkel i overv&aring;gningen:</strong> Da kun
+          36&nbsp;% af oplandene unders&oslash;ges for PFAS, og disse ikke er
+          udvalgt tilf&aelig;ldigt, kan vi ikke uden videre overf&oslash;re
+          resultaterne til resten af landet.
         </li>
         <li>
-          <strong>Temporal begr&aelig;nsning</strong> &ndash; Systematisk
-          TFA-overv&aring;gning startede f&oslash;rst i 2020. Vi kan ikke
-          vurdere langsigtede trends p&aring; baggrund af 4&ndash;5 &aring;rs
+          <strong>Korte tidsserier:</strong> Den systematiske overv&aring;gning
+          af TFA startede f&oslash;rst i 2020. Vi kan derfor ikke tegne
+          langsigtede tendenser p&aring; baggrund af kun 4&ndash;5 &aring;rs
           data.
         </li>
         <li>
-          <strong>Ingen punktkildeadskillelse</strong> &ndash; Vi kan ikke
-          adskille PFAS fra landbrugspesticider fra andre kilder (brandskum,
-          industri, spildevand, deposition). TFA&apos;s universelle
-          tilstedev&aelig;relse afspejler sandsynligvis flere kilder.
+          <strong>Sv&aelig;rt at isolere kilderne:</strong> Vi kan ikke skelne
+          matematisk mellem PFAS fra landbruget og PFAS fra f.eks. brandskum,
+          industri eller regnvand. Den massive tilstedev&aelig;relse af TFA er
+          h&oslash;jst sandsynligt et resultat af flere kilder p&aring;
+          &eacute;n gang.
         </li>
         <li>
-          <strong>Kausalitet vs. korrelation</strong> &ndash; De illustrative
-          eksempler (mark &rarr; produkt &rarr; boring) viser rumlig
-          n&aelig;rhed, ikke &aring;rsagssammenh&aelig;ng.
-          Grundvandsstr&oslash;mme og multiple kilder g&oslash;r det umuligt at
-          spore &eacute;t fund til &eacute;n mark.
+          <strong>Kausalitet vs. korrelation:</strong> Eksemplet fra Skrydstrup
+          viser, at tingene findes samme sted &ndash; ikke at der
+          n&oslash;dvendigvis er en direkte &aring;rsagssammenh&aelig;ng mellem
+          den specifikke mark og boringen.
         </li>
         <li>
-          <strong>Rumlig autokorrelation</strong> &ndash; PFAS-fund er
-          st&aelig;rkt rumligt klyngede. Naive statistiske tests overvurderer
-          signifikansen markant (294&ndash;448&times; inflation af effektive
-          frihedsgrader).
+          <strong>Geografisk klyngedannelse:</strong> Som n&aelig;vnt
+          optr&aelig;der PFAS ofte i klynger, hvilket g&oslash;r statistiske
+          beregninger komplekse og kr&aelig;ver avanceret justering for at
+          undg&aring; kunstigt forst&aelig;rkede resultater.
         </li>
       </ul>
     </section>

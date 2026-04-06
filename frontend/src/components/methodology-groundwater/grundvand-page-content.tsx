@@ -14,7 +14,7 @@ import { SectionGrundvandReferences } from '@/components/methodology-groundwater
 
 export function GrundvandPageContent() {
   return (
-    <ArticleLayout>
+    <ArticleLayout data-testid="grundvand-page-content">
       <GrundvandHero />
       <SectionIntroduction />
       <GroundwaterScrolly />

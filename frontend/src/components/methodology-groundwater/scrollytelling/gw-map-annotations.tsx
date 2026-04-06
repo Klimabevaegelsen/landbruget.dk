@@ -41,6 +41,14 @@ export function GwMapAnnotations({ step }: GwMapAnnotationsProps) {
           subtext="Midtfyn"
         />
       )}
+      {step === 'opland' && (
+        <MapLabel
+          lng={ESPE_CENTER.lng}
+          lat={ESPE_CENTER.lat + 0.02}
+          text="Espe Opland"
+          subtext="~8 km² indvindingsområde"
+        />
+      )}
       {step === 'fields' && (
         <>
           <MapLabel
@@ -127,10 +135,12 @@ export function GwMapAnnotations({ step }: GwMapAnnotationsProps) {
           <MapLabel lng={9.15} lat={55.49} text="Vejen" />
         </>
       )}
-      <div className="absolute bottom-3 left-3 z-10">
+      <div className="absolute top-3 left-3 z-10">
         <MapLegend
           items={ESPE_LEGEND}
-          visible={step === 'fields' || step === 'detection'}
+          visible={
+            step === 'opland' || step === 'fields' || step === 'detection'
+          }
         />
         <MapLegend items={VEJEN_LEGEND} visible={step === 'metabolite'} />
       </div>

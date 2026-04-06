@@ -11,65 +11,63 @@ export function SectionPfasFindings() {
       <SubsectionHeader
         id="pfas-tfa-ubiquity"
         number="3.1"
-        title="TFA: 100&nbsp;% detektionsrate"
+        title="TFA: Fundet i 100&nbsp;% af pr&oslash;verne"
       />
       <p>
         TFA er detekteret i{' '}
         <mark>
           <strong>samtlige 2.113 overv&aring;gede grundvandsoplande</strong>
         </mark>
-        . Medianen er 0,075&nbsp;&micro;g/L, men koncentrationer op til
-        4,88&nbsp;&micro;g/L er registreret. Den universelle
-        tilstedev&aelig;relse afspejler b&aring;de fluorpesticidbrug og
-        atmosf&aelig;risk deposition fra nedbrydning af fluorholdige
-        k&oslash;lemidler (HFC&apos;er).
+        . Medianen er 0,075&nbsp;&micro;g/L, men der er registreret
+        koncentrationer helt op til 4,88&nbsp;&micro;g/L. Denne massive
+        tilstedev&aelig;relse afspejler b&aring;de brugen af fluorholdige
+        pesticider og atmosf&aelig;risk nedfald fra nedbrudte k&oslash;lemidler.
       </p>
 
       <SubsectionHeader
         id="pfas-monitoring-density"
         number="3.2"
-        title="Overv&aring;gningstætheden dominerer"
+        title="Overv&aring;gningssk&aelig;vhed: Vi finder kun det, vi leder efter"
       />
       <p>
-        I alle 19 statistiske modeller er{' '}
-        <strong>antallet af boringer per opland</strong> den st&aelig;rkeste
-        pr&aelig;diktor for om PFAS detekteres. Det afspejler et
-        grundl&aelig;ggende{' '}
+        I alle vores statistiske modeller er{' '}
+        <strong>antallet af boringer i et opland</strong> den st&aelig;rkeste
+        indikator for, om der findes PFAS. Det er et klassisk udtryk for{' '}
         <mark>
-          <strong>observationsbias</strong>
-        </mark>
-        : jo mere vi kigger, jo mere finder vi. Kun <mark>36&nbsp;%</mark> af
-        oplandene har nogen PFAS-overv&aring;gning overhovedet.
+          <strong>overv&aring;gningssk&aelig;vhed</strong>
+        </mark>{' '}
+        (<em>observationsbias</em>): Jo mere vi leder, jo mere finder vi.
+        Problemet er, at hele <mark>64&nbsp;%</mark> af oplandene overhovedet
+        ikke overv&aring;ges for PFAS.
       </p>
 
       <SubsectionHeader
         id="pfas-dose-response"
         number="3.3"
-        title="Beskedent dosis-respons"
+        title="Svag sammenh&aelig;ng for traditionelle PFAS"
       />
       <p>
-        For traditionelle PFAS (PFOS, PFOA) ses en beskeden sammenhæng med
-        pesticidintensitet: oplande i den h&oslash;jeste kvartil har{' '}
-        <strong>1,7&times; h&oslash;jere PFOS-detektionsrate</strong> (Q4/Q1).
-        For PFOA er forholdet 1,3&times;. Korrelationerne er dog svage og kan
-        ikke adskilles fra co-lokalisering med andre PFAS-kilder
-        (industriomr&aring;der, beredskab).
+        For de &aelig;ldre og mere kendte PFAS-stoffer (som PFOS og PFOA) ser vi
+        kun en beskeden sammenh&aelig;ng med landbrugets pesticidforbrug.
+        Oplande med det h&oslash;jeste pesticidforbrug har{' '}
+        <strong>1,7 gange h&oslash;jere fund af PFOS</strong> sammenlignet med
+        oplande med det laveste forbrug. Sammenh&aelig;ngen er dog for svag til
+        entydigt at pege p&aring; landbruget, da stofferne ogs&aring; kan stamme
+        fra n&aelig;rliggende industri eller brand&oslash;velsespladser.
       </p>
 
       <SubsectionHeader
         id="pfas-spatial"
         number="3.4"
-        title="Rumlig autokorrelation"
+        title="Geografisk afsmitning (Rumlig autokorrelation)"
       />
       <p>
-        PFAS-fund er st&aelig;rkt rumligt autokorrelerede: Moran&apos;s
-        I-v&aelig;rdierne (0,25&ndash;0,38) giver{' '}
-        <mark>
-          <strong>294&ndash;448&times; inflation</strong>
-        </mark>{' '}
-        af effektive frihedsgrader sammenlignet med uafh&aelig;ngige
-        observationer. Det betyder, at naive statistiske tests vil overvurdere
-        signifikansen af rumlige m&oslash;nstre markant.
+        PFAS-forurening optr&aelig;der ofte i store, sammenh&aelig;ngende
+        klynger p&aring; landkortet. Rent statistisk betyder det, at et fund i
+        &eacute;n boring smitter af p&aring; naboboringen. Hvis man ikke
+        justerer for dette i sine modeller, vil man f&aring; et st&aelig;rkt
+        overvurderet billede af, hvor pr&aelig;cise de geografiske
+        m&oslash;nstre er.
       </p>
     </section>
   );

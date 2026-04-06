@@ -1,4 +1,7 @@
-import { SubsectionHeader } from '@/components/methodology/article-layout';
+import {
+  Sidenote,
+  SubsectionHeader,
+} from '@/components/methodology/article-layout';
 
 export function PerspectivesHealth() {
   return (
@@ -6,35 +9,21 @@ export function PerspectivesHealth() {
       <SubsectionHeader
         id="health"
         number="4.2"
-        title="Sundhed og nærhedsanalyse"
+        title="Sundhed og afstandsanalyser"
       />
       <p>
-        En systematisk gennemgang af 151 studier (1988&ndash;2019) viser, at 71
-        % finder en signifikant sammenhæng mellem beboeres nærhed til
-        pesticidbehandlede marker og negative sundhedseffekter [18]. De hyppigst
-        dokumenterede udfald er neurodegenerative sygdomme (f.eks. Parkinsons),
-        børnekræft (hjernetumorer), udviklingsforstyrrelser og reproduktive
-        komplikationer [19, 20].
-      </p>
-      <p>
-        Eksponeringsgradienten er veldokumenteret: Koncentrationen af
-        pesticid-rester (metabolitter) i urin falder i takt med afstanden til
-        behandlede arealer [21]. De fleste epidemiologiske studier anvender
-        afstandsanalyser (bufferzoner) på 200&ndash;500 meter omkring boliger
-        som indikator for eksponering [18].
-      </p>
-      <p>
-        Kombinationen af vores data og Bygnings- og Boligregistret (BBR) [14]
-        gør det muligt at beregne den præcise afstand mellem marker med
-        pesticidanvendelse og beboelse, skoler, daginstitutioner og hospitaler.
-        Afstandene beregnes præcist i meter via geografiske koordinater (
-        <code>ST_Distance</code>).
-      </p>
-      <p>
-        Selvom dette er et overordnet pejlemærke og ikke en præcis
-        eksponeringsmodel (da faktisk afdrift afhænger af bl.a. vind, vejr og
-        sprøjteteknik), giver det et hidtil uset udgangspunkt for epidemiologisk
-        forskning i Danmark.
+        Epidemiologiske studier viser konsekvent en sammenh&aelig;ng mellem
+        n&aelig;rhed til spr&oslash;jtede marker og sygdomme som Parkinsons og
+        b&oslash;rnekr&aelig;ft
+        <Sidenote number={18}>
+          Bresson et al. (2020), scoping review af 151 studier
+        </Sidenote>
+        <Sidenote number={19}>Brouwer et al. (2022)</Sidenote>
+        <Sidenote number={20}>Baldi et al. (2021)</Sidenote>. Ved at kombinere
+        vores markdata med Bygnings- og Boligregistret (BBR) kan forskere nu
+        beregne den pr&aelig;cise afstand mellem spr&oslash;jtede marker og
+        boliger, skoler eller daginstitutioner
+        <Sidenote number={21}>Lu et al. (2012)</Sidenote>.
       </p>
     </>
   );

@@ -4,6 +4,7 @@ import { ScrollyCard } from '@/components/methodology/scrolly-card';
 import {
   IntroCard,
   LocationCard,
+  OplandCard,
   SoilCard,
   VadoseCard,
   DetectionCard,
@@ -17,18 +18,15 @@ const CAVEAT =
 export const GROUNDWATER_STEPS = [
   { id: 'intro', content: <IntroCard /> },
   { id: 'location', content: <LocationCard /> },
+  { id: 'opland', content: <OplandCard /> },
   {
     id: 'fields',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="Pesticider på marken">
+      <ScrollyCard caveat={CAVEAT} title="P&aring; marken">
         <p>
-          I 2016 sprøjtes <strong>Fighter 480</strong> (aktivstof: bentazon) på
-          6 marker inde i Espe-oplandet — silomajs og vårbyg, i alt
-          42,2&nbsp;ha.
-        </p>
-        <p className="mt-2">
-          Vi kan ikke vide om netop disse marker bidrager til fund i
-          grundvandet, men de illustrerer sammenhængen.
+          I 2016 blev der spr&oslash;jtet med <strong>Fighter 480</strong>{' '}
+          (aktivstof: bentazon) p&aring; seks marker inden for oplandet &mdash;
+          silomajs og v&aring;rbyg, i alt 42,2&nbsp;ha.
         </p>
       </ScrollyCard>
     ),
@@ -36,12 +34,11 @@ export const GROUNDWATER_STEPS = [
   {
     id: 'ingredient',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="Aktivstof ≠ produktnavn">
+      <ScrollyCard caveat={CAVEAT} title="Aktivstof vs. produkt">
         <p>
-          <strong>Bentazon</strong> er aktivstoffet i Fighter 480 og Basagran
-          SG. <strong>MCPA</strong> er aktivstoffet i U46 M og Agroxone. Det er
-          aktivstoffet der bestemmer hvad der potentielt kan sive ned til
-          grundvandet.
+          Det er aktivstoffet bentazon, der potentielt siver ned &mdash; ikke
+          produktnavnet <em>Fighter 480</em>. Tilsvarende g&aelig;lder for
+          aktivstoffet MCPA (i produkterne U46 M og Agroxone).
         </p>
       </ScrollyCard>
     ),
@@ -52,12 +49,11 @@ export const GROUNDWATER_STEPS = [
   {
     id: 'doseresponse',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="Det statistiske mønster">
+      <ScrollyCard caveat={CAVEAT} title="Det statistiske m&oslash;nster">
         <p>
-          På tværs af <strong>3.154 oplande</strong> ser vi et klart
-          dosis-respons-mønster: oplande med mest bentazon-anvendelse har{' '}
-          <strong>4,4× højere detektionsrate</strong> (Q4/Q1). Korrelation
-          r&nbsp;=&nbsp;0,213, multivariat p&nbsp;=&nbsp;0,003.
+          P&aring; tv&aelig;rs af <strong>3.154 oplande</strong> ser vi et klart
+          m&oslash;nster: oplande med mest bentazon-anvendelse har{' '}
+          <strong>4,4&times; h&oslash;jere detektionsrate</strong> (Q4/Q1).
         </p>
       </ScrollyCard>
     ),
@@ -69,14 +65,15 @@ export const GROUNDWATER_STEPS = [
     content: (
       <ScrollyCard caveat={CAVEAT} title="Hvad det betyder">
         <p>
-          Grundvandsstrømme, jordvariabilitet og multiple kilder gør det umuligt
-          at spore ét fund til én mark.
+          Vi kan ikke bevise, at forureningen stammer fra netop disse marker, da
+          grundvandstr&oslash;mme er komplekse.
         </p>
         <p className="mt-2">
-          Men det overordnede billede er klart:{' '}
+          Men p&aring; tv&aelig;rs af 3.154 oplande ser vi et klart statistisk
+          m&oslash;nster:{' '}
           <strong>
-            jo mere der sprøjtes i et opland, jo oftere finder vi stofferne i
-            grundvandet.
+            jo mere der spr&oslash;jtes i et opland, des oftere finder vi
+            stofferne i vandet.
           </strong>
         </p>
       </ScrollyCard>

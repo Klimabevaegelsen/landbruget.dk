@@ -1,30 +1,16 @@
 'use client';
 
+import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { EXAMPLE } from '@/components/methodology/scrolly-example-data';
+import {
+  EXAMPLE,
+  SJI_JOURNAL_ROWS,
+  TARGET_POST,
+} from '@/components/methodology/scrolly-example-data';
 import type { DisaggStepId } from '@/components/methodology/scrolly-disagg-views';
 
-const P = EXAMPLE.pesticide;
-
-const COLS = [
-  { key: 'row', label: 'Post', value: `#${EXAMPLE.sjiRow}`, highlight: false },
-  { key: 'cvr', label: 'CVR', value: EXAMPLE.cvr, highlight: true },
-  { key: 'crop', label: 'Afgrøde', value: EXAMPLE.cropName, highlight: true },
-  {
-    key: 'area',
-    label: 'Areal',
-    value: `${P.reportedAreaHa} ha`,
-    highlight: false,
-  },
-  { key: 'product', label: 'Produkt', value: P.name, highlight: false },
-  {
-    key: 'dose',
-    label: 'Dosis',
-    value: `${P.totalDose} ${P.unit}`,
-    highlight: false,
-  },
-];
+const SPOTLIGHT_STEPS = new Set<DisaggStepId>(['overview', 'fields', 'match']);
 
 interface ScrollyRecordOverlayProps {
   step: DisaggStepId;
@@ -35,7 +21,25 @@ export function ScrollyRecordOverlay({
   step,
   visible,
 }: ScrollyRecordOverlayProps) {
-  const highlightKeys = step === 'fields' || step === 'match';
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const targetRef = useRef<HTMLTableRowElement>(null);
+  const [spotlit, setSpotlit] = useState(false);
+  const shouldSpotlight = SPOTLIGHT_STEPS.has(step);
+
+  useEffect(() => {
+    if (!shouldSpotlight) {
+      setSpotlit(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSpotlit(true);
+      targetRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [shouldSpotlight]);
 
   return (
     <AnimatePresence>
@@ -50,46 +54,69 @@ export function ScrollyRecordOverlay({
         >
           <div className="text-muted-foreground flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium tracking-widest uppercase">
             <span className="bg-muted inline-block h-2 w-2 rounded-sm border" />
-            SJI-indberetning &mdash; landbrugsår {EXAMPLE.year}/
+            SJI-indberetning &mdash; CVR {EXAMPLE.cvr} &mdash; {EXAMPLE.year}/
             {EXAMPLE.year + 1}
           </div>
-          <div className="overflow-x-auto">
+          <div
+            ref={scrollRef}
+            className="max-h-[220px] overflow-x-hidden overflow-y-auto"
+          >
             <table className="w-full text-[11px]">
-              <thead>
-                <tr className="bg-muted/50">
-                  {COLS.map((c) => (
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-muted/80 backdrop-blur-sm">
+                  {['Post', 'Produkt', 'Areal', 'Dosis'].map((h) => (
                     <th
-                      key={c.key}
+                      key={h}
                       className="text-muted-foreground border-r px-2 py-1 text-left font-medium last:border-r-0"
                     >
-                      {c.label}
+                      {h}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  {COLS.map((c) => (
-                    <motion.td
-                      key={c.key}
+                {SJI_JOURNAL_ROWS.map((row) => {
+                  const isTarget = row.post === TARGET_POST;
+                  const dimmed = spotlit && !isTarget;
+                  return (
+                    <motion.tr
+                      key={row.post}
+                      ref={isTarget ? targetRef : undefined}
                       animate={{
+                        opacity: dimmed ? 0.35 : 1,
                         backgroundColor:
-                          highlightKeys && c.highlight
-                            ? 'var(--color-primary-15, rgba(99,102,241,0.15))'
+                          spotlit && isTarget
+                            ? 'var(--color-primary-15, rgba(42,139,78,0.12))'
                             : 'transparent',
                       }}
                       transition={{ duration: 0.4 }}
                       className={cn(
-                        'border-r px-2 py-1.5 font-mono whitespace-nowrap last:border-r-0',
-                        highlightKeys && c.highlight
-                          ? 'text-foreground font-semibold'
-                          : 'text-foreground/70'
+                        'border-border/20 border-b',
+                        spotlit && isTarget && 'border-l-primary border-l-2'
                       )}
                     >
-                      {c.value}
-                    </motion.td>
-                  ))}
-                </tr>
+                      <td className="text-muted-foreground border-r px-2 py-1 font-mono whitespace-nowrap">
+                        #{row.post}
+                      </td>
+                      <td
+                        className={cn(
+                          'border-r px-2 py-1',
+                          spotlit && isTarget
+                            ? 'text-foreground font-semibold'
+                            : 'text-foreground/70'
+                        )}
+                      >
+                        {row.product}
+                      </td>
+                      <td className="text-foreground/70 border-r px-2 py-1 text-right font-mono whitespace-nowrap">
+                        {row.area}&nbsp;ha
+                      </td>
+                      <td className="text-foreground/70 px-2 py-1 text-right font-mono whitespace-nowrap">
+                        {row.dose}&nbsp;{row.unit}
+                      </td>
+                    </motion.tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

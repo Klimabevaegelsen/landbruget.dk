@@ -32,24 +32,33 @@ export function LocationCard() {
   );
 }
 
-export function SoilCard() {
+export function OplandCard() {
   return (
-    <ScrollyCard caveat={CAVEAT} title="Ned gennem jorden">
+    <ScrollyCard caveat={CAVEAT} title="Oplandet">
       <p>
-        Bentazon har en{' '}
-        <strong>
-          K<sub>oc</sub>&nbsp;~34
-        </strong>{' '}
-        (et mål for binding til jordpartikler — lavt tal = høj mobilitet). Det
-        bindes næsten ikke og er meget mobilt.
+        Et <strong>opland</strong> er det areal hvorfra regnvand siver ned og
+        ender i vandværkets indvindingsboringer. Det er den geografiske
+        forbindelse mellem markanvendelse og drikkevand.
       </p>
       <p className="mt-2">
-        MCPA nedbrydes hurtigt (
-        <strong>
-          DT<sub>50</sub>&nbsp;~25 dage
-        </strong>
-        , dvs. halveringstid i jord), men metabolitten{' '}
-        <strong>4-chlor-2-methylphenol</strong> er mere mobil og persistent.
+        Espe-oplandet dækker ca. 8 km² landbrugsjord. De marker der sprøjtes
+        inden for oplandet kan potentielt bidrage til fund i grundvandet.
+      </p>
+    </ScrollyCard>
+  );
+}
+
+export function SoilCard() {
+  return (
+    <ScrollyCard caveat={CAVEAT} title="Nedsivning">
+      <p>
+        Bentazon binder sig n&aelig;sten ikke til jorden og bev&aelig;ger sig
+        hurtigt (estimeret transporttid: 1,5 &aring;r).
+      </p>
+      <p className="mt-2">
+        MCPA nedbrydes hurtigt, men efterlader et nedbrydningsprodukt
+        (metabolit) &mdash; <strong>4-chlor-2-methylphenol</strong> &mdash; der
+        er langt mere mobilt og persistent (estimeret transporttid: 9 &aring;r).
       </p>
     </ScrollyCard>
   );
@@ -73,18 +82,15 @@ export function VadoseCard() {
 
 export function DetectionCard() {
   return (
-    <ScrollyCard caveat={CAVEAT} title="Bentazon detekteres">
+    <ScrollyCard caveat={CAVEAT} title="Fundet i boringen">
       <p>
-        <strong>10. maj 2019</strong>, boring DGU&nbsp;{ESPE_WELL.dgu} (DGU =
-        geologisk undersøgelses boringsnummer), {ESPE_WELL.depthM}&nbsp;m dybde:{' '}
+        Tre &aring;r senere (maj 2019) m&aring;les der{' '}
         <span className="text-destructive font-semibold">
           {ESPE_WELL.detection.conc}&nbsp;{ESPE_WELL.detection.unit} bentazon
-        </span>
-        &nbsp;— 4.900× over grænseværdien.
-      </p>
-      <p className="mt-2">
-        Vi kan ikke fastslå at det stammer fra netop disse marker, men
-        detektionen sker i samme opland.
+        </span>{' '}
+        i en {ESPE_WELL.depthM}&nbsp;m dyb boring (DGU&nbsp;{ESPE_WELL.dgu})
+        &mdash; 4.900 gange over gr&aelig;nsev&aelig;rdien p&aring;
+        0,1&nbsp;&mu;g/L.
       </p>
     </ScrollyCard>
   );
@@ -104,15 +110,16 @@ export function TransitionCard() {
 
 export function MetaboliteCard() {
   return (
-    <ScrollyCard caveat={CAVEAT} title="9 år senere: metabolitten">
+    <ScrollyCard caveat={CAVEAT} title="Metabolitten dukker op">
       <p>
-        Boring DGU&nbsp;{VEJEN_WELL.dgu}, {VEJEN_WELL.depthM}&nbsp;m dybde ved{' '}
-        <strong>Vejen Forsyning</strong>. MCPA: altid &lt;0,015&nbsp;µg/L. Men
-        metabolitten <strong>4-chlor-2-methylphenol</strong>:{' '}
+        En anden, dybere boring ({VEJEN_WELL.depthM}&nbsp;m, DGU&nbsp;
+        {VEJEN_WELL.dgu}) ved <strong>Vejen Forsyning</strong> viser i 2021
+        h&oslash;je niveauer af MCPA-metabolitten{' '}
+        <strong>4-chlor-2-methylphenol</strong>:{' '}
         <span className="text-primary font-semibold">
           {VEJEN_WELL.detection.conc}&nbsp;{VEJEN_WELL.detection.unit}
-        </span>{' '}
-        (2021), persistent siden 1997.
+        </span>
+        , persistent siden 1997.
       </p>
     </ScrollyCard>
   );

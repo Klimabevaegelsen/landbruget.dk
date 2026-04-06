@@ -6,41 +6,27 @@ export function DatasourceSubstanceMapping() {
       <SubsectionHeader
         id="data-mapping"
         number="2.4"
-        title="Stofkortl&aelig;gning"
+        title="Stofkortl&aelig;gning (Overs&aelig;ttelse af kemi)"
       />
       <p>
-        Pesticider overv&aring;ges og registreres under forskellige navne i
-        henholdsvis GEUS&apos; grundvandsprogram og Milj&oslash;styrelsens
-        spr&oslash;jtejournal (SJI). For at koble overv&aring;gningsdata med
-        anvendelsesdata har vi opbygget en kortl&aelig;gning med 138
-        stofkorrespondancer &ndash; 69 metabolit-til-moderstof, 66
-        navnevarianter og 3 multi-variant-relationer &ndash; baseret p&aring;
-        PPDB, GEUS-tekniske rapporter og Bek&aelig;mpelsesmiddeldatabasen (BMD).
-      </p>
-      <p>
-        Tre eksempler illustrerer, hvorfor denne kortl&aelig;gning er
-        afg&oslash;rende:
+        Et pesticid skifter ofte &ldquo;identitet&rdquo;, n&aring;r det lander i
+        jorden. For at kunne koble landmandens spr&oslash;jtejournal med
+        GEUS&apos; vandpr&oslash;ver har vi kortlagt 138 kemiske relationer. For
+        eksempel:
       </p>
       <ul className="my-4 list-disc space-y-2 pl-6">
         <li>
-          <strong className="text-foreground">1,2,4-triazol</strong> dannes fra
-          12 forskellige triazol-fungicider (propiconazol og tebuconazol
-          udg&oslash;r ~70&nbsp;% af anvendelsesintensiteten).
+          <strong className="text-foreground">1,2,4-triazol</strong> er et
+          nedbrydningsprodukt fra 12 forskellige svampemidler.
         </li>
         <li>
-          <strong className="text-foreground">4-chlor-2-methylphenol</strong>{' '}
-          overv&aring;ges under dette navn, men er en metabolit af MCPA.
-        </li>
-        <li>
-          <strong className="text-foreground">AMPA</strong> kr&aelig;ver
-          eksplicit metabolit-til-moderstof-mapping til glyphosat.
+          <strong className="text-foreground">AMPA</strong> er
+          nedbrydningsproduktet af glyphosat (Roundup).
         </li>
       </ul>
       <p>
-        Uden denne infrastruktur ville korrelationen mellem metabolitter i
-        grundvandet og moderstoffernes anvendelse p&aring; marker v&aelig;re
-        usynlig &ndash; og de st&aelig;rkeste signaler i analysen ville blive
-        overset.
+        Uden denne &ldquo;ordbog&rdquo; mellem moderstoffer og metabolitter
+        ville de st&aelig;rkeste sammenh&aelig;nge i analysen forblive usynlige.
       </p>
     </>
   );

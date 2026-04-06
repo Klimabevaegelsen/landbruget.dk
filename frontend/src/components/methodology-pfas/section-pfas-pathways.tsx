@@ -10,43 +10,35 @@ export function SectionPfasPathways() {
       />
 
       <p className="mb-4">
-        Landbruget bidrager til PFAS i grundvand via mindst fire mekanismer:
+        Landbruget og det omgivende samfund bidrager prim&aelig;rt til PFAS i
+        grundvandet via fire mekanismer med meget forskellige tidshorisonter:
       </p>
 
       <ol className="list-decimal space-y-3 pl-6">
         <li>
-          <strong>TFA fra fluorpesticider</strong> &ndash; Fluorholdige
-          aktivstoffer (fluopyram, diflufenican, tau-fluvalinat m.fl.) nedbrydes
-          i milj&oslash;et til trifluoreddikesyre. 35 registrerede aktivstoffer
-          i Danmark kan danne TFA. Denne vej forklarer den universelle
-          TFA-tilstedev&aelig;relse.
+          <strong>Fluorholdige pesticider (TFA):</strong> Aktivstofferne
+          nedbrydes i milj&oslash;et til TFA. Dette er hoved&aring;rsagen til,
+          at TFA findes overalt. Det kan n&aring; grundvandet inden for f&aring;
+          &aring;r.
         </li>
         <li>
-          <strong>Biosolids (spildevandsslam)</strong> &ndash; PFAS-holdigt slam
-          udspredt p&aring; landbrugsjord kan udvaske PFOS, PFOA og andre
-          langk&aelig;dede PFAS til grundvandet over tid.
+          <strong>Spildevandsslam:</strong> Slam, der spredes som g&oslash;dning
+          p&aring; markerne, kan indeholde PFAS (bl.a. PFOS og PFOA), som
+          langsomt vaskes ned i grundvandet over &aring;rtier.
         </li>
         <li>
-          <strong>Pesticidformuleringer</strong> &ndash; Visse
-          pesticidformuleringer anvender fluorholdige overfladeaktive stoffer
-          (surfactants), som kan introducere traditionelle PFAS uafh&aelig;ngigt
-          af selve aktivstoffet.
+          <strong>Hj&aelig;lpestoffer i spr&oslash;jtemidler:</strong> Visse
+          pesticidblandinger indeholder fluorholdige hj&aelig;lpestoffer
+          (overfladeaktive stoffer), som kan introducere traditionelle PFAS,
+          uafh&aelig;ngigt af selve aktivstoffet.
         </li>
         <li>
-          <strong>Atmosf&aelig;risk deposition</strong> &ndash; Nedbrydning af
-          fluorholdige k&oslash;lemidler (HFC&apos;er) producerer TFA i
-          atmosf&aelig;ren, som afs&aelig;ttes via nedb&oslash;r. Denne vej
-          bidrager til baggrundsniveauet af TFA og er uafh&aelig;ngig af lokal
-          pesticidanvendelse.
+          <strong>Atmosf&aelig;risk nedfald:</strong> Nedbrydning af
+          fluorholdige k&oslash;lemidler (HFC&apos;er) i atmosf&aelig;ren danner
+          TFA, som falder ned med regnen. Dette bidrager konstant til
+          baggrundsniveauet af TFA, uafh&aelig;ngigt af det lokale landbrug.
         </li>
       </ol>
-
-      <p className="mt-4">
-        De fire veje har meget forskellige tidslinjer: TFA fra pesticider kan
-        n&aring; grundvandet inden for f&aring; &aring;r, mens PFOS fra
-        biosolids kan tage &aring;rtier. Den atmosf&aelig;riske deposition er
-        kontinuerlig og allestedsn&aelig;rv&aelig;rende.
-      </p>
     </section>
   );
 }

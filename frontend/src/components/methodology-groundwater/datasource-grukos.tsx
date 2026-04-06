@@ -9,28 +9,24 @@ export function DatasourceGrukos() {
         title="Grundvandskortl&aelig;gning (GRUKOS)"
       />
       <p>
-        Milj&oslash;styrelsens grundvandskortl&aelig;gningsdatas&aelig;t
-        (GRUKOS) indeholder de omr&aring;der, som kommunerne har udpeget
-        p&aring; baggrund af den statslige grundvandskortl&aelig;gning. Data
-        distribueres via WFS-tjenesten p&aring; MiljoGIS og indeholder to lag:
+        Milj&oslash;styrelsens datas&aelig;t over de omr&aring;der, kommunerne
+        har udpeget til grundvandsbeskyttelse. Datas&aelig;ttet indeholder:
       </p>
       <ul className="my-4 list-disc space-y-2 pl-6">
         <li>
           <strong className="text-foreground">Indsatsomr&aring;der</strong>{' '}
-          &ndash; omr&aring;der med vedtagne indsatsplaner for
-          grundvandsbeskyttelse.
+          &ndash; omr&aring;der med vedtagne politiske indsatsplaner.
         </li>
         <li>
           <strong className="text-foreground">Indvindingsoplande</strong>{' '}
-          &ndash; de hydrologiske oplande til almene vandforsyninger.
+          &ndash; de hydrologiske oplande, der forsyner vandv&aelig;rkerne.
         </li>
       </ul>
       <p>
-        Begge lag kategoriseres efter s&aring;rbarhedstype: NFI
-        (nitratf&oslash;lsomme indvindingsomr&aring;der) og SFI
-        (sprøjtemiddelf&oslash;lsomme indvindingsomr&aring;der). SFI-zonerne er
-        s&aelig;rligt relevante for vores analyse, da de markerer omr&aring;der
-        med forh&oslash;jet risiko for pesticidnedsivning til grundvandet.
+        Disse kategoriseres efter s&aring;rbarhed. Vi fokuserer is&aelig;r
+        p&aring; <em>SFI</em> (Spr&oslash;jtemidelf&oslash;lsomme
+        indvindingsomr&aring;der), da de markerer zoner med forh&oslash;jet
+        risiko for, at pesticider siver ned.
       </p>
     </>
   );
