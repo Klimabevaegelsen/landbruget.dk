@@ -16,7 +16,10 @@ by modifying the search configuration.
 
 import asyncio
 import json
+import os
+import shutil
 import ssl
+import tempfile
 import time
 import uuid
 from datetime import datetime
@@ -354,13 +357,17 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         self, session: aiohttp.ClientSession, session_id: str, search_parameters: list[dict]
     ) -> tuple[str, int]:
         """
-        Download the full CSV export from Kemidata and stream directly to storage.
+        Download the full CSV export from Kemidata and upload to storage.
+
+        Downloads to a local temp file first, then uploads to R2.
+        This avoids R2's multipart upload constraint (all non-trailing parts
+        must have the same size) which is violated when streaming irregular
+        chunks directly via s3fs.
 
         Batches parameters in small chunks to stay under the API's 200k record
         download limit. Uses adaptive sizing: starts at 10 params per batch,
         falls back to 1 param if a batch exceeds the limit.
         Concatenates CSV output, skipping duplicate headers after the first batch.
-        Streams each response in chunks to avoid holding 100MB+ in memory.
 
         Returns:
             Tuple of (relative storage path, total bytes written).
@@ -382,67 +389,76 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         total_bytes = 0
         max_retries = 3
         batch_counter = 0
-        # R2 multipart uploads can fail with uneven chunks unless fixed block sizes are enforced.
-        with self.storage.fs.open(
-            storage_path,
-            "wb",
-            block_size=8 * 1024 * 1024,
-            fixed_block_size=True,
-        ) as cloud_file:
-            for idx, batch in enumerate(batches, 1):
-                batch_counter += 1
-                self.log.info(f"  Download batch {idx}/{len(batches)} ({len(batch)} parameters)")
-                body = self._build_download_body(session_id, batch)
+        tmp_path = None
 
-                try:
-                    batch_bytes = await self._download_batch_with_retry(
-                        session, body, cloud_file, batch_counter, max_retries
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+                tmp_path = tmp.name
+                for idx, batch in enumerate(batches, 1):
+                    batch_counter += 1
+                    self.log.info(
+                        f"  Download batch {idx}/{len(batches)} ({len(batch)} parameters)"
                     )
-                    total_bytes += batch_bytes
-                except Exception as exc:
-                    if "200000 records" not in str(exc):
-                        raise
-                    if len(batch) <= 1:
-                        # Single param exceeds 200k — split by date range
-                        self.log.warning(
-                            "  Single parameter exceeds 200k limit, splitting by date range..."
-                        )
-                        sub_bytes = await self._download_by_date_range(
-                            session, session_id, batch, cloud_file, batch_counter
-                        )
-                        total_bytes += sub_bytes
-                    else:
-                        # Batch exceeds 200k — split into individual params
-                        self.log.warning(
-                            f"  Batch {idx} exceeds 200k record limit, "
-                            f"splitting {len(batch)} params into individual downloads..."
-                        )
-                        for sub_idx, param in enumerate(batch, 1):
-                            batch_counter += 1
-                            sub_body = self._build_download_body(session_id, [param])
-                            self.log.info(
-                                f"    Sub-batch {sub_idx}/{len(batch)}: "
-                                f"{param.get('name', 'unknown')}"
-                            )
-                            try:
-                                sub_bytes = await self._download_batch_with_retry(
-                                    session, sub_body, cloud_file, batch_counter, max_retries
-                                )
-                                total_bytes += sub_bytes
-                            except Exception as sub_exc:
-                                if "200000 records" not in str(sub_exc):
-                                    raise
-                                self.log.warning(
-                                    f"    Single param {param.get('name', 'unknown')} "
-                                    f"exceeds 200k, splitting by date range..."
-                                )
-                                dr_bytes = await self._download_by_date_range(
-                                    session, session_id, [param], cloud_file, batch_counter
-                                )
-                                total_bytes += dr_bytes
+                    body = self._build_download_body(session_id, batch)
 
-        size_mb = total_bytes / (1024 * 1024)
-        self.log.info(f"Streamed CSV to storage: {size_mb:.1f} MB → {storage_path}")
+                    try:
+                        batch_bytes = await self._download_batch_with_retry(
+                            session, body, tmp, batch_counter, max_retries
+                        )
+                        total_bytes += batch_bytes
+                    except Exception as exc:
+                        if "200000 records" not in str(exc):
+                            raise
+                        if len(batch) <= 1:
+                            # Single param exceeds 200k — split by date range
+                            self.log.warning(
+                                "  Single parameter exceeds 200k limit, splitting by date range..."
+                            )
+                            sub_bytes = await self._download_by_date_range(
+                                session, session_id, batch, tmp, batch_counter
+                            )
+                            total_bytes += sub_bytes
+                        else:
+                            # Batch exceeds 200k — split into individual params
+                            self.log.warning(
+                                f"  Batch {idx} exceeds 200k record limit, "
+                                f"splitting {len(batch)} params into individual downloads..."
+                            )
+                            for sub_idx, param in enumerate(batch, 1):
+                                batch_counter += 1
+                                sub_body = self._build_download_body(session_id, [param])
+                                self.log.info(
+                                    f"    Sub-batch {sub_idx}/{len(batch)}: "
+                                    f"{param.get('name', 'unknown')}"
+                                )
+                                try:
+                                    sub_bytes = await self._download_batch_with_retry(
+                                        session, sub_body, tmp, batch_counter, max_retries
+                                    )
+                                    total_bytes += sub_bytes
+                                except Exception as sub_exc:
+                                    if "200000 records" not in str(sub_exc):
+                                        raise
+                                    self.log.warning(
+                                        f"    Single param {param.get('name', 'unknown')} "
+                                        f"exceeds 200k, splitting by date range..."
+                                    )
+                                    dr_bytes = await self._download_by_date_range(
+                                        session, session_id, [param], tmp, batch_counter
+                                    )
+                                    total_bytes += dr_bytes
+
+            # Upload completed temp file to R2
+            size_mb = total_bytes / (1024 * 1024)
+            self.log.info(f"Uploading {size_mb:.1f} MB CSV to cloud storage...")
+            with open(tmp_path, "rb") as src, self.storage.fs.open(storage_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+        self.log.info(f"Uploaded CSV to storage: {size_mb:.1f} MB → {storage_path}")
         return relative_path, total_bytes
 
     def _storage_path(self, filename: str) -> str:

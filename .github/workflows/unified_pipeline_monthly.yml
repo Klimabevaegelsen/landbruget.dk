@@ -110,7 +110,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Free up disk space for memory-intensive jobs
-        if: matrix.source == 'fvm_wfs' || matrix.source == 'cadastral'
+        if: matrix.source == 'fvm_wfs' || matrix.source == 'cadastral' || matrix.source == 'kemidata_surface_water_pesticides'
         run: |
           echo "=== Initial disk usage ==="
           df -h
