@@ -100,7 +100,9 @@ class HomepageExporter(BaseExporter):
             "pesticides": _r2_path(
                 "gold/pesticide_disaggregation_2023_2024/20260317_074432/pesticide_disaggregation_2023_2024.parquet"
             ),
-            "worker_safety": _r2_path("gold/worker_safety/20260317_074628/worker_safety_clean.parquet"),
+            "worker_safety": _r2_path(
+                "gold/worker_safety/20260317_074628/worker_safety_clean.parquet"
+            ),
             "work_permits": _r2_path("gold/work_permits/20260317_074636/work_permits.parquet"),
         }
 
@@ -108,7 +110,9 @@ class HomepageExporter(BaseExporter):
             try:
                 self.load_parquet_table(path, name)
             except Exception:
-                logger.warning(f"Could not load {name} from {path} — rankings using it will be skipped")
+                logger.warning(
+                    f"Could not load {name} from {path} — rankings using it will be skipped"
+                )
 
     def _table_exists(self, name: str) -> bool:
         try:
@@ -119,14 +123,27 @@ class HomepageExporter(BaseExporter):
 
     def _export_statistics(self) -> None:
         """Generate homepage/statistics.json."""
-        stats = {"total_companies": 0, "total_data_points": 0, "last_updated": datetime.now(UTC).isoformat()}
+        stats = {
+            "total_companies": 0,
+            "total_data_points": 0,
+            "last_updated": datetime.now(UTC).isoformat(),
+        }
 
         if self._table_exists("companies"):
-            stats["total_companies"] = self.conn.execute("SELECT count(*) FROM companies").fetchone()[0]
+            stats["total_companies"] = self.conn.execute(
+                "SELECT count(*) FROM companies"
+            ).fetchone()[0]
 
         # Count total data points across all loaded tables
         total = 0
-        for table in ["companies", "financials", "field_production", "pesticides", "worker_safety", "work_permits"]:
+        for table in [
+            "companies",
+            "financials",
+            "field_production",
+            "pesticides",
+            "worker_safety",
+            "work_permits",
+        ]:
             if self._table_exists(table):
                 total += self.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
         stats["total_data_points"] = total

@@ -255,7 +255,10 @@ class PesticidesExporter(BaseExporter):
                 ORDER BY bin_start
             """)
 
-            histogram = [{"bin_start": float(r["bin_start"]), "field_count": int(r["field_count"])} for r in rows]
+            histogram = [
+                {"bin_start": float(r["bin_start"]), "field_count": int(r["field_count"])}
+                for r in rows
+            ]
 
             # Write for year 2024 (the disaggregation covers 2023-2024 season)
             self.write_json(histogram, "pesticides/burden-histogram-2024.json")

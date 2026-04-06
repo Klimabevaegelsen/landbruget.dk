@@ -313,7 +313,9 @@ class MunicipalitiesExporter(BaseExporter):
                 "rank_in_municipality": row["rank_in_municipality"],
             }
             if additional_keys:
-                company["additional_data"] = {k: row.get(k) for k in additional_keys if row.get(k) is not None}
+                company["additional_data"] = {
+                    k: row.get(k) for k in additional_keys if row.get(k) is not None
+                }
             municipalities[muni] = [*municipalities[muni], company]
 
         for muni, companies in municipalities.items():
