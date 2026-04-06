@@ -23,6 +23,11 @@ export function buildReport(
     score,
     fields_count: fields.length,
     pfas_fields_count: fields.filter((f) => f.pfas_applications > 0).length,
+    avg_burden:
+      fields.length > 0
+        ? fields.reduce((sum, f) => sum + f.total_pesticide_belastning, 0) /
+          fields.length
+        : 0,
     nearest_field_m: fields[0]?.distance_m ?? 0,
     fields,
     has_bnbo_overlap: fields.some(
