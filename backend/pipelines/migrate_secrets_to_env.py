@@ -10,7 +10,7 @@ Requires:
 import logging
 import os
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from github import Github
 from github.Repository import Repository
 from google.cloud import secretmanager
@@ -88,7 +88,7 @@ def update_github_secrets(repo: Repository, secrets: dict[str, str]) -> None:
 
 def main():
     """Main function to sync secrets."""
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
 
     # Get required environment variables
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")

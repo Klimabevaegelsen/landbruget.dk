@@ -12,7 +12,7 @@ import os
 import sys
 
 import click
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from unified_pipeline.bronze.agricultural_fields import (
     AgriculturalFieldsBronze,
@@ -156,7 +156,7 @@ from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTyp
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 from unified_pipeline.util.log_util import Logger
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Import legacy monolithic CVR enrichment from the specific .py file
 # Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory

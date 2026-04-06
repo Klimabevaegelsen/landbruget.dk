@@ -25,7 +25,7 @@ Output schema:
 import os
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from pydantic import ConfigDict, Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
@@ -38,7 +38,7 @@ from unified_pipeline.util.subsidy_scheme_classifier import (
 )
 from unified_pipeline.util.timing import timed
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 
 class StoetteoplysningerSilverConfig(BaseJobConfig):

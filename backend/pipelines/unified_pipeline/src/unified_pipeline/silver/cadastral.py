@@ -8,7 +8,7 @@ from common.geometry_validator import (
 )
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
@@ -34,7 +34,7 @@ class CadastralSilverConfig(BaseJobConfig):
     )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     save_local: bool = os.getenv("SAVE_LOCAL", "False").lower() == "true"
 
 

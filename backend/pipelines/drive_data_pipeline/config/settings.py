@@ -4,12 +4,11 @@ import os
 from enum import StrEnum
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseModel, Field, model_validator
 
-# Load environment variables from .env file
-env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-load_dotenv(env_path)
+# Load environment variables (walks up to find root .env)
+load_dotenv(find_dotenv(usecwd=True))
 
 
 class StorageType(StrEnum):

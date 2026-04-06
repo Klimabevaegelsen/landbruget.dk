@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Import schema documentation
 # Import config
@@ -161,7 +161,7 @@ logging.basicConfig(
 # Note: pathlib.Path already imported at top of file
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Find the project root (directory containing 'backend' folder)
 current_file = Path(__file__).resolve()

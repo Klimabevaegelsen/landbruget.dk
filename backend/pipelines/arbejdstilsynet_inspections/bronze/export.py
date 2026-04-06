@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Import the unified metadata system
 try:
@@ -24,7 +24,7 @@ except ImportError:
 from playwright.async_api import async_playwright
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 
 # Try to import optimized cloud storage access with fallback
@@ -620,7 +620,7 @@ class BronzePipeline:
 
 def main(log_level: str = "INFO", storage_bucket: str | None = None) -> None:
     # Environment variable loading is done at the top of the script
-    # load_dotenv()
+    # load_dotenv(find_dotenv(usecwd=True))
 
     pipeline_name = "arbejdstilsynet_inspections"
     source_url = "https://publicdata.at.dk/reports/powerbi/Data%20på%20nettet/Tilsynsindblikket?rs:embed=true"  # Hardcoded URL

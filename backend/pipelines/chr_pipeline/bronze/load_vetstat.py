@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from lxml import etree
 
 # Import the exporter function
@@ -41,15 +41,8 @@ except ImportError:
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
 
-# Load environment variables
-load_dotenv()
-
-# Also try to load from the pipeline directory in case working directory is different
-
-pipeline_dir = Path(__file__).parent.parent
-env_path = pipeline_dir / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
+# Load environment variables (walks up to find root .env)
+load_dotenv(find_dotenv(usecwd=True))
 
 # Get Google Cloud Project ID from environment variable
 GOOGLE_CLOUD_PROJECT_ID = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -85,14 +78,8 @@ NAMESPACES = {
 
 def get_vetstat_credentials() -> tuple[str, str, Any, Any]:
     """Get FVM username, password, VetStat certificate, and private key."""
-    # Load environment variables from .env file if it exists
-    load_dotenv()
-
-    # Also try to load from the pipeline directory in case working directory is different
-    pipeline_dir = Path(__file__).parent.parent
-    env_path = pipeline_dir / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
+    # Load environment variables (walks up to find root .env)
+    load_dotenv(find_dotenv(usecwd=True))
 
     # Get required environment variables
     username = os.getenv("FVM_USERNAME")

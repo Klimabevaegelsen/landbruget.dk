@@ -55,11 +55,11 @@ from datetime import datetime
 from pathlib import Path
 
 import vertexai
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from vertexai.generative_models import GenerativeModel, Part
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import ClassVar
 
 import aiohttp
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from pydantic import ConfigDict
 
 # ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
@@ -52,7 +52,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     type: str = "wfs"
     url: str = "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS"
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     save_local: bool = os.getenv("SAVE_LOCAL", "False").lower() == "true"
 
 
