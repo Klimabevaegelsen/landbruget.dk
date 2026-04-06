@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { Scrollama, Step } from 'react-scrollama';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
+import { useMediaQuery } from '@/hooks/use-mobile-detection';
 
 interface ScrollyStep {
   id: string;
@@ -24,6 +25,7 @@ export function ScrollySection({
   offset = 0.5,
 }: ScrollySectionProps) {
   const [activeStepId, setActiveStepId] = useState(steps[0]?.id ?? '');
+  const isMobile = useMediaQuery('(max-width: 1023px)');
 
   return (
     <section
@@ -44,7 +46,7 @@ export function ScrollySection({
         {/* Scrolling text steps */}
         <div className="lg:w-1/2">
           <Scrollama
-            offset={offset}
+            offset={isMobile ? 0.65 : offset}
             onStepEnter={({ data }) => setActiveStepId(data as string)}
           >
             {steps.map((step, i) => {
@@ -52,7 +54,7 @@ export function ScrollySection({
               return (
                 <Step key={step.id} data={step.id}>
                   <div
-                    className="mb-48 min-h-[40vh]"
+                    className="mb-48 min-h-[40dvh]"
                     data-testid={`scrolly-step-${step.id}`}
                   >
                     <motion.div
