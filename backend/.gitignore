@@ -16,7 +16,6 @@ venv.bak/
 
 # Data files
 data/
-!**/unified_pipeline/src/unified_pipeline/data/
 *.wsdl
 
 # IDE
