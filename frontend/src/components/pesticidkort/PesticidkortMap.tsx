@@ -4,19 +4,15 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import Map, { NavigationControl, Marker, MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
-import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
 import { ProximityRings } from '@/components/pesticidkort/ProximityRings';
 import { addFieldLayers } from '@/components/pesticidkort/map-layers';
-import {
-  featureToFieldSummary,
-  haversineDistance,
-} from '@/components/pesticidkort/map-utils';
+import { addBuildingLayers } from '@/components/pesticidkort/map-layers-buildings';
 import {
   highlightField,
   flyToField,
 } from '@/components/pesticidkort/map-highlight';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
-import { computeCentroid } from '@/utils/geo';
+import { usePesticidkortData } from '@/components/pesticidkort/usePesticidkortData';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
@@ -27,6 +23,7 @@ interface PesticidkortMapProps {
   year: number;
   selectedFieldUuid?: string | null;
   onFieldsLoaded: (fields: NearbyFieldSummary[]) => void;
+  onFieldClick?: (fieldUuid: string) => void;
 }
 
 export function PesticidkortMap({
@@ -36,68 +33,55 @@ export function PesticidkortMap({
   year,
   selectedFieldUuid,
   onFieldsLoaded,
+  onFieldClick,
 }: PesticidkortMapProps) {
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [isReady, setIsReady] = useState(false);
-  const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
-  const fieldsQueriedRef = useRef(false);
 
-  useEffect(() => {
-    pmtilesCacheService
-      .getFieldAnalysisUrls(year)
-      .then((urls) => setPmtilesUrl(urls.fields));
-  }, [year]);
+  const { pmtilesUrl, buildingsUrl, queryNearbyFields, fieldsQueriedRef } =
+    usePesticidkortData({
+      lat,
+      lng,
+      radiusM,
+      year,
+      mapRef,
+      onFieldsLoaded,
+    });
 
   useEffect(() => {
     registerPmtilesProtocol();
   }, []);
 
-  const queryNearbyFields = useCallback(() => {
-    if (!mapRef.current || fieldsQueriedRef.current) return;
-    const map = mapRef.current.getMap();
-    if (!map.getLayer('fields-fill')) return;
-    fieldsQueriedRef.current = true;
-
-    const features = map.queryRenderedFeatures(undefined, {
-      layers: ['fields-fill'],
-    });
-    const seen = new Set<string>();
-    const fields: NearbyFieldSummary[] = [];
-
-    for (const feat of features) {
-      const uuid = String(feat.properties.field_uuid ?? '');
-      if (!uuid || seen.has(uuid)) continue;
-      seen.add(uuid);
-      const centroid = computeCentroid(feat.geometry);
-      if (!centroid) continue;
-      const dist = haversineDistance(lat, lng, centroid.lat, centroid.lng);
-      if (dist > radiusM) continue;
-      fields.push(
-        featureToFieldSummary(
-          feat.properties as Record<string, unknown>,
-          lat,
-          lng,
-          centroid.lat,
-          centroid.lng
-        )
-      );
-    }
-    fields.sort((a, b) => a.distance_m - b.distance_m);
-    onFieldsLoaded(fields);
-  }, [lat, lng, radiusM, onFieldsLoaded]);
-
   const handleMapLoad = useCallback(() => {
     if (!mapRef.current || !pmtilesUrl) return;
-    const map = mapRef.current.getMap();
-    addFieldLayers(map as unknown as MapInstance, pmtilesUrl);
+    const map = mapRef.current.getMap() as unknown as MapInstance;
+    addFieldLayers(map, pmtilesUrl);
+    if (buildingsUrl) addBuildingLayers(map, buildingsUrl);
     setIsReady(true);
-    map.on('idle', () => {
+
+    const rawMap = mapRef.current.getMap();
+    rawMap.on('idle', () => {
       if (!fieldsQueriedRef.current) queryNearbyFields();
     });
-  }, [pmtilesUrl, queryNearbyFields]);
+    rawMap.on('click', 'fields-fill', (e) => {
+      const uuid = String(e.features?.[0]?.properties.field_uuid ?? '');
+      if (uuid && onFieldClick) onFieldClick(uuid);
+    });
+    rawMap.on('mouseenter', 'fields-fill', () => {
+      rawMap.getCanvas().style.cursor = 'pointer';
+    });
+    rawMap.on('mouseleave', 'fields-fill', () => {
+      rawMap.getCanvas().style.cursor = '';
+    });
+  }, [
+    pmtilesUrl,
+    buildingsUrl,
+    queryNearbyFields,
+    fieldsQueriedRef,
+    onFieldClick,
+  ]);
 
-  // When year changes, update the source URL on the existing map
   useEffect(() => {
     if (!mapRef.current || !pmtilesUrl) return;
     const map = mapRef.current.getMap();
@@ -108,11 +92,7 @@ export function PesticidkortMap({
       );
     }
     fieldsQueriedRef.current = false;
-  }, [pmtilesUrl]);
-
-  useEffect(() => {
-    fieldsQueriedRef.current = false;
-  }, [lat, lng, radiusM]);
+  }, [pmtilesUrl, fieldsQueriedRef]);
 
   useEffect(() => {
     if (!isReady) return;

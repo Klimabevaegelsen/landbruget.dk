@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { FieldCard } from '@/components/pesticidkort/FieldCard';
@@ -12,28 +12,21 @@ const INITIAL_VISIBLE = 5;
 interface FieldListProps {
   fields: NearbyFieldSummary[];
   histogram: HistogramBin[];
+  selectedFieldUuid?: string | null;
   onFieldSelect?: (fieldUuid: string) => void;
 }
 
 export function FieldList({
   fields,
   histogram,
+  selectedFieldUuid,
   onFieldSelect,
 }: FieldListProps) {
   const reducedMotion = useReducedMotion();
   const [showAll, setShowAll] = useState(false);
 
   const sortedFields = useMemo(
-    () =>
-      [...fields].sort((a, b) => {
-        const aPfas = a.pfas_applications > 0 ? 1 : 0;
-        const bPfas = b.pfas_applications > 0 ? 1 : 0;
-        if (aPfas !== bPfas) return bPfas - aPfas;
-        if (a.total_pesticide_belastning !== b.total_pesticide_belastning) {
-          return b.total_pesticide_belastning - a.total_pesticide_belastning;
-        }
-        return a.distance_m - b.distance_m;
-      }),
+    () => [...fields].sort((a, b) => a.distance_m - b.distance_m),
     [fields]
   );
 
@@ -41,6 +34,30 @@ export function FieldList({
     ? sortedFields
     : sortedFields.slice(0, INITIAL_VISIBLE);
   const hiddenCount = sortedFields.length - INITIAL_VISIBLE;
+
+  useEffect(() => {
+    if (!selectedFieldUuid) return;
+    const idx = sortedFields.findIndex(
+      (f) => f.field_uuid === selectedFieldUuid
+    );
+    if (idx >= INITIAL_VISIBLE && !showAll) {
+      setShowAll(true);
+      // Wait for DOM to render expanded list before scrolling
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          document
+            .getElementById(selectedFieldUuid)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+      });
+      return;
+    }
+    requestAnimationFrame(() => {
+      document
+        .getElementById(selectedFieldUuid)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }, [selectedFieldUuid, sortedFields, showAll]);
 
   return (
     <div>
@@ -62,6 +79,7 @@ export function FieldList({
             <FieldCard
               field={field}
               histogram={histogram}
+              isSelected={field.field_uuid === selectedFieldUuid}
               onSelect={() => onFieldSelect?.(field.field_uuid)}
             />
           </motion.div>
