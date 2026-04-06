@@ -667,11 +667,21 @@ class DataLoader:
 
     def _read_native(self, r2_prefix: str, table_name: str, extra_select: str) -> int:
         """Read parquet directly from R2 using DuckDB native auth."""
-        for path in [f"r2://{BUCKET}/{r2_prefix}/*.parquet", f"r2://{BUCKET}/{r2_prefix}/data.parquet"]:
+        # Try multiple path patterns — data may be stored with timestamped subdirectories
+        # e.g. silver/grukos/20260406_130709/data.parquet
+        paths = [
+            f"r2://{BUCKET}/{r2_prefix}/*.parquet",
+            f"r2://{BUCKET}/{r2_prefix}/data.parquet",
+            f"r2://{BUCKET}/{r2_prefix}/*/*.parquet",
+            f"r2://{BUCKET}/{r2_prefix}/*/data.parquet",
+        ]
+        for path in paths:
             try:
                 self.conn.execute(f"CREATE TABLE {table_name} AS SELECT {extra_select} FROM read_parquet('{path}')")
                 return self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-            except Exception:  # noqa: S112
+            except Exception:
+                # Drop table if partially created
+                self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                 continue
         raise RuntimeError(f"Could not read {r2_prefix} from R2")
 
