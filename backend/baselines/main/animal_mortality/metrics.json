@@ -1,6 +1,6 @@
 {
   "dataset_name": "animal_mortality",
-  "source_path": "gs://landbruget-data/silver/animal mortality/20260116_234019/Dodelighedsdata.Datatraek.til.udlevering_pr.parquet",
+  "source_path": "gs://landbruget-data/silver/animal_mortality/20260116_234019/Dodelighedsdata.Datatraek.til.udlevering_pr.parquet",
   "generated_at": "2026-01-17T11:15:16.697135",
   "record_count": 54808,
   "unique_identifiers": {},

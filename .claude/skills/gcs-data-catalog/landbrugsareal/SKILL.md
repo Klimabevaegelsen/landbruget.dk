@@ -1,13 +1,13 @@
 ---
-name: gcs-landbrugsareal-data
+name: r2-landbrugsareal-data
 description: |
-  Activates when querying agricultural land and field data from GCS.
+  Activates when querying agricultural land and field data from R2.
   Use this skill for: field boundaries, crop data, land use, organic farming,
   production estimates, cadastral data, agricultural blocks, building data.
   Keywords: landbrugsareal, field, mark, marker, crop, afgrøde, organic, økologisk, production, areal, cadastral, matrikel
 ---
 
-# GCS Landbrugsareal (Agricultural Land) Data Catalog
+# R2 Landbrugsareal (Agricultural Land) Data Catalog
 
 Field boundaries, crop data, land use, and agricultural production data.
 
@@ -25,7 +25,7 @@ Field boundaries, crop data, land use, and agricultural production data.
 ### Silver Layer
 
 #### FVM Marker - Field Boundaries (617K rows/year)
-**Path**: `gs://$GCS_BUCKET/silver/fvm_marker_{year}/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/fvm_marker_{year}/*/data.parquet`
 **Years Available**: 2008-2025
 
 | Column | Type | Description | Example |
@@ -61,7 +61,7 @@ organic_conversion_date: date32
 ```
 
 #### Agricultural Blocks
-**Path**: `gs://$GCS_BUCKET/silver/agricultural_blocks_{year}/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/agricultural_blocks_{year}/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -70,7 +70,7 @@ organic_conversion_date: date32
 | total_area_ha | float | Total block area |
 
 #### Cadastral (2.16M rows)
-**Path**: `gs://$GCS_BUCKET/silver/cadastral/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/cadastral/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -83,7 +83,7 @@ organic_conversion_date: date32
 | geometry | binary | Parcel polygon (WKB) | - |
 
 #### BBR Buildings (579K rows)
-**Path**: `gs://$GCS_BUCKET/silver/bbr_buildings/*/joined_buildings.parquet`
+**Path**: `r2://landbruget-data/silver/bbr_buildings/*/joined_buildings.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -97,7 +97,7 @@ organic_conversion_date: date32
 | address | string | Building address |
 
 #### DAGI Kommuner (99 rows)
-**Path**: `gs://$GCS_BUCKET/silver/dagi_kommuner/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/dagi_kommuner/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -112,7 +112,7 @@ organic_conversion_date: date32
 ### Gold Layer
 
 #### Field Production (617K rows/year)
-**Path**: `gs://$GCS_BUCKET/gold/field_production_{year}/*/data.parquet`
+**Path**: `r2://landbruget-data/gold/field_production_{year}/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -156,19 +156,16 @@ primary_field_id: string
 
 ### Get All Fields for a CVR
 ```python
-import pyarrow.parquet as pq
-from google.cloud import storage
-import io
+import duckdb
+from common.storage.filesystem import setup_duckdb_cloud_auth
 
-client = storage.Client()
-bucket = client.bucket('$GCS_BUCKET')
+conn = duckdb.connect()
+setup_duckdb_cloud_auth(conn)
 
 # Read FVM marker data for 2024
-blob = bucket.blob('silver/fvm_marker_2024/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-df = pq.read_table(buffer).to_pandas()
+df = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/fvm_marker_2024/2025-01-10/data.parquet')
+""").df()
 
 # Filter by CVR
 company_fields = df[df['cvr_number'] == '31373077']
@@ -194,11 +191,9 @@ organic_stats = organic_stats.sort_values('organic_pct', ascending=False)
 ### Get Production Estimates for a Crop
 ```python
 # Read gold production data
-blob = bucket.blob('gold/field_production_2024/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-production = pq.read_table(buffer).to_pandas()
+production = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/gold/field_production_2024/2025-01-10/data.parquet')
+""").df()
 
 # Filter for wheat
 wheat = production[production['crop_type'].str.contains('hvede', case=False)]
@@ -218,23 +213,13 @@ crop_diversity.columns = ['cvr_number', 'crop_count', 'total_area']
 crop_diversity = crop_diversity.sort_values('crop_count', ascending=False)
 ```
 
-### Read Geometry with GeoPandas
+### Read Geometry with DuckDB Spatial
 ```python
-import geopandas as gpd
-import io
-
-# Read with geometry
-blob = bucket.blob('silver/fvm_marker_2024/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-
-# Read as GeoDataFrame
-gdf = gpd.read_parquet(buffer)
-gdf = gdf.set_crs('EPSG:4326')  # Set CRS if not set
-
-# Plot a sample
-gdf[gdf['cvr_number'] == '31373077'].plot()
+# Read with geometry via DuckDB
+gdf = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/fvm_marker_2024/2025-01-10/data.parquet')
+    WHERE cvr_number = '31373077'
+""").df()
 ```
 
 ## Join Keys
@@ -273,20 +258,20 @@ gdf[gdf['cvr_number'] == '31373077'].plot()
 - **miljo/** - Environmental data at field level (pesticides, nitrogen)
 - **husdyr/** - Livestock density per land area
 
-## GCS Paths Reference
+## R2 Paths Reference
 
 ```bash
 # List available FVM marker years
-gsutil ls gs://$GCS_BUCKET/silver/ | grep fvm_marker
+rclone lsd r2:landbruget-data/silver/ | grep fvm_marker
 
 # List field production years
-gsutil ls gs://$GCS_BUCKET/gold/ | grep field_production
+rclone lsd r2:landbruget-data/gold/ | grep field_production
 
 # List cadastral snapshots
-gsutil ls gs://$GCS_BUCKET/silver/cadastral/
+rclone lsd r2:landbruget-data/silver/cadastral/
 
 # List DAGI municipality data
-gsutil ls gs://$GCS_BUCKET/silver/dagi_kommuner/
+rclone lsd r2:landbruget-data/silver/dagi_kommuner/
 ```
 
 ## Yearly Data Pattern

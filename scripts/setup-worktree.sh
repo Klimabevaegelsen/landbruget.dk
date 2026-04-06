@@ -74,33 +74,18 @@ fi
 echo "✅ Frontend dependencies installed"
 echo ""
 
-# Step 4: Set up Backend Python environment
+# Step 4: Set up Backend Python environment using uv (workspace-aware)
 echo "🐍 Setting up Backend Python environment..."
-cd "$BACKEND_DIR"
+cd "$PROJECT_ROOT"
 
-if [ ! -d "venv" ]; then
-    echo "📦 Creating Python virtual environment..."
-    python3 -m venv venv
-    echo "✅ Virtual environment created"
-fi
-
-echo "📦 Installing Python dependencies..."
-source venv/bin/activate
-
-if ! pip show pip-tools > /dev/null 2>&1; then
-    pip install pip-tools
-fi
-
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt
-    echo "✅ Python dependencies installed"
-elif [ -f "pyproject.toml" ]; then
-    pip install -e .
-    echo "✅ Python package installed in editable mode"
+if command -v uv &> /dev/null; then
+    echo "📦 Installing Python dependencies with uv..."
+    uv sync --all-packages
+    echo "✅ Python dependencies installed via uv workspace"
 else
-    echo "⚠️  No requirements.txt or pyproject.toml found"
+    echo "⚠️  uv not found. Install it: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    echo "   Then re-run this setup script."
 fi
-deactivate
 echo ""
 
 # Step 5: Verify .env is gitignored
@@ -120,5 +105,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Verify .env has your credentials (see .env.example)"
 echo "  2. cd frontend && npm run dev     # Start dev server"
-echo "  3. cd backend && source venv/bin/activate && python -m pytest"
+echo "  3. uv run pytest                  # Run backend tests"
 echo ""

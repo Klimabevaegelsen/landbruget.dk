@@ -1,13 +1,13 @@
 ---
-name: gcs-miljo-data
+name: r2-miljo-data
 description: |
-  Activates when querying environmental data from GCS.
+  Activates when querying environmental data from R2.
   Use this skill for: pesticides, nitrogen leaching, BNBO drinking water protection,
   wetlands, soil types, environmental compliance, biodiversity.
   Keywords: miljø, environment, pesticide, pesticid, nitrogen, kvælstof, BNBO, wetlands, vådomr, soil, jord, biodiversity
 ---
 
-# GCS Miljø (Environment) Data Catalog
+# R2 Miljø (Environment) Data Catalog
 
 Environmental data including pesticides, nitrogen leaching, protected areas, and soil.
 
@@ -29,7 +29,7 @@ Environmental data including pesticides, nitrogen leaching, protected areas, and
 ### Silver Layer
 
 #### Pesticides (316K rows)
-**Path**: `gs://$GCS_BUCKET/silver/pesticides/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/pesticides/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -42,7 +42,7 @@ Environmental data including pesticides, nitrogen leaching, protected areas, and
 | crop_type | string | Target crop | Hvede |
 
 #### BNBO Status (5.4K rows)
-**Path**: `gs://$GCS_BUCKET/silver/bnbo_status/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/bnbo_status/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -67,7 +67,7 @@ dgunr: string
 ```
 
 #### Wetlands (1.7M rows)
-**Path**: `gs://$GCS_BUCKET/silver/wetlands/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/wetlands/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -77,7 +77,7 @@ dgunr: string
 | geometry | binary | Wetland polygon (WKB) |
 
 #### Soil Types
-**Path**: `gs://$GCS_BUCKET/silver/soil_types/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/soil_types/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -87,7 +87,7 @@ dgunr: string
 | clay_content | float | Clay percentage |
 
 #### Slurry Leaks (Incidents)
-**Path**: `gs://$GCS_BUCKET/silver/slurry leaks/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/slurry leaks/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -99,7 +99,7 @@ dgunr: string
 ### Gold Layer
 
 #### Pesticide Disaggregation (1.52M rows)
-**Path**: `gs://$GCS_BUCKET/gold/pesticide_disaggregation_{year}/*/data.parquet`
+**Path**: `r2://landbruget-data/gold/pesticide_disaggregation_{year}/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -132,7 +132,7 @@ municipality: string
 ```
 
 #### NLES5 Nitrogen Estimates (500K rows)
-**Path**: `gs://$GCS_BUCKET/gold/nles5_nitrogen_{year}/*/data.parquet`
+**Path**: `r2://landbruget-data/gold/nles5_nitrogen_{year}/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -169,7 +169,7 @@ data_quality_score: double
 ```
 
 #### Field Intersections (Environmental Overlaps)
-**Path**: `gs://$GCS_BUCKET/gold/field_analysis_{year}_intersections_*/*/data.parquet`
+**Path**: `r2://landbruget-data/gold/field_analysis_{year}_intersections_*/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -182,19 +182,16 @@ data_quality_score: double
 
 ### Get Pesticide Usage by CVR
 ```python
-import pyarrow.parquet as pq
-from google.cloud import storage
-import io
+import duckdb
+from common.storage.filesystem import setup_duckdb_cloud_auth
 
-client = storage.Client()
-bucket = client.bucket('$GCS_BUCKET')
+conn = duckdb.connect()
+setup_duckdb_cloud_auth(conn)
 
 # Read pesticide disaggregation data
-blob = bucket.blob('gold/pesticide_disaggregation_2024/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-df = pq.read_table(buffer).to_pandas()
+df = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/gold/pesticide_disaggregation_2024/2025-01-10/data.parquet')
+""").df()
 
 # Filter by CVR
 company_pesticides = df[df['cvr_number'] == '31373077']
@@ -210,44 +207,36 @@ usage_summary = company_pesticides.groupby('PesticideName').agg({
 
 ### Find Fields in BNBO Protection Zones
 ```python
-import geopandas as gpd
-
 # Read BNBO zones
-blob = bucket.blob('silver/bnbo_status/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-bnbo = gpd.read_parquet(buffer)
-bnbo = bnbo.set_crs('EPSG:4326')
+bnbo = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/bnbo_status/2025-01-10/data.parquet')
+""").df()
 
 # Read field boundaries
-blob = bucket.blob('silver/fvm_marker_2024/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-fields = gpd.read_parquet(buffer)
-fields = fields.set_crs('EPSG:4326')
+fields = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/fvm_marker_2024/2025-01-10/data.parquet')
+""").df()
 
-# Spatial join to find overlapping fields
-fields_in_bnbo = gpd.sjoin(fields, bnbo, how='inner', predicate='intersects')
+# For spatial joins, convert to GeoDataFrames
+import geopandas as gpd
+bnbo_gdf = gpd.GeoDataFrame(bnbo, geometry=gpd.GeoSeries.from_wkb(bnbo['geometry']), crs='EPSG:4326')
+fields_gdf = gpd.GeoDataFrame(fields, geometry=gpd.GeoSeries.from_wkb(fields['geometry']), crs='EPSG:4326')
+
+fields_in_bnbo = gpd.sjoin(fields_gdf, bnbo_gdf, how='inner', predicate='intersects')
 print(f"Fields overlapping BNBO zones: {len(fields_in_bnbo)}")
 ```
 
 ### Calculate Nitrogen Leaching by Municipality
 ```python
 # Read nitrogen data
-blob = bucket.blob('gold/nles5_nitrogen_2024/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-nitrogen = pq.read_table(buffer).to_pandas()
+nitrogen = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/gold/nles5_nitrogen_2024/2025-01-10/data.parquet')
+""").df()
 
 # Read field data with municipality
-blob = bucket.blob('silver/fvm_marker_2024/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-fields = pq.read_table(buffer).to_pandas()
+fields = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/fvm_marker_2024/2025-01-10/data.parquet')
+""").df()
 
 # Join and aggregate
 nitrogen_with_muni = nitrogen.merge(
@@ -282,15 +271,10 @@ glyph_by_muni['dose_per_ha'] = glyph_by_muni['DosageQuantity'] / glyph_by_muni['
 
 ### Wetland Overlap Analysis
 ```python
-import geopandas as gpd
-
 # Read wetlands
-blob = bucket.blob('silver/wetlands/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-wetlands = gpd.read_parquet(buffer)
-wetlands = wetlands.set_crs('EPSG:4326')
+wetlands = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/wetlands/2025-01-10/data.parquet')
+""").df()
 
 # High peat content areas
 high_peat = wetlands[wetlands['toerv_pct'] > 50]
@@ -339,23 +323,23 @@ print(f"High peat wetland polygons: {len(high_peat)}")
 - **husdyr/** - Livestock density affecting nitrogen loading
 - **medarbejdere/** - Environmental compliance inspections
 
-## GCS Paths Reference
+## R2 Paths Reference
 
 ```bash
 # List pesticide disaggregation years
-gsutil ls gs://$GCS_BUCKET/gold/ | grep pesticide
+rclone lsd r2:landbruget-data/gold/ | grep pesticide
 
 # List NLES5 nitrogen years
-gsutil ls gs://$GCS_BUCKET/gold/ | grep nles5
+rclone lsd r2:landbruget-data/gold/ | grep nles5
 
 # List BNBO status snapshots
-gsutil ls gs://$GCS_BUCKET/silver/bnbo_status/
+rclone lsd r2:landbruget-data/silver/bnbo_status/
 
 # List wetland data
-gsutil ls gs://$GCS_BUCKET/silver/wetlands/
+rclone lsd r2:landbruget-data/silver/wetlands/
 
 # List field intersection analyses
-gsutil ls gs://$GCS_BUCKET/gold/ | grep intersections
+rclone lsd r2:landbruget-data/gold/ | grep intersections
 ```
 
 ## Spatial Analysis Tips

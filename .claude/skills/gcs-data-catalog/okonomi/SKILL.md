@@ -1,13 +1,13 @@
 ---
-name: gcs-okonomi-data
+name: r2-okonomi-data
 description: |
-  Activates when querying financial/economic data from GCS.
+  Activates when querying financial/economic data from R2.
   Use this skill for: subsidies, farm financials, property values, CVR enrichment,
   ownership data, støtte per hektar, samlet støtte, grundværdi.
   Keywords: økonomi, finance, subsidies, støtte, tilskud, CVR, property, ejendom, grundværdi
 ---
 
-# GCS Økonomi (Finance) Data Catalog
+# R2 Økonomi (Finance) Data Catalog
 
 Financial and economic data for Danish agricultural businesses.
 
@@ -24,7 +24,7 @@ Financial and economic data for Danish agricultural businesses.
 ### Silver Layer
 
 #### Subsidies (554K rows)
-**Path**: `gs://$GCS_BUCKET/silver/subsidies/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/subsidies/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -52,7 +52,7 @@ tilskudsberetha_grundbet: double
 ```
 
 #### Property Owners (8.2M rows)
-**Path**: `gs://$GCS_BUCKET/silver/property_owners/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/property_owners/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -76,7 +76,7 @@ ejendeVirksomhed:
 ### Gold Layer
 
 #### CVR Enrichment
-**Path**: `gs://$GCS_BUCKET/gold/cvr_enrichment/*/`
+**Path**: `r2://landbruget-data/gold/cvr_enrichment/*/`
 
 Contains multiple enrichment files:
 - `address_geocoding.parquet` - Geocoded company addresses
@@ -94,19 +94,16 @@ Contains multiple enrichment files:
 
 ### Get Total Subsidies by CVR
 ```python
-import pyarrow.parquet as pq
-from google.cloud import storage
-import io
+import duckdb
+from common.storage.filesystem import setup_duckdb_cloud_auth
 
-client = storage.Client()
-bucket = client.bucket('$GCS_BUCKET')
+conn = duckdb.connect()
+setup_duckdb_cloud_auth(conn)
 
 # Read subsidies
-blob = bucket.blob('silver/subsidies/2025-01-10T00:00:26.377177/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-df = pq.read_table(buffer).to_pandas()
+df = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/subsidies/2025-01-10T00:00:26.377177/data.parquet')
+""").df()
 
 # Calculate total subsidies per CVR
 totals = df.groupby('cvr_number').agg({
@@ -124,11 +121,9 @@ totals['subsidy_per_ha'] = (
 ### Find Property Owner by CVR
 ```python
 # Read property owners
-blob = bucket.blob('silver/property_owners/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-df = pq.read_table(buffer).to_pandas()
+df = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/property_owners/2025-01-10/data.parquet')
+""").df()
 
 # Filter by CVR (need to handle nested structure)
 import pandas as pd
@@ -196,15 +191,15 @@ municipal_stats = subsidies_with_geo.groupby('municipality').agg({
 - **husdyr/** - Livestock data for animal-based subsidies
 - **medarbejdere/** - Employee data for labor cost analysis
 
-## GCS Paths Reference
+## R2 Paths Reference
 
 ```bash
 # List available subsidy snapshots
-gsutil ls gs://$GCS_BUCKET/silver/subsidies/
+rclone lsd r2:landbruget-data/silver/subsidies/
 
 # List CVR enrichment data
-gsutil ls gs://$GCS_BUCKET/gold/cvr_enrichment/
+rclone lsd r2:landbruget-data/gold/cvr_enrichment/
 
 # List property owner snapshots
-gsutil ls gs://$GCS_BUCKET/silver/property_owners/
+rclone lsd r2:landbruget-data/silver/property_owners/
 ```

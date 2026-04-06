@@ -11,7 +11,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-03-30T08:45:57.210187Z"
+exclude-newer = "2026-03-30T14:34:40.37872Z"
 exclude-newer-span = "P7D"
 
 [manifest]
@@ -1521,6 +1521,7 @@ version = "0.1.0"
 source = { editable = "backend/common" }
 dependencies = [
     { name = "duckdb" },
+    { name = "google-cloud-secret-manager" },
     { name = "pydantic" },
     { name = "s3fs" },
 ]
@@ -1528,6 +1529,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "duckdb", specifier = ">=1.5.0" },
+    { name = "google-cloud-secret-manager", specifier = ">=2.18.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "s3fs", specifier = ">=2024.1.0" },
 ]

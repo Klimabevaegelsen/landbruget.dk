@@ -106,7 +106,7 @@ class SilverStorageManager(DuckDBProcessor):
         if source_subfolder:
             # Sanitize subfolder name
             sanitized_subfolder = re.sub(r'[<>:"/\\|?*]', "_", source_subfolder)
-            sanitized_subfolder = sanitized_subfolder.strip(". ").lower()
+            sanitized_subfolder = sanitized_subfolder.strip(". ").lower().replace(" ", "_")
 
             # Create path: silver/{subfolder_name}/{timestamp}
             output_dir = run_dir / sanitized_subfolder / timestamp_str
