@@ -20,6 +20,9 @@ Data sources (all from R2 / landbruget-data bucket):
 Usage:
     cd backend && source venv/bin/activate
     python scripts/verify_pfas_groundwater_correlations.py [--dry-run] [--verbose]
+    python scripts/verify_pfas_groundwater_correlations.py --year-window all
+    python scripts/verify_pfas_groundwater_correlations.py --years 2010,2011,2012,2013
+    python scripts/verify_pfas_groundwater_correlations.py --sensitivity-run --export-json sensitivity.json
 
 Auth: Uses wrangler CLI (must be logged in) or R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_ACCOUNT_ID env vars.
 """
@@ -71,8 +74,37 @@ DEFAULT_PFAS_THRESHOLD = 0.075
 # Minimum sample size per substance (lower than pesticide script — PFAS data is sparser)
 MIN_DETECTIONS = 20
 
-# Application years — three consecutive years temporally aligned
+# Application years — default: three consecutive years temporally aligned
+# Can be overridden via --years or --year-window CLI arguments
 APPLICATION_YEARS = [2015, 2016, 2017]
+
+# Named year windows for sensitivity analysis
+# 2014 excluded from all windows (0% coverage — CVR missing in FVM 2015)
+YEAR_WINDOWS = {
+    "original": [2015, 2016, 2017],
+    "extended-early": [2010, 2011, 2012, 2013, 2015, 2016, 2017],
+    "all": [2010, 2011, 2012, 2013, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023],
+    "high-coverage": [2018, 2019, 2020, 2021, 2022, 2023],
+    "early-only": [2010, 2011, 2012, 2013],
+}
+
+# Known coverage percentages per year (from disaggregation robustness validation)
+YEAR_COVERAGE = {
+    2010: 55.7,
+    2011: 63.1,
+    2012: 62.6,
+    2013: 66.6,
+    2014: 0.0,
+    2015: 81.8,
+    2016: 87.2,
+    2017: 86.9,
+    2018: 90.5,
+    2019: 91.6,
+    2020: 92.7,
+    2021: 92.1,
+    2022: 91.2,
+    2023: 90.0,
+}
 
 # Detection windows for PFAS
 # TFA monitoring started in 2020; traditional PFAS monitoring started earlier
@@ -3457,13 +3489,63 @@ def main():
         default=None,
         help="Run only a specific tier (1-4). Default: run all.",
     )
+    year_group = parser.add_mutually_exclusive_group()
+    year_group.add_argument(
+        "--years",
+        type=str,
+        default=None,
+        help="Comma-separated application years (e.g. 2010,2011,2012,2013,2015,2016,2017)",
+    )
+    year_group.add_argument(
+        "--year-window",
+        type=str,
+        choices=list(YEAR_WINDOWS.keys()),
+        default=None,
+        help="Named year window: original, extended-early, all, high-coverage, early-only",
+    )
+    parser.add_argument(
+        "--sensitivity-run",
+        action="store_true",
+        help="Run all 5 year windows sequentially and produce a comparison table",
+    )
     args = parser.parse_args()
 
     if args.verbose:
         log.setLevel(logging.DEBUG)
 
+    # Handle sensitivity run mode — runs all windows and compares
+    if args.sensitivity_run:
+        run_sensitivity_analysis(args)
+        return
+
+    # Resolve APPLICATION_YEARS from CLI
+    global APPLICATION_YEARS
+    if args.years:
+        APPLICATION_YEARS = sorted(int(y.strip()) for y in args.years.split(","))
+    elif args.year_window:
+        APPLICATION_YEARS = YEAR_WINDOWS[args.year_window]
+
+    # Warn about low-coverage years
+    low_cov = {y: YEAR_COVERAGE.get(y, 0) for y in APPLICATION_YEARS if YEAR_COVERAGE.get(y, 0) < 80}
+    if low_cov:
+        log.warning("⚠ Including years with <80%% disaggregation coverage:")
+        for y, cov in sorted(low_cov.items()):
+            log.warning(f"  {y}: {cov:.1f}%% coverage")
+    if 2014 in APPLICATION_YEARS:
+        log.error("Year 2014 has 0%% coverage (CVR missing in FVM 2015). Removing it.")
+        APPLICATION_YEARS = [y for y in APPLICATION_YEARS if y != 2014]
+
+    run_single_analysis(args)
+
+
+def run_single_analysis(args):
+    """Run the full analysis pipeline for the current APPLICATION_YEARS."""
+    cov_range = [YEAR_COVERAGE.get(y, 0) for y in APPLICATION_YEARS if YEAR_COVERAGE.get(y, 0) > 0]
+    cov_str = f"{min(cov_range):.0f}-{max(cov_range):.0f}%" if cov_range else "unknown"
+
     log.info("=" * 60)
     log.info("PFAS Groundwater Correlation Verification Script")
+    log.info(f"Application years: {APPLICATION_YEARS} (coverage: {cov_str})")
     log.info("=" * 60)
 
     conn = get_connection()
@@ -3619,6 +3701,150 @@ def main():
         conn.close()
 
     log.info("\nDone.")
+
+
+def _extract_key_metrics(tier1, tier2, tier3, mv_results):
+    """Extract key comparison metrics from a single analysis run."""
+    n_t2_sig = sum(1 for r in tier2 if r.get("fdr_significant"))
+    n_mv_sig = sum(1 for r in mv_results if r.get("p_intensity") is not None and r["p_intensity"] < 0.05)
+
+    # Find PFOA vs fluorinated intensity correlation
+    pfoa_r = None
+    for r in tier2:
+        if r.get("substance") == "PFOA" and "fluorinated" in r.get("intensity_type", ""):
+            pfoa_r = r.get("r")
+            break
+
+    # Find SUM PFAS-22 multivariate p-value
+    pfas22_p = None
+    for r in mv_results:
+        if "PFAS-22" in r.get("substance", ""):
+            pfas22_p = r.get("p_intensity")
+            break
+
+    # Check which of the 4 key survivors hold up
+    key_substances = {"SUM PFAS-22", "PFOA", "PFHxS"}
+    survivors = []
+    for r in mv_results:
+        sub = r.get("substance", "")
+        if r.get("p_intensity") is not None and r["p_intensity"] < 0.05 and any(k in sub for k in key_substances):
+            survivors.append(sub)
+
+    return {
+        "tier2_fdr_sig": f"{n_t2_sig}/{len(tier2)}",
+        "mv_survivors": f"{n_mv_sig}/{len(mv_results)}",
+        "pfoa_r": pfoa_r,
+        "pfas22_p": pfas22_p,
+        "key_survivors": survivors,
+    }
+
+
+def run_sensitivity_analysis(args):
+    """Run all year windows and produce a comparison table."""
+    global APPLICATION_YEARS
+
+    log.info("=" * 70)
+    log.info("PFAS Year-Window Sensitivity Analysis")
+    log.info("Running all 5 year windows sequentially...")
+    log.info("=" * 70)
+
+    comparison = {}
+
+    for window_name, years in YEAR_WINDOWS.items():
+        APPLICATION_YEARS = years
+        cov_vals = [YEAR_COVERAGE.get(y, 0) for y in years if YEAR_COVERAGE.get(y, 0) > 0]
+        cov_str = f"{min(cov_vals):.0f}-{max(cov_vals):.0f}%" if cov_vals else "N/A"
+
+        log.info("")
+        log.info("=" * 60)
+        log.info(f"Window: {window_name} — years={years} coverage={cov_str}")
+        log.info("=" * 60)
+
+        conn = get_connection()
+        loader = DataLoader(conn)
+
+        try:
+            info = discover_data(loader)
+            if info.get("pfas_rows", 0) == 0 or info.get("grukos_count", 0) == 0:
+                log.error(f"  Skipping {window_name}: missing PFAS or GRUKOS data")
+                comparison[window_name] = {"error": "missing data"}
+                continue
+
+            pfas_source = info.get("pfas_source", "geus_clean_all")
+            load_data(loader, pfas_source)
+            build_fluorinated_ingredient_list(conn)
+            build_gruko_application_intensity(conn)
+            build_gruko_soil_transit(conn)
+            build_gruko_detections(conn)
+            build_gruko_covariates(conn)
+
+            tier1 = run_tier1_tfa_correlations(conn)
+            tier2 = run_tier2_traditional_pfas(conn)
+            tier3 = run_tier3_exploratory_screen(conn)
+
+            all_biv = tier1 + tier2 + tier3
+            mv = run_multivariate_logistic(conn, all_biv) if all_biv else []
+
+            metrics = _extract_key_metrics(tier1, tier2, tier3, mv)
+            metrics["years"] = len(years)
+            metrics["coverage"] = cov_str
+            comparison[window_name] = metrics
+
+        except Exception as e:
+            log.error(f"  Window {window_name} failed: {e}")
+            comparison[window_name] = {"error": str(e)}
+        finally:
+            loader.cleanup()
+            conn.close()
+
+    # Print comparison table
+    print("\n" + "=" * 100)  # noqa: T201
+    print("YEAR-WINDOW SENSITIVITY COMPARISON")  # noqa: T201
+    print("=" * 100)  # noqa: T201
+    header = f"{'Window':<20} {'Years':>5} {'Coverage':>12} {'T2 FDR-sig':>12} {'MV survivors':>14} {'PFOA r':>8} {'PFAS-22 p':>10} {'Key survivors'}"
+    print(header)  # noqa: T201
+    print("-" * len(header))  # noqa: T201
+
+    for wname in YEAR_WINDOWS:
+        m = comparison.get(wname, {})
+        if "error" in m:
+            print(f"{wname:<20} {'ERROR':>5} {m['error']}")  # noqa: T201
+            continue
+        pfoa_r = f"{m['pfoa_r']:.3f}" if m.get("pfoa_r") is not None else "N/A"
+        pfas22_p = f"{m['pfas22_p']:.4f}" if m.get("pfas22_p") is not None else "N/A"
+        surv = ", ".join(m.get("key_survivors", [])) or "none"
+        print(  # noqa: T201
+            f"{wname:<20} {m.get('years', '?'):>5} {m.get('coverage', '?'):>12} "
+            f"{m.get('tier2_fdr_sig', '?'):>12} {m.get('mv_survivors', '?'):>14} "
+            f"{pfoa_r:>8} {pfas22_p:>10} {surv}"
+        )
+
+    print("=" * 100)  # noqa: T201
+
+    # Export comparison JSON if requested
+    if args.export_json:
+        from datetime import datetime
+
+        class NumpyEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if hasattr(obj, "item"):
+                    return obj.item()
+                if hasattr(obj, "tolist"):
+                    return obj.tolist()
+                return super().default(obj)
+
+        export_data = {
+            "metadata": {
+                "script": "verify_pfas_groundwater_correlations.py",
+                "mode": "sensitivity_analysis",
+                "windows": dict(YEAR_WINDOWS.items()),
+                "timestamp": datetime.now().isoformat(),
+            },
+            "comparison": comparison,
+        }
+        with Path(args.export_json).open("w") as f:
+            json.dump(export_data, f, cls=NumpyEncoder, indent=2)
+        log.info(f"Exported sensitivity comparison to {args.export_json}")
 
 
 if __name__ == "__main__":
