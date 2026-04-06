@@ -21,67 +21,85 @@ export const VEJEN_WELL = {
 
 export type ScrollyStepId =
   | 'intro'
-  | 'location'
-  | 'opland'
-  | 'fields'
-  | 'ingredient'
-  | 'soil'
-  | 'vadose'
-  | 'detection'
-  | 'doseresponse'
-  | 'transition'
-  | 'metabolite'
-  | 'conclusion';
+  | 'espe'
+  | 'kilden'
+  | 'rejsen'
+  | 'fundet'
+  | 'mcpa'
+  | 'fortidslevn'
+  | 'billede';
 
 export interface ScrollyViewState {
   lng: number;
   lat: number;
   zoom: number;
+  pitch?: number;
+  bearing?: number;
 }
 
 export const VIEWS: Record<ScrollyStepId, ScrollyViewState> = {
-  intro: { lng: 10.5, lat: 56.0, zoom: 6.5 },
-  location: { lng: 10.46, lat: 55.25, zoom: 9 },
-  opland: { lng: 10.454, lat: 55.205, zoom: 11.5 },
-  fields: { lng: 10.463, lat: 55.201, zoom: 11.8 },
-  ingredient: { lng: 10.46, lat: 55.202, zoom: 14 },
-  soil: { lng: 10.46, lat: 55.205, zoom: 13.5 },
-  vadose: { lng: 10.44, lat: 55.204, zoom: 12.5 },
-  detection: { lng: ESPE_WELL.lng, lat: ESPE_WELL.lat, zoom: 14.5 },
-  doseresponse: { lng: 10.46, lat: 55.22, zoom: 11 },
-  transition: { lng: 9.8, lat: 55.35, zoom: 9 },
-  metabolite: { lng: VEJEN_WELL.lng, lat: VEJEN_WELL.lat, zoom: 12 },
-  conclusion: { lng: 9.8, lat: 55.35, zoom: 8 },
+  intro: { lng: 10.5, lat: 56.0, zoom: 6.5, pitch: 0, bearing: 0 },
+  espe: { lng: 10.454, lat: 55.205, zoom: 13, pitch: 0, bearing: 0 },
+  kilden: { lng: 10.463, lat: 55.201, zoom: 13.5, pitch: 0, bearing: 0 },
+  rejsen: { lng: 10.46, lat: 55.204, zoom: 13.5, pitch: 60, bearing: -20 },
+  fundet: {
+    lng: ESPE_WELL.lng,
+    lat: ESPE_WELL.lat,
+    zoom: 14.5,
+    pitch: 60,
+    bearing: -20,
+  },
+  mcpa: {
+    lng: VEJEN_WELL.lng,
+    lat: VEJEN_WELL.lat,
+    zoom: 13,
+    pitch: 60,
+    bearing: -20,
+  },
+  fortidslevn: {
+    lng: VEJEN_WELL.lng,
+    lat: VEJEN_WELL.lat,
+    zoom: 14,
+    pitch: 60,
+    bearing: -20,
+  },
+  billede: { lng: 10.5, lat: 56.0, zoom: 6.5, pitch: 0, bearing: 0 },
 };
 
 /** Steps where each case-study's layers are visible on the map. */
 export const ESPE_STEPS = new Set<ScrollyStepId>([
-  'opland',
-  'fields',
-  'ingredient',
-  'soil',
-  'vadose',
-  'detection',
-  'doseresponse',
-  'conclusion',
+  'espe',
+  'kilden',
+  'rejsen',
+  'fundet',
+  'billede',
 ]);
-export const VEJEN_STEPS = new Set<ScrollyStepId>(['metabolite', 'conclusion']);
-export const ESPE_WELL_STEPS = new Set<ScrollyStepId>([
-  'detection',
-  'doseresponse',
-  'conclusion',
+export const VEJEN_STEPS = new Set<ScrollyStepId>([
+  'mcpa',
+  'fortidslevn',
+  'billede',
 ]);
+export const ESPE_WELL_STEPS = new Set<ScrollyStepId>(['fundet', 'billede']);
 export const VEJEN_WELL_STEPS = new Set<ScrollyStepId>([
-  'metabolite',
-  'conclusion',
+  'fortidslevn',
+  'billede',
+]);
+
+/** Steps where 3D pitch is active. */
+export const PITCHED_STEPS = new Set<ScrollyStepId>([
+  'rejsen',
+  'fundet',
+  'mcpa',
+  'fortidslevn',
 ]);
 
 /** Per-step flyTo animation overrides (duration in ms, curve). */
 export const FLY_TO_OVERRIDES: Partial<
   Record<ScrollyStepId, { duration?: number; curve?: number }>
 > = {
-  opland: { duration: 2200, curve: 1.0 },
-  fields: { duration: 1400, curve: 1.4 },
-  doseresponse: { duration: 2000 },
-  transition: { duration: 2800, curve: 1.6 },
+  espe: { duration: 2200, curve: 1.0 },
+  kilden: { duration: 1400, curve: 1.4 },
+  rejsen: { duration: 2000, curve: 1.2 },
+  mcpa: { duration: 2800, curve: 1.6 },
+  billede: { duration: 2000, curve: 1.2 },
 };

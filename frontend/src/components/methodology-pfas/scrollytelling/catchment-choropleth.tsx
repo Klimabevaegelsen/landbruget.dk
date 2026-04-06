@@ -12,6 +12,7 @@ interface Centroid {
 
 interface CatchmentChoroplethProps {
   visible: boolean;
+  voidMode?: boolean;
 }
 
 function toGeoJSON(centroids: Centroid[]): GeoJSON.FeatureCollection {
@@ -25,7 +26,10 @@ function toGeoJSON(centroids: Centroid[]): GeoJSON.FeatureCollection {
   };
 }
 
-export function CatchmentChoropleth({ visible }: CatchmentChoroplethProps) {
+export function CatchmentChoropleth({
+  visible,
+  voidMode = false,
+}: CatchmentChoroplethProps) {
   const [centroids, setCentroids] = useState<Centroid[] | null>(null);
 
   useEffect(() => {
@@ -50,9 +54,12 @@ export function CatchmentChoropleth({ visible }: CatchmentChoroplethProps) {
         type="circle"
         filter={['==', ['get', 'monitored'], false]}
         paint={{
-          'circle-radius': 3,
-          'circle-color': '#94a3b8',
-          'circle-opacity': 0.5,
+          'circle-radius': voidMode ? 4 : 3,
+          'circle-color': voidMode ? 'transparent' : '#94a3b8',
+          'circle-opacity': voidMode ? 0 : 0.5,
+          'circle-stroke-width': voidMode ? 1.5 : 0,
+          'circle-stroke-color': '#94a3b8',
+          'circle-stroke-opacity': voidMode ? 0.6 : 0,
         }}
       />
       <Layer

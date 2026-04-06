@@ -28,12 +28,12 @@ Understanding the relationship between pesticide use and groundwater contaminati
 
 **Table 1: Comparison of existing studies linking pesticide application to groundwater contamination.**
 
-| Study | Country | Spatial resolution | Substances | Application data source |
-|:------|:--------|:-------------------|:-----------|:------------------------|
-| Hansen et al. (2022) | Denmark | National (298 wells) | 8 | National sales statistics |
+| Study | Country | Resolution | *n* | Application data |
+|:------|:--------|:-----------|----:|:-----------------|
+| Hansen et al. (2022) | Denmark | National (298 wells) | 8 | National sales |
 | Lindström et al. (2013) | Sweden | Catchment | 17 | Field-level |
-| Danish PLAP (Gimsing et al., 2019) | Denmark | 5 fields (1–2 ha) | 29 | Field-level |
-| **This study** | **Denmark** | **5,826 catchments** | **11 qualifying** | **Parcel-level (disaggregated)** |
+| PLAP (Gimsing et al., 2019) | Denmark | 5 fields (1–2 ha) | 29 | Field-level |
+| **This study** | **Denmark** | **5,826 catchments** | **11** | **Parcel-level (disagg.)** |
 
 Hansen et al. (2022) used national sales statistics and Pearson cross-correlation over 30 years but could not resolve spatial variation within Denmark. Lindström et al. (2013) demonstrated in a Swedish catchment that application dosage explains 50–85% of detection variability. Both studies tested only parent compounds with directly matching names, omitting the metabolite dimension. We constructed a comprehensive mapping of 138 substance correspondences (69 metabolite-to-parent, 66 parent name variants, 3 multi-variant) from the Pesticide Properties Database (PPDB; University of Hertfordshire, 2024), GEUS technical reports (2023/42), and the Danish Bekæmpelsesmiddeldatabasen (BMD), enabling systematic correlation of metabolite groundwater detections with parent compound application intensity.
 
@@ -209,6 +209,8 @@ Our approaches complement Hansen et al. (2022): they demonstrated that national 
 
 6. **Temporal stationarity assumption**: The correlation between 2015–2017 application intensity and 2018+ detections implicitly assumes spatial stationarity of application patterns. For substances with long transit times (4-chloro-2-methylphenol optimal lag = 9 years), the detections may reflect historical rather than recent applications; the observed correlation likely reflects persistent spatial patterns of use rather than a direct 2015–2017 causal link (Supplementary S3.14 tests temporal stability of application rankings).
 
+7. **Screening bias (first-testing-not-first-detection)**: The 2018+ detection window coincides with expansions of the Danish monitoring panel, raising the concern that post-2018 detections reflect the start of testing rather than the onset of contamination. We assessed this risk using sample-level VP4 data (GEUS Dataverse, doi:10.22008/FK2/IHVDXL) by examining, for each substance, the full testing history including negative results (tested but not detected, marked as ½ LOQ = 0.015 µg/L). All 9 substances in this study have extensive negative testing histories predating their first detection: 1,2,4-triazole was first tested in 2001 (16 years before first detection in 2017, with 160 negative tests in 2017 alone before detections scaled in 2018); bentazon has been tested since 1994 with >2,900 negative tests before any detection; AMPA and glyphosate since 1997 with >100 negative tests before first detections in 1998; diuron since 1994 with 104 negatives before first detection in 1996; 4-chloro-2-methylphenol, MCPA, and 2,4-dichlorphenol have continuous testing histories since the early 1980s. Screening bias is therefore not a material concern for the substances analyzed in this study — their detections reflect genuine contamination, not an artifact of first-time testing (Supplementary S5.1 provides the full substance-by-substance yearly analysis).
+
 Additional limitations (ecological fallacy, resolution asymmetry, catchment type asymmetry, marginal EPV for 4-chloro-2-methylphenol, multi-parent metabolite attribution, detection window sensitivity, reporting uncertainty) are discussed in Supplementary S4.2.
 
 ### 4.6 Transferability
@@ -245,6 +247,12 @@ Within-catchment models using individual well-to-field proximity analysis could 
 - **Substance mapping table (138 entries)**: To be deposited on Zenodo upon publication
 - **Field-level application methodology**: Self-contained description in Section 2.1 of this paper; extended technical documentation available upon request
 - **Analysis code**: Available at https://github.com/landbruget/landbruget.dk; verification script `verify_groundwater_correlations.py` with complete substance mapping tables
+
+---
+
+## AI Disclosure Statement
+
+This paper was drafted with assistance from Claude (Anthropic, Claude Opus 4.6). All empirical analyses, statistical modeling, and validation were performed by the authors. The AI assistant was used for literature search, prose drafting, and manuscript preparation.
 
 ---
 

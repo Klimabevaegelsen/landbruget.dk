@@ -8,11 +8,7 @@ import type { DisaggStepId } from '@/components/methodology/scrolly-disagg-views
 
 function renderVisual(stepId: string) {
   const step = stepId as DisaggStepId;
-  const showRecord =
-    step === 'record' ||
-    step === 'overview' ||
-    step === 'fields' ||
-    step === 'match';
+  const showRecord = step === 'regneark';
   return (
     <div className="relative h-full w-full">
       <MethodologyMap step={step} />

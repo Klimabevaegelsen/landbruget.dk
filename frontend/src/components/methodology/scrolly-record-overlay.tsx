@@ -10,8 +10,6 @@ import {
 } from '@/components/methodology/scrolly-example-data';
 import type { DisaggStepId } from '@/components/methodology/scrolly-disagg-views';
 
-const SPOTLIGHT_STEPS = new Set<DisaggStepId>(['overview', 'fields', 'match']);
-
 interface ScrollyRecordOverlayProps {
   step: DisaggStepId;
   visible: boolean;
@@ -24,7 +22,7 @@ export function ScrollyRecordOverlay({
   const scrollRef = useRef<HTMLDivElement>(null);
   const targetRef = useRef<HTMLTableRowElement>(null);
   const [spotlit, setSpotlit] = useState(false);
-  const shouldSpotlight = SPOTLIGHT_STEPS.has(step);
+  const shouldSpotlight = step === 'regneark';
 
   useEffect(() => {
     if (!shouldSpotlight) {
@@ -61,67 +59,78 @@ export function ScrollyRecordOverlay({
             ref={scrollRef}
             className="max-h-[220px] overflow-x-hidden overflow-y-auto"
           >
-            <table className="w-full text-[11px]">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-muted/80 backdrop-blur-sm">
-                  {['Post', 'Produkt', 'Areal', 'Dosis'].map((h) => (
-                    <th
-                      key={h}
-                      className="text-muted-foreground border-r px-2 py-1 text-left font-medium last:border-r-0"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {SJI_JOURNAL_ROWS.map((row) => {
-                  const isTarget = row.post === TARGET_POST;
-                  const dimmed = spotlit && !isTarget;
-                  return (
-                    <motion.tr
-                      key={row.post}
-                      ref={isTarget ? targetRef : undefined}
-                      animate={{
-                        opacity: dimmed ? 0.35 : 1,
-                        backgroundColor:
-                          spotlit && isTarget
-                            ? 'var(--color-primary-15, rgba(42,139,78,0.12))'
-                            : 'transparent',
-                      }}
-                      transition={{ duration: 0.4 }}
-                      className={cn(
-                        'border-border/20 border-b',
-                        spotlit && isTarget && 'border-l-primary border-l-2'
-                      )}
-                    >
-                      <td className="text-muted-foreground border-r px-2 py-1 font-mono whitespace-nowrap">
-                        #{row.post}
-                      </td>
-                      <td
-                        className={cn(
-                          'border-r px-2 py-1',
-                          spotlit && isTarget
-                            ? 'text-foreground font-semibold'
-                            : 'text-foreground/70'
-                        )}
-                      >
-                        {row.product}
-                      </td>
-                      <td className="text-foreground/70 border-r px-2 py-1 text-right font-mono whitespace-nowrap">
-                        {row.area}&nbsp;ha
-                      </td>
-                      <td className="text-foreground/70 px-2 py-1 text-right font-mono whitespace-nowrap">
-                        {row.dose}&nbsp;{row.unit}
-                      </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <RecordTable spotlit={spotlit} targetRef={targetRef} />
           </div>
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+interface RecordTableProps {
+  spotlit: boolean;
+  targetRef: React.RefObject<HTMLTableRowElement | null>;
+}
+
+function RecordTable({ spotlit, targetRef }: RecordTableProps) {
+  return (
+    <table className="w-full text-[11px]">
+      <thead className="sticky top-0 z-10">
+        <tr className="bg-muted/80 backdrop-blur-sm">
+          {['Post', 'Produkt', 'Areal', 'Dosis'].map((h) => (
+            <th
+              key={h}
+              className="text-muted-foreground border-r px-2 py-1 text-left font-medium last:border-r-0"
+            >
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {SJI_JOURNAL_ROWS.map((row) => {
+          const isTarget = row.post === TARGET_POST;
+          const dimmed = spotlit && !isTarget;
+          return (
+            <motion.tr
+              key={row.post}
+              ref={isTarget ? targetRef : undefined}
+              animate={{
+                opacity: dimmed ? 0.35 : 1,
+                backgroundColor:
+                  spotlit && isTarget
+                    ? 'var(--color-primary-15, rgba(42,139,78,0.12))'
+                    : 'transparent',
+              }}
+              transition={{ duration: 0.4 }}
+              className={cn(
+                'border-border/20 border-b',
+                spotlit && isTarget && 'border-l-primary border-l-2'
+              )}
+            >
+              <td className="text-muted-foreground border-r px-2 py-1 font-mono whitespace-nowrap">
+                #{row.post}
+              </td>
+              <td
+                className={cn(
+                  'border-r px-2 py-1',
+                  spotlit && isTarget
+                    ? 'text-foreground font-semibold'
+                    : 'text-foreground/70'
+                )}
+              >
+                {row.product}
+              </td>
+              <td className="text-foreground/70 border-r px-2 py-1 text-right font-mono whitespace-nowrap">
+                {row.area}&nbsp;ha
+              </td>
+              <td className="text-foreground/70 px-2 py-1 text-right font-mono whitespace-nowrap">
+                {row.dose}&nbsp;{row.unit}
+              </td>
+            </motion.tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }

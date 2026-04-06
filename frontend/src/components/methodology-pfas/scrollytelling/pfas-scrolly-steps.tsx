@@ -1,104 +1,56 @@
 'use client';
 
 import { ScrollyCard } from '@/components/methodology/scrolly-card';
-import { EXAMPLE_FIELD, STATS } from './scrolly-constants';
 import {
-  IntroCard,
-  LocationCard,
-  DetectionCard,
-  TransitionCard,
-  BlindspotCard,
+  SkjultCard,
+  SkrydstrupCard,
+  ByggeklodserCard,
+  GlassetCard,
+  BlindvinkelCard,
 } from './pfas-step-content';
 
 const CAVEAT =
   'Illustrativt eksempel\u00a0— viser rumlig sameksistens, ikke årsagssammenhæng';
 
 export const PFAS_STEPS = [
-  { id: 'intro', content: <IntroCard /> },
-  { id: 'location', content: <LocationCard /> },
+  { id: 'skjult', content: <SkjultCard /> },
+  { id: 'skrydstrup', content: <SkrydstrupCard /> },
+  { id: 'byggeklodser', content: <ByggeklodserCard /> },
   {
-    id: 'field',
+    id: 'evighed',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="En mark i oplandet">
+      <ScrollyCard caveat={CAVEAT} title="Evighedskemikaliet">
         <p>
-          Inde i Skrydstrup-oplandet dyrkes{' '}
-          <strong>{EXAMPLE_FIELD.crop}</strong> p&aring; {EXAMPLE_FIELD.areaHa}
-          &nbsp;ha. Marken spr&oslash;jtes med tre produkter der indeholder
-          fluorholdige aktivstoffer.
+          N&aring;r pesticiderne nedbrydes i naturen, kn&aelig;kker CF
+          <sub>3</sub>-gruppen af og bliver til <strong>TFA</strong>. TFA er et
+          PFAS-stof. Det er ekstremt mobilt og forsvinder stort set aldrig.
         </p>
       </ScrollyCard>
     ),
   },
+  { id: 'glasset', content: <GlassetCard /> },
   {
-    id: 'product',
+    id: 'overalt',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="Fra produkt til aktivstof">
+      <ScrollyCard caveat={CAVEAT} title="TFA er overalt">
         <p>
-          <strong>Propulse SE 250</strong> indeholder <strong>fluopyram</strong>
-          , <strong>DFF</strong> indeholder <strong>diflufenican</strong>, og{' '}
-          <strong>Mavrik 2F</strong> indeholder <strong>tau-fluvalinat</strong>.
-          Alle tre er fluorholdige (indeholder en CF<sub>3</sub>-gruppe).
+          Nej. P&aring; tv&aelig;rs af landets overv&aring;gede oplande er
+          detektionsraten <strong>100&nbsp;%</strong>. Overalt hvor vi leder
+          efter TFA, finder vi det. Ingen undtagelser.
         </p>
       </ScrollyCard>
     ),
   },
+  { id: 'blindvinkel', content: <BlindvinkelCard /> },
   {
-    id: 'molecule',
+    id: 'spoergsmaalet',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="CF₃-gruppen gør forskellen">
+      <ScrollyCard caveat={CAVEAT} title="Spørgsmålet er ikke 'om'">
         <p>
-          N&aring;r pesticiderne nedbrydes, frigives CF₃-gruppen
-          (trifluormethyl) som <strong>trifluoreddikesyre (TFA)</strong>. I alt
-          er <strong>{STATS.tfaFormingIngredients} aktivstoffer</strong>{' '}
-          registreret i Danmark som kan danne TFA.
-        </p>
-      </ScrollyCard>
-    ),
-  },
-  {
-    id: 'tfa',
-    content: (
-      <ScrollyCard caveat={CAVEAT} title="TFA — et evighedskemikalie">
-        <p>
-          TFA er en <strong>PFAS-forbindelse</strong> (per- og polyfluoralkyl).
-          Den er ekstremt persistent og meget mobil i jord og grundvand. TFA kan
-          sive ned til grundvandet, men ogs&aring; tilf&oslash;res via
-          atmosf&aelig;risk deposition.
-        </p>
-      </ScrollyCard>
-    ),
-  },
-  { id: 'detection', content: <DetectionCard /> },
-  { id: 'transition', content: <TransitionCard /> },
-  {
-    id: 'everywhere',
-    content: (
-      <ScrollyCard caveat={CAVEAT} title="TFA er overalt vi kigger">
-        <p>
-          P&aring; tv&aelig;rs af{' '}
-          <strong>
-            {STATS.monitored.toLocaleString('da-DK')} overv&aring;gede oplande
-          </strong>{' '}
-          er TFA fundet i <strong>100&nbsp;%</strong>. Ingen undtagelser. Der er
-          udf&oslash;rt{' '}
-          <strong>
-            {STATS.pfasAnalyses.toLocaleString('da-DK')} PFAS-analyser
-          </strong>{' '}
-          p&aring; dansk grundvand.
-        </p>
-      </ScrollyCard>
-    ),
-  },
-  { id: 'blindspot', content: <BlindspotCard /> },
-  {
-    id: 'conclusion',
-    content: (
-      <ScrollyCard caveat={CAVEAT} title="Den blinde vinkel">
-        <p>
-          TFA findes i <strong>alle</strong> overv&aring;gede oplande, og{' '}
-          <strong>{(100 - STATS.pctMonitored).toFixed(0)}&nbsp;%</strong> har
-          aldrig f&aring;et m&aring;lt. Sp&oslash;rgsm&aring;let er ikke{' '}
-          <em>om</em> TFA er der — men <strong>hvor meget</strong>.
+          Vi mangler data for to tredjedele af Danmark. Sp&oslash;rgsm&aring;let
+          er ikke l&aelig;ngere, <em>om</em> der er evighedskemikalier i det
+          uoverv&aring;gede grundvand. Sp&oslash;rgsm&aring;let er kun:{' '}
+          <strong>Hvor meget?</strong>
         </p>
       </ScrollyCard>
     ),

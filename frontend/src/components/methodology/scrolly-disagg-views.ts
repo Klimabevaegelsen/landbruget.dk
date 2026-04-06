@@ -6,18 +6,18 @@ const C = EXAMPLE.center;
 export type DisaggStepId =
   | 'context'
   | 'location'
-  | 'record'
-  | 'overview'
+  | 'regneark'
   | 'fields'
   | 'match'
-  | 'result'
-  | 'summary'
+  | 'virkelighed'
   | 'scale';
 
 export interface DisaggViewState {
   lng: number;
   lat: number;
   zoom: number;
+  pitch?: number;
+  bearing?: number;
   bounds?: LngLatBoundsLike;
 }
 
@@ -28,13 +28,21 @@ const FIELD_BOUNDS: LngLatBoundsLike = [
 ];
 
 export const VIEWS: Record<DisaggStepId, DisaggViewState> = {
-  context: { lng: 10.5, lat: 56.0, zoom: 6.5 },
-  location: { lng: 9.5, lat: 55.3, zoom: 9 },
-  record: { lng: C[0], lat: C[1], zoom: 11 },
-  overview: { lng: C[0], lat: C[1], zoom: 12.5 },
-  fields: { lng: C[0], lat: C[1], zoom: 14, bounds: FIELD_BOUNDS },
-  match: { lng: C[0], lat: C[1], zoom: 14, bounds: FIELD_BOUNDS },
-  result: { lng: C[0], lat: C[1], zoom: 13.5, bounds: FIELD_BOUNDS },
-  summary: { lng: C[0], lat: C[1], zoom: 12 },
-  scale: { lng: 9.5, lat: 55.5, zoom: 10 },
+  context: { lng: 10.5, lat: 56.0, zoom: 6, pitch: 0, bearing: 0 },
+  location: { lng: 9.5, lat: 55.26, zoom: 10 },
+  regneark: { lng: C[0] - 0.02, lat: C[1], zoom: 11 },
+  fields: { lng: C[0], lat: C[1], zoom: 14.5, bounds: FIELD_BOUNDS },
+  match: { lng: C[0], lat: C[1], zoom: 14.5, bounds: FIELD_BOUNDS },
+  virkelighed: { lng: C[0], lat: C[1], zoom: 14, bounds: FIELD_BOUNDS },
+  scale: { lng: 10.5, lat: 56.0, zoom: 6 },
 };
+
+export const DISAGG_STEP_ORDER: DisaggStepId[] = [
+  'context',
+  'location',
+  'regneark',
+  'fields',
+  'match',
+  'virkelighed',
+  'scale',
+];

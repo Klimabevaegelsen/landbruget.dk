@@ -2,71 +2,70 @@
 
 import { ScrollySection } from '@/components/methodology/scrolly-section';
 import { ScrollyStats } from '@/components/methodology/scrolly-stats';
-import { GroundwaterScrollyMap } from './groundwater-scrolly-map';
-import { GwDegradationGraphic } from './gw-degradation-graphic';
-import { GwTimelineOverlay } from './gw-timeline-overlay';
-import { GROUNDWATER_STEPS } from './groundwater-scrolly-steps';
-import type { ScrollyStepId } from './scrolly-constants';
+import { GroundwaterScrollyMap } from '@/components/methodology-groundwater/scrollytelling/groundwater-scrolly-map';
+import { GwDegradationGraphic } from '@/components/methodology-groundwater/scrollytelling/gw-degradation-graphic';
+import { GwTimelineOverlay } from '@/components/methodology-groundwater/scrollytelling/gw-timeline-overlay';
+import { GwVadoseAnimation } from '@/components/methodology-groundwater/scrollytelling/gw-vadose-animation';
+import { GwDepthCallout } from '@/components/methodology-groundwater/scrollytelling/gw-depth-callout';
+import { GROUNDWATER_STEPS } from '@/components/methodology-groundwater/scrollytelling/groundwater-scrolly-steps';
+import type { ScrollyStepId } from '@/components/methodology-groundwater/scrollytelling/scrolly-constants';
 
 const STAT_ROWS: Partial<
   Record<ScrollyStepId, { label: string; value: string }[]>
 > = {
-  location: [
-    { label: 'Vandværk', value: 'Espe' },
+  espe: [
+    { label: 'Vandv\u00e6rk', value: 'Espe' },
     { label: 'Placering', value: 'Midtfyn' },
+    { label: 'Opland', value: '~8 km\u00b2' },
   ],
-  opland: [
-    { label: 'Opland', value: 'Espe' },
-    { label: 'Areal', value: '~8 km²' },
-    { label: 'Type', value: 'Landbrugsjord' },
-  ],
-  fields: [
+  kilden: [
     { label: 'Marker', value: '6' },
     { label: 'Areal', value: '42,2 ha' },
-    { label: 'Afgrøder', value: 'Silomajs + vårbyg' },
-    { label: 'Stof', value: 'Bentazon' },
+    { label: 'Stof', value: 'Bentazon (Koc ~34)' },
   ],
-  detection: [
+  fundet: [
     { label: 'Boring', value: 'DGU 155. 1899' },
     { label: 'Dybde', value: '6 m' },
-    { label: 'Koncentration', value: '490 µg/L' },
-    { label: 'Grænseværdi', value: '0,1 µg/L' },
+    { label: 'Koncentration', value: '490 \u00b5g/L' },
+    { label: 'Gr\u00e6nsev\u00e6rdi', value: '0,1 \u00b5g/L' },
   ],
-  doseresponse: [
-    { label: 'Oplande', value: '3.154' },
-    { label: 'Q4/Q1', value: '4,4×' },
-    { label: 'Korrelation', value: 'r = 0,213' },
-    { label: 'p-værdi', value: '0,003' },
+  mcpa: [
+    { label: 'Vandv\u00e6rk', value: 'Vejen Forsyning' },
+    { label: 'Stof', value: 'MCPA \u2192 metabolit' },
   ],
-  metabolite: [
+  fortidslevn: [
     { label: 'Boring', value: 'DGU 132. 1056' },
     { label: 'Dybde', value: '19,3 m' },
-    { label: 'Metabolit', value: '3,2 µg/L' },
+    { label: 'Metabolit', value: '3,2 \u00b5g/L' },
     { label: 'Persistent siden', value: '1997' },
   ],
 };
 
 const TIMELINE_STEPS = new Set<ScrollyStepId>([
-  'vadose',
-  'detection',
-  'metabolite',
+  'rejsen',
+  'fundet',
+  'fortidslevn',
 ]);
-const DEGRADATION_STEPS = new Set<ScrollyStepId>([
-  'ingredient',
-  'soil',
-  'metabolite',
-]);
+const DEGRADATION_STEPS = new Set<ScrollyStepId>(['kilden', 'mcpa']);
+const VADOSE_STEPS = new Set<ScrollyStepId>(['rejsen', 'fundet', 'mcpa']);
+
+function getVariant(step: ScrollyStepId): 'bentazon' | 'mcpa' {
+  return step === 'mcpa' || step === 'fortidslevn' ? 'mcpa' : 'bentazon';
+}
 
 function renderVisual(stepId: string) {
   const step = stepId as ScrollyStepId;
   const stats = STAT_ROWS[step];
   const showTimeline = TIMELINE_STEPS.has(step);
   const showDegradation = DEGRADATION_STEPS.has(step);
-  const variant = step === 'metabolite' ? 'mcpa' : 'bentazon';
+  const showVadose = VADOSE_STEPS.has(step);
+  const variant = getVariant(step);
 
   return (
     <div className="relative h-full w-full">
       <GroundwaterScrollyMap step={step} />
+      <GwVadoseAnimation variant={variant} visible={showVadose} />
+      <GwDepthCallout visible={step === 'fundet'} />
       <div className="absolute top-3 right-3 z-10">
         <GwDegradationGraphic variant={variant} visible={showDegradation} />
       </div>

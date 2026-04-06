@@ -3,78 +3,47 @@
 import { ScrollyCard } from '@/components/methodology/scrolly-card';
 import {
   IntroCard,
-  LocationCard,
-  OplandCard,
-  SoilCard,
-  VadoseCard,
-  DetectionCard,
-  TransitionCard,
-  MetaboliteCard,
-} from './gw-step-content';
+  EspeCard,
+  KildenCard,
+  FundetCard,
+} from '@/components/methodology-groundwater/scrollytelling/gw-step-content';
+import {
+  McpaCard,
+  FortidslevnCard,
+} from '@/components/methodology-groundwater/scrollytelling/gw-vejen-cards';
 
 const CAVEAT =
-  'Illustrativt eksempel\u00a0— se afsnit\u00a06.5 om begrænsninger';
+  'Illustrativt eksempel\u00a0\u2014 se afsnit\u00a06.5 om begr\u00e6nsninger';
 
 export const GROUNDWATER_STEPS = [
   { id: 'intro', content: <IntroCard /> },
-  { id: 'location', content: <LocationCard /> },
-  { id: 'opland', content: <OplandCard /> },
+  { id: 'espe', content: <EspeCard /> },
+  { id: 'kilden', content: <KildenCard /> },
   {
-    id: 'fields',
+    id: 'rejsen',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="P&aring; marken">
+      <ScrollyCard caveat={CAVEAT} title="Den langsomme rejse">
         <p>
-          I 2016 blev der spr&oslash;jtet med <strong>Fighter 480</strong>{' '}
-          (aktivstof: bentazon) p&aring; seks marker inden for oplandet &mdash;
-          silomajs og v&aring;rbyg, i alt 42,2&nbsp;ha.
+          Stofferne skal passere jordlagene under os &mdash; den{' '}
+          <strong>um&aelig;ttede zone</strong>. Bentazon rejser hurtigt. Det
+          tager kun <strong>~1,5 &aring;r</strong> at n&aring; grundvandet.
         </p>
       </ScrollyCard>
     ),
   },
+  { id: 'fundet', content: <FundetCard /> },
+  { id: 'mcpa', content: <McpaCard /> },
+  { id: 'fortidslevn', content: <FortidslevnCard /> },
   {
-    id: 'ingredient',
+    id: 'billede',
     content: (
-      <ScrollyCard caveat={CAVEAT} title="Aktivstof vs. produkt">
+      <ScrollyCard caveat={CAVEAT} title="Det store billede">
         <p>
-          Det er aktivstoffet bentazon, der potentielt siver ned &mdash; ikke
-          produktnavnet <em>Fighter 480</em>. Tilsvarende g&aelig;lder for
-          aktivstoffet MCPA (i produkterne U46 M og Agroxone).
-        </p>
-      </ScrollyCard>
-    ),
-  },
-  { id: 'soil', content: <SoilCard /> },
-  { id: 'vadose', content: <VadoseCard /> },
-  { id: 'detection', content: <DetectionCard /> },
-  {
-    id: 'doseresponse',
-    content: (
-      <ScrollyCard caveat={CAVEAT} title="Det statistiske m&oslash;nster">
-        <p>
-          P&aring; tv&aelig;rs af <strong>3.154 oplande</strong> ser vi et klart
-          m&oslash;nster: oplande med mest bentazon-anvendelse har{' '}
-          <strong>4,4&times; h&oslash;jere detektionsrate</strong> (Q4/Q1).
-        </p>
-      </ScrollyCard>
-    ),
-  },
-  { id: 'transition', content: <TransitionCard /> },
-  { id: 'metabolite', content: <MetaboliteCard /> },
-  {
-    id: 'conclusion',
-    content: (
-      <ScrollyCard caveat={CAVEAT} title="Hvad det betyder">
-        <p>
-          Vi kan ikke bevise, at forureningen stammer fra netop disse marker, da
-          grundvandstr&oslash;mme er komplekse.
-        </p>
-        <p className="mt-2">
-          Men p&aring; tv&aelig;rs af 3.154 oplande ser vi et klart statistisk
-          m&oslash;nster:{' '}
-          <strong>
-            jo mere der spr&oslash;jtes i et opland, des oftere finder vi
-            stofferne i vandet.
-          </strong>
+          Vi kan ikke f&aelig;lde dom over &eacute;n specifik mark. Men
+          m&oslash;nsteret lyver ikke: p&aring; tv&aelig;rs af{' '}
+          <strong>3.154 oplande</strong> ser vi, at jo mere der spr&oslash;jtes
+          p&aring; overfladen, des oftere finder vi stofferne i vores
+          drikkevand.
         </p>
       </ScrollyCard>
     ),

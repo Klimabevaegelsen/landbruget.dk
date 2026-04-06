@@ -45,30 +45,24 @@ export const STATS = {
 } as const;
 
 export type PfasScrollyStepId =
-  | 'intro'
-  | 'location'
-  | 'field'
-  | 'product'
-  | 'molecule'
-  | 'tfa'
-  | 'detection'
-  | 'transition'
-  | 'everywhere'
-  | 'blindspot'
-  | 'conclusion';
+  | 'skjult'
+  | 'skrydstrup'
+  | 'byggeklodser'
+  | 'evighed'
+  | 'glasset'
+  | 'overalt'
+  | 'blindvinkel'
+  | 'spoergsmaalet';
 
 import type { ScrollyViewState } from '@/components/methodology-groundwater/scrollytelling/scrolly-constants';
 
 export const VIEWS: Record<PfasScrollyStepId, ScrollyViewState> = {
-  intro: { lng: 10.5, lat: 56.0, zoom: 6.5 },
-  location: { lng: 9.4, lat: 55.3, zoom: 9 },
-  field: { lng: 9.251, lat: 55.248, zoom: 13.5 },
-  product: { lng: 9.251, lat: 55.248, zoom: 14.5 },
-  molecule: { lng: 9.251, lat: 55.248, zoom: 14 },
-  tfa: { lng: 9.251, lat: 55.248, zoom: 13.5 },
-  detection: { lng: SKRYDSTRUP_WELL.lng, lat: SKRYDSTRUP_WELL.lat, zoom: 15 },
-  transition: { lng: 9.5, lat: 55.5, zoom: 9 },
-  everywhere: { lng: 10.5, lat: 56.0, zoom: 6.5 },
-  blindspot: { lng: 8.82, lat: 55.91, zoom: 11 },
-  conclusion: { lng: 10.5, lat: 56.0, zoom: 6.5 },
+  skjult: { lng: 10.5, lat: 56.0, zoom: 6.5 },
+  skrydstrup: { lng: 9.251, lat: 55.248, zoom: 13.5 },
+  byggeklodser: { lng: 9.251, lat: 55.248, zoom: 14.5 },
+  evighed: { lng: 9.251, lat: 55.248, zoom: 13.5 },
+  glasset: { lng: 9.250338, lat: 55.247566, zoom: 15 },
+  overalt: { lng: 10.5, lat: 56.0, zoom: 6.5 },
+  blindvinkel: { lng: 8.82, lat: 55.91, zoom: 11 },
+  spoergsmaalet: { lng: 10.5, lat: 56.0, zoom: 6.5 },
 };
