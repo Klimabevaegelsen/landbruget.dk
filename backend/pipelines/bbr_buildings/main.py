@@ -1007,6 +1007,12 @@ def _upload_bronze_data_to_storage(
 
             logger.info(f"✅ Uploaded attributes to {attributes_path}")
 
+        # Enforce retention: keep only the last 3 versions
+        try:
+            storage_access.enforce_retention(f"{bucket_name}/bronze/bbr_buildings", keep=3)
+        except Exception as e:
+            logger.warning(f"⚠️ Retention cleanup failed for bronze/bbr_buildings: {e}")
+
     except Exception as e:
         logger.warning(f"⚠️ Failed to upload bronze data to storage: {e}")
         logger.warning("Silver layer will need to process locally")
@@ -1461,6 +1467,12 @@ def _upload_silver_data_to_storage(
                 shutil.copyfileobj(src, dst)
 
             logger.info(f"✅ Uploaded {file_path.name} to {storage_path}")
+
+        # Enforce retention: keep only the last 3 versions
+        try:
+            storage_access.enforce_retention(f"{bucket_name}/silver/bbr_buildings", keep=3)
+        except Exception as e:
+            logger.warning(f"⚠️ Retention cleanup failed for silver/bbr_buildings: {e}")
 
     except Exception as e:
         logger.warning(f"⚠️ Failed to upload silver data to storage: {e}")

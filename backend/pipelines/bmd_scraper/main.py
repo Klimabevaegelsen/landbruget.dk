@@ -92,6 +92,14 @@ def run_bronze_stage(bronze_dir: Path) -> Path | None:
                     logger.warning(
                         "Failed to upload to cloud storage, but continuing with local file"
                     )
+                else:
+                    # Enforce retention: keep only the last 3 versions
+                    try:
+                        from common.storage import StorageAccess as RetentionSA
+
+                        RetentionSA().enforce_retention(f"{bucket_name}/bronze/bmd", keep=3)
+                    except Exception as e:
+                        logger.warning(f"Retention cleanup failed for bronze/bmd: {e}")
             else:
                 logger.warning("Storage bucket not set, skipping cloud storage upload")
 

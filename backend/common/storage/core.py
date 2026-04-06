@@ -1037,6 +1037,56 @@ class StorageAccess:
             self.log.error(f"Error handling oversized file {storage_path}: {e}")
             raise
 
+    def enforce_retention(
+        self,
+        prefix: str,
+        keep: int = 3,
+    ) -> list[str]:
+        """Delete old timestamped versions, keeping only the most recent *keep*.
+
+        Expects the standard medallion layout where each version is stored under
+        a timestamp directory::
+
+            {bucket}/{stage}/{dataset}/{timestamp}/data.parquet
+
+        Args:
+            prefix: The ``bucket/stage/dataset`` prefix (no trailing slash).
+                    All immediate subdirectories are treated as versions.
+            keep: Number of most-recent versions to retain (default 3).
+
+        Returns:
+            List of deleted version prefixes.
+        """
+        prefix = _strip_protocol(prefix).rstrip("/")
+
+        try:
+            # List immediate subdirectories (timestamp folders)
+            entries = self.fs.ls(prefix, detail=False)
+        except FileNotFoundError:
+            return []
+
+        # Only keep directories (timestamp folders), not loose files
+        dirs = sorted(d.rstrip("/") for d in entries if self.fs.isdir(d))
+
+        if len(dirs) <= keep:
+            return []
+
+        to_delete = dirs[: len(dirs) - keep]
+        deleted: list[str] = []
+
+        for version_dir in to_delete:
+            try:
+                self.fs.rm(version_dir, recursive=True)
+                self.log.info(f"Retention: deleted old version {version_dir}")
+                deleted.append(version_dir)
+            except Exception as e:
+                self.log.warning(f"Retention: failed to delete {version_dir}: {e}")
+
+        if deleted:
+            self.log.info(f"Retention: kept {keep} versions under {prefix}, deleted {len(deleted)} old version(s)")
+
+        return deleted
+
     def __del__(self):
         """Cleanup DuckDB connection."""
         with contextlib.suppress(Exception):

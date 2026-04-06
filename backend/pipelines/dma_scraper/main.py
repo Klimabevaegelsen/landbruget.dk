@@ -436,6 +436,22 @@ def main(total_pages, run_silver, timestamp, start_date, end_date, log_level):
         except Exception as e:
             print(f"Failed to create DMA pipeline metadata: {e}")
 
+    # Enforce retention: keep only the last 3 versions
+    if (
+        ENVIRONMENT.lower() in ("production", "container")
+        and isinstance(storage_backend, OptimizedStorageBackend)
+        and storage_backend.use_optimized
+    ):
+        try:
+            bucket = storage_backend.bucket_name
+            for prefix in (
+                f"{bucket}/{PREFIX_BRONZE_SAVE_PATH}",
+                f"{bucket}/{PREFIX_SILVER_SAVE_PATH}",
+            ):
+                storage_backend.storage.enforce_retention(prefix, keep=3)
+        except Exception as e:
+            print(f"⚠️ Retention cleanup failed for DMA: {e}")
+
 
 if __name__ == "__main__":
     main()

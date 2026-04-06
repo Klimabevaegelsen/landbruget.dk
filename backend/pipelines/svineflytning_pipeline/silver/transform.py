@@ -690,6 +690,11 @@ class SvineflytningSilverProcessor:
 
             if uploaded_count == len(parquet_files):
                 logger.info("✅ Successfully uploaded all silver files to cloud storage")
+                # Enforce retention: keep only the last 3 versions
+                try:
+                    storage_access.enforce_retention(f"{GCS_BUCKET}/silver/svineflytning", keep=3)
+                except Exception as e:
+                    logger.warning(f"Retention cleanup failed for silver/svineflytning: {e}")
                 return True
             logger.warning(f"⚠️ Only uploaded {uploaded_count}/{len(parquet_files)} silver files")
             return False

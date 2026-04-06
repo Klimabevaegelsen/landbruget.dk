@@ -274,6 +274,13 @@ def export_movements_optimized(
         destination = str(output_file.absolute())
         logger.debug(f"Successfully saved locally: {destination}")
 
+    # Enforce retention: keep only the last 3 versions
+    if USE_CLOUD_STORAGE and storage_access:
+        try:
+            storage_access.enforce_retention(f"{GCS_BUCKET}/bronze/svineflytning", keep=3)
+        except Exception as e:
+            logger.warning(f"Retention cleanup failed for bronze/svineflytning: {e}")
+
     return {
         "export_timestamp": export_timestamp,
         "storage_type": "storage" if USE_CLOUD_STORAGE else "local",

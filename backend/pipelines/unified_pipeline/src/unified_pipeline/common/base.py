@@ -693,6 +693,13 @@ class BaseSource(Generic[T], ABC):
                 raise ValueError(f"Unsupported data type: {type(data)}")
             self.log.info(f"✅ Saved to cloud storage: {storage_path}")
 
+            # Enforce retention: keep only the last 3 timestamped versions
+            retention_prefix = f"{bucket}/{stage}/{final_dataset}"
+            try:
+                self.storage.enforce_retention(retention_prefix, keep=3)
+            except Exception as e:
+                self.log.warning(f"Retention cleanup failed for {retention_prefix}: {e}")
+
     def _read_silver_data(self, dataset: str) -> Any | None:
         """Read data from silver layer for gold processing."""
 
