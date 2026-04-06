@@ -1,5 +1,10 @@
 import { Droplets, Home, GraduationCap } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
+import {
+  parseProductString,
+  formatProduct,
+} from '@/components/pesticidkort/field-utils';
 
 export function FieldProximity({ field }: { field: NearbyFieldSummary }) {
   if (
@@ -33,22 +38,59 @@ export function FieldProximity({ field }: { field: NearbyFieldSummary }) {
   );
 }
 
-export function FieldProducts({ field }: { field: NearbyFieldSummary }) {
+function ProductList({
+  raw,
+  colorClass,
+  label,
+}: {
+  raw: string;
+  colorClass?: string;
+  label: string;
+}) {
+  const products = parseProductString(raw);
+  if (products.length === 0) return null;
+
   return (
-    <div className="text-muted-foreground mt-2 space-y-1 text-xs">
+    <div className={cn('space-y-0.5', colorClass)}>
+      <span className="font-medium">{label}</span>
+      <ul className="list-none space-y-0.5 pl-0">
+        {products.map((p) => (
+          <li key={`${p.name}-${p.dose}`}>{formatProduct(p)}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function FieldProducts({ field }: { field: NearbyFieldSummary }) {
+  const hasAny =
+    field.pfas_products_detail ||
+    field.glyphosate_products_detail ||
+    field.diquat_products_detail ||
+    field.other_products_detail;
+  if (!hasAny) return null;
+
+  return (
+    <div className="text-muted-foreground mt-2 space-y-2 text-xs">
       {field.pfas_products_detail && (
-        <p className="text-warning">PFAS: {field.pfas_products_detail}</p>
+        <ProductList
+          raw={field.pfas_products_detail}
+          colorClass="text-warning"
+          label="PFAS"
+        />
       )}
       {field.glyphosate_products_detail && (
-        <p>Glyphosat: {field.glyphosate_products_detail}</p>
+        <ProductList raw={field.glyphosate_products_detail} label="Glyphosat" />
       )}
       {field.diquat_products_detail && (
-        <p className="text-destructive">
-          Diquat: {field.diquat_products_detail}
-        </p>
+        <ProductList
+          raw={field.diquat_products_detail}
+          colorClass="text-destructive"
+          label="Diquat"
+        />
       )}
       {field.other_products_detail && (
-        <p>Øvrige: {field.other_products_detail}</p>
+        <ProductList raw={field.other_products_detail} label="Øvrige" />
       )}
     </div>
   );

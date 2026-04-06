@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { PersonalReport } from '@/components/pesticidkort/PersonalReport';
+import { useBurdenHistogram } from '@/components/pesticidkort/useBurdenHistogram';
 import { BottomSheet } from '@/components/pesticidkort/BottomSheet';
 import { ReportHeader } from '@/components/pesticidkort/ReportHeader';
 import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
@@ -59,6 +60,7 @@ export function ReportMapView({
     'half'
   );
   const router = useRouter();
+  const histogram = useBurdenHistogram(year);
 
   const handleFieldsLoaded = useCallback(
     (fields: NearbyFieldSummary[]) => {
@@ -92,26 +94,32 @@ export function ReportMapView({
     [router, lat, lng]
   );
 
-  const reportPanel = (
-    <>
-      {report ? (
-        <PersonalReport
-          report={report}
-          onFieldSelect={setSelectedField}
-          onOpenStory={() => setShowStory(true)}
-        />
-      ) : (
-        <div aria-live="polite" className="space-y-4 px-6 py-5">
-          <div className="bg-muted h-8 w-32 animate-pulse rounded" />
-          <div className="bg-muted h-20 animate-pulse rounded-xl" />
-          <div className="bg-muted h-24 animate-pulse rounded-xl" />
-        </div>
-      )}
-      <div className="border-border border-t px-6 py-3">
-        <ModeToggle mode="citizen" onChange={handleModeChange} />
-        <YearTimeline year={year} onChange={onYearChange} compact />
-      </div>
-    </>
+  const reportContent = report ? (
+    <PersonalReport
+      report={report}
+      histogram={histogram}
+      onFieldSelect={setSelectedField}
+      onOpenStory={() => setShowStory(true)}
+    />
+  ) : (
+    <div
+      aria-live="polite"
+      className="animate-fade-slide-up space-y-4 px-5 py-5 motion-reduce:animate-none"
+    >
+      <p className="text-muted-foreground text-sm">
+        Analyserer marker nær din adresse...
+      </p>
+      <div className="bg-muted h-20 animate-pulse rounded-xl" />
+      <div className="bg-muted h-12 animate-pulse rounded-xl" />
+      <div className="bg-muted h-24 animate-pulse rounded-xl" />
+    </div>
+  );
+
+  const controls = (
+    <div className="bg-background/95 border-border border-t px-5 py-3 backdrop-blur-sm">
+      <ModeToggle mode="citizen" onChange={handleModeChange} />
+      <YearTimeline year={year} onChange={onYearChange} compact />
+    </div>
   );
 
   return (
@@ -130,13 +138,21 @@ export function ReportMapView({
 
       <div className="md:hidden">
         <BottomSheet state={sheetState} onStateChange={setSheetState}>
-          {reportPanel}
+          {reportContent}
+          {controls}
         </BottomSheet>
       </div>
 
       <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-[420px] md:block">
-        <div className="bg-background/95 pointer-events-auto h-full overflow-y-auto border-r pt-14 backdrop-blur-sm">
-          {reportPanel}
+        <div className="bg-background/95 pointer-events-auto flex h-full flex-col border-r pt-14 backdrop-blur-sm">
+          <div
+            className="flex-1 overflow-y-auto"
+            role="region"
+            aria-label="Pesticidrapport"
+          >
+            {reportContent}
+          </div>
+          {controls}
         </div>
       </div>
 
