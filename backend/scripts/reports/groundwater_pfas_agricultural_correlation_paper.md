@@ -385,6 +385,8 @@ The most important limitations of this study are:
 
 8. **Low detection rates and marginal EPV.** Most PFAS substances had catchment-level detection rates between 1% and 10%, creating severe class imbalance. Two of four multivariate-surviving associations (Σ-PFHxS EPV = 6, SUM PFAS-22 EPV = 8) fall below the recommended EPV ≥ 10 threshold (Peduzzi et al., 1996). Firth penalized regression (Section 3.6) confirmed these low-EPV results (Firth p-values virtually identical to MLE estimates), and confirmatory studies with larger event counts are needed.
 
+9. **Screening bias (first-testing-not-first-detection).** PFAS monitoring in Danish groundwater began only in 2013 (pilot) and scaled from 2017 onward; TFA monitoring started in 2020. This raises the concern that detections reflect first-time testing rather than new contamination. We assessed screening bias using sample-level VP4 data (GEUS Dataverse, doi:10.22008/FK2/IHVDXL). The risk varies by substance: PFNA was tested from 2013 with 259 negative tests across 3 years before its first detection in 2016 (LOW risk). PFHxS had 4 negative tests in 2013 before first detection in 2014 (LOW risk). PFOA was detected in its first full testing year (2014) at 95.7% detection rate with only 1 negative test (MODERATE risk — though near-universal detection at first testing suggests genuine ubiquity rather than a testing artifact). PFOS shows 100% detection in every year since monitoring began in 2013 (22,243 positive tests, zero negatives across 12 years), which is more consistent with ubiquitous contamination than a testing artifact. TFA similarly shows 100% detection since monitoring began in 2020 (6,496 positive tests, zero negatives). For PFOS and TFA, the absence of any negative test across thousands of wells over many years indicates genuine ubiquitous presence; the screening bias concern applies more to the timing of detection than to its existence. The binary detection approach used in this study is unaffected by screening bias for substances with 100% detection rates, since spatial variation in concentration (not detection/non-detection) would be needed to reveal application-intensity gradients. For PFOA and PFHxS, where detection rates vary spatially (8–20%), the short testing history (from 2013/2014) means we cannot fully exclude the possibility that spatial detection patterns partly reflect the rollout of monitoring infrastructure rather than contamination patterns (Supplementary S5.1 provides the full substance-by-substance yearly analysis).
+
 ### 4.9 Policy Implications
 
 Despite the limitations above, several findings carry immediate regulatory relevance:
@@ -425,6 +427,12 @@ Spatial autocorrelation in both intensity and detection surfaces means that stan
 ## 6. Data Availability
 
 All pesticide application data are derived from publicly available Danish Agricultural Agency (*Landbrugsstyrelsen*) spraying journals via the unified data pipeline at landbruget.dk. PFAS groundwater monitoring data are from the GEUS Jupiter database (DOI: 10.22008/FK2/NTQHYO). The Danish Pesticide Register (BMD) is publicly accessible at bmd.mst.dk. The complete analytical pipeline is available in the study repository at github.com/landbruget/landbruget.dk.
+
+---
+
+## AI Disclosure Statement
+
+This paper was drafted with assistance from Claude (Anthropic, Claude Opus 4.6). All empirical analyses, statistical modeling, and validation were performed by the authors. The AI assistant was used for literature search, prose drafting, and manuscript preparation.
 
 ---
 
