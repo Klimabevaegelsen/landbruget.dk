@@ -6,54 +6,31 @@ import {
 export function SectionSpatialLinkage() {
   return (
     <section data-testid="section-spatial-linkage">
-      <SectionHeader id="method" number="3" title="Rumlig kobling" />
+      <SectionHeader id="method" number="3" title="Geografisk kobling" />
 
       <p>
-        Det centrale metodiske bidrag er at koble pesticidanvendelse p&aring;
-        markniveau med grundvandsbeskyttelsesomr&aring;der og
-        overv&aring;gningsboringer. Alle rumlige operationer udf&oslash;res i
-        EPSG:25832 (UTM zone 32N), s&aring; areal- og afstandsberegninger
-        foreg&aring;r direkte i meter.
+        Det metodiske gennembrud er evnen til at overlejre markernes
+        pesticidforbrug med grundvandskortene. Alt beregnes pr&aelig;cist i
+        meter via GIS-koordinater (EPSG:25832).
       </p>
 
       <SubsectionHeader
         id="method-grukos"
         number="3.1"
-        title="Mark &times; grundvandsopland-kobling"
+        title="Marker i grundvandsoplande"
       />
       <p>
-        For hvert &aring;r beregner vi den geometriske sk&aelig;ring (
-        <code>ST_Intersection</code>) mellem samtlige landbrugsmarker og
-        grundvandsoplandene. Resultatet er en tabel, der for hver mark angiver,
-        hvor stor en andel der ligger inden for et indsatsomr&aring;de eller
-        indvindingsopland &ndash; og om omr&aring;det er klassificeret som NFI
-        eller SFI.
-      </p>
-      <p>
-        Denne kobling muligg&oslash;r to typer analyser: (i) hvilke marker med
-        dokumenteret pesticidanvendelse ligger i s&aring;rbare
-        grundvandsomr&aring;der, og (ii) hvor stor den samlede
-        pesticidbelastning er inden for hvert grundvandsopland.
+        For hvert &aring;r beregner vi det pr&aelig;cise geografiske overlap
+        mellem landbrugsmarker og grundvandsoplandene. Det viser den samlede
+        pesticidbelastning inden for de s&aring;rbare zoner.
       </p>
 
-      <SubsectionHeader
-        id="method-bnbo"
-        number="3.2"
-        title="Mark &times; BNBO-kobling"
-      />
+      <SubsectionHeader id="method-bnbo" number="3.2" title="Marker i BNBO" />
       <p>
-        P&aring; samme m&aring;de beregner vi overlapbet mellem marker og
-        BNBO-zoner. Her er analysen s&aelig;rligt relevant efter
-        spr&oslash;jteforbuddets ikrafttr&aelig;den 1.&nbsp;juli 2024: vi kan
-        identificere pr&aelig;cist, hvilke marker med dokumenteret
-        pesticidanvendelse der ligger helt eller delvist inden for et
-        BNBO-omr&aring;de.
-      </p>
-      <p>
-        Ved at kombinere BNBO-statusdata med pesticiddata p&aring; markniveau
-        kan vi desuden vurdere, om omr&aring;der med status &ldquo;indsats
-        n&oslash;dvendig&rdquo; faktisk har aktiv pesticidanvendelse p&aring; de
-        tilgr&aelig;nsende marker.
+        Vi kortl&aelig;gger, pr&aelig;cist hvilke spr&oslash;jtede marker der
+        overlapper med de boringsnære beskyttelsesomr&aring;der &ndash; et
+        s&aelig;rligt vigtigt v&aelig;rkt&oslash;j til at monitorere
+        overholdelsen af spr&oslash;jteforbuddet fra 2024.
       </p>
 
       <SubsectionHeader
@@ -62,17 +39,9 @@ export function SectionSpatialLinkage() {
         title="Boringsoverl&aelig;g"
       />
       <p>
-        GRUMO-boringernes geografiske placering overlejres med vores markkort
-        for at unders&oslash;ge, om omr&aring;der med intensiv
-        pesticidanvendelse korrelerer med forh&oslash;jede fund i det
-        underliggende grundvand. For hver boring identificeres de marker, der
-        ligger inden for et defineret opland (typisk 1&ndash;5&nbsp;km radius).
-      </p>
-      <p>
-        Denne analyse er eksplorativ &ndash; den kan p&aring;vise geografisk
-        sammenfaldenhed, men ikke kausalitet. Grundvandets transporttid fra
-        markoverfladen til en boring kan v&aelig;re &aring;rtier, og mange andre
-        faktorer p&aring;virker pesticidkoncentrationen (se afsnit 6).
+        Vi tr&aelig;kker en radius (typisk 1&ndash;5&nbsp;km) omkring hver
+        GRUMO-boring og identificerer markernes pesticidforbrug i det
+        p&aring;g&aelig;ldende opland for at lede efter korrelationer.
       </p>
     </section>
   );

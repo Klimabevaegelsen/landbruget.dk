@@ -6,7 +6,6 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import {
   SKRYDSTRUP_CATCHMENT,
-  SONDER_FELDING_CATCHMENT,
   HADERSLEV_FIELDS,
 } from '@/components/methodology-pfas/scrollytelling/scrolly-geo-data';
 import {
@@ -15,42 +14,9 @@ import {
   type PfasScrollyStepId,
 } from '@/components/methodology-pfas/scrollytelling/scrolly-constants';
 import { CatchmentLayers } from '@/components/methodology-groundwater/scrollytelling/catchment-layers';
+import { buildGeo, buildUnmonitoredGeo } from './pfas-geo-builders';
 import { CatchmentChoropleth } from './catchment-choropleth';
 import { PfasMapAnnotations } from './pfas-map-annotations';
-
-function buildGeo(
-  catchment: typeof SKRYDSTRUP_CATCHMENT,
-  fields?: typeof HADERSLEV_FIELDS
-): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: { kind: 'catchment' },
-        geometry: catchment as unknown as GeoJSON.Geometry,
-      },
-      ...(fields?.features.map((f) => ({
-        type: 'Feature' as const,
-        properties: { ...f.properties, kind: 'field' },
-        geometry: f.geometry as unknown as GeoJSON.Geometry,
-      })) ?? []),
-    ],
-  };
-}
-
-function buildUnmonitoredGeo(): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: { kind: 'catchment' },
-        geometry: SONDER_FELDING_CATCHMENT as unknown as GeoJSON.Geometry,
-      },
-    ],
-  };
-}
 
 interface PfasScrollyMapProps {
   step: PfasScrollyStepId;

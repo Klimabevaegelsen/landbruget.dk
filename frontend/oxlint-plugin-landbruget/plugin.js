@@ -359,6 +359,9 @@ const TEST_COVERAGE_ALLOWLIST = new Set([
   'src/app/(main)/page.tsx',
   'src/app/(main)/virksomhed/[id]/page.tsx',
   'src/app/(main)/markanalyse/page.tsx',
+  // Covered by tests/methodology-pages.spec.ts (suppress until rule can detect test files)
+  'src/app/(main)/pesticidanalyse/pfas/page.tsx',
+  'src/app/(main)/pesticidanalyse/grundvand/page.tsx',
   // Hooks without unit tests
   'src/hooks/use-mobile-detection.ts',
   'src/hooks/use-touch-gestures.ts',

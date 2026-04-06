@@ -24,6 +24,10 @@ env_path = pipeline_dir / ".env"
 if env_path.exists():
     load_dotenv(env_path)
 
+from common.secrets import init_secrets  # noqa: E402
+
+init_secrets()
+
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.auth")
 

@@ -11,27 +11,27 @@ export function SectionPfasDataSources() {
       <SubsectionHeader
         id="pfas-geus"
         number="2.1"
-        title="GEUS Jupiter — PFAS-analyser"
+        title="GEUS Jupiter (PFAS-analyser)"
       />
       <p>
-        GEUS&apos; nationale grundvandsdatabase (Jupiter) indeholder{' '}
-        <strong>441.589 PFAS-analyser</strong> fra danske boringer,
-        d&aelig;kkende 26 PFAS-stoffer. Trifluoreddikesyre (TFA) er det hyppigst
-        fundne stof med m&aring;linger fra <strong>4.789 boringer</strong>.
-        Systematisk TFA-overv&aring;gning startede f&oslash;rst i 2020.
+        GEUS&apos; nationale grundvandsdatabase indeholder{' '}
+        <strong>441.589 analyser</strong> for 26 forskellige PFAS-stoffer i
+        danske boringer. TFA er det hyppigst fundne stof med m&aring;linger fra{' '}
+        <strong>4.789 boringer</strong>. Den systematiske overv&aring;gning af
+        TFA startede f&oslash;rst i 2020.
       </p>
 
       <SubsectionHeader
         id="pfas-grukos"
         number="2.2"
-        title="GRUKOS — grundvandsoplande"
+        title="GRUKOS (Grundvandsoplande)"
       />
       <p>
-        Milj&oslash;styrelsens grundvandskortl&aelig;gning (GRUKOS) afgrænser{' '}
-        <strong>5.826 indvindingsoplande</strong> for danske vandv&aelig;rker.
-        Hvert opland er det areal, hvorfra nedb&oslash;r kan n&aring;
-        vandv&aelig;rkets boringer &ndash; og dermed det omr&aring;de, hvor
-        pesticidanvendelse potentielt kan p&aring;virke drikkevandet.
+        Milj&oslash;styrelsens grundvandskortl&aelig;gning afgr&aelig;nser{' '}
+        <strong>5.826 indvindingsoplande</strong>. Et opland er det geografiske
+        omr&aring;de, hvorfra regnvand siver ned og ender i vandv&aelig;rkets
+        boringer. Det er alts&aring; her, landbrugets pesticidforbrug direkte
+        kan p&aring;virke drikkevandet.
       </p>
 
       <SubsectionHeader
@@ -40,30 +40,28 @@ export function SectionPfasDataSources() {
         title="Bek&aelig;mpelsesmiddeldatabasen (BMD)"
       />
       <p>
-        Milj&oslash;styrelsens BMD indeholder registreringer af alle godkendte
-        pesticidprodukter og deres aktivstoffer. Vi har kortlagt{' '}
-        <strong>132 fluorholdige produkter</strong> med{' '}
-        <strong>52 fluorholdige aktivstoffer</strong>, heraf{' '}
-        <strong>35 der kan danne TFA</strong> via metabolisk nedbrydning af
-        CF₃-gruppen.
+        Milj&oslash;styrelsens database over godkendte spr&oslash;jtemidler. Vi
+        har kortlagt <strong>132 fluorholdige produkter</strong> fordelt
+        p&aring; <strong>52 aktivstoffer</strong>. Af disse kan{' '}
+        <strong>35 aktivstoffer danne TFA</strong>, n&aring;r de nedbrydes.
       </p>
 
       <SubsectionHeader
         id="pfas-disagg"
         number="2.4"
-        title="Pesticid-disaggregering"
+        title="Fordeling af pesticidforbrug p&aring; markniveau"
       />
       <p>
-        Vores disaggregeringsmetode fordeler virksomhedsrapporterede
-        pesticiddata ned p&aring; individuelle marker (se{' '}
+        Vores metode fordeler bedrifternes indberettede pesticidforbrug ud
+        p&aring; de enkelte marker (se{' '}
         <a
           href="/pesticidanalyse/metode"
           className="text-primary underline-offset-4 hover:underline"
         >
-          metoden for disaggregering
+          metoden for fordeling af pesticidforbrug
         </a>
-        ). Det g&oslash;r det muligt at koble konkrete produkter og aktivstoffer
-        til specifikke landbrugsarealer inden for hvert grundvandsopland.
+        ). Dette g&oslash;r det muligt at koble specifikke spr&oslash;jtemidler
+        til landbrugsarealerne inden for hvert grundvandsopland.
       </p>
     </section>
   );

@@ -26,22 +26,25 @@ export function MapLegend({ items, visible }: MapLegendProps) {
           data-testid="map-legend"
         >
           <ul className="space-y-1">
-            {items.map((item) => (
-              <li
-                key={item.label}
-                className="flex items-center gap-1.5 text-[10px]"
-              >
-                <span
-                  className={
-                    item.shape === 'circle'
-                      ? 'inline-block h-2 w-2 rounded-full'
-                      : 'inline-block h-2 w-2 rounded-sm'
-                  }
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-muted-foreground">{item.label}</span>
-              </li>
-            ))}
+            {items.map((item) => {
+              const swatchStyle = { backgroundColor: item.color };
+              return (
+                <li
+                  key={item.label}
+                  className="flex items-center gap-1.5 text-[10px]"
+                >
+                  <span
+                    className={
+                      item.shape === 'circle'
+                        ? 'inline-block h-2 w-2 rounded-full'
+                        : 'inline-block h-2 w-2 rounded-sm'
+                    }
+                    style={swatchStyle}
+                  />
+                  <span className="text-muted-foreground">{item.label}</span>
+                </li>
+              );
+            })}
           </ul>
         </motion.div>
       )}

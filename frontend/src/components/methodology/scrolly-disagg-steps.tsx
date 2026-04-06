@@ -122,9 +122,23 @@ export const DISAGG_STEPS = [
         </h4>
         <p className="text-muted-foreground text-sm leading-relaxed">
           Fra &eacute;n anonym indberetning &rarr; 3 identificerede marker med
-          individuelle doser. Denne proces k&oslash;rer for alle ~350.000
-          indberetninger. Konfidensscoren ({EXAMPLE.confidence}) angiver hvor
-          sikkert matchet er.
+          individuelle doser. Konfidensscoren ({EXAMPLE.confidence}) angiver
+          hvor sikkert matchet er.
+        </p>
+      </div>
+    ),
+  },
+  {
+    id: 'scale',
+    content: (
+      <div className="rounded-lg border p-5">
+        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
+          Fra &eacute;n mark til hele Danmark
+        </h4>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          Denne proces k&oslash;rer for alle ~350.000 indberetninger og ~600.000
+          marker hvert &aring;r. Resultatet er et landsd&aelig;kkende kort over
+          pesticidbelastning &mdash; fra individuel mark til national skala.
         </p>
       </div>
     ),

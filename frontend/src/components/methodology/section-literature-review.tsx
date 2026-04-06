@@ -1,5 +1,6 @@
 import {
   SectionHeader,
+  Sidenote,
   SubsectionHeader,
 } from '@/components/methodology/article-layout';
 import { LiteratureNovelty } from '@/components/methodology/literature-novelty';
@@ -14,11 +15,12 @@ export function SectionLiteratureReview() {
       />
 
       <p>
-        Rumlig fordeling af pesticiddata har været genstand for voksende
-        forskningsmæssig interesse i det seneste årti, drevet af behovet for at
-        forstå lokale eksponeringer og miljøpåvirkninger. Den opnåede rumlige
-        opløsning varierer betydeligt mellem studier og afhænger fundamentalt af
-        den tilgængelige datainfrastruktur.
+        Geografisk fordeling af pesticiddata har f&aring;et voksende
+        forskningsmæssig opmærksomhed i det seneste &aring;rti, drevet af
+        behovet for at forst&aring; den lokale eksponering og
+        milj&oslash;p&aring;virkning. Den opn&aring;ede pr&aelig;cision varierer
+        betydeligt mellem de forskellige studier og afh&aelig;nger fundamentalt
+        af landenes datainfrastruktur.
       </p>
 
       <SubsectionHeader
@@ -28,35 +30,35 @@ export function SectionLiteratureReview() {
       />
 
       <p>
-        På global og kontinental skala anvendes typisk statistisk nedskalering
-        fra nationale salgsdata. PEST-CHEMGRIDS-datasættet [1] estimerer
-        anvendelsesrater for 20 aktive stoffer på et ~10 km gitter ved at
-        kombinere FAO-salgsstatistikker med afgrødefordelingsdata. En nyere
-        EU-dækkende udvidelse [2] opnår 250 m opløsning ved at kalibrere globale
-        estimater med EUROSTAT-data og d&apos;Andrimonts 10 m afgrødekort, men
-        forbliver modelbaseret &mdash; det faktiske forbrug kendes ikke.
+        P&aring; global skala anvendes typisk en statistisk nedskalering af
+        nationale salgsdata. PEST-CHEMGRIDS-datas&aelig;ttet
+        <Sidenote number={1}>Maggi et al. (2019)</Sidenote> estimerer for
+        eksempel forbruget af 20 aktivstoffer i et 10&nbsp;km-gitter ved at
+        kombinere FAO-salgsstatistikker med data for afgr&oslash;defordeling. En
+        nyere EU-model
+        <Sidenote number={2}>Maggi et al. (2025)</Sidenote> opn&aring;r en
+        opl&oslash;sning p&aring; 250 meter ved at kalibrere globale estimater
+        med EUROSTAT-data, men den forbliver teoretisk &mdash; det faktiske
+        forbrug kendes ikke.
       </p>
       <p>
-        På regionalt niveau har Udias et al. [6] estimeret pesticidemissioner på
-        NUTS-3-niveau for EU via statistisk fremskrivning, mens Habran et al.
-        [5] opnåede 100 m gitteropløsning for Vallonien (Belgien) ved at
-        kombinere afgrødekort med estimerede anvendelsesrater. Begge tilgange
-        anvender modellerede &mdash; ikke rapporterede &mdash; doser.
+        P&aring; regionalt niveau har forskere estimeret pesticidudledninger via
+        statistisk fremskrivning
+        <Sidenote number={6}>Udias et al. (2023)</Sidenote>, mens andre har
+        opn&aring;et en gitteropl&oslash;sning p&aring; 100 meter i Belgien ved
+        at kombinere afgr&oslash;dekort med estimerede standarddoser
+        <Sidenote number={5}>Habran et al. (2022)</Sidenote>. Ogs&aring; her
+        anvendes modellerede doser frem for rapporterede data.
       </p>
       <p>
-        Den fineste rumlige opløsning i publiceret forskning er opnået i
-        Frankrig. Martin et al. [3] fordelte regionale salgsdata til
-        individuelle markblokke via postnummerbaserede salgstal og
-        afgrødegodkendelser, valideret i to testområder (830 ha og 12.007 ha).
-        Galimberti et al. [4] udvidede denne tilgang til 9,5 mio. franske
-        markblokke og 388 aktive stoffer. Begge studier anvender dog salgsdata
-        &mdash; ikke faktisk forbrug &mdash; og antager, at godkendte doser
-        afspejler praksis, hvilket introducerer en systematisk usikkerhed.
-      </p>
-      <p>
-        I Tyskland har SYNOPS-GIS-modellen [7] opnået ægte markniveau-opløsning
-        for sukkerroer, men baseret på spørgeskemadata fra et begrænset antal
-        bedrifter &mdash; ikke et nationalt indberetningssystem.
+        Den fineste geografiske opl&oslash;sning i den publicerede forskning er
+        hidtil opn&aring;et i Frankrig, hvor man har fordelt regionale salgsdata
+        ud p&aring; individuelle markblokke
+        <Sidenote number={3}>Martin et al. (2023)</Sidenote>
+        <Sidenote number={4}>Galimberti et al. (2025)</Sidenote>. Denne tilgang
+        bygger dog fortsat p&aring; salgstal og antager, at standarddoserne
+        altid afspejler den faktiske praksis, hvilket introducerer en
+        systematisk usikkerhed.
       </p>
 
       <SubsectionHeader
@@ -64,31 +66,33 @@ export function SectionLiteratureReview() {
         number="2.2"
         title="Generelle begrænsninger i litteraturen"
       />
-      <p>Fire begrænsninger går igen i den eksisterende litteratur:</p>
-      <ol className="list-decimal space-y-3 pl-6">
+      <p>
+        Fire begr&aelig;nsninger g&aring;r igen i den eksisterende litteratur:
+      </p>
+      <ul className="list-disc space-y-3 pl-6">
         <li>
-          <em>Salgs- vs. anvendelsesgabet:</em> Størstedelen af studierne
-          anvender salgs- eller omsætningsdata som tilnærmelse for faktisk
-          anvendelse. Det introducerer en fundamental usikkerhed, da ikke alle
-          solgte pesticider nødvendigvis anvendes i salgsåret eller -regionen
-          [10].
+          <strong>Forskellen p&aring; salg og forbrug:</strong>{' '}
+          St&oslash;rstedelen af studierne bruger salgsdata som rettesnor for
+          forbruget. Det er usikkert, da ikke alt solgt pesticid bruges i det
+          samme &aring;r eller i den samme region.
         </li>
         <li>
-          <em>Homogenitetsantagelsen:</em> Inden for en given afgrødetype
-          antages et ensartet forbrug, hvilket ignorerer variation mellem
-          bedrifter, jordtyper og lokalt skadedyrstryk.
+          <strong>Antagelsen om ensartet forbrug:</strong> Inden for en given
+          afgr&oslash;dtype antages et ensartet forbrug, hvilket ignorerer
+          variationer i jordtyper og lokalt skadedyrstryk.
         </li>
         <li>
-          <em>Mangel på kontrolmålinger:</em> Faktiske registreringer på
-          markniveau er sjældent tilgængelige, og selv de bedste modeller
-          rapporterer betydelige statistiske afvigelser [5].
+          <strong>Mangel p&aring; kontrolm&aring;linger:</strong> Faktiske
+          registreringer p&aring; markniveau er sj&aelig;ldent
+          tilg&aelig;ngelige, og modellerne har store statistiske afvigelser.
         </li>
         <li>
-          <em>Databeskyttelse:</em> Individuelle bedriftsdata er i de fleste
-          EU-lande beskyttet under GDPR, hvilket begrænser muligheden for at
-          validere og offentliggøre estimater på markniveau.
+          <strong>Databeskyttelse (GDPR):</strong> Data fra individuelle
+          bedrifter er beskyttet i de fleste EU-lande, hvilket g&oslash;r det
+          sv&aelig;rt at validere og offentligg&oslash;re kortl&aelig;gninger
+          p&aring; markniveau.
         </li>
-      </ol>
+      </ul>
 
       <LiteratureNovelty />
     </section>

@@ -6,36 +6,37 @@ export function SectionPfasIntroduction() {
       <SectionHeader id="pfas-introduction" number="1" title="Introduktion" />
 
       <p>
-        PFAS &ndash; per- og polyfluoralkylstoffer &ndash; kaldes
-        &ldquo;evighedskemikalier&rdquo; fordi de er ekstremt persistente i
-        milj&oslash;et. De mest kendte PFAS-kilder er brandslukningsskum og
-        industrielle processer. Men en ofte overset kilde er{' '}
-        <strong>fluorholdige pesticider</strong>, der nedbrydes til
-        trifluoreddikesyre (TFA) i jord og grundvand.
+        PFAS (per- og polyfluoralkylstoffer) kaldes ofte for
+        &ldquo;evighedskemikalier&rdquo;, fordi de er ekstremt sv&aelig;re at
+        nedbryde i naturen. De mest kendte kilder til PFAS er brandslukningsskum
+        og industriel produktion. Men en ofte overset kilde er{' '}
+        <strong>fluorholdige pesticider</strong>, der nedbrydes til stoffet
+        trifluoreddikesyre (TFA) i jorden og grundvandet.
       </p>
 
       <p>
-        I Danmark er{' '}
+        I Danmark har vi{' '}
         <mark>
           <strong>52 godkendte aktivstoffer</strong>
-        </mark>{' '}
-        fluorholdige, heraf{' '}
+        </mark>
+        , der indeholder fluor. Af dem kan{' '}
         <mark>
-          <strong>35 der kan danne TFA</strong>
+          <strong>35 nedbrydes til TFA</strong>
         </mark>
         . De bruges p&aring; titusindvis af marker hvert &aring;r. TFA er
-        ekstremt mobilt i grundvand og detekteres i{' '}
+        ekstremt mobilt i grundvandet og detekteres i{' '}
         <mark>
           <strong>100&nbsp;%</strong>
         </mark>{' '}
-        af de overv&aring;gede grundvandsoplande.
+        af de grundvandsoplande, hvor man leder efter det.
       </p>
 
       <p>
         Denne artikel f&oslash;lger k&aelig;den fra mark til boring &ndash; fra
-        produktet der spr&oslash;jtes, til aktivstoffet det indeholder, til
-        metabolitten der dukker op i grundvandet. Derefter zoomer vi ud og viser
-        den <strong>blinde vinkel</strong>:{' '}
+        det produkt, der spr&oslash;jtes med, til det aktivstof det indeholder,
+        og endelig til det nedbrydningsprodukt, der dukker op i drikkevandet.
+        Derefter zoomer vi ud og kigger p&aring; den store{' '}
+        <strong>blinde vinkel</strong>:{' '}
         <mark>64&nbsp;% af Danmarks grundvandsoplande</mark> har aldrig
         f&aring;et m&aring;lt for PFAS.
       </p>

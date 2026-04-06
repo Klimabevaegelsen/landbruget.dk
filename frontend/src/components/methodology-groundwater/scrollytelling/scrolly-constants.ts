@@ -22,6 +22,7 @@ export const VEJEN_WELL = {
 export type ScrollyStepId =
   | 'intro'
   | 'location'
+  | 'opland'
   | 'fields'
   | 'ingredient'
   | 'soil'
@@ -41,7 +42,8 @@ export interface ScrollyViewState {
 export const VIEWS: Record<ScrollyStepId, ScrollyViewState> = {
   intro: { lng: 10.5, lat: 56.0, zoom: 6.5 },
   location: { lng: 10.46, lat: 55.25, zoom: 9 },
-  fields: { lng: 10.46, lat: 55.202, zoom: 13 },
+  opland: { lng: 10.454, lat: 55.205, zoom: 11.5 },
+  fields: { lng: 10.463, lat: 55.201, zoom: 11.8 },
   ingredient: { lng: 10.46, lat: 55.202, zoom: 14 },
   soil: { lng: 10.46, lat: 55.205, zoom: 13.5 },
   vadose: { lng: 10.44, lat: 55.204, zoom: 12.5 },
@@ -50,4 +52,36 @@ export const VIEWS: Record<ScrollyStepId, ScrollyViewState> = {
   transition: { lng: 9.8, lat: 55.35, zoom: 9 },
   metabolite: { lng: VEJEN_WELL.lng, lat: VEJEN_WELL.lat, zoom: 12 },
   conclusion: { lng: 9.8, lat: 55.35, zoom: 8 },
+};
+
+/** Steps where each case-study's layers are visible on the map. */
+export const ESPE_STEPS = new Set<ScrollyStepId>([
+  'opland',
+  'fields',
+  'ingredient',
+  'soil',
+  'vadose',
+  'detection',
+  'doseresponse',
+  'conclusion',
+]);
+export const VEJEN_STEPS = new Set<ScrollyStepId>(['metabolite', 'conclusion']);
+export const ESPE_WELL_STEPS = new Set<ScrollyStepId>([
+  'detection',
+  'doseresponse',
+  'conclusion',
+]);
+export const VEJEN_WELL_STEPS = new Set<ScrollyStepId>([
+  'metabolite',
+  'conclusion',
+]);
+
+/** Per-step flyTo animation overrides (duration in ms, curve). */
+export const FLY_TO_OVERRIDES: Partial<
+  Record<ScrollyStepId, { duration?: number; curve?: number }>
+> = {
+  opland: { duration: 2200, curve: 1.0 },
+  fields: { duration: 1400, curve: 1.4 },
+  doseresponse: { duration: 2000 },
+  transition: { duration: 2800, curve: 1.6 },
 };

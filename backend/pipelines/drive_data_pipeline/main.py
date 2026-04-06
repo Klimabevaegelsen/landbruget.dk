@@ -48,6 +48,9 @@ if not os.path.exists(env_path):
     # Try parent directory
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 load_dotenv(env_path)
+from common.secrets import init_secrets  # noqa: E402
+
+init_secrets()
 
 
 def _extract_cvr_numbers_flexible(

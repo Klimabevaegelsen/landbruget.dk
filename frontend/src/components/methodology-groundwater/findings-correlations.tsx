@@ -6,64 +6,73 @@ export function FindingsCorrelations() {
       <SubsectionHeader
         id="findings-correlations"
         number="5.1"
-        title="Signifikante korrelationer"
+        title="Signifikante fund og dosis-respons"
       />
       <p>
-        Af 11 kvalificerende stoffer (med &ge;30 detektioner pr. opland i
-        2018+-vinduet) viser{' '}
+        Ud af de 11 stoffer viste{' '}
         <mark>
-          <strong className="text-foreground">7 (64&nbsp;%)</strong> statistisk
-          signifikante positive korrelationer
-        </mark>{' '}
-        efter Benjamini&ndash;Hochberg-korrektion (q&lt;0,05) mellem
-        anvendelsesintensitet og detektionssandsynlighed i grundvandet. Tre af
-        disse overlever desuden alle fire valideringslag (se afsnit 4).
+          <strong className="text-foreground">7 stoffer (64&nbsp;%)</strong> en
+          statistisk signifikant sammenh&aelig;ng
+        </mark>
+        : Jo mere der spr&oslash;jtes p&aring; marken, des oftere findes stoffet
+        i grundvandet. Tre af stofferne klarede sig hele vejen gennem vores
+        strenge firetrins-validering:
       </p>
-      <p>
-        De st&aelig;rkeste korrelationer ses for 1,2,4-triazol (r=0,232),
-        4-chlor-2-methylphenol (r=0,222) og bentazon (r=0,213). For de tre
-        robuste stoffer er detektionsrater{' '}
-        <mark>
-          <strong className="text-foreground">3,7&ndash;4,4&times;</strong>{' '}
-          h&oslash;jere
-        </mark>{' '}
-        i det &oslash;verste anvendelseskvartil sammenlignet med det laveste.
-      </p>
-      <div className="border-border bg-card my-6 rounded border p-5">
-        <p className="text-foreground text-sm font-semibold">
-          Alle 7 FDR-signifikante stoffer (efter korrelationsstyrke)
-        </p>
-        <ol className="text-muted-foreground mt-3 list-decimal space-y-1 pl-5 text-sm">
-          <li>
-            1,2,4-Triazol (metabolit) &mdash; r=0,232, Q4/Q1&nbsp;3,8&times;
-            &nbsp;&#x2713;
-          </li>
-          <li>
-            4-Chlor-2-methylphenol (metabolit) &mdash; r=0,222,
-            Q4/Q1&nbsp;3,7&times; &nbsp;&#x2713;
-          </li>
-          <li>
-            Bentazon (moderstof) &mdash; r=0,213, Q4/Q1&nbsp;4,4&times;
-            &nbsp;&#x2713;
-          </li>
-          <li>AMPA (metabolit) &mdash; r=0,181, Q4/Q1&nbsp;4,7&times;</li>
-          <li>
-            Glyphosat (moderstof) &mdash; r=0,123, Q4/Q1&nbsp;4,0&times;
-            &nbsp;(p=0,055 multivariat)
-          </li>
-          <li>
-            2,4-Dichlorphenol (metabolit) &mdash; r=0,071,
-            Q4/Q1&nbsp;10,2&times;
-          </li>
-          <li>MCPA (moderstof) &mdash; r=0,051, Q4/Q1&nbsp;5,1&times;</li>
-        </ol>
-        <p className="text-muted-foreground mt-3 text-xs">
-          &#x2713; = overlever multivariat justering og rumlig modellering.
-          Glyphosat viser signifikant bivariat korrelation, men overlever ikke
-          multivariat justering (p=0,055), hvilket indikerer delvis
-          konfoundering af hydrogeologiske variable.
-        </p>
+
+      <div className="border-border bg-card my-6 overflow-x-auto rounded border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-border border-b">
+              <th className="text-muted-foreground px-4 py-2.5 text-left font-medium">
+                Stof (Type)
+              </th>
+              <th className="text-muted-foreground px-4 py-2.5 text-right font-medium">
+                Korrelation (r)
+              </th>
+              <th className="text-muted-foreground px-4 py-2.5 text-right font-medium">
+                Fund (H&oslash;jeste vs. laveste forbrug)
+              </th>
+            </tr>
+          </thead>
+          <tbody className="text-muted-foreground">
+            <tr className="border-border border-b">
+              <td className="text-foreground px-4 py-2.5 font-medium">
+                Bentazon (Moderstof)
+              </td>
+              <td className="px-4 py-2.5 text-right">0,213</td>
+              <td className="px-4 py-2.5 text-right font-semibold">
+                4,4&times; h&oslash;jere
+              </td>
+            </tr>
+            <tr className="border-border border-b">
+              <td className="text-foreground px-4 py-2.5 font-medium">
+                1,2,4-Triazol (Metabolit)
+              </td>
+              <td className="px-4 py-2.5 text-right">0,232</td>
+              <td className="px-4 py-2.5 text-right font-semibold">
+                3,8&times; h&oslash;jere
+              </td>
+            </tr>
+            <tr>
+              <td className="text-foreground px-4 py-2.5 font-medium">
+                4-Chlor-2-methylphenol (Metabolit)
+              </td>
+              <td className="px-4 py-2.5 text-right">0,222</td>
+              <td className="px-4 py-2.5 text-right font-semibold">
+                3,7&times; h&oslash;jere
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
+
+      <p className="text-muted-foreground text-sm">
+        <em>
+          L&aelig;ses&aring;dan: I de oplande, hvor der blev spr&oslash;jtet
+          mest med bentazon, fandt man stoffet i grundvandet 4,4 gange oftere
+          end i de oplande, hvor der blev spr&oslash;jtet mindst.
+        </em>
+      </p>
     </>
   );
 }

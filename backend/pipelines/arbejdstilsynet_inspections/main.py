@@ -31,6 +31,9 @@ print("[DEBUG] DOCKER_ENV =", os.environ.get("DOCKER_ENV"))
 def main(stage, start_date, end_date, storage_bucket, log_level):
     """Run the Arbejdstilsynet Inspections pipeline."""
     load_dotenv()
+    from common.secrets import init_secrets
+
+    init_secrets()
 
     # Set logging level
     logging.basicConfig(

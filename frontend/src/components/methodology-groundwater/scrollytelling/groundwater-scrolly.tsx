@@ -3,6 +3,8 @@
 import { ScrollySection } from '@/components/methodology/scrolly-section';
 import { ScrollyStats } from '@/components/methodology/scrolly-stats';
 import { GroundwaterScrollyMap } from './groundwater-scrolly-map';
+import { GwDegradationGraphic } from './gw-degradation-graphic';
+import { GwTimelineOverlay } from './gw-timeline-overlay';
 import { GROUNDWATER_STEPS } from './groundwater-scrolly-steps';
 import type { ScrollyStepId } from './scrolly-constants';
 
@@ -12,6 +14,11 @@ const STAT_ROWS: Partial<
   location: [
     { label: 'Vandværk', value: 'Espe' },
     { label: 'Placering', value: 'Midtfyn' },
+  ],
+  opland: [
+    { label: 'Opland', value: 'Espe' },
+    { label: 'Areal', value: '~8 km²' },
+    { label: 'Type', value: 'Landbrugsjord' },
   ],
   fields: [
     { label: 'Marker', value: '6' },
@@ -39,16 +46,35 @@ const STAT_ROWS: Partial<
   ],
 };
 
+const TIMELINE_STEPS = new Set<ScrollyStepId>([
+  'vadose',
+  'detection',
+  'metabolite',
+]);
+const DEGRADATION_STEPS = new Set<ScrollyStepId>([
+  'ingredient',
+  'soil',
+  'metabolite',
+]);
+
 function renderVisual(stepId: string) {
   const step = stepId as ScrollyStepId;
   const stats = STAT_ROWS[step];
+  const showTimeline = TIMELINE_STEPS.has(step);
+  const showDegradation = DEGRADATION_STEPS.has(step);
+  const variant = step === 'metabolite' ? 'mcpa' : 'bentazon';
+
   return (
     <div className="relative h-full w-full">
       <GroundwaterScrollyMap step={step} />
+      <div className="absolute top-3 right-3 z-10">
+        <GwDegradationGraphic variant={variant} visible={showDegradation} />
+      </div>
       <div className="absolute right-3 bottom-3 left-3 z-10">
+        <GwTimelineOverlay variant={variant} visible={showTimeline} />
         <ScrollyStats
           rows={stats ?? []}
-          visible={!!stats}
+          visible={!!stats && !showTimeline}
           testId="groundwater-scrolly-stats"
         />
       </div>

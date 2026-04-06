@@ -25,6 +25,7 @@ export function DisaggMapAnnotations({ step }: DisaggMapAnnotationsProps) {
     step === 'result' ||
     step === 'summary';
   const showDoseLabels = step === 'result' || step === 'summary';
+  const showLegend = step === 'result' || step === 'scale';
 
   return (
     <>
@@ -59,8 +60,16 @@ export function DisaggMapAnnotations({ step }: DisaggMapAnnotationsProps) {
           variant="muted"
         />
       )}
+      {step === 'scale' && (
+        <MapLabel
+          lng={9.5}
+          lat={55.5}
+          text="~600.000 marker"
+          subtext="Hele Danmark"
+        />
+      )}
       <div className="absolute bottom-3 left-3 z-10">
-        <MapLegend items={BURDEN_LEGEND} visible={step === 'result'} />
+        <MapLegend items={BURDEN_LEGEND} visible={showLegend} />
       </div>
     </>
   );

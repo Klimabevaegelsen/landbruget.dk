@@ -8,6 +8,7 @@ import {
 import { AllocationExplorer } from '@/components/methodology/allocation-explorer';
 import { DeepDive } from '@/components/methodology/deep-dive';
 import { CodeBlock } from '@/components/methodology/code-block';
+import { DisaggregationValidation } from '@/components/methodology/disaggregation-validation';
 import { SectionCoverageAccuracy } from '@/components/methodology/section-coverage-accuracy';
 import { DisaggregationScrolly } from '@/components/methodology/disaggregation-scrolly';
 
@@ -17,31 +18,28 @@ export function SectionDisaggregation() {
       <SectionHeader id="disaggregation" number="3" title="Fordelingsmetode" />
 
       <p>
-        Pesticidindberetninger rapporteres på virksomhedsniveau (CVR), men
-        analysen kræver specifik markopløsning. Vi anvender en sekventiel
-        sammenkøringsprocedure med fire strategier, der tilsammen opnår en
-        dækning på <mark>&ge; 92 %</mark>.
+        Pesticidindberetninger rapporteres p&aring; virksomhedsniveau (CVR), men
+        analysen kr&aelig;ver data p&aring; markniveau. Vi anvender en trinvis
+        sammenkøring med fire strategier, der samlet set opn&aring;r en
+        d&aelig;kning p&aring; mindst <mark>92 %</mark>.
       </p>
 
       <DisaggregationScrolly />
 
-      <SubsectionHeader id="y-plus-1" number="3.1" title="Y+1-forskydningen" />
+      <SubsectionHeader
+        id="y-plus-1"
+        number="3.1"
+        title="Tidsforskydningen (&Aring;r+1)"
+      />
       <p>
-        Et centralt designvalg er den tidsmæssige forskydning: Pesticiddata fra
-        landbrugsår <em>Y</em> køres sammen med markgrænser fra kalenderår{' '}
-        <em>Y+1</em>. Baggrunden er, at markblokke først fastlægges endeligt
-        efter vækstsæsonens afslutning. Eksempelvis anvender vi 2022-markgrænser
-        til at placere pesticidanvendelsen i landbrugsåret 2021/22
-        (august&ndash;juli).
-      </p>
-      <p>
-        Valget er ikke vilkårligt &mdash; det er strukturelt nødvendigt.
-        Empirisk test med Y+0-kobling (hvor SJI-år X matches mod FVM-år X i
-        stedet for X+1) giver kun 6&ndash;9&nbsp;% dækning mod{' '}
-        <mark>82&ndash;93&nbsp;% med Y+1</mark>, en forskel på over 80
-        procentpoint i hvert testår (2018&ndash;2023). De 6&ndash;9&nbsp;%
-        afspejler landmænd, der tilfældigvis dyrker samme afgrøde på samme areal
-        to år i træk.
+        Et centralt designvalg er vores tidsforskydning: Pesticiddata fra
+        landbrugs&aring;r <em>Y</em> sammenkøres med markgr&aelig;nser fra
+        kalender&aring;r <em>Y+1</em>. Grunden er, at de endelige markblokke
+        f&oslash;rst fastl&aelig;gges <em>efter</em> v&aelig;ksts&aelig;sonen.
+        Eksempelvis bruges markgr&aelig;nserne fra 2022 til at placere
+        pesticider spr&oslash;jtet i landbrugs&aring;ret 2021/22. Uden denne
+        forskydning falder d&aelig;kningen fra over 90&nbsp;% til blot
+        6&ndash;9&nbsp;%.
       </p>
 
       <SubsectionHeader
@@ -50,51 +48,50 @@ export function SectionDisaggregation() {
         title="Sammenkøringsstrategier"
       />
       <p>
-        For hver kombination af CVR-nummer og afgrødekode beregnes det samlede
-        markareal og sammenlignes med det indberettede behandlingsareal.
-        Overensstemmelsen accepteres inden for en tolerance på &plusmn;2 %.
+        For hver kombination af CVR-nummer og afgr&oslash;dekode sammenlignes
+        markarealet med det indberettede areal. Vi accepterer et match, hvis
+        forskellen ligger inden for en tolerance p&aring; &plusmn;2,0&nbsp;%:
       </p>
 
       <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-6 rounded-md border px-5 py-4 font-mono text-[15px] leading-relaxed">
-        |AppArea &minus; &Sigma;FieldArea| &frasl; AppArea &times; 100 &le; 2,0
-        %
+        |Indberettet areal &minus; &Sigma;Markareal| &frasl; Indberettet areal
+        &times; 100 &le; 2,0 %
       </p>
 
-      <p>
-        <strong>
-          Strategi 1 &ndash; Bedste overensstemmelse for blandet drift.
-        </strong>{' '}
-        For virksomheder, der har både økologiske og konventionelle marker for
-        samme afgrøde, beregnes arealoverensstemmelsen ad to veje: (a) med alle
-        marker og (b) kun med de konventionelle. Den beregning, der giver den
-        laveste afvigelse inden for &plusmn;2&nbsp;%-tolerancen, vælges
-        automatisk. Herved får hver bedrift den mest præcise fordeling,
-        uafhængigt af om driften er blandet.
-      </p>
-
-      <p>
-        <strong>Strategi 2 &ndash; Hovedareal-kobling.</strong> De resterende
-        rent konventionelle CVR+afgrøde-grupper behandles med proportional
-        fordeling af dosis:
-      </p>
+      <p>Vi anvender fire strategier:</p>
+      <ol className="list-decimal space-y-3 pl-6">
+        <li>
+          <strong>Bedste match (blandet drift):</strong> For bedrifter med
+          b&aring;de &oslash;kologiske og konventionelle marker afpr&oslash;ver
+          systemet kombinationer (med og uden &oslash;kologi) for at finde den
+          laveste afvigelse.
+        </li>
+        <li>
+          <strong>Proportional fordeling:</strong> For rent konventionelle
+          bedrifter fordeles m&aelig;ngden ud fra markens andel af det samlede
+          areal:
+        </li>
+      </ol>
 
       <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-6 rounded-md border px-5 py-4 font-mono text-[15px] leading-relaxed">
         Dosis<sub>mark</sub> = Dosis<sub>total</sub> &times; (Areal
-        <sub>mark</sub> &frasl; Areal<sub>CVR,afgrøde</sub>)
+        <sub>mark</sub> &frasl; Areal<sub>CVR, afgr&oslash;de</sub>)
       </p>
 
-      <p>
-        <strong>Strategi 3 &ndash; Ikke-økologisk oprydning.</strong> Opsamler
-        tilfælde, som strategi 2 ikke kunne håndtere, ved at ekskludere marker
-        registreret som økologiske (<code>organic_farming = true</code>).
-        Fungerer som et sikkerhedsnet for de resterende poster.
-      </p>
-      <p>
-        <strong>Strategi 4 &ndash; Delvis markdækning.</strong> Håndterer
-        tilfælde, hvor et CVR-nummer kun har én mark for en given afgrøde, og
-        det behandlede areal er mindre end markens fulde areal. Markeres
-        særskilt i data (<code>IsPartialFieldCoverage = true</code>).
-      </p>
+      <ol className="list-decimal space-y-3 pl-6" start={3}>
+        <li>
+          <strong>Filtrering af &oslash;kologi:</strong> Et sikkerhedsnet for
+          resterende poster, der tvinger systemet til at ignorere marker
+          registreret som &oslash;kologiske (<code>organic_farming = true</code>
+          ).
+        </li>
+        <li>
+          <strong>Delvis markbehandling:</strong> H&aring;ndterer de
+          tilf&aelig;lde, hvor bedriften kun har &eacute;n mark med
+          afgr&oslash;den, men har indberettet et behandlet areal, der er{' '}
+          <em>mindre</em> end markens samlede areal.
+        </li>
+      </ol>
 
       <SubsectionHeader
         id="confidence"
@@ -102,15 +99,11 @@ export function SectionDisaggregation() {
         title="Pålidelighedsscore"
       />
       <p>
-        Hver tildeling får en pålidelighedsscore baseret på forskellen mellem
-        indberettet og beregnet areal:
+        Hver fordeling udl&oslash;ser en score mellem 0,0 og 1,0 (hvor 1,0 er
+        perfekt), baseret p&aring; formlen:
       </p>
       <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-6 rounded-md border px-5 py-4 font-mono text-[15px] leading-relaxed">
         Score = max(0, 1 &minus; |&Delta;areal%| &frasl; tolerance%)
-      </p>
-      <p>
-        Scoren spænder fra 0,0 til 1,0, hvor 1,0 indikerer perfekt
-        overensstemmelse på arealet.
       </p>
 
       <Figure
@@ -146,81 +139,7 @@ GROUP BY cvr, crop_code
         </p>
       </DeepDive>
 
-      <SubsectionHeader
-        id="validation"
-        number="3.4"
-        title="Empirisk validering"
-      />
-      <p>
-        Fordelingsmetodens robusthed er valideret empirisk over alle 14
-        tilgængelige indberetningsår (2010&ndash;2023) ved at køre strategi 1 og
-        2 mod produktionsdata fra SJI og FVM i R2-lageret.
-      </p>
-
-      <DeepDive
-        title="Vis valideringsresultater: dækning over tid"
-        testId="deep-dive-validation"
-      >
-        <p>
-          <strong>Dækning ved 2&nbsp;% tolerance (strategi 1+2):</strong>
-        </p>
-        <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-4 rounded-md border px-5 py-4 font-mono text-[14px] leading-relaxed">
-          2015: 81,8&nbsp;% &nbsp;|&nbsp; 2016: 87,2&nbsp;% &nbsp;|&nbsp; 2017:
-          86,9&nbsp;% &nbsp;|&nbsp; 2018: 90,5&nbsp;% &nbsp;|&nbsp; 2019:
-          91,6&nbsp;% &nbsp;|&nbsp; 2020: 92,7&nbsp;% &nbsp;|&nbsp; 2021:
-          92,1&nbsp;% &nbsp;|&nbsp; 2022: 91,2&nbsp;% &nbsp;|&nbsp; 2023:
-          90,0&nbsp;%
-        </p>
-        <p>
-          Dækningen forbedres frem mod 2020 grundet stigende
-          registreringskomplethed i FVM. Grænsen på 92&nbsp;% er nået fra 2020.
-          Strategi&nbsp;2 (ikke-økologiske marker) bidrager med
-          0&ndash;0,2&nbsp;procentpoint ved 2&nbsp;% tolerance &mdash; det
-          primære bidrag er fra strategi&nbsp;1.
-        </p>
-        <p className="mt-2">
-          <strong>Tolerancefølsomhed:</strong> Springet fra 0&nbsp;% til
-          0,5&nbsp;% tolerance er den største enkeltstigning hvert år
-          (37&ndash;48&nbsp;% &rarr; 72&ndash;87&nbsp;%), hvilket bekræfter, at
-          afrunding i arealindberetningen er den dominerende årsag til
-          afvigelse. Over 2&nbsp;% aftager gevinsten markant &mdash; 10&nbsp;%
-          tolerance giver kun ~3&ndash;4 procentpoint ekstra dækning, mens
-          antallet af tvetydige koblinger tredobles. Ved 2&nbsp;% tolerance har
-          6,5&nbsp;% af koblede poster kryds-afgrøde-tvetydighed (dvs. de kunne
-          matche flere afgrødegrupper under samme CVR); ved 10&nbsp;% stiger
-          dette til 27,6&nbsp;%.
-        </p>
-        <p className="mt-2">
-          <strong>Ikke-koblede poster (2021):</strong> Af 27.188 ukoblede poster
-          skyldes 67&nbsp;% for stor arealafvigelse (&gt;&nbsp;2&nbsp;%),
-          24&nbsp;% at CVR-nummeret slet ikke findes i FVM, og 8&nbsp;% at CVR
-          findes men uden matchende afgrødekode.
-        </p>
-        <p className="mt-2">
-          <strong>Dosisplausibilitet:</strong> Af 1.671.295 kontrollerbare
-          fordelte poster (2021) overskred kun 289 (0,017&nbsp;%) ti gange den
-          produktspecifikke mediandosis. Den lave outlier-rate tyder på, at
-          fordelingen ikke systematisk producerer usandsynlige tildelinger.
-        </p>
-        <p className="mt-2">
-          <strong>Særlige år:</strong> 2014-data giver 0&nbsp;% dækning ved alle
-          toleranceniveauer &mdash; FVM 2015-datasættet i R2 mangler{' '}
-          <code>cvr_number</code> for samtlige 741.882 marker (feltet er NULL),
-          hvilket gør CVR+afgrøde-koblingen umulig. Afgrødekoderne er kompatible
-          (begge anvender de standardiserede Fællesskema-koder). CVR-genfinding
-          via journalnumre er undersøgt og afvist: journalnumre (format
-          &ldquo;ÅÅ-XXXXXXX&rdquo;) er årsspecifikke ansøgnings-ID&rsquo;er, der
-          tildeles på ny hvert år og ikke identificerer samme bedrift på tværs
-          af år (0&nbsp;% CVR-overensstemmelse mellem FVM 2016 og 2017 for delte
-          numeriske dele). Løsning kræver, at FVM 2015-sølvdata genbehandles med
-          CVR udfyldt. Årene 2010&ndash;2013 har 55&ndash;67&nbsp;% dækning
-          grundet lav FVM-registreringskomplethed i den tidlige periode.
-        </p>
-        <p className="text-muted-foreground mt-2 text-[13px]">
-          Valideringen er reproducerbar via{' '}
-          <code>backend/scripts/validate_disaggregation_robustness.py</code>.
-        </p>
-      </DeepDive>
+      <DisaggregationValidation />
 
       <SectionCoverageAccuracy />
     </section>

@@ -29,6 +29,9 @@ if os.path.exists(env_path):
     print(f"Loaded environment variables from {env_path}")
 else:
     print("No .env file found, using environment variables directly")
+from common.secrets import init_secrets  # noqa: E402
+
+init_secrets()
 
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))

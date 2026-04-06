@@ -48,3 +48,60 @@ export const EXAMPLE = {
 } as const;
 
 export type ExampleField = (typeof EXAMPLE.fields)[number];
+
+/** Real SJI journal rows from CVR 41996528, extracted from R2 gold layer. */
+export const SJI_JOURNAL_ROWS = [
+  { post: 268458, product: 'Balaya', dose: 3.65, unit: 'L', area: 6.08 },
+  { post: 268459, product: 'Prosaro', dose: 12.03, unit: 'L', area: 34.82 },
+  {
+    post: 268460,
+    product: 'Harmony 50 SX',
+    dose: 0.22,
+    unit: 'L',
+    area: 38.47,
+  },
+  { post: 268461, product: 'Balaya', dose: 24.37, unit: 'L', area: 34.82 },
+  { post: 268462, product: 'Mavrik', dose: 1.4, unit: 'L', area: 17.54 },
+  { post: 268463, product: 'Kerb 400 SC', dose: 9.8, unit: 'L', area: 7.84 },
+  { post: 268464, product: 'Signum', dose: 5.45, unit: 'L', area: 6.42 },
+  {
+    post: 268465,
+    product: 'Roundup PowerMax',
+    dose: 51.17,
+    unit: 'L',
+    area: 38.47,
+  },
+  {
+    post: 268466,
+    product: 'Harmony 50 SX',
+    dose: 0.06,
+    unit: 'L',
+    area: 10.36,
+  },
+  { post: 268467, product: 'Cossack OD', dose: 8.0, unit: 'L', area: 34.82 },
+  { post: 268468, product: 'Agil 100 EC', dose: 5.8, unit: 'L', area: 7.84 },
+  { post: 268469, product: 'Pictor Active', dose: 5.49, unit: 'L', area: 7.84 },
+  { post: 268470, product: 'Caryx', dose: 5.49, unit: 'L', area: 7.84 },
+  { post: 268471, product: 'Primus XL', dose: 13.0, unit: 'L', area: 34.82 },
+  { post: 268472, product: 'Lamdex', dose: 4.7, unit: 'L', area: 7.84 },
+  {
+    post: 268473,
+    product: 'Propulse SE 250',
+    dose: 2.74,
+    unit: 'L',
+    area: 7.84,
+  },
+  { post: 268474, product: 'Betanal', dose: 6.6, unit: 'L', area: 6.42 },
+  { post: 268475, product: 'Primus XL', dose: 4.56, unit: 'L', area: 6.08 },
+  { post: 268476, product: 'MaisTer', dose: 0.72, unit: 'L', area: 38.47 },
+  { post: 268477, product: 'Kerb 400 SC', dose: 1.82, unit: 'L', area: 6.08 },
+  {
+    post: 268478,
+    product: 'Roundup PowerMax',
+    dose: 5.8,
+    unit: 'L',
+    area: 6.42,
+  },
+] as const;
+
+export const TARGET_POST = EXAMPLE.sjiRow;

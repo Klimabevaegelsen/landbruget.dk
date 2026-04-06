@@ -14,6 +14,11 @@ import {
   ESPE_WELL,
   VEJEN_WELL,
   VIEWS,
+  ESPE_STEPS,
+  VEJEN_STEPS,
+  ESPE_WELL_STEPS,
+  VEJEN_WELL_STEPS,
+  FLY_TO_OVERRIDES,
   type ScrollyStepId,
 } from '@/components/methodology-groundwater/scrollytelling/scrolly-constants';
 import { CatchmentLayers } from '@/components/methodology-groundwater/scrollytelling/catchment-layers';
@@ -40,23 +45,6 @@ function buildGeo(
   };
 }
 
-const ESPE_STEPS = new Set<ScrollyStepId>([
-  'fields',
-  'ingredient',
-  'soil',
-  'vadose',
-  'detection',
-  'doseresponse',
-  'conclusion',
-]);
-const VEJEN_STEPS = new Set<ScrollyStepId>(['metabolite', 'conclusion']);
-const ESPE_WELL_STEPS = new Set<ScrollyStepId>([
-  'detection',
-  'doseresponse',
-  'conclusion',
-]);
-const VEJEN_WELL_STEPS = new Set<ScrollyStepId>(['metabolite', 'conclusion']);
-
 interface GroundwaterScrollyMapProps {
   step: ScrollyStepId;
 }
@@ -65,9 +53,6 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
   const { mapStyle } = useMapTheme();
-
-  const showEspe = ESPE_STEPS.has(step);
-  const showVejen = VEJEN_STEPS.has(step);
 
   const espeGeo = useMemo(() => buildGeo(ESPE_CATCHMENT, ESPE_FIELDS), []);
   const vejenGeo = useMemo(() => buildGeo(VEJEN_CATCHMENT, VEJEN_FIELDS), []);
@@ -79,12 +64,13 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
     const map = mapRef.current?.getMap();
     if (!map) return;
     const v = VIEWS[step];
+    const overrides = FLY_TO_OVERRIDES[step];
     map.flyTo({
       center: [v.lng, v.lat],
       zoom: v.zoom,
-      duration: 1600,
+      duration: overrides?.duration ?? 1600,
       essential: true,
-      curve: 1.2,
+      curve: overrides?.curve ?? 1.2,
     });
   }, [step, ready]);
 
@@ -102,7 +88,7 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
       dragRotate={false}
       data-testid="groundwater-scrolly-map"
     >
-      {showEspe && (
+      {ESPE_STEPS.has(step) && (
         <CatchmentLayers
           id="espe"
           data={espeGeo}
@@ -110,7 +96,7 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
           fieldColor="#ef4444"
         />
       )}
-      {showVejen && (
+      {VEJEN_STEPS.has(step) && (
         <CatchmentLayers
           id="vejen"
           data={vejenGeo}
@@ -137,7 +123,7 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
           anchor="center"
         >
           <div
-            className="border-background h-4 w-4 animate-pulse rounded-full border-2 bg-amber-500 shadow-md"
+            className="border-background bg-warning h-4 w-4 animate-pulse rounded-full border-2 shadow-md"
             data-testid="vejen-well-marker"
           />
         </Marker>

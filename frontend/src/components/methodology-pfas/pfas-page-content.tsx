@@ -12,7 +12,7 @@ import { SectionPfasReferences } from '@/components/methodology-pfas/section-pfa
 
 export function PfasPageContent() {
   return (
-    <ArticleLayout>
+    <ArticleLayout data-testid="pfas-page-content">
       <PfasHero />
       <SectionPfasIntroduction />
       <PfasScrolly />

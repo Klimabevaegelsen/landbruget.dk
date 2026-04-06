@@ -28,12 +28,12 @@ export function GrundvandHero() {
       <h1 className="font-display text-foreground text-[36px] leading-[1.1] font-semibold tracking-tight lg:text-[42px]">
         Pesticider og grundvand
         <br />
-        <span className="text-primary">fra mark til boring</span>
+        <span className="text-primary">Fra mark til boring</span>
       </h1>
 
       <p className="text-muted-foreground mt-6 max-w-[620px] text-lg leading-relaxed">
-        Denne artikel beskriver, hvordan vi kobler pesticidanvendelse p&aring;
-        markniveau med Danmarks grundvandsbeskyttelse &ndash; fra
+        Denne artikel beskriver, hvordan vi kobler pesticidforbrug p&aring;
+        markniveau med beskyttelsen af det danske grundvand &ndash; fra
         grundvandskortl&aelig;gningens indsatsomr&aring;der og BNBO-zoner til
         GEUS&apos; nationale grundvandsoverv&aring;gning.
       </p>

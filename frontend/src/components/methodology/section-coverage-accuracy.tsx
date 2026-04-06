@@ -16,19 +16,17 @@ export function SectionCoverageAccuracy() {
       <SubsectionHeader
         id="coverage-accuracy"
         number="3.5"
-        title="Dækning versus fordel\u00ADingsnøjagtighed"
+        title="Dækning versus fordelingsnøjagtighed"
       />
       <p>
-        Dækningstallene ovenfor måler <em>koblingssucces</em> &mdash; andelen af
-        indberetninger, der kan knyttes til mindst &eacute;n mark. Det er ikke
-        det samme som <em>fordelingsnøjagtighed</em>. Forskellen er afgørende.
-      </p>
-
-      <p>
-        Af de 314.740 S1-koblede poster i 2021 modtager kun 19,6&nbsp;% en
-        entydig enmmarkstildeling. De resterende 80,4&nbsp;% fordeles
-        proportionalt over flere marker, baseret på en antagelse om ensartet
-        behandlingsintensitet. Medianen er tre marker pr. kobling.
+        Det er vigtigt at skelne mellem, hvor meget data vi kan <em>koble</em>,
+        og hvor pr&aelig;cist det kan <em>fordeles</em>. Selvom vi kobler
+        92&nbsp;% af dataene, er det kun ca. 19,6&nbsp;% af indberetningerne,
+        der kan knyttes til &eacute;n specifik mark. De resterende 80,4&nbsp;%
+        fordeles proportionalt over flere marker (medianen er tre marker per
+        kobling). Kortet viser derved en <em>nedre gr&aelig;nse</em> for
+        forbruget, da indberetningssystemet generelt underestimerer
+        salgstallene.
       </p>
 
       <div
@@ -75,21 +73,6 @@ export function SectionCoverageAccuracy() {
           </tbody>
         </table>
       </div>
-
-      <p>
-        Den reelle fordelingsnøjagtighed ligger derfor i intervallet mellem
-        19,6&nbsp;% (kun entydige tildelinger) og 92,1&nbsp;% (fuld
-        koblingsdækning). Indsnævring af dette interval kræver validering mod
-        uafhængige feltdata, som ikke aktuelt foreligger i Danmark.
-      </p>
-
-      <p className="text-muted-foreground mt-2 text-[13px]">
-        Bemærk: Kortet viser en <em>nedre grænse</em> for den faktiske
-        pesticidanvendelse. SJI-data underrapporterer konsekvent i forhold til
-        nationale salgstal, særligt for glyphosat. 92&nbsp;% dækning af et
-        datasæt, der i sig selv underrapporterer, betyder at den virkelige
-        eksponering er højere end vist.
-      </p>
     </>
   );
 }
