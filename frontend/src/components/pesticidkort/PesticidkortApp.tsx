@@ -80,8 +80,6 @@ export function PesticidkortApp() {
           <LandingHero
             onAddressSelect={handleAddressSelect}
             onExploreMap={handleExploreMap}
-            year={year}
-            onYearChange={setYear}
           />
         </motion.div>
       )}

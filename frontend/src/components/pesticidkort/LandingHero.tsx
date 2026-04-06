@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { AddressAutocomplete } from '@/components/pesticidkort/AddressAutocomplete';
-import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
 import {
   fadeSlideUp,
   staggerContainer,
@@ -14,15 +13,11 @@ import type { AddressResult } from '@/components/pesticidkort/types';
 interface LandingHeroProps {
   onAddressSelect: (result: AddressResult) => void;
   onExploreMap: () => void;
-  year: number;
-  onYearChange: (year: number) => void;
 }
 
 export function LandingHero({
   onAddressSelect,
   onExploreMap,
-  year,
-  onYearChange,
 }: LandingHeroProps) {
   const router = useRouter();
   const reducedMotion = useReducedMotion();
@@ -53,7 +48,7 @@ export function LandingHero({
 
         <motion.p
           variants={fadeSlideUp}
-          className="text-muted-foreground mt-5 max-w-md text-lg leading-relaxed"
+          className="text-muted-foreground mt-3 max-w-md text-lg leading-relaxed"
         >
           Over 1,2 millioner danskere bor inden for 1 km af marker, der sprøjtes
           med pesticider. Se hvad der sprøjtes tæt på din adresse.
@@ -61,10 +56,6 @@ export function LandingHero({
 
         <motion.div variants={fadeSlideUp} className="mt-8 max-w-lg">
           <AddressAutocomplete onSelect={onAddressSelect} />
-        </motion.div>
-
-        <motion.div variants={fadeSlideUp} className="mt-6 max-w-lg">
-          <YearTimeline year={year} onChange={onYearChange} />
         </motion.div>
 
         <motion.div

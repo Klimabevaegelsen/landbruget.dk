@@ -5,7 +5,7 @@ test.describe('Pesticidkort', () => {
     await page.goto('/pesticidkort');
   });
 
-  test('should load landing page with heading, address input, year timeline, and explore button', async ({
+  test('should load landing page with heading, address input, and explore button', async ({
     page,
   }) => {
     await expect(page.locator('h1')).toBeVisible();
@@ -14,28 +14,9 @@ test.describe('Pesticidkort', () => {
       page.locator('[data-testid="address-autocomplete-input"]')
     ).toBeVisible();
 
-    await expect(page.locator('[data-testid="year-timeline"]')).toBeVisible();
-
     await expect(
       page.locator('[data-testid="explore-map-button"]')
     ).toBeVisible();
-  });
-
-  test('should show year dots for 2015-2023 and clicking changes active year', async ({
-    page,
-  }) => {
-    await expect(page.locator('[data-testid="year-timeline"]')).toBeVisible();
-
-    for (let year = 2015; year <= 2023; year++) {
-      await expect(
-        page.locator(`[data-testid="year-dot-${year}"]`)
-      ).toBeVisible();
-    }
-
-    // Click a different year and verify it becomes active
-    const yearDot2018 = page.locator('[data-testid="year-dot-2018"]');
-    await yearDot2018.click();
-    await expect(yearDot2018).toHaveAttribute('aria-current', 'true');
   });
 
   test('should navigate to explore map mode and back to landing', async ({
@@ -90,8 +71,6 @@ test.describe('Pesticidkort', () => {
     await expect(
       page.locator('[data-testid="address-autocomplete-input"]')
     ).toBeVisible();
-
-    await expect(page.locator('[data-testid="year-timeline"]')).toBeVisible();
 
     await expect(
       page.locator('[data-testid="explore-map-button"]')
