@@ -30,7 +30,7 @@ interface PfasMapAnnotationsProps {
 export function PfasMapAnnotations({ step }: PfasMapAnnotationsProps) {
   return (
     <>
-      {step === 'intro' && (
+      {step === 'skjult' && (
         <MapLabel
           lng={10.5}
           lat={56.0}
@@ -38,44 +38,31 @@ export function PfasMapAnnotations({ step }: PfasMapAnnotationsProps) {
           subtext="i hele Danmark"
         />
       )}
-      {step === 'location' && (
+      {step === 'skrydstrup' && (
         <MapLabel
-          lng={9.4}
-          lat={55.3}
-          text="Haderslev"
-          subtext="Sønderjylland"
+          lng={CATCHMENT_CENTER.lng}
+          lat={CATCHMENT_CENTER.lat + 0.012}
+          text="I/S Skrydstrup Vandværk"
+          subtext="Haderslev, Sønderjylland"
         />
       )}
-      {step === 'field' && (
-        <>
-          <MapLabel
-            lng={CATCHMENT_CENTER.lng}
-            lat={CATCHMENT_CENTER.lat + 0.012}
-            text="I/S Skrydstrup Vandværk"
-          />
-          <MapLabel
-            lng={FIELD_CENTER.lng}
-            lat={FIELD_CENTER.lat}
-            text="62,9 ha vinterhvede"
-          />
-        </>
-      )}
-      {step === 'product' && (
+      {step === 'byggeklodser' && (
         <MapLabel
           lng={FIELD_CENTER.lng}
           lat={FIELD_CENTER.lat}
           text="3 fluorprodukter"
+          subtext="CF₃-gruppe"
         />
       )}
-      {(step === 'molecule' || step === 'tfa') && (
+      {step === 'evighed' && (
         <MapLabel
           lng={CATCHMENT_CENTER.lng}
           lat={CATCHMENT_CENTER.lat + 0.012}
           text="I/S Skrydstrup"
-          subtext="opland"
+          subtext="TFA spreder sig"
         />
       )}
-      {step === 'detection' && (
+      {step === 'glasset' && (
         <WellLabel
           lng={SKRYDSTRUP_WELL.lng}
           lat={SKRYDSTRUP_WELL.lat}
@@ -85,10 +72,7 @@ export function PfasMapAnnotations({ step }: PfasMapAnnotationsProps) {
           depth={`${SKRYDSTRUP_WELL.depthM} m`}
         />
       )}
-      {step === 'transition' && (
-        <MapLabel lng={9.5} lat={55.5} text="Zoomer ud..." variant="muted" />
-      )}
-      {step === 'everywhere' && (
+      {step === 'overalt' && (
         <MapLabel
           lng={10.5}
           lat={56.3}
@@ -96,25 +80,23 @@ export function PfasMapAnnotations({ step }: PfasMapAnnotationsProps) {
           subtext="TFA fundet i 100 %"
         />
       )}
-      {step === 'blindspot' && (
-        <>
-          <MapLabel
-            lng={SONDER_FELDING.lng}
-            lat={SONDER_FELDING.lat + 0.03}
-            text="Søndre-Felding Vandværk"
-            subtext="Ingen PFAS-målinger"
-            variant="muted"
-          />
-        </>
+      {step === 'blindvinkel' && (
+        <MapLabel
+          lng={SONDER_FELDING.lng}
+          lat={SONDER_FELDING.lat + 0.03}
+          text="Søndre-Felding Vandværk"
+          subtext="Ingen PFAS-målinger"
+          variant="muted"
+        />
       )}
       <div className="absolute bottom-3 left-3 z-10">
         <MapLegend
-          items={step === 'field' || step === 'detection' ? LOCAL_LEGEND : []}
-          visible={step === 'field' || step === 'detection'}
+          items={LOCAL_LEGEND}
+          visible={step === 'byggeklodser' || step === 'glasset'}
         />
         <MapLegend
           items={NATIONAL_LEGEND}
-          visible={step === 'everywhere' || step === 'blindspot'}
+          visible={step === 'overalt' || step === 'blindvinkel'}
         />
       </div>
     </>

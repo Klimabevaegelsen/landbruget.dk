@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import Map, { type MapRef } from '@vis.gl/react-maplibre';
+import Map, { Source, Layer, type MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
@@ -13,18 +13,16 @@ import {
   type DisaggStepId,
 } from '@/components/methodology/scrolly-disagg-views';
 import { DisaggMapAnnotations } from '@/components/methodology/disagg-map-annotations';
+import {
+  addHighlightLayers,
+  updateStepPaint,
+} from '@/components/methodology/disagg-map-layers';
+import {
+  HEATMAP_POINTS,
+  HADERSLEV_POLYGON,
+} from '@/components/methodology/disagg-map-geodata';
 
 const UUIDS = EXAMPLE.fields.map((f) => f.uuid);
-
-const HIGHLIGHT_STEPS = new Set<DisaggStepId>([
-  'fields',
-  'match',
-  'result',
-  'summary',
-  'scale',
-]);
-const DIM_STEPS = new Set<DisaggStepId>(['context', 'location']);
-const BURDEN_STEPS = new Set<DisaggStepId>(['result', 'summary', 'scale']);
 
 interface MethodologyMapProps {
   step: DisaggStepId;
@@ -48,24 +46,7 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     const map = mapRef.current?.getMap();
     if (!map || !pmtilesUrl) return;
     addFieldLayers(map as never, pmtilesUrl);
-    map.setPaintProperty('fields-fill', 'fill-opacity-transition', {
-      duration: 600,
-      delay: 0,
-    });
-    map.setPaintProperty('fields-fill', 'fill-opacity', 0);
-    map.addLayer({
-      id: 'method-highlight',
-      source: 'fields',
-      'source-layer': 'field_analysis',
-      type: 'line',
-      paint: {
-        'line-color': '#f59e0b',
-        'line-width': 3,
-        'line-opacity': 0,
-        'line-opacity-transition': { duration: 500, delay: 0 },
-      },
-      filter: ['in', 'field_uuid', ...UUIDS],
-    });
+    addHighlightLayers(map, UUIDS);
     map.once('idle', () => setReady(true));
     setTimeout(() => setReady(true), 5000);
   }, [pmtilesUrl]);
@@ -78,47 +59,27 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     if (v.bounds) {
       map.fitBounds(v.bounds, { padding: 60, duration: 1600 });
     } else {
-      const duration = step === 'scale' ? 2000 : 1600;
       map.flyTo({
         center: [v.lng, v.lat],
         zoom: v.zoom,
-        duration,
+        pitch: v.pitch ?? 0,
+        bearing: v.bearing ?? 0,
+        duration: step === 'scale' ? 2000 : 1600,
         essential: true,
         curve: 1.2,
       });
     }
     try {
-      const dim = DIM_STEPS.has(step);
-      const burdenColor = BURDEN_STEPS.has(step)
-        ? [
-            'interpolate',
-            ['linear'],
-            ['coalesce', ['get', 'total_pesticide_belastning'], 0],
-            0,
-            '#6abf69',
-            2,
-            '#d4c54a',
-            5,
-            '#d89135',
-            10,
-            '#c4512c',
-          ]
-        : '#6abf69';
-      map.setPaintProperty('fields-fill', 'fill-color', burdenColor);
-      map.setPaintProperty('fields-fill', 'fill-opacity', dim ? 0.15 : 0.7);
-      map.setPaintProperty('fields-outline', 'line-opacity', dim ? 0.3 : 0.8);
-      map.setPaintProperty('fields-outline', 'line-width', dim ? 0.5 : 1.5);
-      map.setPaintProperty(
-        'method-highlight',
-        'line-opacity',
-        HIGHLIGHT_STEPS.has(step) ? 1 : 0
-      );
+      updateStepPaint(map, step);
     } catch (err) {
       console.warn('[MethodologyMap] Paint update failed:', err);
     }
   }, [step, ready]);
 
   if (!pmtilesUrl) return null;
+
+  const showHeatmap = step === 'context';
+  const showMunicipality = step === 'location';
 
   return (
     <Map
@@ -134,6 +95,33 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
       dragRotate={false}
       data-testid="methodology-map"
     >
+      {showHeatmap && (
+        <Source id="heatmap-pts" type="geojson" data={HEATMAP_POINTS}>
+          <Layer
+            id="method-heatmap"
+            type="heatmap"
+            paint={{
+              'heatmap-intensity': 0.6,
+              'heatmap-radius': 30,
+              'heatmap-opacity': 0.5,
+            }}
+          />
+        </Source>
+      )}
+      {showMunicipality && (
+        <Source id="haderslev-poly" type="geojson" data={HADERSLEV_POLYGON}>
+          <Layer
+            id="method-municipality-fill"
+            type="fill"
+            paint={{ 'fill-color': '#f59e0b', 'fill-opacity': 0.08 }}
+          />
+          <Layer
+            id="method-municipality-line"
+            type="line"
+            paint={{ 'line-color': '#f59e0b', 'line-width': 2 }}
+          />
+        </Source>
+      )}
       <DisaggMapAnnotations step={step} />
     </Map>
   );

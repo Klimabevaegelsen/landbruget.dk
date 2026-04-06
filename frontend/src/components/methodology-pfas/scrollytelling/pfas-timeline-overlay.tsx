@@ -10,80 +10,56 @@ import {
 } from 'motion/react';
 import { GwTimelineBar } from '@/components/methodology-groundwater/scrollytelling/gw-timeline-bar';
 
-interface GwTimelineOverlayProps {
-  variant: 'bentazon' | 'mcpa';
+interface PfasTimelineOverlayProps {
   visible: boolean;
 }
 
 /**
  * Real sample data from GEUS Jupiter (data.geus.dk).
- * DGU 155. 1899, intake 1 — only 1 sample ever taken.
+ * DGU 151. 2426, intake 1, Skrydstrup.
+ *
+ * 2021-09-22: Standard PFAS-12 panel → all <0,001 µg/L (TFA not included)
+ * 2021-09-24: TFA-specific test → 4,88 µg/L (49× limit)
+ *
+ * Timeline starts ~2015 when fluorinated pesticides (DFF, fluopyram) were
+ * applied on surrounding fields, and ends at the 2021 detection.
  */
-const BENTAZON = {
-  startYear: 2016,
-  endYear: 2019,
-  midpoint: null as null | { year: number; label: string },
-  startLabel: 'Fighter 480 spr\u00f8jtet',
-  endContext: 'Fund i boring',
-  endLabel: '490 \u00b5g/L',
-  endSub: 'DGU 155. 1899',
-  transport: '~1,5 \u00e5rs transport',
-  duration: 2.5,
-  endColor: 'text-destructive',
-  samples: [{ year: 2019, conc: '490 \u00b5g/L', detected: true }],
-} as const;
-
-/**
- * Real sample data from GEUS Jupiter (data.geus.dk).
- * DGU 132. 1056, intake 5 — persistent 4-chlor-2-methylphenol since 1998.
- */
-const MCPA = {
-  startYear: 1995,
+const PFAS_CONFIG = {
+  startYear: 2015,
   endYear: 2021,
-  midpoint: null as null | { year: number; label: string },
-  startLabel: 'MCPA anvendt',
-  endContext: 'Seneste pr\u00f8ve',
-  endLabel: '3,2 \u00b5g/L',
-  endSub: 'DGU 132. 1056',
-  transport:
-    'Persistent i 23+ \u00e5r \u2014 alle pr\u00f8ver over gr\u00e6nsev\u00e6rdi',
-  duration: 3.5,
+  midpoint: { year: 2021, label: 'PFAS-12: <0,001 µg/L' },
+  startLabel: 'Fluorpesticider sprøjtet',
+  endContext: 'TFA-specifik test',
+  endLabel: '4,88 µg/L',
+  endSub: 'DGU 151. 2426',
+  transport: '~6 års transport · TFA ikke i standardpanel',
+  duration: 2.5,
   endColor: 'text-primary',
-  samples: [
-    { year: 1998, conc: '5,0 \u00b5g/L', detected: true },
-    { year: 2012, conc: '3,4 \u00b5g/L', detected: true },
-    { year: 2015, conc: '3,1 \u00b5g/L', detected: true },
-    { year: 2018, conc: '3,0 \u00b5g/L', detected: true },
-    { year: 2021, conc: '3,2 \u00b5g/L', detected: true },
-  ],
+  samples: [],
 } as const;
 
 const EASE_TRAVEL = [0.25, 0.1, 0.25, 1] as const;
 
-export function GwTimelineOverlay({
-  variant,
-  visible,
-}: GwTimelineOverlayProps) {
-  const config = variant === 'bentazon' ? BENTAZON : MCPA;
+export function PfasTimelineOverlay({ visible }: PfasTimelineOverlayProps) {
   const progress = useMotionValue(0);
   const yearValue = useTransform(
     progress,
     [0, 1],
-    [config.startYear, config.endYear]
+    [PFAS_CONFIG.startYear, PFAS_CONFIG.endYear]
   );
-  const [displayYear, setDisplayYear] = useState<number>(config.startYear);
+  const [displayYear, setDisplayYear] = useState<number>(PFAS_CONFIG.startYear);
   const [arrived, setArrived] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       progress.set(0);
       setArrived(false);
-      setDisplayYear(config.startYear);
+      setDisplayYear(PFAS_CONFIG.startYear);
       return;
     }
     const unsub = yearValue.on('change', (v) => setDisplayYear(Math.round(v)));
     const controls = animate(progress, 1, {
-      duration: config.duration,
+      duration: PFAS_CONFIG.duration,
       ease: EASE_TRAVEL,
       delay: 0.6,
       onComplete: () => setArrived(true),
@@ -92,7 +68,7 @@ export function GwTimelineOverlay({
       unsub();
       controls.stop();
     };
-  }, [visible, variant, config, progress, yearValue]);
+  }, [visible, progress, yearValue]);
 
   return (
     <AnimatePresence>
@@ -103,7 +79,7 @@ export function GwTimelineOverlay({
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.4 }}
           className="bg-card/90 rounded-lg border p-3 shadow-sm backdrop-blur-sm"
-          data-testid="timeline-overlay"
+          data-testid="pfas-timeline-overlay"
         >
           <div className="mb-2 flex items-baseline justify-between">
             <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
@@ -114,8 +90,8 @@ export function GwTimelineOverlay({
             </span>
           </div>
           <GwTimelineBar
-            config={config}
-            variant={variant}
+            config={PFAS_CONFIG}
+            variant="pfas"
             progress={progress}
             arrived={arrived}
             displayYear={displayYear}

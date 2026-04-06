@@ -1,146 +1,76 @@
 'use client';
 
-import { EXAMPLE } from '@/components/methodology/scrolly-example-data';
-import { DisaggResultCard } from '@/components/methodology/disagg-result-card';
-
-const F = EXAMPLE.fields;
-const P = EXAMPLE.pesticide;
+import { ScrollyCard } from '@/components/methodology/scrolly-card';
 
 export const DISAGG_STEPS = [
   {
     id: 'context',
     content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          Hvad er en spr&oslash;jtejournal?
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Alle landm&aelig;nd skal indberette pesticidanvendelse til
-          Milj&oslash;styrelsen via <strong>SJI</strong>{' '}
-          (Spr&oslash;jtejournal-Indberetning) &mdash; en digital log over hvad
-          der spr&oslash;jtes, hvor meget, og p&aring; hvilken afgr&oslash;de.
-          Men journalen n&aelig;vner ikke <em>hvilke marker</em>. Det hul fylder
-          vi.
-        </p>
-      </div>
+      <ScrollyCard title="Det manglende led">
+        Alle landm&aelig;nd skal indberette deres pesticidforbrug til
+        Milj&oslash;styrelsen. Men journalen rummer en massiv blind vinkel: Den
+        n&aelig;vner ikke hvilke marker, der er spr&oslash;jtet. Det hul lukker
+        vi nu.
+      </ScrollyCard>
     ),
   },
   {
     id: 'location',
     content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          Haderslev, Sydjylland
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Vi f&oslash;lger &eacute;n indberetning fra {EXAMPLE.municipality}{' '}
-          kommune i Sydjylland &mdash; mellem Kolding og Aabenraa, t&aelig;t
-          p&aring; den tyske gr&aelig;nse. Et typisk dansk
-          landbrugsomr&aring;de.
-        </p>
-      </div>
+      <ScrollyCard title="Haderslev, Sydjylland">
+        Vi f&oslash;lger &eacute;t konkret spor fra Haderslev &mdash; et typisk
+        dansk landbrugsomr&aring;de t&aelig;t p&aring; den tyske gr&aelig;nse.
+      </ScrollyCard>
     ),
   },
   {
-    id: 'record',
+    id: 'regneark',
     content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          Hvad indberetningen indeholder
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Tabellen viser &eacute;n SJI-r&aelig;kke: <strong>Post</strong>{' '}
-          (l&oslash;benummer), <strong>CVR</strong> (virksomhedsnummer),{' '}
-          <strong>Afgr&oslash;de</strong>, <strong>Areal</strong> (behandlet),{' '}
-          <strong>Produkt</strong> og <strong>Dosis</strong>. L&aelig;g
-          m&aelig;rke til: ingen markidentifikation. Vi ved <em>hvad</em> der er
-          spr&oslash;jtet, men ikke <em>hvor</em>.
-        </p>
-      </div>
-    ),
-  },
-  {
-    id: 'overview',
-    content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          &Eacute;n indberetning blandt 350.000
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          I landbrugs&aring;ret {EXAMPLE.year}/{EXAMPLE.year + 1} modtog
-          Milj&oslash;styrelsen ca. 350.000 indberetninger. Vi f&oslash;lger
-          post #{EXAMPLE.sjiRow} fra CVR&nbsp;{EXAMPLE.cvr}.
-        </p>
-      </div>
+      <ScrollyCard title="Et anonymt regneark">
+        Vi ved, at CVR&nbsp;41996528 har spr&oslash;jtet 51,2&nbsp;liter Roundup
+        p&aring; 38,47&nbsp;hektar majs. Men regnearket fort&aelig;ller os ikke
+        hvor i landskabet, de hektar ligger.
+      </ScrollyCard>
     ),
   },
   {
     id: 'fields',
     content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          CVR-opslag i markregisteret
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Vi sl&aring;r CVR&nbsp;{EXAMPLE.cvr} op i <strong>FVM</strong> (det
-          offentlige register over alle danske landbrugsmarker) for{' '}
-          {EXAMPLE.fieldYear} og finder <strong>3 marker</strong> med{' '}
-          {EXAMPLE.cropName.toLowerCase()}:
-          {F.map((f, i) => (
-            <span key={f.uuid}>
-              {i > 0 ? ',' : ''} {f.areaHa}&nbsp;ha
-            </span>
-          ))}
-          . Samlet: {P.reportedAreaHa}&nbsp;ha.
-        </p>
-      </div>
+      <ScrollyCard title="Jagten i markregisteret">
+        Ved at krydstjekke med det offentlige markregister (FVM) finder vi
+        g&aring;rdens majsmarker. Der er pr&aelig;cis tre.
+      </ScrollyCard>
     ),
   },
   {
     id: 'match',
     content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          Arealtjek: {EXAMPLE.areaDeviationPct}&nbsp;% afvigelse
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Markernes samlede areal matcher indberetningens behandlingsareal
-          perfekt. Afvigelse: {EXAMPLE.areaDeviationPct}&nbsp;% &mdash; langt
-          inden for &plusmn;2&nbsp;%-gr&aelig;nsen. P&aring;lidelighedsscore:{' '}
-          <strong>{EXAMPLE.confidence}</strong>.
-        </p>
-      </div>
+      <ScrollyCard title="Puslespillet g&aring;r op">
+        N&aring;r vi l&aelig;gger de tre markers areal sammen (16,24 + 14,43 +
+        7,80&nbsp;ha), rammer vi pr&aelig;cis 38,47&nbsp;hektar. Afvigelsen er
+        0&nbsp;%. Vi har fundet de rigtige marker.
+      </ScrollyCard>
     ),
   },
-  { id: 'result', content: <DisaggResultCard /> },
   {
-    id: 'summary',
+    id: 'virkelighed',
     content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          Resultatet
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Fra &eacute;n anonym indberetning &rarr; 3 identificerede marker med
-          individuelle doser. Konfidensscoren ({EXAMPLE.confidence}) angiver
-          hvor sikkert matchet er.
-        </p>
-      </div>
+      <ScrollyCard title="Fra regneark til virkelighed">
+        Nu kan vi fordele de 51,2&nbsp;liter Roundup proportionalt ud p&aring;
+        landkortet, dr&aring;be for dr&aring;be, baseret p&aring; markernes
+        st&oslash;rrelse.
+      </ScrollyCard>
     ),
   },
   {
     id: 'scale',
     content: (
-      <div className="rounded-lg border p-5">
-        <h4 className="font-display text-foreground mb-2 text-base font-semibold">
-          Fra &eacute;n mark til hele Danmark
-        </h4>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Denne proces k&oslash;rer for alle ~350.000 indberetninger og ~600.000
-          marker hvert &aring;r. Resultatet er et landsd&aelig;kkende kort over
-          pesticidbelastning &mdash; fra individuel mark til national skala.
-        </p>
-      </div>
+      <ScrollyCard title="Vi g&oslash;r det 350.000 gange">
+        Dette er ikke bare &eacute;n mark. Vi har bygget en algoritme, der
+        udf&oslash;rer dette krydstjek for samtlige ~350.000 indberetninger
+        hvert &aring;r. Resultatet? Et unikt, landsd&aelig;kkende kort over
+        pesticidbelastning.
+      </ScrollyCard>
     ),
   },
 ];

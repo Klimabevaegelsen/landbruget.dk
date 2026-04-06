@@ -18,11 +18,13 @@ import {
   VEJEN_STEPS,
   ESPE_WELL_STEPS,
   VEJEN_WELL_STEPS,
+  PITCHED_STEPS,
   FLY_TO_OVERRIDES,
   type ScrollyStepId,
 } from '@/components/methodology-groundwater/scrollytelling/scrolly-constants';
 import { CatchmentLayers } from '@/components/methodology-groundwater/scrollytelling/catchment-layers';
-import { GwMapAnnotations } from './gw-map-annotations';
+import { GwTerrainExtrusion } from '@/components/methodology-groundwater/scrollytelling/gw-terrain-extrusion';
+import { GwMapAnnotations } from '@/components/methodology-groundwater/scrollytelling/gw-map-annotations';
 
 function buildGeo(
   catchment: typeof ESPE_CATCHMENT | typeof VEJEN_CATCHMENT,
@@ -52,7 +54,9 @@ interface GroundwaterScrollyMapProps {
 export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
-  const { mapStyle } = useMapTheme();
+  const { mapStyle, getMapStyle } = useMapTheme();
+  const isDarkIntro = step === 'intro';
+  const activeStyle = isDarkIntro ? getMapStyle('dark') : mapStyle;
 
   const espeGeo = useMemo(() => buildGeo(ESPE_CATCHMENT, ESPE_FIELDS), []);
   const vejenGeo = useMemo(() => buildGeo(VEJEN_CATCHMENT, VEJEN_FIELDS), []);
@@ -68,10 +72,17 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
     map.flyTo({
       center: [v.lng, v.lat],
       zoom: v.zoom,
+      pitch: v.pitch ?? 0,
+      bearing: v.bearing ?? 0,
       duration: overrides?.duration ?? 1600,
       essential: true,
       curve: overrides?.curve ?? 1.2,
     });
+    if (PITCHED_STEPS.has(step)) {
+      map.dragRotate.enable();
+    } else {
+      map.dragRotate.disable();
+    }
   }, [step, ready]);
 
   return (
@@ -81,8 +92,10 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
         longitude: VIEWS.intro.lng,
         latitude: VIEWS.intro.lat,
         zoom: VIEWS.intro.zoom,
+        pitch: VIEWS.intro.pitch ?? 0,
+        bearing: VIEWS.intro.bearing ?? 0,
       }}
-      mapStyle={mapStyle}
+      mapStyle={activeStyle}
       onLoad={handleLoad}
       attributionControl={false}
       dragRotate={false}
@@ -104,6 +117,7 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
           fieldColor="#f59e0b"
         />
       )}
+      <GwTerrainExtrusion step={step} />
       {ESPE_WELL_STEPS.has(step) && (
         <Marker
           longitude={ESPE_WELL.lng}
