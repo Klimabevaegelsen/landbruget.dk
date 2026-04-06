@@ -60,9 +60,12 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip uv
           # Install required dependencies for the scripts
-          pip install duckdb pyarrow google-genai
+          pip install duckdb pyarrow google-genai s3fs
+          # Install common package for storage auth (setup_duckdb_cloud_auth)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
           echo "✅ Python dependencies installed"
 
       - name: Authenticate to Google Cloud
