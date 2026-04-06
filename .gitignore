@@ -14,7 +14,7 @@ venv.bak/
 .venv
 
 # Data files
-data/
+/data/
 *.wsdl
 
 # IDE
