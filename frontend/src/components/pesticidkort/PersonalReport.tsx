@@ -3,16 +3,17 @@
 import Link from 'next/link';
 import { Share2, BookOpen } from 'lucide-react';
 import { useMemo } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
 import { PesticideProximityScore } from '@/components/pesticidkort/PesticideProximityScore';
 import { SummaryStats } from '@/components/pesticidkort/SummaryStats';
 import { AlertCallout } from '@/components/pesticidkort/AlertCallout';
-import { FieldCard } from '@/components/pesticidkort/FieldCard';
+import { FieldList } from '@/components/pesticidkort/FieldList';
+import type { HistogramBin } from '@/components/pesticidkort/BurdenScale';
 import type { PesticideReport } from '@/components/pesticidkort/types';
 import { toast } from 'sonner';
 
 interface PersonalReportProps {
   report: PesticideReport;
+  histogram: HistogramBin[];
   onFieldSelect?: (fieldUuid: string) => void;
   onOpenStory?: () => void;
 }
@@ -34,10 +35,10 @@ function handleShare({ lat, lng, address, year }: PesticideReport) {
 
 export function PersonalReport({
   report,
+  histogram,
   onFieldSelect,
   onOpenStory,
 }: PersonalReportProps) {
-  const reducedMotion = useReducedMotion();
   const { fields } = report;
   const pfasFieldsInRadius = useMemo(
     () => fields.filter((f) => f.pfas_applications > 0),
@@ -48,16 +49,12 @@ export function PersonalReport({
       fields.filter((f) => f.bnbo_area_hectares && f.bnbo_area_hectares > 0),
     [fields]
   );
-  const sortedFields = useMemo(
-    () => [...fields].sort((a, b) => a.distance_m - b.distance_m),
-    [fields]
-  );
 
   return (
     <div
       data-testid="personal-report"
       aria-live="polite"
-      className="animate-fade-slide-up space-y-8 px-6 py-4 motion-reduce:animate-none"
+      className="animate-fade-slide-up space-y-6 px-5 py-4 motion-reduce:animate-none"
     >
       <div className="bg-card rounded-xl p-5">
         <PesticideProximityScore
@@ -65,12 +62,11 @@ export function PersonalReport({
           label={report.grade.label}
           description={report.grade.description}
         />
-
         <div className="mt-4 flex items-center gap-3">
           <button
             onClick={() => handleShare(report)}
             data-testid="share-report-button"
-            className="text-muted-foreground flex min-h-[44px] items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline"
+            className="text-muted-foreground flex min-h-[44px] items-center gap-1.5 text-sm font-medium underline-offset-4 transition-transform duration-100 hover:underline active:scale-95"
           >
             <Share2 aria-hidden="true" className="h-3.5 w-3.5" />
             Del resultat
@@ -111,32 +107,13 @@ export function PersonalReport({
         </div>
       )}
 
-      <div>
-        <h3 className="text-foreground mb-4 text-base font-semibold">
-          Marker i dit nærområde
-        </h3>
-        <div>
-          {sortedFields.map((field, index) => (
-            <motion.div
-              key={field.field_uuid}
-              initial={reducedMotion ? false : { opacity: 0, y: 8 }}
-              animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.32,
-                delay: reducedMotion ? 0 : Math.min(index * 0.04, 0.28),
-                ease: [0.25, 1, 0.5, 1],
-              }}
-            >
-              <FieldCard
-                field={field}
-                onSelect={() => onFieldSelect?.(field.field_uuid)}
-              />
-            </motion.div>
-          ))}
-        </div>
-      </div>
+      <FieldList
+        fields={fields}
+        histogram={histogram}
+        onFieldSelect={onFieldSelect}
+      />
 
-      <footer className="text-muted-foreground border-border border-t pt-4 pb-4">
+      <footer className="text-muted-foreground pt-4 pb-4">
         <p className="text-xs leading-relaxed">
           Data fra Miljøstyrelsen, Landbrugsstyrelsen, Geodatastyrelsen og 18+
           andre offentlige kilder. Sidst opdateret 2023.

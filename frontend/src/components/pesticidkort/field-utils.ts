@@ -20,28 +20,51 @@ export function getCropEmoji(crop: string): string {
 }
 
 /**
- * Map a field's belastning (B/ha) to a 1–10 decile for the burden bar.
- *
- * Breakpoints based on Miljøstyrelsen crop burden data (2023):
- *   Græs 0.03 → decile 1, Vårsæd 0.77 → 3, Vintersæd 2.74 → 5,
- *   Roer 4.13 → 7, Kartofler 10.2 → 10
+ * Scale max for the burden histogram track.
+ * Kartofler peak at ~10.2 B/ha (Bekæmpelsesmiddelstatistik 2023).
  */
-export function getBurdenDecile(belastning: number): number {
-  const breaks = [0.1, 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0];
-  for (let i = 0; i < breaks.length; i++) {
-    if (belastning <= breaks[i]) return i + 1;
-  }
-  return 10;
+const SCALE_MAX = 12;
+
+/** National average PBI: 2.15 B/ha (Bekæmpelsesmiddelstatistik 2023). */
+const NATIONAL_AVG = 2.15;
+
+export const NATIONAL_AVG_PERCENT = (NATIONAL_AVG / SCALE_MAX) * 100;
+
+export function burdenToPercent(belastning: number): number {
+  return Math.min((belastning / SCALE_MAX) * 100, 100);
 }
 
-export function getBarColor(decile: number): string {
-  if (decile <= 3) return 'oklch(60% 0.15 142)';
-  if (decile <= 6) return 'oklch(70% 0.14 85)';
-  return 'oklch(60% 0.18 25)';
+export function formatBurden(belastning: number): string {
+  return `${belastning.toFixed(1).replace('.', ',')} B/ha`;
 }
 
-export function getBurdenLabel(decile: number): string {
-  if (decile <= 3) return 'under gns.';
-  if (decile <= 6) return 'omkring gns.';
-  return 'over gns.';
+interface ParsedProduct {
+  name: string;
+  dose: string;
+  count: string;
+  flags: string[];
+}
+
+export function parseProductString(raw: string): ParsedProduct[] {
+  return raw
+    .split(';')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => {
+      const parts = segment.split(':').map((p) => p.trim());
+      const name = parts[0] || '';
+      const dose = parts[1] || '';
+      const count = parts[2] || '';
+      const flags = parts.slice(3).filter(Boolean);
+      return { name, dose, count, flags };
+    })
+    .filter((p) => p.name);
+}
+
+export function formatProduct(p: ParsedProduct): string {
+  const parts = [p.name];
+  if (p.dose) parts.push(`${p.dose.replace('.', ',')} l/ha`);
+  if (p.count) parts.push(`${p.count} beh.`);
+  if (p.flags.length > 0) parts.push(p.flags.join(', '));
+  return parts.join(' — ');
 }

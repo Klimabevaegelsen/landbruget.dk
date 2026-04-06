@@ -248,6 +248,48 @@ export const getCachedPesticideCompanyDetails = unstable_cache(
 );
 
 /**
+ * Cached server-side fetch for national burden histogram.
+ * Calls the get_burden_histogram RPC via PostgREST.
+ */
+export const getCachedBurdenHistogram = unstable_cache(
+  async (year: number) => {
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/rpc/get_burden_histogram`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            apikey: SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ p_year: year }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Supabase error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      return (await response.json()) as {
+        bin_start: number;
+        field_count: number;
+      }[];
+    } catch (error) {
+      console.error('Failed to fetch burden histogram:', error);
+      return [];
+    }
+  },
+  ['burden-histogram'],
+  {
+    revalidate: 604800,
+    tags: ['burden-histogram'],
+  }
+);
+
+/**
  * Manual cache invalidation functions for Tuesday data updates
  * Call these when you update data on Tuesdays
  */

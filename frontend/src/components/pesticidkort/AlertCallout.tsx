@@ -33,9 +33,8 @@ const ALERT_CONFIG: Record<
     border: 'border-l-info',
     bg: 'bg-info/5',
     icon: 'text-info',
-    title: (n) =>
-      `${n} marker overlapper med boringsnære beskyttelsesområder (BNBO)`,
-    body: 'Disse områder beskytter dit drikkevand mod forurening.',
+    title: (n) => `${n} marker ligger tæt på drikkevandsboringer`,
+    body: 'Sprøjtning nær drikkevandsboringer kan forurene grundvandet.',
   },
   violation: {
     border: 'border-l-destructive',

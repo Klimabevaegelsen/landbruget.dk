@@ -27,29 +27,29 @@ const GRADE_THRESHOLDS: { max: number; grade: PesticideGrade }[] = [
 
 const GRADE_DEFINITIONS: Record<PesticideGrade, Omit<GradeInfo, 'grade'>> = {
   A: {
-    label: 'Laveste femtedel',
+    label: 'Meget lav belastning',
     description:
-      'Pesticidbelastningen i dit nærområde er blandt de laveste i landet',
+      'Der sprøjtes markant mindre med pesticider nær din adresse end de fleste steder i Danmark',
   },
   B: {
     label: 'Under gennemsnit',
     description:
-      'Pesticidbelastningen i dit nærområde er under landsgennemsnittet',
+      'Der sprøjtes mindre med pesticider nær din adresse end landsgennemsnittet',
   },
   C: {
     label: 'Omkring gennemsnit',
     description:
-      'Pesticidbelastningen i dit nærområde er omkring landsgennemsnittet',
+      'Pesticidbrugen nær din adresse svarer til et typisk dansk landbrugsområde',
   },
   D: {
     label: 'Over gennemsnit',
     description:
-      'Pesticidbelastningen i dit nærområde er over landsgennemsnittet',
+      'Der sprøjtes mere med pesticider nær din adresse end landsgennemsnittet',
   },
   E: {
-    label: 'Højeste femtedel',
+    label: 'Meget høj belastning',
     description:
-      'Pesticidbelastningen i dit nærområde er blandt de højeste i landet',
+      'Der sprøjtes markant mere med pesticider nær din adresse end de fleste steder i Danmark',
   },
 };
 

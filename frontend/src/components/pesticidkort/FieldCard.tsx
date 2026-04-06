@@ -6,10 +6,14 @@ import { ChevronDown } from 'lucide-react';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import {
   getCropEmoji,
-  getBurdenDecile,
-  getBarColor,
-  getBurdenLabel,
+  formatBurden,
+  parseProductString,
+  formatProduct,
 } from '@/components/pesticidkort/field-utils';
+import {
+  BurdenScale,
+  type HistogramBin,
+} from '@/components/pesticidkort/BurdenScale';
 import {
   FieldProximity,
   FieldProducts,
@@ -17,33 +21,39 @@ import {
 
 interface FieldCardProps {
   field: NearbyFieldSummary;
+  histogram: HistogramBin[];
   onSelect?: () => void;
 }
 
-export function FieldCard({ field, onSelect }: FieldCardProps) {
+export function FieldCard({ field, histogram, onSelect }: FieldCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const decile = getBurdenDecile(field.total_pesticide_belastning);
+  const burden = field.total_pesticide_belastning;
   const hasPfas = field.pfas_applications > 0;
-  const isHighRisk = decile >= 7 || hasPfas;
+  const isZeroBurden = burden === 0;
   const hasProducts =
     field.other_products_detail || field.glyphosate_products_detail;
+
+  const pfasSummary =
+    hasPfas && field.pfas_products_detail
+      ? parseProductString(field.pfas_products_detail)
+          .slice(0, 1)
+          .map(formatProduct)
+          .join('')
+      : null;
 
   return (
     <div
       data-testid={`field-card-${field.field_uuid}`}
       className={cn(
-        'border-border border-b py-4 transition-colors',
-        field.is_organic && 'bg-success/[0.04]',
-        hasPfas && 'border-l-[3px] border-l-warning bg-warning/[0.04]',
-        !hasPfas &&
-          isHighRisk &&
-          'border-l-[3px] border-l-destructive/40 bg-destructive/[0.03] pl-3'
+        'bg-card mb-2 rounded-xl px-4 py-3 transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5',
+        hasPfas && 'ring-warning/30 ring-1',
+        !hasPfas && burden >= 6 && 'ring-destructive/20 ring-1'
       )}
     >
       <button
         onClick={onSelect}
         data-testid={`field-select-${field.field_uuid}-button`}
-        className="hover:bg-muted/30 w-full rounded px-1 text-left transition-colors"
+        className="w-full text-left"
       >
         <div className="flex items-center gap-2 text-sm">
           <span>{getCropEmoji(field.crop_name)}</span>
@@ -58,36 +68,25 @@ export function FieldCard({ field, onSelect }: FieldCardProps) {
               PFAS
             </span>
           )}
-          <span className="text-muted-foreground ml-auto text-xs tabular-nums">
-            {field.area_hectares.toFixed(1)} ha
-            <span className="mx-1.5">·</span>
-            {Math.round(field.distance_m)} m
-          </span>
+        </div>
+        <div className="text-muted-foreground mt-1 flex items-center gap-2 text-xs tabular-nums">
+          <span>{field.area_hectares.toFixed(1)} ha</span>
+          <span>·</span>
+          <span>{Math.round(field.distance_m)} m væk</span>
         </div>
 
-        <div className="mt-2.5 flex items-center gap-2">
-          <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
-            <div
-              className="h-full rounded-full bg-[var(--bar-color)]"
-              style={
-                {
-                  width: `${decile * 10}%`,
-                  '--bar-color': getBarColor(decile),
-                } as React.CSSProperties
-              }
-            />
+        {!isZeroBurden && (
+          <div className="mt-2.5 flex items-center gap-2">
+            <BurdenScale burden={burden} histogram={histogram} />
+            <span className="text-muted-foreground shrink-0 text-[11px] tabular-nums">
+              {formatBurden(burden)}
+            </span>
           </div>
-          <span className="text-muted-foreground text-right text-[11px] tabular-nums">
-            {field.total_pesticide_belastning.toFixed(1)} B/ha (
-            {getBurdenLabel(decile)})
-          </span>
-        </div>
+        )}
       </button>
 
-      {hasPfas && field.pfas_products_detail && (
-        <p className="text-warning mt-2 text-xs">
-          {field.pfas_products_detail.split(';')[0].trim()}
-        </p>
+      {pfasSummary && (
+        <p className="text-warning mt-2 text-xs">{pfasSummary}</p>
       )}
 
       <FieldProximity field={field} />
@@ -97,7 +96,7 @@ export function FieldCard({ field, onSelect }: FieldCardProps) {
           onClick={() => setExpanded(!expanded)}
           data-testid={`field-expand-${field.field_uuid}-button`}
           aria-expanded={expanded}
-          className="text-muted-foreground mt-1 -ml-1 flex min-h-[44px] items-center gap-1 px-1 text-xs hover:underline"
+          className="text-muted-foreground mt-1 flex min-h-[44px] items-center gap-1 text-xs hover:underline"
         >
           <ChevronDown
             className={cn(
@@ -105,7 +104,7 @@ export function FieldCard({ field, onSelect }: FieldCardProps) {
               expanded && 'rotate-180'
             )}
           />
-          {expanded ? 'Skjul produkter' : 'Se alle produkter'}
+          {expanded ? 'Skjul produkter' : 'Se produkter'}
         </button>
       )}
 

@@ -48,7 +48,7 @@ export function PesticideProximityScore({
             {description}
           </p>
           <p className="text-muted-foreground mt-2 text-xs">
-            Skala: A = laveste relative belastning, E = højeste.
+            A = mindst sprøjtning, E = mest sprøjtning i dit område.
           </p>
         </div>
       </div>

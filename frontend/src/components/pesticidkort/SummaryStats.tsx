@@ -36,7 +36,7 @@ export function SummaryStats({
           {Math.round(fieldsCountDisplay)}
         </span>
         <p className="text-muted-foreground mt-0.5 text-xs">
-          marker inden for 1 km
+          sprøjtede marker inden for 1 km
         </p>
       </div>
 
@@ -62,7 +62,7 @@ export function SummaryStats({
               : 'text-muted-foreground'
           )}
         >
-          med PFAS-pesticider
+          bruger PFAS-stoffer
         </p>
       </div>
 
@@ -70,7 +70,9 @@ export function SummaryStats({
         <span className="text-foreground text-3xl font-bold tabular-nums">
           {formatDistance(nearestFieldDisplay)}
         </span>
-        <p className="text-muted-foreground mt-0.5 text-xs">nærmeste mark</p>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          til nærmeste mark
+        </p>
       </div>
     </div>
   );
