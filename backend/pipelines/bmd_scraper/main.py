@@ -19,6 +19,9 @@ from silver import BMDTransformer, upload_to_storage
 
 # Load environment variables
 dotenv.load_dotenv()
+from common.secrets import init_secrets  # noqa: E402
+
+init_secrets()
 
 logger = setup_pipeline_logger("bmd_pipeline", level=os.getenv("LOG_LEVEL", "INFO"))
 

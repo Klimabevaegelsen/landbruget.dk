@@ -2,6 +2,7 @@
 
 from .data_source_registry import DataSourceInfo, DataSourceType, get_source_info
 from .pipeline_metadata import DatasetMetadata, MetadataManager, ProcessingMetadata
+from .secrets import init_secrets
 
 __all__ = [
     "DataSourceInfo",
@@ -10,4 +11,5 @@ __all__ = [
     "MetadataManager",
     "ProcessingMetadata",
     "get_source_info",
+    "init_secrets",
 ]
