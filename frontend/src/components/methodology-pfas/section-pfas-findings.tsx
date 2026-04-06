@@ -15,8 +15,10 @@ export function SectionPfasFindings() {
       />
       <p>
         TFA er detekteret i{' '}
-        <strong>samtlige 2.113 overv&aring;gede grundvandsoplande</strong>.
-        Medianen er 0,075&nbsp;&micro;g/L, men koncentrationer op til
+        <mark>
+          <strong>samtlige 2.113 overv&aring;gede grundvandsoplande</strong>
+        </mark>
+        . Medianen er 0,075&nbsp;&micro;g/L, men koncentrationer op til
         4,88&nbsp;&micro;g/L er registreret. Den universelle
         tilstedev&aelig;relse afspejler b&aring;de fluorpesticidbrug og
         atmosf&aelig;risk deposition fra nedbrydning af fluorholdige
@@ -32,9 +34,12 @@ export function SectionPfasFindings() {
         I alle 19 statistiske modeller er{' '}
         <strong>antallet af boringer per opland</strong> den st&aelig;rkeste
         pr&aelig;diktor for om PFAS detekteres. Det afspejler et
-        grundl&aelig;ggende <strong>observationsbias</strong>: jo mere vi
-        kigger, jo mere finder vi. Kun 36&nbsp;% af oplandene har nogen
-        PFAS-overv&aring;gning overhovedet.
+        grundl&aelig;ggende{' '}
+        <mark>
+          <strong>observationsbias</strong>
+        </mark>
+        : jo mere vi kigger, jo mere finder vi. Kun <mark>36&nbsp;%</mark> af
+        oplandene har nogen PFAS-overv&aring;gning overhovedet.
       </p>
 
       <SubsectionHeader
@@ -59,10 +64,12 @@ export function SectionPfasFindings() {
       <p>
         PFAS-fund er st&aelig;rkt rumligt autokorrelerede: Moran&apos;s
         I-v&aelig;rdierne (0,25&ndash;0,38) giver{' '}
-        <strong>294&ndash;448&times; inflation</strong> af effektive
-        frihedsgrader sammenlignet med uafh&aelig;ngige observationer. Det
-        betyder, at naive statistiske tests vil overvurdere signifikansen af
-        rumlige m&oslash;nstre markant.
+        <mark>
+          <strong>294&ndash;448&times; inflation</strong>
+        </mark>{' '}
+        af effektive frihedsgrader sammenlignet med uafh&aelig;ngige
+        observationer. Det betyder, at naive statistiske tests vil overvurdere
+        signifikansen af rumlige m&oslash;nstre markant.
       </p>
     </section>
   );

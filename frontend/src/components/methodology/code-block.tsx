@@ -31,7 +31,7 @@ export function CodeBlock({
       <pre className="bg-card overflow-x-auto p-4">
         <code
           className={cn(
-            'font-mono text-[13px] leading-relaxed text-foreground/80',
+            'font-mono text-[14px] leading-relaxed text-foreground/80',
             `language-${language}`
           )}
         >

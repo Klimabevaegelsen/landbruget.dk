@@ -65,7 +65,7 @@ export function SectionLiteratureReview() {
         title="Generelle begrænsninger i litteraturen"
       />
       <p>Fire begrænsninger går igen i den eksisterende litteratur:</p>
-      <ol className="list-decimal space-y-2 pl-6">
+      <ol className="list-decimal space-y-3 pl-6">
         <li>
           <em>Salgs- vs. anvendelsesgabet:</em> Størstedelen af studierne
           anvender salgs- eller omsætningsdata som tilnærmelse for faktisk

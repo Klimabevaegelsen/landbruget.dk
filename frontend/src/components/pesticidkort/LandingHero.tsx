@@ -90,7 +90,7 @@ export function LandingHero({
           <Link
             href="/pesticidanalyse/metode"
             data-testid="methodology-link"
-            className="text-muted-foreground flex min-h-[44px] items-center underline-offset-4 hover:underline"
+            className="text-primary flex min-h-[44px] items-center font-medium underline-offset-4 hover:underline"
           >
             Om metoden
           </Link>

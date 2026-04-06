@@ -20,7 +20,7 @@ export function SectionDisaggregation() {
         Pesticidindberetninger rapporteres på virksomhedsniveau (CVR), men
         analysen kræver specifik markopløsning. Vi anvender en sekventiel
         sammenkøringsprocedure med fire strategier, der tilsammen opnår en
-        d��kning på &ge; 92 %.
+        dækning på <mark>&ge; 92 %</mark>.
       </p>
 
       <DisaggregationScrolly />
@@ -37,10 +37,11 @@ export function SectionDisaggregation() {
       <p>
         Valget er ikke vilkårligt &mdash; det er strukturelt nødvendigt.
         Empirisk test med Y+0-kobling (hvor SJI-år X matches mod FVM-år X i
-        stedet for X+1) giver kun 6&ndash;9&nbsp;% dækning mod
-        82&ndash;93&nbsp;% med Y+1, en forskel på over 80 procentpoint i hvert
-        testår (2018&ndash;2023). De 6&ndash;9&nbsp;% afspejler landmænd, der
-        tilfældigvis dyrker samme afgrøde på samme areal to år i træk.
+        stedet for X+1) giver kun 6&ndash;9&nbsp;% dækning mod{' '}
+        <mark>82&ndash;93&nbsp;% med Y+1</mark>, en forskel på over 80
+        procentpoint i hvert testår (2018&ndash;2023). De 6&ndash;9&nbsp;%
+        afspejler landmænd, der tilfældigvis dyrker samme afgrøde på samme areal
+        to år i træk.
       </p>
 
       <SubsectionHeader
@@ -54,7 +55,7 @@ export function SectionDisaggregation() {
         Overensstemmelsen accepteres inden for en tolerance på &plusmn;2 %.
       </p>
 
-      <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-4 rounded border px-4 py-3 font-mono text-[13px] leading-relaxed">
+      <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-6 rounded-md border px-5 py-4 font-mono text-[15px] leading-relaxed">
         |AppArea &minus; &Sigma;FieldArea| &frasl; AppArea &times; 100 &le; 2,0
         %
       </p>
@@ -77,7 +78,7 @@ export function SectionDisaggregation() {
         fordeling af dosis:
       </p>
 
-      <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-4 rounded border px-4 py-3 font-mono text-[13px] leading-relaxed">
+      <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-6 rounded-md border px-5 py-4 font-mono text-[15px] leading-relaxed">
         Dosis<sub>mark</sub> = Dosis<sub>total</sub> &times; (Areal
         <sub>mark</sub> &frasl; Areal<sub>CVR,afgrøde</sub>)
       </p>
@@ -104,7 +105,7 @@ export function SectionDisaggregation() {
         Hver tildeling får en pålidelighedsscore baseret på forskellen mellem
         indberettet og beregnet areal:
       </p>
-      <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-4 rounded border px-4 py-3 font-mono text-[13px] leading-relaxed">
+      <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-6 rounded-md border px-5 py-4 font-mono text-[15px] leading-relaxed">
         Score = max(0, 1 &minus; |&Delta;areal%| &frasl; tolerance%)
       </p>
       <p>
@@ -163,7 +164,7 @@ GROUP BY cvr, crop_code
         <p>
           <strong>Dækning ved 2&nbsp;% tolerance (strategi 1+2):</strong>
         </p>
-        <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-3 rounded border px-4 py-3 font-mono text-[12px] leading-relaxed">
+        <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-4 rounded-md border px-5 py-4 font-mono text-[14px] leading-relaxed">
           2015: 81,8&nbsp;% &nbsp;|&nbsp; 2016: 87,2&nbsp;% &nbsp;|&nbsp; 2017:
           86,9&nbsp;% &nbsp;|&nbsp; 2018: 90,5&nbsp;% &nbsp;|&nbsp; 2019:
           91,6&nbsp;% &nbsp;|&nbsp; 2020: 92,7&nbsp;% &nbsp;|&nbsp; 2021:

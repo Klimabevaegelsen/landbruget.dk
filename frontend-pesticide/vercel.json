@@ -1,4 +1,16 @@
 {
+  "rewrites": [
+    { "source": "/", "destination": "https://www.landbruget.dk/pesticidkort" },
+    {
+      "source": "/_next/:path*",
+      "destination": "https://www.landbruget.dk/_next/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://www.landbruget.dk/api/:path*"
+    },
+    { "source": "/:path*", "destination": "https://www.landbruget.dk/:path*" }
+  ],
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install",

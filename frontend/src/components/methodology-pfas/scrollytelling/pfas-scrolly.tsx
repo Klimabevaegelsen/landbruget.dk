@@ -9,6 +9,10 @@ import type { PfasScrollyStepId } from './scrolly-constants';
 const STAT_ROWS: Partial<
   Record<PfasScrollyStepId, { label: string; value: string }[]>
 > = {
+  intro: [
+    { label: 'Oplande i DK', value: '5.826' },
+    { label: 'Overvågede', value: '2.113 (36 %)' },
+  ],
   field: [
     { label: 'Opland', value: 'I/S Skrydstrup' },
     { label: 'Afgrøde', value: 'Vinterhvede' },

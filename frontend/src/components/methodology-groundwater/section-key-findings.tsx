@@ -12,12 +12,13 @@ export function SectionKeyFindings() {
       <SectionHeader id="findings" number="5" title="Resultater" />
 
       <p>
-        Vi har gennemf&oslash;rt en korrelationsanalyse p&aring; tv&aelig;rs af
-        5.826 grundvandsoplande, der sammenholder markniveauets
-        pesticidanvendelsesintensitet (kg aktivstof/ha) med fund i 4,6 millioner
-        pr&oslash;veniveau-pesticidanalyser fra GEUS Dataverse (VP4). Af disse
-        kvalificerer 11 stoffer med b&aring;de tilstr&aelig;kkelig
-        detektionshyppighed og anvendelsesdata via stofkortl&aelig;gning.
+        Vi har gennemf&oslash;rt en korrelationsanalyse p&aring; tv&aelig;rs af{' '}
+        <mark>5.826 grundvandsoplande</mark>, der sammenholder markniveauets
+        pesticidanvendelsesintensitet (kg aktivstof/ha) med fund i{' '}
+        <mark>4,6 millioner pr&oslash;veniveau-pesticidanalyser</mark> fra GEUS
+        Dataverse (VP4). Af disse kvalificerer <mark>11 stoffer</mark> med
+        b&aring;de tilstr&aelig;kkelig detektionshyppighed og anvendelsesdata
+        via stofkortl&aelig;gning.
       </p>
 
       <FindingsCorrelations />
