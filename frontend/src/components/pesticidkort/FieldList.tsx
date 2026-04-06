@@ -13,6 +13,7 @@ interface FieldListProps {
   fields: NearbyFieldSummary[];
   histogram: HistogramBin[];
   selectedFieldUuid?: string | null;
+  clickedField?: NearbyFieldSummary | null;
   onFieldSelect?: (fieldUuid: string) => void;
 }
 
@@ -20,6 +21,7 @@ export function FieldList({
   fields,
   histogram,
   selectedFieldUuid,
+  clickedField,
   onFieldSelect,
 }: FieldListProps) {
   const reducedMotion = useReducedMotion();
@@ -35,6 +37,11 @@ export function FieldList({
     : sortedFields.slice(0, INITIAL_VISIBLE);
   const hiddenCount = sortedFields.length - INITIAL_VISIBLE;
 
+  const isAdHocField =
+    clickedField &&
+    selectedFieldUuid === clickedField.field_uuid &&
+    !sortedFields.some((f) => f.field_uuid === selectedFieldUuid);
+
   useEffect(() => {
     if (!selectedFieldUuid) return;
     const idx = sortedFields.findIndex(
@@ -42,7 +49,6 @@ export function FieldList({
     );
     if (idx >= INITIAL_VISIBLE && !showAll) {
       setShowAll(true);
-      // Wait for DOM to render expanded list before scrolling
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           document
@@ -94,6 +100,22 @@ export function FieldList({
           <ChevronDown className="h-4 w-4 transition-transform duration-200 group-hover:translate-y-0.5" />
           Vis alle {sortedFields.length} marker
         </button>
+      )}
+      {isAdHocField && clickedField && (
+        <div className="border-border/50 mt-4 border-t pt-4">
+          <h3 className="text-foreground mb-1 text-sm font-semibold">
+            Valgt mark
+          </h3>
+          <p className="text-muted-foreground mb-3 text-xs">
+            Uden for dit nærområde — indgår ikke i din score
+          </p>
+          <FieldCard
+            field={clickedField}
+            histogram={histogram}
+            isSelected
+            onSelect={() => onFieldSelect?.(clickedField.field_uuid)}
+          />
+        </div>
       )}
     </div>
   );

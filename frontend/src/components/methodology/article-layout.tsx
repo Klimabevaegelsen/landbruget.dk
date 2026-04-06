@@ -51,9 +51,7 @@ export function Figure({
     >
       {children}
       <figcaption className="text-muted-foreground mt-5 border-t border-dashed pt-3 text-[13px] leading-normal">
-        <span className="text-primary/60 font-semibold">
-          Figur&nbsp;{number}.
-        </span>{' '}
+        <span className="text-primary/60 font-semibold">Figur {number}.</span>{' '}
         {caption}
       </figcaption>
     </figure>

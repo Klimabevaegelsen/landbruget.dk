@@ -529,42 +529,49 @@ class PMTilesDataLoader:
                     COUNT(*) as pesticide_applications,
                     STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
 
-                    -- Enhanced categorized product details with risk information
+                    -- Enhanced categorized product details with risk + product group + burden
+                    -- Format: Name:Dosage:Unit:HealthRisk:EnvRisk:SignalWord:ProductGroup:Burden
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_pfas, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                              COALESCE(health_risk, '') || ':' ||
-                              COALESCE(environmental_risk, '') || ':' ||
-                             COALESCE(signal_word, '')
+                             COALESCE(health_risk, '') || ':' ||
+                             COALESCE(environmental_risk, '') || ':' ||
+                             COALESCE(signal_word, '') || ':' ||
+                             COALESCE(product_group, '') || ':' ||
+                             ROUND(COALESCE(samlet_belastning, 0), 2)
                         END, ';'
                     ) FILTER (WHERE COALESCE(contains_pfas, false) = true) as pfas_products_detail,
-                     COUNT(
-                         CASE WHEN COALESCE(contains_pfas, false) = true THEN 1 END
-                     ) as pfas_applications,
+                    COUNT(
+                        CASE WHEN COALESCE(contains_pfas, false) = true THEN 1 END
+                    ) as pfas_applications,
 
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_diquat, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                              COALESCE(health_risk, '') || ':' ||
-                              COALESCE(environmental_risk, '') || ':' ||
-                             COALESCE(signal_word, '')
+                             COALESCE(health_risk, '') || ':' ||
+                             COALESCE(environmental_risk, '') || ':' ||
+                             COALESCE(signal_word, '') || ':' ||
+                             COALESCE(product_group, '') || ':' ||
+                             ROUND(COALESCE(samlet_belastning, 0), 2)
                         END, ';'
                     ) FILTER (
                         WHERE COALESCE(contains_diquat, false) = true
                     ) as diquat_products_detail,
-                     COUNT(
-                         CASE WHEN COALESCE(contains_diquat, false) = true THEN 1 END
-                     ) as diquat_applications,
+                    COUNT(
+                        CASE WHEN COALESCE(contains_diquat, false) = true THEN 1 END
+                    ) as diquat_applications,
 
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_glyphosate, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                              COALESCE(health_risk, '') || ':' ||
-                              COALESCE(environmental_risk, '') || ':' ||
-                             COALESCE(signal_word, '')
+                             COALESCE(health_risk, '') || ':' ||
+                             COALESCE(environmental_risk, '') || ':' ||
+                             COALESCE(signal_word, '') || ':' ||
+                             COALESCE(product_group, '') || ':' ||
+                             ROUND(COALESCE(samlet_belastning, 0), 2)
                         END, ';'
                     ) FILTER (
                         WHERE COALESCE(contains_glyphosate, false) = true
@@ -578,7 +585,12 @@ class PMTilesDataLoader:
                                   AND COALESCE(contains_diquat, false) = false
                                   AND COALESCE(contains_glyphosate, false) = false
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
-                             COALESCE(DosageUnit, 'ukendt')
+                             COALESCE(DosageUnit, 'ukendt') || ':' ||
+                             COALESCE(health_risk, '') || ':' ||
+                             COALESCE(environmental_risk, '') || ':' ||
+                             COALESCE(signal_word, '') || ':' ||
+                             COALESCE(product_group, '') || ':' ||
+                             ROUND(COALESCE(samlet_belastning, 0), 2)
                         END, ';'
                     ) FILTER (WHERE COALESCE(contains_pfas, false) = false
                                     AND COALESCE(contains_diquat, false) = false
@@ -943,6 +955,7 @@ class PMTilesDataLoader:
                         b.farebetegnelse_sundhed as health_risk,
                         b.farebetegnelse_miljø as environmental_risk,
                         b.signalord as signal_word,
+                        b.produktgruppe_pesticid as product_group,
                         -- BMD burden calculation fields
                         COALESCE(b.samlet_belastning, 0.0) as samlet_belastning,
                         COALESCE(b.belastning_sundhed, 0.0) as belastning_sundhed,
@@ -977,6 +990,7 @@ class PMTilesDataLoader:
                         NULL as health_risk,
                         NULL as environmental_risk,
                         NULL as signal_word,
+                        NULL as product_group,
                         -- BMD burden calculation fields (fallback)
                         0 as samlet_belastning,
                         0 as belastning_sundhed,
@@ -1011,6 +1025,7 @@ class PMTilesDataLoader:
                         NULL as health_risk,
                         NULL as environmental_risk,
                         NULL as signal_word,
+                        NULL as product_group,
                         -- BMD burden calculation fields (fallback)
                         0 as samlet_belastning,
                         0 as belastning_sundhed,

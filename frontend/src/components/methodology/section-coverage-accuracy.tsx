@@ -20,13 +20,12 @@ export function SectionCoverageAccuracy() {
       />
       <p>
         Det er vigtigt at skelne mellem, hvor meget data vi kan <em>koble</em>,
-        og hvor pr&aelig;cist det kan <em>fordeles</em>. Selvom vi kobler
-        92&nbsp;% af dataene, er det kun ca. 19,6&nbsp;% af indberetningerne,
-        der kan knyttes til &eacute;n specifik mark. De resterende 80,4&nbsp;%
-        fordeles proportionalt over flere marker (medianen er tre marker per
-        kobling). Kortet viser derved en <em>nedre gr&aelig;nse</em> for
-        forbruget, da indberetningssystemet generelt underestimerer
-        salgstallene.
+        og hvor præcist det kan <em>fordeles</em>. Selvom vi kobler 92 % af
+        dataene, er det kun ca. 19,6 % af indberetningerne, der kan knyttes til
+        én specifik mark. De resterende 80,4 % fordeles proportionalt over flere
+        marker (medianen er tre marker per kobling). Det betyder, at kortet
+        viser en <em>udjævnet</em> fordeling: for nogle marker vil det viste
+        forbrug være højere end det reelle, for andre lavere.
       </p>
 
       <div
@@ -57,7 +56,7 @@ export function SectionCoverageAccuracy() {
                     {row.label}
                   </td>
                   <td className="text-foreground/80 px-4 py-1.5 text-right font-mono">
-                    {row.pct}&nbsp;%
+                    {row.pct} %
                   </td>
                   <td className="w-1/3 px-4 py-1.5">
                     <div className="bg-primary/10 h-3 w-full overflow-hidden rounded-sm">

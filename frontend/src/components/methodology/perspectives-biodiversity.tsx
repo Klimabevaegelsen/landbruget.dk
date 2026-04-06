@@ -9,10 +9,10 @@ export function PerspectivesBiodiversity() {
         title="Biodiversitet og beskyttede områder"
       />
       <p>
-        Afdrift af pesticider er en trussel mod Natura 2000-omr&aring;der og
-        beskyttet &sect;3-natur (enge, moser, overdrev). Markspecifikke data
-        tillader forskere at tr&aelig;kke sikkerhedszoner og beregne det kemiske
-        pres p&aring; truede insekter som f.eks. vilde bier.
+        Afdrift af pesticider er en trussel mod Natura 2000-områder og beskyttet
+        &sect;3-natur (enge, moser, overdrev). Markspecifikke data tillader
+        forskere at trække sikkerhedszoner og beregne det kemiske pres på truede
+        insekter som f.eks. vilde bier.
       </p>
     </>
   );

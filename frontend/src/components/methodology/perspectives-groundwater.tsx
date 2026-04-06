@@ -10,12 +10,11 @@ export function PerspectivesGroundwater() {
         title="Grundvand og drikkevand"
       />
       <p>
-        Da 100&nbsp;% af det danske drikkevand er grundvandsbaseret, er
-        pesticidrester (som findes i 51&nbsp;% af overv&aring;gningsboringerne)
-        et massivt problem. Data p&aring; markniveau g&oslash;r det muligt at
-        overlejre spr&oslash;jtede arealer med det nationale
-        grundvandsoverv&aring;gningsprogram (GRUMO) og de boringsn&aelig;re
-        beskyttelsesomr&aring;der (BNBO) for at identificere risikozoner.
+        Da 100 % af det danske drikkevand er grundvandsbaseret, er
+        pesticidrester (som findes i 51 % af overvågningsboringerne) et massivt
+        problem. Data på markniveau gør det muligt at overlejre sprøjtede
+        arealer med det nationale grundvandsovervågningsprogram (GRUMO) og de
+        boringsnære beskyttelsesområder (BNBO) for at identificere risikozoner.
       </p>
       <p>
         <Link
@@ -23,7 +22,7 @@ export function PerspectivesGroundwater() {
           data-testid="grundvand-methodology-link"
           className="text-primary font-medium underline-offset-4 hover:underline"
         >
-          L&aelig;s den fulde metode for grundvandsanalysen &rarr;
+          Læs den fulde metode for grundvandsanalysen &rarr;
         </Link>
       </p>
     </>

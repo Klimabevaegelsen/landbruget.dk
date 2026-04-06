@@ -45,7 +45,7 @@ export function FieldCard({
       id={field.field_uuid}
       data-testid={`field-card-${field.field_uuid}`}
       className={cn(
-        'bg-card mb-2 rounded-xl px-4 py-3 transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5',
+        'bg-card mb-2 rounded-xl px-4 py-3 transition-all duration-200 hover:shadow-md hover:-translate-y-1',
         isSelected && 'ring-primary ring-2',
         field.is_organic && !isSelected && 'border-success/40 border-l-2'
       )}
@@ -95,7 +95,7 @@ export function FieldCard({
               expanded && 'rotate-180'
             )}
           />
-          {expanded ? 'Skjul produkter' : 'Se produkter'}
+          {expanded ? 'Skjul pesticider' : 'Vis pesticider'}
         </button>
       )}
 

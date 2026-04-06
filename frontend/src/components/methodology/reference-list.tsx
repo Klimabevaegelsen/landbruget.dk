@@ -34,14 +34,13 @@ const REFS: ReactNode[] = [
     risk assessment at the field level.&rdquo; <em>Pest Management Science</em>.
   </>,
   <>
-    Kudsk, P. &amp; J&oslash;rgensen, L. N. (2018). &ldquo;Pesticide Load
-    &ndash; a new Danish pesticide risk indicator with multiple
-    applications.&rdquo; <em>Land Use Policy</em> 70, 384&ndash;393.
+    Kudsk, P. &amp; Jørgensen, L. N. (2018). &ldquo;Pesticide Load – a new
+    Danish pesticide risk indicator with multiple applications.&rdquo;{' '}
+    <em>Land Use Policy</em> 70, 384–393.
   </>,
   <>
-    J&oslash;rgensen, L. N. &amp; Kudsk, P. (2019). &ldquo;Twenty years of
-    pesticide use patterns in winter wheat in Denmark.&rdquo;{' '}
-    <em>Crop Protection</em>.
+    Jørgensen, L. N. &amp; Kudsk, P. (2019). &ldquo;Twenty years of pesticide
+    use patterns in winter wheat in Denmark.&rdquo; <em>Crop Protection</em>.
   </>,
   <>
     d&apos;Andrimont, R. et al. (2021). &ldquo;Improving the monitoring of
@@ -49,24 +48,23 @@ const REFS: ReactNode[] = [
     <em>Nature Ecology &amp; Evolution</em>.
   </>,
   <>
-    Landbrugsstyrelsen. &ldquo;F&aelig;llesskema &ndash; Markblokke og
-    afgr&oslash;dedata.&rdquo; Udgivet &aring;rligt.
+    Landbrugsstyrelsen. &ldquo;Fællesskema – Markblokke og afgrødedata.&rdquo;
+    Udgivet årligt.
   </>,
   <>
-    Milj&oslash;styrelsen. &ldquo;Bek&aelig;mpelsesmiddeldatabasen (BMD).&rdquo;
-    bmd.mst.dk.
+    Miljøstyrelsen. &ldquo;Bekæmpelsesmiddeldatabasen (BMD).&rdquo; bmd.mst.dk.
   </>,
   <>
-    Milj&oslash;styrelsen. &ldquo;Pesticidindberetninger &ndash; aggregeret
-    virksomhedsdata.&rdquo; Landbrug&aring;r 2020/21&ndash;2024/25.
+    Miljøstyrelsen. &ldquo;Pesticidindberetninger – aggregeret
+    virksomhedsdata.&rdquo; Landbrugår 2020/21–2024/25.
   </>,
   <>
     Geodatastyrelsen. &ldquo;Bygnings- og Boligregistret (BBR).&rdquo;
     dataforsyningen.dk.
   </>,
   <>
-    GEUS. &ldquo;Grundvandsoverv&aring;gning (GRUMO) &ndash; pesticider i dansk
-    grundvand.&rdquo; &Aring;rlig statusrapport.
+    GEUS. &ldquo;Grundvandsovervågning (GRUMO) – pesticider i dansk
+    grundvand.&rdquo; Årlig statusrapport.
   </>,
   <>
     Hansen, B. et al. (2022). &ldquo;National Assessment of Long-Term
@@ -74,9 +72,9 @@ const REFS: ReactNode[] = [
     <em>Environmental Science &amp; Technology</em>.
   </>,
   <>
-    Milj&oslash;- og Ligestillingsministeriet (2024). &ldquo;Nyt forbud
-    beskytter s&aring;rbare omr&aring;der omkring drikkevandsboringer mod
-    spr&oslash;jtemidler.&rdquo; regeringen.dk.
+    Miljø- og Ligestillingsministeriet (2024). &ldquo;Nyt forbud beskytter
+    sårbare områder omkring drikkevandsboringer mod sprøjtemidler.&rdquo;
+    regeringen.dk.
   </>,
   <>
     Bresson, M. et al. (2020). &ldquo;Assessment of residential exposures to

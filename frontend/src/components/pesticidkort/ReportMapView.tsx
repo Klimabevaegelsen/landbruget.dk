@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { PersonalReport } from '@/components/pesticidkort/PersonalReport';
+import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import { useBurdenHistogram } from '@/components/pesticidkort/useBurdenHistogram';
 import { useReportBuilder } from '@/components/pesticidkort/useReportBuilder';
 import { BottomSheet } from '@/components/pesticidkort/BottomSheet';
@@ -51,6 +52,9 @@ export function ReportMapView({
   onBack,
 }: ReportMapViewProps) {
   const [selectedField, setSelectedField] = useState<string | null>(null);
+  const [clickedField, setClickedField] = useState<NearbyFieldSummary | null>(
+    null
+  );
   const [showStory, setShowStory] = useState(false);
   const [sheetState, setSheetState] = useState<'peek' | 'half' | 'full'>(
     'half'
@@ -66,8 +70,9 @@ export function ReportMapView({
   });
 
   const handleMapFieldClick = useCallback(
-    (fieldUuid: string) => {
+    (fieldUuid: string, fieldData: NearbyFieldSummary) => {
       setSelectedField(fieldUuid);
+      setClickedField(fieldData);
       if (sheetState === 'peek') setSheetState('half');
     },
     [sheetState]
@@ -85,6 +90,7 @@ export function ReportMapView({
       report={report}
       histogram={histogram}
       selectedFieldUuid={selectedField}
+      clickedField={clickedField}
       onFieldSelect={setSelectedField}
       onOpenStory={() => setShowStory(true)}
     />

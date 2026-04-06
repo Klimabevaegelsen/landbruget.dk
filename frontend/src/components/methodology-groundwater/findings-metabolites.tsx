@@ -10,11 +10,10 @@ export function FindingsMetabolites() {
       />
       <p>
         Et vigtigt fund er, at nedbrydningsprodukter (metabolitter) oftere
-        sladrer om forureningen end selve det spr&oslash;jtemiddel, landmanden
-        h&aelig;ldte i tanken. Metabolitter er typisk mere mobile i jorden og
-        har en l&aelig;ngere halveringstid. Derfor b&oslash;r fremtidig
-        grundvandsoverv&aring;gning i h&oslash;jere grad prioritere at lede
-        efter metabolitter frem for moderstofferne.
+        sladrer om forureningen end selve det sprøjtemiddel, landmanden hældte i
+        tanken. Metabolitter er typisk mere mobile i jorden og har en længere
+        halveringstid. Derfor bør fremtidig grundvandsovervågning i højere grad
+        prioritere at lede efter metabolitter frem for moderstofferne.
       </p>
     </>
   );

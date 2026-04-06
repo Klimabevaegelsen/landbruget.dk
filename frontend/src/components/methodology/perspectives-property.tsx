@@ -9,10 +9,9 @@ export function PerspectivesProperty() {
         title="Boligpriser og samfundsøkonomi"
       />
       <p>
-        Amerikanske studier peger p&aring;, at forurening kan s&aelig;nke
-        ejendomsv&aelig;rdier med op til 15&nbsp;% [26]. Med danske data kan
-        &oslash;konomer nu unders&oslash;ge, om n&aelig;rhed til intensivt
-        spr&oslash;jtede arealer p&aring;virker huspriserne herhjemme.
+        Amerikanske studier peger på, at forurening kan sænke ejendomsværdier
+        med op til 15 % [26]. Med danske data kan økonomer nu undersøge, om
+        nærhed til intensivt sprøjtede arealer påvirker huspriserne herhjemme.
       </p>
     </>
   );

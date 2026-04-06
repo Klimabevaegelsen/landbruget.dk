@@ -11,8 +11,8 @@ const F = EXAMPLE.fields;
 const BURDEN_LEGEND = [
   { color: '#6abf69', label: 'Lav belastning' },
   { color: '#d4c54a', label: 'Moderat' },
-  { color: '#d89135', label: 'H\u00f8j' },
-  { color: '#c4512c', label: 'Meget h\u00f8j' },
+  { color: '#d89135', label: 'Høj' },
+  { color: '#c4512c', label: 'Meget høj' },
 ];
 
 interface DisaggMapAnnotationsProps {
@@ -27,11 +27,7 @@ export function DisaggMapAnnotations({ step }: DisaggMapAnnotationsProps) {
   return (
     <>
       {step === 'context' && (
-        <MapLabel
-          lng={10.5}
-          lat={56.0}
-          text="~350.000 indberetninger/\u00e5r"
-        />
+        <MapLabel lng={10.5} lat={56.0} text="~350.000 indberetninger/år" />
       )}
       {step === 'location' && (
         <MapLabel lng={9.5} lat={55.26} text="Haderslev" subtext="Sydjylland" />

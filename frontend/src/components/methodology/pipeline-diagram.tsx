@@ -11,7 +11,7 @@ const STAGES: PipelineStage[] = [
   {
     name: 'bronze',
     label: 'Bronze',
-    description: 'R\u00e5 data fra offentlige kilder, u\u00e6ndret',
+    description: 'Rå data fra offentlige kilder, uændret',
     opacity: 'opacity-50',
   },
   {

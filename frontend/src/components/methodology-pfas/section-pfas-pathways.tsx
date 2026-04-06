@@ -10,33 +10,32 @@ export function SectionPfasPathways() {
       />
 
       <p className="mb-4">
-        Landbruget og det omgivende samfund bidrager prim&aelig;rt til PFAS i
+        Landbruget og det omgivende samfund bidrager primært til PFAS i
         grundvandet via fire mekanismer med meget forskellige tidshorisonter:
       </p>
 
       <ol className="list-decimal space-y-3 pl-6">
         <li>
           <strong>Fluorholdige pesticider (TFA):</strong> Aktivstofferne
-          nedbrydes i milj&oslash;et til TFA. Dette er hoved&aring;rsagen til,
-          at TFA findes overalt. Det kan n&aring; grundvandet inden for f&aring;
-          &aring;r.
+          nedbrydes i miljøet til TFA. Dette er hovedårsagen til, at TFA findes
+          overalt. Det kan nå grundvandet inden for få år.
         </li>
         <li>
-          <strong>Spildevandsslam:</strong> Slam, der spredes som g&oslash;dning
-          p&aring; markerne, kan indeholde PFAS (bl.a. PFOS og PFOA), som
-          langsomt vaskes ned i grundvandet over &aring;rtier.
+          <strong>Spildevandsslam:</strong> Slam, der spredes som gødning på
+          markerne, kan indeholde PFAS (bl.a. PFOS og PFOA), som langsomt vaskes
+          ned i grundvandet over årtier.
         </li>
         <li>
-          <strong>Hj&aelig;lpestoffer i spr&oslash;jtemidler:</strong> Visse
-          pesticidblandinger indeholder fluorholdige hj&aelig;lpestoffer
+          <strong>Hjælpestoffer i sprøjtemidler:</strong> Visse
+          pesticidblandinger indeholder fluorholdige hjælpestoffer
           (overfladeaktive stoffer), som kan introducere traditionelle PFAS,
-          uafh&aelig;ngigt af selve aktivstoffet.
+          uafhængigt af selve aktivstoffet.
         </li>
         <li>
-          <strong>Atmosf&aelig;risk nedfald:</strong> Nedbrydning af
-          fluorholdige k&oslash;lemidler (HFC&apos;er) i atmosf&aelig;ren danner
-          TFA, som falder ned med regnen. Dette bidrager konstant til
-          baggrundsniveauet af TFA, uafh&aelig;ngigt af det lokale landbrug.
+          <strong>Atmosfærisk nedfald:</strong> Nedbrydning af fluorholdige
+          kølemidler (HFC&apos;er) i atmosfæren danner TFA, som falder ned med
+          regnen. Dette bidrager konstant til baggrundsniveauet af TFA,
+          uafhængigt af det lokale landbrug.
         </li>
       </ol>
     </section>

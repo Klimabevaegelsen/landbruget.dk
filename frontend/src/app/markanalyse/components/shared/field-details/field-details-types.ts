@@ -12,6 +12,8 @@ export interface ParsedEnhancedPesticide {
   healthRisk?: string;
   envRisk?: string;
   signalWord?: string;
+  productGroup?: string;
+  burden?: number;
 }
 
 /** Icon-agnostic risk classification data */

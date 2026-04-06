@@ -12,9 +12,9 @@ export function SectionResults() {
 
       <p>
         Denne metodes store styrke er geografien: Den flytter pesticiddata fra
-        anonyme regneark ud p&aring; landkortet. Selvom resultaterne er
-        estimater og udgangspunkter (ikke kausale beviser), &aring;bner de for
-        helt nye typer af analyser.
+        anonyme regneark ud på landkortet. Selvom resultaterne er estimater og
+        udgangspunkter (ikke kausale beviser), åbner de for helt nye typer af
+        analyser.
       </p>
 
       <PerspectivesGroundwater />

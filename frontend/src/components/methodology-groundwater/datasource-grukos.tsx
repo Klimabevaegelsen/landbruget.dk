@@ -6,27 +6,26 @@ export function DatasourceGrukos() {
       <SubsectionHeader
         id="data-grukos"
         number="2.1"
-        title="Grundvandskortl&aelig;gning (GRUKOS)"
+        title="Grundvandskortlægning (GRUKOS)"
       />
       <p>
-        Milj&oslash;styrelsens datas&aelig;t over de omr&aring;der, kommunerne
-        har udpeget til grundvandsbeskyttelse. Datas&aelig;ttet indeholder:
+        Miljøstyrelsens datasæt over de områder, kommunerne har udpeget til
+        grundvandsbeskyttelse. Datasættet indeholder:
       </p>
       <ul className="my-4 list-disc space-y-2 pl-6">
         <li>
-          <strong className="text-foreground">Indsatsomr&aring;der</strong>{' '}
-          &ndash; omr&aring;der med vedtagne politiske indsatsplaner.
+          <strong className="text-foreground">Indsatsområder</strong> – områder
+          med vedtagne politiske indsatsplaner.
         </li>
         <li>
-          <strong className="text-foreground">Indvindingsoplande</strong>{' '}
-          &ndash; de hydrologiske oplande, der forsyner vandv&aelig;rkerne.
+          <strong className="text-foreground">Indvindingsoplande</strong> – de
+          hydrologiske oplande, der forsyner vandværkerne.
         </li>
       </ul>
       <p>
-        Disse kategoriseres efter s&aring;rbarhed. Vi fokuserer is&aelig;r
-        p&aring; <em>SFI</em> (Spr&oslash;jtemidelf&oslash;lsomme
-        indvindingsomr&aring;der), da de markerer zoner med forh&oslash;jet
-        risiko for, at pesticider siver ned.
+        Disse kategoriseres efter sårbarhed. Vi fokuserer især på <em>SFI</em>{' '}
+        (Sprøjtemidelfølsomme indvindingsområder), da de markerer zoner med
+        forhøjet risiko for, at pesticider siver ned.
       </p>
     </>
   );

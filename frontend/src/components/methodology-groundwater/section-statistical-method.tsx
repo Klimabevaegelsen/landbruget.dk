@@ -9,9 +9,8 @@ export function SectionStatisticalMethod() {
       <SectionHeader id="statistics" number="4" title="Statistisk metode" />
 
       <p>
-        For at undg&aring;, at vi drager konklusioner p&aring; baggrund af
-        statistiske tilf&aelig;ldigheder, skal alle data overleve en streng
-        firetrins-validering:
+        For at undgå, at vi drager konklusioner på baggrund af statistiske
+        tilfældigheder, skal alle data overleve en streng firetrins-validering:
       </p>
 
       <SubsectionHeader
@@ -24,24 +23,23 @@ export function SectionStatisticalMethod() {
           <strong className="text-foreground">
             FDR-korrektion (False Discovery Rate)
           </strong>{' '}
-          &ndash; Filtrerer falske positiver fra ved hj&aelig;lp af
-          Benjamini&ndash;Hochberg-metoden.
+          – Filtrerer falske positiver fra ved hjælp af
+          Benjamini–Hochberg-metoden.
         </li>
         <li>
-          <strong className="text-foreground">Logistisk regression</strong>{' '}
-          &ndash; Bekr&aelig;fter sammenh&aelig;ngen via grundl&aelig;ggende
-          statistiske modeller.
+          <strong className="text-foreground">Logistisk regression</strong> –
+          Bekræfter sammenhængen via grundlæggende statistiske modeller.
         </li>
         <li>
-          <strong className="text-foreground">Multivariat justering</strong>{' '}
-          &ndash; Renser data for &ldquo;forstyrrende faktorer&rdquo;
-          (confounders) som jordtype, boringens dybde og t&aelig;theden af
-          overv&aring;gningsboringer i omr&aring;det.
+          <strong className="text-foreground">Multivariat justering</strong> –
+          Renser data for &ldquo;forstyrrende faktorer&rdquo; (confounders) som
+          jordtype, boringens dybde og tætheden af overvågningsboringer i
+          området.
         </li>
         <li>
-          <strong className="text-foreground">Geografisk modellering</strong>{' '}
-          &ndash; Justerer for s&aring;kaldt geografisk autokorrelation,
-          s&aring; afsmitning fra nabooplande ikke forvr&aelig;nger billedet.
+          <strong className="text-foreground">Geografisk modellering</strong> –
+          Justerer for såkaldt geografisk autokorrelation, så afsmitning fra
+          nabooplande ikke forvrænger billedet.
         </li>
       </ol>
 
@@ -51,16 +49,16 @@ export function SectionStatisticalMethod() {
         title="Negativ kontrol"
       />
       <p>
-        Som en stresstest af modellen testede vi fem stoffer, som binder sig
-        s&aring; h&aring;rdt til jorden, at de <em>ikke</em> burde kunne
-        n&aring; grundvandet. Resultatet var pr&aelig;cis som forventet:
+        Som en stresstest af modellen testede vi fem stoffer, som binder sig så
+        hårdt til jorden, at de <em>ikke</em> burde kunne nå grundvandet.
+        Resultatet var præcis som forventet:
       </p>
       <div className="border-border bg-card my-6 rounded border p-5">
         <p className="text-foreground text-sm font-semibold">
-          Ingen af de fem stoffer viste nogen statistisk sammenh&aelig;ng.
+          Ingen af de fem stoffer viste nogen statistisk sammenhæng.
         </p>
         <p className="text-muted-foreground mt-2 text-sm">
-          Modellen fanger alts&aring; kun reelle nedsivninger.
+          Modellen fanger altså kun reelle nedsivninger.
         </p>
       </div>
     </section>

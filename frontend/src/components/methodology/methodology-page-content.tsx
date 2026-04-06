@@ -27,16 +27,15 @@ export function MethodologyPageContent() {
             Tjek din egen adresse
           </p>
           <p className="text-muted-foreground mt-2 max-w-[480px] text-[15px] leading-relaxed">
-            Se hvilke pesticider der bruges t&aelig;t p&aring; dit hjem &mdash;
-            baseret p&aring; offentlige data fra 92&nbsp;% af alle danske
-            marker.
+            Se hvilke pesticider der bruges tæt på dit hjem — baseret på
+            offentlige data fra 92 % af alle danske marker.
           </p>
           <Link
             href="/pesticidkort"
             data-testid="methodology-cta-pesticidkort"
             className="bg-primary text-primary-foreground mt-5 inline-block rounded-full px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-90"
           >
-            &Aring;bn pesticidkortet &rarr;
+            Åbn pesticidkortet &rarr;
           </Link>
         </div>
       </footer>

@@ -11,10 +11,10 @@ export function LimitationDataSources() {
       <p>
         Kravet om at indberette sprøjtejournaler gælder kun for landbrug over 10
         hektar. Mindre bedrifter er et sort hul i vores data. Det drejer sig om
-        cirka 8.000&ndash;10.000 bedrifter &ndash; ofte frugtplantager,
-        grøntsagsavlere og juletræsproducenter, der typisk bruger relativt meget
-        sprøjtegift per hektar. Denne indbyggede blinde vinkel i lovgivningen
-        betyder, at det samlede kemiske pres systematisk undervurderes.
+        cirka 8.000–10.000 bedrifter – ofte frugtplantager, grøntsagsavlere og
+        juletræsproducenter, der typisk bruger relativt meget sprøjtegift per
+        hektar. Denne indbyggede blinde vinkel i lovgivningen betyder, at det
+        samlede kemiske pres systematisk undervurderes.
       </p>
 
       <SubsectionHeader
