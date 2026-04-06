@@ -131,7 +131,55 @@ else
 fi
 echo ""
 
-# Step 5: Check for required Supabase environment variables
+# Step 5: Set up Backend Pipeline environment variables (Google Cloud secrets etc.)
+PIPELINES_DIR="$BACKEND_DIR/pipelines"
+PIPELINES_ENV_FILE="$PIPELINES_DIR/.env"
+PIPELINES_ENV_EXAMPLE="$PIPELINES_DIR/.env.example"
+
+if [ -n "$MAIN_REPO_ROOT" ] && [ "$MAIN_REPO_ROOT" != "$PROJECT_ROOT" ]; then
+    MAIN_PIPELINES_ENV="$MAIN_REPO_ROOT/backend/pipelines/.env"
+else
+    MAIN_PIPELINES_ENV=""
+fi
+
+echo "🔧 Setting up Pipeline environment (Google Cloud secrets etc.)..."
+if [ -L "$PIPELINES_ENV_FILE" ]; then
+    LINK_TARGET="$(readlink "$PIPELINES_ENV_FILE")"
+    echo "✅ Pipeline .env is already a symlink"
+    echo "   → $LINK_TARGET"
+elif [ -f "$PIPELINES_ENV_FILE" ]; then
+    echo "✅ Pipeline .env file already exists (regular file)"
+else
+    if [ -n "$MAIN_PIPELINES_ENV" ] && [ -f "$MAIN_PIPELINES_ENV" ]; then
+        ln -s "$MAIN_PIPELINES_ENV" "$PIPELINES_ENV_FILE"
+        echo "✅ Created symlink to main repository pipeline .env"
+        echo "   $PIPELINES_ENV_FILE → $MAIN_PIPELINES_ENV"
+    elif [ -f "$PIPELINES_ENV_EXAMPLE" ]; then
+        cp "$PIPELINES_ENV_EXAMPLE" "$PIPELINES_ENV_FILE"
+        echo "⚠️  Created pipeline .env from .env.example (template only)"
+        echo "   You'll need to add your Google Cloud credentials manually"
+    else
+        echo "⚠️  Warning: Neither main repo .env nor .env.example found for pipelines"
+    fi
+fi
+echo ""
+
+# Step 5b: Run direnv allow if .envrc exists and direnv is installed
+echo "🔧 Setting up direnv..."
+if command -v direnv &> /dev/null; then
+    if [ -f "$PROJECT_ROOT/.envrc" ]; then
+        cd "$PROJECT_ROOT"
+        direnv allow
+        echo "✅ direnv allow executed for $PROJECT_ROOT/.envrc"
+    else
+        echo "⚠️  No .envrc found at project root"
+    fi
+else
+    echo "⚠️  direnv not installed (install with: brew install direnv)"
+fi
+echo ""
+
+# Step 6: Check for required Supabase environment variables
 echo "🔐 Checking Supabase environment variables..."
 MISSING_VARS=()
 
@@ -171,7 +219,7 @@ else
     echo ""
 fi
 
-# Step 6: Verify .env files are gitignored
+# Step 7: Verify .env files are gitignored
 GITIGNORE_FILE="$PROJECT_ROOT/.gitignore"
 if [ -f "$GITIGNORE_FILE" ]; then
     if grep -q "\.env" "$GITIGNORE_FILE"; then
@@ -184,7 +232,7 @@ else
 fi
 echo ""
 
-# Step 7: Install oxlint if not present
+# Step 8: Install oxlint if not present
 echo "🔍 Checking oxlint installation..."
 cd "$FRONTEND_DIR"
 if npm list oxlint > /dev/null 2>&1; then
@@ -194,7 +242,7 @@ else
 fi
 echo ""
 
-# Step 8: Summary
+# Step 9: Summary
 echo "✨ Worktree setup complete!"
 echo ""
 echo "Next steps:"
