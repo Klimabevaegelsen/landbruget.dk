@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from zeep.helpers import serialize_object
 
 # Add backend directory to path BEFORE any common imports
@@ -35,7 +35,7 @@ except ImportError:
     METADATA_AVAILABLE = False
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Configure logging
 logger = logging.getLogger(__name__)

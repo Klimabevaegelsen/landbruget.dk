@@ -16,19 +16,12 @@ from datetime import datetime
 from pathlib import Path
 
 import click
-import dotenv
 from common.cli import PipelineRun, common_options
+from dotenv import find_dotenv, load_dotenv
 from loguru import logger
 
-# Load environment variables
-# Only load .env file if it exists (for local development)
-# In GitHub Actions, environment variables are set directly
-env_path = os.path.join(os.path.dirname(__file__), ".env")
-if os.path.exists(env_path):
-    dotenv.load_dotenv(env_path)
-    print(f"Loaded environment variables from {env_path}")
-else:
-    print("No .env file found, using environment variables directly")
+# Load environment variables (walks up to find root .env)
+load_dotenv(find_dotenv(usecwd=True))
 from common.secrets import init_secrets  # noqa: E402
 
 init_secrets()

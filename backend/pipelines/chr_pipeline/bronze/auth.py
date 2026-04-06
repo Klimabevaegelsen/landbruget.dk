@@ -3,26 +3,19 @@
 import base64
 import logging
 import os
-from pathlib import Path
 from typing import Any
 
 import certifi
 import requests
 from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from requests import Session
 from zeep import Client
 from zeep.transports import Transport
 from zeep.wsse.username import UsernameToken
 
-# Load environment variables
-load_dotenv()
-
-# Also try to load from the pipeline directory in case working directory is different
-pipeline_dir = Path(__file__).parent.parent
-env_path = pipeline_dir / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
+# Load environment variables (walks up to find root .env)
+load_dotenv(find_dotenv(usecwd=True))
 
 from common.secrets import init_secrets  # noqa: E402
 

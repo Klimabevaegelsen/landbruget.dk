@@ -5,7 +5,7 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from zeep import Client
 
 # Import cloud storage access for persistent storage
@@ -18,7 +18,7 @@ except ImportError:
     StorageAccess = None
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.volume_management")

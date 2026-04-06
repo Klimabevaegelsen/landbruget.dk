@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Import DateTimeEncoder for JSON serialization
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Configure logging
 logger = logging.getLogger(__name__)

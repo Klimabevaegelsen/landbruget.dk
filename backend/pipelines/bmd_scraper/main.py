@@ -9,16 +9,16 @@ import sys
 from pathlib import Path
 
 import click
-import dotenv
 from common.cli import PipelineRun, common_options, stage_options
 from common.logging_utils import setup_pipeline_logger
+from dotenv import find_dotenv, load_dotenv
 
 from bronze import BMDScraper
 from bronze.export import CloudStorage
 from silver import BMDTransformer, upload_to_storage
 
-# Load environment variables
-dotenv.load_dotenv()
+# Load environment variables (walks up to find root .env)
+load_dotenv(find_dotenv(usecwd=True))
 from common.secrets import init_secrets  # noqa: E402
 
 init_secrets()

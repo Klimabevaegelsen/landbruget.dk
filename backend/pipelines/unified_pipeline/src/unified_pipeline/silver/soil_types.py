@@ -22,12 +22,12 @@ from common.geometry_validator import (
 )
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
 USE_UTM_PROCESSING = True

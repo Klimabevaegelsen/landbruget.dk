@@ -8,7 +8,7 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from .animal_movements import load_animal_movements, load_cattle_movement_summaries
 from .auth import create_chr_dyr_client, get_fvm_credentials
@@ -23,7 +23,7 @@ except ImportError:
     StorageAccess = None
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_chr_dyr")

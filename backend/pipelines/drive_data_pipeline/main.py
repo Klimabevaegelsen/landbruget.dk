@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 import duckdb
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Add the parent directory to sys.path to enable imports
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,12 +42,8 @@ except ImportError as e:
     save_pipeline_cvr_numbers = None
     StorageAccess = None
 
-# Load .env file directly - check current directory first, then parent
-env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-if not os.path.exists(env_path):
-    # Try parent directory
-    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-load_dotenv(env_path)
+# Load environment variables (walks up to find root .env)
+load_dotenv(find_dotenv(usecwd=True))
 from common.secrets import init_secrets  # noqa: E402
 
 init_secrets()

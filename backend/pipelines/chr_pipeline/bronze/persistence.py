@@ -4,7 +4,7 @@ import logging
 import os
 from datetime import datetime
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Import cloud storage access for persistent storage
 try:
@@ -16,7 +16,7 @@ except ImportError:
     StorageAccess = None
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.persistence")

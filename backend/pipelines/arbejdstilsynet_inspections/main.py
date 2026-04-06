@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 from common.cli import PipelineRun, common_options, resolve_bucket, stage_options
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 import bronze.export
 import silver.transform
@@ -30,7 +30,7 @@ print("[DEBUG] DOCKER_ENV =", os.environ.get("DOCKER_ENV"))
 @common_options
 def main(stage, start_date, end_date, storage_bucket, log_level):
     """Run the Arbejdstilsynet Inspections pipeline."""
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     from common.secrets import init_secrets
 
     init_secrets()

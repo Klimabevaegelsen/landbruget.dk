@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import ijson  # Add this import for streaming JSON parsing
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Import the unified cloud storage access layer
 try:
@@ -35,7 +35,7 @@ class DateTimeEncoder(json.JSONEncoder):
 
 
 # Load environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True))
 
 # Configure logging
 logger = logging.getLogger(__name__)
