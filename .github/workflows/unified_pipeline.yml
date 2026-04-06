@@ -293,8 +293,10 @@ jobs:
           echo "✅ Cleanup completed"
 
   # Pesticide Processing Matrix Jobs - Combined disaggregation + proximity + drift exposure per year
+  # Needs run-pipeline to complete first because pesticide_proximity requires water_typology silver data
   pesticide-processing:
-    if: ${{ contains(fromJson('["all", "pesticide_disaggregation", "pesticide_drift_exposure"]'), github.event.inputs.source) }}
+    needs: [run-pipeline]
+    if: ${{ !cancelled() && contains(fromJson('["all", "pesticide_disaggregation", "pesticide_drift_exposure"]'), github.event.inputs.source) }}
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
