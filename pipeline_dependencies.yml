@@ -74,6 +74,7 @@ pipelines:
     description: "Building footprints (GeoDanmark + INSPIRE)"
     downstream:
       - pesticide_proximity
+      - pesticide_drift_exposure
       - generate_pmtiles
     paths:
       - backend/pipelines/bbr_buildings/**
@@ -155,6 +156,7 @@ pipelines:
       - bmd_scraper # silver/pesticides_{year}_{year+1}
     downstream:
       - pesticide_proximity
+      - pesticide_drift_exposure
       - pesticide_compliance
       - h3_pfas_analysis
     outputs:
@@ -202,6 +204,19 @@ pipelines:
     outputs:
       - gold/pesticide_proximity_{year}_{year+1}
 
+  pesticide_drift_exposure:
+    workflow: unified_pipeline.yml # runs as step after disaggregation (same job as proximity)
+    description: "Rautmann drift-weighted pesticide exposure per building (500m radius)"
+    upstream:
+      - pesticide_disaggregation # gold/pesticide_disaggregation_{Y}_{Y+1}
+      - unified_pipeline # silver/fvm_marker_{year+1}
+      - bbr_buildings_pipeline # silver/bbr_buildings
+    downstream:
+      - generate_pmtiles
+    outputs:
+      - gold/pesticide_drift_exposure_{year}_{year+1}
+    notes: "Tier 1: Rautmann power-law drift curves. Tier 2 (future): wind-direction weighting from WRF wind roses."
+
   pesticide_compliance:
     workflow: pesticide_compliance_matrix.yml
     description: "Regulatory violation detection"
@@ -244,6 +259,7 @@ pipelines:
       - field_area_analysis # gold/field_environmental_analysis_fields
       - field_production # gold/field_production
       - pesticide_proximity # gold/pesticide_proximity
+      - pesticide_drift_exposure # gold/pesticide_drift_exposure
       - h3_pfas_analysis # gold/h3_pfas_total, kommune_pfas_total
       - bbr_buildings_pipeline # silver/bbr_buildings
       - bmd_scraper # silver/bmd

@@ -21,6 +21,7 @@ on:
           - water_typology
           - grukos
           - pesticide_disaggregation
+          - pesticide_drift_exposure
           - pesticide_compliance
           - worker_safety
           - work_permits
@@ -249,6 +250,10 @@ jobs:
             # Pesticide disaggregation uses dedicated matrix jobs - skip main pipeline
             echo "Pesticide disaggregation detected - using dedicated matrix jobs instead"
             echo "Main pipeline job skipped for pesticide_disaggregation (matrix jobs handle this)"
+          elif [ "${{ matrix.source }}" = "pesticide_drift_exposure" ]; then
+            # Pesticide drift exposure runs as part of pesticide-processing matrix job
+            echo "Pesticide drift exposure detected - using dedicated matrix jobs instead"
+            echo "Main pipeline job skipped for pesticide_drift_exposure (matrix jobs handle this)"
           elif [ "${{ matrix.source }}" = "pesticide_compliance" ]; then
             # Pesticide compliance uses dedicated matrix jobs - skip main pipeline
             echo "Pesticide compliance detected - using dedicated matrix jobs instead"
@@ -287,9 +292,9 @@ jobs:
           du -sh /tmp 2>/dev/null || echo "N/A"
           echo "✅ Cleanup completed"
 
-  # Pesticide Processing Matrix Jobs - Combined disaggregation + proximity per year
+  # Pesticide Processing Matrix Jobs - Combined disaggregation + proximity + drift exposure per year
   pesticide-processing:
-    if: ${{ contains(fromJson('["all", "pesticide_disaggregation"]'), github.event.inputs.source) }}
+    if: ${{ contains(fromJson('["all", "pesticide_disaggregation", "pesticide_drift_exposure"]'), github.event.inputs.source) }}
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
@@ -403,7 +408,7 @@ jobs:
       - name: Run Pesticide Processing for ${{ matrix.year }}
         run: |
           cd backend/pipelines/unified_pipeline
-          echo "🧪 Processing pesticide disaggregation + proximity for year: ${{ matrix.year }}"
+          echo "🧪 Processing pesticide disaggregation + proximity + drift exposure for year: ${{ matrix.year }}"
           echo "📅 Pesticide year ${{ matrix.year }} uses field data from year $((${{ matrix.year }} + 1))"
 
           # Start resource monitoring
@@ -458,6 +463,20 @@ jobs:
             exit 1
           fi
 
+          # Step 3: Run drift exposure analysis (uses fresh disaggregation data)
+          echo "💨 Step 3: Running drift exposure analysis for year ${{ matrix.year }}"
+          echo "🏠 Computing Rautmann drift-weighted exposure per building (500m radius)"
+          echo "🚨 WORKFLOW: About to execute Python command for drift exposure"
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s pesticide_drift_exposure -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s pesticide_drift_exposure -j gold --pesticide-year ${{ matrix.year }}; then
+            echo "✅ Drift exposure analysis completed for year ${{ matrix.year }}"
+          else
+            DRIFT_EXIT_CODE=$?
+            echo "❌ Drift exposure analysis FAILED for year ${{ matrix.year }} with exit code $DRIFT_EXIT_CODE"
+            echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
+            exit 1
+          fi
+
           # Stop monitoring
           kill $MONITOR_PID 2>/dev/null || true
           echo "✅ Complete pesticide processing finished for year ${{ matrix.year }}"
@@ -469,6 +488,7 @@ jobs:
           sudo rm -rf /tmp/duckdb* || true
           sudo rm -rf /tmp/duckdb_field_analysis/* || true
           sudo rm -rf /tmp/proximity_data/* || true
+          sudo rm -rf /tmp/drift_data/* || true
           find /tmp -type f -size +100M -delete 2>/dev/null || true
           find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
           find . -type f -name "*.pyc" -delete 2>/dev/null || true
