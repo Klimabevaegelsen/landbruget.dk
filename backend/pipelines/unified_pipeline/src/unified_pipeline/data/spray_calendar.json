@@ -1,0 +1,49 @@
+{
+  "_description": "Monthly spray probability by crop group and pesticide type. Values sum to 1.0 per entry. Month keys are 1-12. Derived from Danish SEGES/BASF crop management guides, AHDB fungicide programmes, and Kudsk et al. (2018) PLI methodology. Winter cereal herbicides include autumn pre-emergence (Sep-Oct) and spring follow-up (Mar-May).",
+  "winter_wheat": {
+    "herbicide":        {"9": 0.15, "10": 0.20, "3": 0.15, "4": 0.35, "5": 0.15},
+    "fungicide":        {"5": 0.30, "6": 0.50, "7": 0.20},
+    "insecticide":      {"5": 0.20, "6": 0.50, "7": 0.30},
+    "growth_regulator": {"4": 0.50, "5": 0.50}
+  },
+  "winter_barley": {
+    "herbicide":        {"9": 0.20, "10": 0.20, "3": 0.15, "4": 0.35, "5": 0.10},
+    "fungicide":        {"5": 0.40, "6": 0.40, "7": 0.20},
+    "insecticide":      {"5": 0.30, "6": 0.40, "7": 0.30},
+    "growth_regulator": {"4": 0.50, "5": 0.50}
+  },
+  "spring_barley": {
+    "herbicide":        {"4": 0.40, "5": 0.50, "6": 0.10},
+    "fungicide":        {"6": 0.40, "7": 0.50, "8": 0.10},
+    "insecticide":      {"6": 0.30, "7": 0.50, "8": 0.20}
+  },
+  "winter_rapeseed": {
+    "herbicide":        {"9": 0.40, "10": 0.40, "3": 0.20},
+    "fungicide":        {"4": 0.30, "5": 0.50, "6": 0.20},
+    "insecticide":      {"4": 0.20, "5": 0.40, "6": 0.30, "7": 0.10}
+  },
+  "sugar_beet": {
+    "herbicide":        {"3": 0.10, "4": 0.30, "5": 0.40, "6": 0.20},
+    "fungicide":        {"6": 0.20, "7": 0.40, "8": 0.30, "9": 0.10},
+    "insecticide":      {"5": 0.20, "6": 0.40, "7": 0.30, "8": 0.10}
+  },
+  "potato": {
+    "herbicide":        {"4": 0.30, "5": 0.50, "6": 0.20},
+    "fungicide":        {"6": 0.20, "7": 0.40, "8": 0.30, "9": 0.10},
+    "insecticide":      {"6": 0.30, "7": 0.40, "8": 0.30}
+  },
+  "maize": {
+    "herbicide":        {"4": 0.20, "5": 0.50, "6": 0.30},
+    "insecticide":      {"6": 0.30, "7": 0.40, "8": 0.30}
+  },
+  "grass": {
+    "herbicide":        {"4": 0.40, "5": 0.40, "6": 0.20}
+  },
+  "_default": {
+    "herbicide":        {"3": 0.15, "4": 0.35, "5": 0.35, "6": 0.15},
+    "fungicide":        {"5": 0.20, "6": 0.35, "7": 0.30, "8": 0.15},
+    "insecticide":      {"5": 0.15, "6": 0.35, "7": 0.35, "8": 0.15},
+    "growth_regulator": {"4": 0.50, "5": 0.50},
+    "_default":         {"4": 0.20, "5": 0.30, "6": 0.30, "7": 0.20}
+  }
+}

@@ -50,12 +50,12 @@ When modifying or running any pipeline, always check downstream dependencies.
 ```
 unified_pipeline →
   field_area_analysis, field_production, pesticide_disaggregation
-  → pesticide_proximity, pesticide_compliance, h3_pfas_analysis
+  → pesticide_proximity, pesticide_drift_exposure, pesticide_compliance, h3_pfas_analysis
   → generate_pmtiles → pmtiles_cache_warmup
 
 bmd_scraper →
   pesticide_disaggregation
-  → pesticide_proximity, pesticide_compliance, h3_pfas_analysis
+  → pesticide_proximity, pesticide_drift_exposure, pesticide_compliance, h3_pfas_analysis
   → generate_pmtiles → pmtiles_cache_warmup
 
 drive_data_pipeline →
@@ -63,7 +63,7 @@ drive_data_pipeline →
   → generate_pmtiles → pmtiles_cache_warmup
 
 bbr_buildings_pipeline →
-  pesticide_proximity
+  pesticide_proximity, pesticide_drift_exposure
   → generate_pmtiles → pmtiles_cache_warmup
 
 chr_pipeline, svineflytning_pipeline, dma_scraper → (no downstream)

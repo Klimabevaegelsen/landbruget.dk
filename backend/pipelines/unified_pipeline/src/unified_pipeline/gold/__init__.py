@@ -10,6 +10,7 @@ from .nles5_nitrogen_estimation import (
     NLES5NitrogenEstimationGoldConfig,
 )
 from .pesticide_disaggregation import PesticideDisaggregationGold, PesticideDisaggregationGoldConfig
+from .pesticide_drift_exposure import PesticideDriftExposureGold, PesticideDriftExposureGoldConfig
 from .pesticide_proximity import PesticideProximityGold, PesticideProximityGoldConfig
 from .property_cadastral_merge import PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig
 from .work_permits import WorkPermitsGold, WorkPermitsGoldConfig
@@ -27,6 +28,8 @@ __all__ = [
     "NLES5NitrogenEstimationGoldConfig",
     "PesticideDisaggregationGold",
     "PesticideDisaggregationGoldConfig",
+    "PesticideDriftExposureGold",
+    "PesticideDriftExposureGoldConfig",
     "PesticideProximityGold",
     "PesticideProximityGoldConfig",
     "PropertyCadastralMergeGold",
