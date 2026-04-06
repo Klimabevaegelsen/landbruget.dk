@@ -62,12 +62,12 @@ def main():
 
     work_permits_path = find_latest(
         storage,
-        f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik_2025.parquet",
+        f"{BUCKET}/silver/work_permits/**/Landbrugsvisum_statistik_2025.parquet",
     )
     if not work_permits_path:
         work_permits_path = find_latest(
             storage,
-            f"{BUCKET}/silver/work permits/**/Landbrugsvisum_statistik.parquet",
+            f"{BUCKET}/silver/work_permits/**/Landbrugsvisum_statistik.parquet",
         )
     if not work_permits_path:
         log.error("No work permits files found")

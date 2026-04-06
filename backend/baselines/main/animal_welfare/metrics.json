@@ -1,6 +1,6 @@
 {
   "dataset_name": "animal_welfare",
-  "source_path": "gs://landbruget-data/silver/animal welfare/20260116_234019/Dyrevelfaerd_indsatsomraader.parquet",
+  "source_path": "gs://landbruget-data/silver/animal_welfare/20260116_234019/Dyrevelfaerd_indsatsomraader.parquet",
   "generated_at": "2026-01-17T11:15:16.158906",
   "record_count": 38248,
   "unique_identifiers": {},

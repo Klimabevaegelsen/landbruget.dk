@@ -1,6 +1,6 @@
 {
   "dataset_name": "animal_international_movements",
-  "source_path": "gs://landbruget-data/silver/animal international movements/20260116_234019/Dyr_udfoersel_2024_2025.parquet",
+  "source_path": "gs://landbruget-data/silver/animal_international_movements/20260116_234019/Dyr_udfoersel_2024_2025.parquet",
   "generated_at": "2026-01-17T11:15:17.447172",
   "record_count": 35433,
   "unique_identifiers": {},

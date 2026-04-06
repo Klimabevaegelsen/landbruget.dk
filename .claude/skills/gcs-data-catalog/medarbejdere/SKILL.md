@@ -1,13 +1,13 @@
 ---
-name: gcs-medarbejdere-data
+name: r2-medarbejdere-data
 description: |
-  Activates when querying employee and workplace safety data from GCS.
+  Activates when querying employee and workplace safety data from R2.
   Use this skill for: Arbejdstilsynet inspections, work permits, safety violations,
   workplace accidents, compliance rates, foreign workers, incident tracking.
   Keywords: medarbejdere, employees, worker, arbejdstilsynet, inspection, tilsyn, safety, arbejdsmiljø, accident, ulykke, compliance
 ---
 
-# GCS Medarbejdere (Employees) Data Catalog
+# R2 Medarbejdere (Employees) Data Catalog
 
 Employee and workplace safety data from regulatory inspections and incident reports.
 
@@ -26,7 +26,7 @@ Employee and workplace safety data from regulatory inspections and incident repo
 ### Gold Layer
 
 #### Arbejdstilsynet Inspections (536 rows)
-**Path**: `gs://$GCS_BUCKET/gold/arbejdstilsynet_inspections/*/data.parquet`
+**Path**: `r2://landbruget-data/gold/arbejdstilsynet_inspections/*/data.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -67,7 +67,7 @@ corrective_deadline: date32
 ### Silver Layer
 
 #### Work Permits
-**Path**: `gs://$GCS_BUCKET/silver/work permits/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/work permits/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -79,7 +79,7 @@ corrective_deadline: date32
 | worker_count | int | Number of workers |
 
 #### Worker Safety Reports
-**Path**: `gs://$GCS_BUCKET/silver/worker safety/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/worker safety/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -92,7 +92,7 @@ corrective_deadline: date32
 | activity_during | string | Activity at time |
 
 #### Stable Fires (Incidents)
-**Path**: `gs://$GCS_BUCKET/silver/stable fires/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/stable fires/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -104,7 +104,7 @@ corrective_deadline: date32
 | damage_estimate_dkk | float | Estimated damage |
 
 #### Transport Accidents
-**Path**: `gs://$GCS_BUCKET/silver/transportation accidents/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/transportation accidents/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -118,7 +118,7 @@ corrective_deadline: date32
 ### Bronze Layer
 
 #### DMA Permits
-**Path**: `gs://$GCS_BUCKET/bronze/dma/*/data.parquet`
+**Path**: `r2://landbruget-data/bronze/dma/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -133,19 +133,16 @@ corrective_deadline: date32
 
 ### Get Inspection History for CVR
 ```python
-import pyarrow.parquet as pq
-from google.cloud import storage
-import io
+import duckdb
+from common.storage.filesystem import setup_duckdb_cloud_auth
 
-client = storage.Client()
-bucket = client.bucket('$GCS_BUCKET')
+conn = duckdb.connect()
+setup_duckdb_cloud_auth(conn)
 
 # Read arbejdstilsynet inspections
-blob = bucket.blob('gold/arbejdstilsynet_inspections/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-df = pq.read_table(buffer).to_pandas()
+df = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/gold/arbejdstilsynet_inspections/2025-01-10/data.parquet')
+""").df()
 
 # Filter by CVR
 cvr = '31373077'
@@ -235,11 +232,9 @@ municipal_fines = inspections_with_geo.groupby('municipality').agg({
 ### Foreign Worker Analysis
 ```python
 # Read work permits
-blob = bucket.blob('silver/work permits/2025-01-10/data.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-permits = pq.read_table(buffer).to_pandas()
+permits = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/work permits/2025-01-10/data.parquet')
+""").df()
 
 # Count by nationality
 nationality_counts = permits.groupby('nationality').agg({
@@ -319,24 +314,24 @@ The `company_compliance_rate` field (0-1 scale):
 - **miljo/** - Environmental compliance (related violations)
 - **husdyr/** - Livestock operations (animal handling safety)
 
-## GCS Paths Reference
+## R2 Paths Reference
 
 ```bash
 # List arbejdstilsynet inspection data
-gsutil ls gs://$GCS_BUCKET/gold/arbejdstilsynet_inspections/
+rclone lsd r2:landbruget-data/gold/arbejdstilsynet_inspections/
 
 # List work permit data
-gsutil ls gs://$GCS_BUCKET/silver/work\ permits/
+rclone ls r2:landbruget-data/silver/work\ permits/
 
 # List worker safety data
-gsutil ls gs://$GCS_BUCKET/silver/worker\ safety/
+rclone ls r2:landbruget-data/silver/worker\ safety/
 
 # List incident data
-gsutil ls gs://$GCS_BUCKET/silver/stable\ fires/
-gsutil ls gs://$GCS_BUCKET/silver/transportation\ accidents/
+rclone ls r2:landbruget-data/silver/stable\ fires/
+rclone ls r2:landbruget-data/silver/transportation\ accidents/
 
 # List DMA permit data
-gsutil ls gs://$GCS_BUCKET/bronze/dma/
+rclone lsd r2:landbruget-data/bronze/dma/
 ```
 
 ## Agricultural-Specific Safety Concerns

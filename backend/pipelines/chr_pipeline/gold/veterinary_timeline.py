@@ -772,16 +772,16 @@ def load_data_sources(storage_access: StorageAccess) -> dict[str, bool]:
         ("chr_properties", "silver/chr/*/properties*.parquet"),
         (
             "animal_welfare",
-            "silver/animal welfare/*/Dyrevelfaerd_indsatsomraader*.parquet",
+            "silver/animal_welfare/*/Dyrevelfaerd_indsatsomraader*.parquet",
         ),  # Main intervention data (CHR-level)
-        ("pig_tail_cutting", "silver/pig tail cutting/*/*.parquet"),
+        ("pig_tail_cutting", "silver/pig_tail_cutting/*/*.parquet"),
         ("property_vet_events", "silver/chr/*/property_vet*.parquet"),
         ("spf_su_herds", "silver/chr/*/spf_su_herds*.parquet"),
         (
             "spf_su_salmonella",
             "silver/chr/*/spf_su_salmonella_data*.parquet",
         ),  # Additional detailed SPF-SU salmonella data
-        ("stable_fires", "silver/stable fires/*/*.parquet"),
+        ("stable_fires", "silver/stable_fires/*/*.parquet"),
     ]
 
     for table_name, pattern in data_source_patterns:

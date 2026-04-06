@@ -49,28 +49,28 @@ def load_transportation_data_sources(storage_access) -> dict[str, bool]:
         # International animal movements (cattle traces)
         (
             "intl_cattle_traces_cl",
-            "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_cl*.parquet",
+            "silver/animal_international_movements/*/Kvaeg_udfoersel_2017_2024_cl*.parquet",
         ),
         (
             "intl_cattle_traces_nt",
-            "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_nt*.parquet",
+            "silver/animal_international_movements/*/Kvaeg_udfoersel_2017_2024_nt*.parquet",
         ),
         (
             "intl_combined_traces_2024_2025",
-            "silver/animal international movements/*/Dyr_udfoersel_2024_2025*.parquet",
+            "silver/animal_international_movements/*/Dyr_udfoersel_2024_2025*.parquet",
         ),
         # International pig movements
         (
             "intl_pig_cl",
-            "silver/pig international movements/*/Grise_udfoersel_2017_2024_cl*.parquet",
+            "silver/pig_international_movements/*/Grise_udfoersel_2017_2024_cl*.parquet",
         ),
         (
             "intl_pig_nt",
-            "silver/pig international movements/*/Grise_udfoersel_2017_2024_nt*.parquet",
+            "silver/pig_international_movements/*/Grise_udfoersel_2017_2024_nt*.parquet",
         ),
         (
             "intl_pig_2024_2025",
-            "silver/pig international movements/*/Dyr_udfoersel_2024_2025*.parquet",
+            "silver/pig_international_movements/*/Dyr_udfoersel_2024_2025*.parquet",
         ),
     ]
 

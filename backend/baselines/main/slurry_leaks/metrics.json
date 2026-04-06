@@ -1,6 +1,6 @@
 {
   "dataset_name": "slurry_leaks",
-  "source_path": "gs://landbruget-data/silver/slurry leaks/20260116_234019/Gylleudslip.2021_2023.parquet",
+  "source_path": "gs://landbruget-data/silver/slurry_leaks/20260116_234019/Gylleudslip.2021_2023.parquet",
   "generated_at": "2026-01-17T11:15:27.893485",
   "record_count": 49,
   "unique_identifiers": {},

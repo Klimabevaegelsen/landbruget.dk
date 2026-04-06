@@ -1,13 +1,13 @@
 ---
-name: gcs-husdyr-data
+name: r2-husdyr-data
 description: |
-  Activates when querying livestock and animal data from GCS.
+  Activates when querying livestock and animal data from R2.
   Use this skill for: CHR registry, pig movements, animal welfare, antibiotics,
   animal density, mortality rates, herd tracking, svineflytning.
   Keywords: husdyr, livestock, animal, dyr, CHR, svin, pig, ko, cattle, antibiotika, dyrevelfærd, flytning, movement
 ---
 
-# GCS Husdyr (Livestock) Data Catalog
+# R2 Husdyr (Livestock) Data Catalog
 
 Livestock data including animal movements, welfare inspections, and herd tracking.
 
@@ -34,7 +34,7 @@ Livestock data including animal movements, welfare inspections, and herd trackin
 ### Silver Layer
 
 #### Svineflytning Movements (1.27M rows)
-**Path**: `gs://$GCS_BUCKET/silver/svineflytning/*/movements.parquet`
+**Path**: `r2://landbruget-data/silver/svineflytning/*/movements.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -79,7 +79,7 @@ vehicle_registration: string
 ```
 
 #### Animal Welfare Inspections
-**Path**: `gs://$GCS_BUCKET/silver/animal welfare/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/animal welfare/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -92,7 +92,7 @@ vehicle_registration: string
 | follow_up_required | bool | Follow-up needed |
 
 #### Animal Mortality
-**Path**: `gs://$GCS_BUCKET/silver/animal mortality/*/data.parquet`
+**Path**: `r2://landbruget-data/silver/animal mortality/*/data.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -106,7 +106,7 @@ vehicle_registration: string
 ### Bronze Layer
 
 #### CHR Movement Summaries (124K rows)
-**Path**: `gs://$GCS_BUCKET/bronze/chr/*/chr_dyr_movement_summaries.parquet`
+**Path**: `r2://landbruget-data/bronze/chr/*/chr_dyr_movement_summaries.parquet`
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
@@ -135,7 +135,7 @@ animal_count: int64
 ```
 
 #### Antibiotic Usage
-**Path**: `gs://$GCS_BUCKET/bronze/vetstat/*/antibiotic_usage.parquet`
+**Path**: `r2://landbruget-data/bronze/vetstat/*/antibiotic_usage.parquet`
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -150,19 +150,16 @@ animal_count: int64
 
 ### Track Pig Movements for a CHR
 ```python
-import pyarrow.parquet as pq
-from google.cloud import storage
-import io
+import duckdb
+from common.storage.filesystem import setup_duckdb_cloud_auth
 
-client = storage.Client()
-bucket = client.bucket('$GCS_BUCKET')
+conn = duckdb.connect()
+setup_duckdb_cloud_auth(conn)
 
 # Read svineflytning movements
-blob = bucket.blob('silver/svineflytning/2025-01-10/movements.parquet')
-buffer = io.BytesIO()
-blob.download_to_file(buffer)
-buffer.seek(0)
-df = pq.read_table(buffer).to_pandas()
+df = conn.execute("""
+    SELECT * FROM read_parquet('r2://landbruget-data/silver/svineflytning/2025-01-10/movements.parquet')
+""").df()
 
 chr_number = 123456
 
@@ -321,20 +318,20 @@ def trace_contacts(chr_number, df, days_back=21):
 - **okonomi/** - Subsidies related to animal production
 - **medarbejdere/** - Agricultural worker data for livestock operations
 
-## GCS Paths Reference
+## R2 Paths Reference
 
 ```bash
 # List svineflytning snapshots
-gsutil ls gs://$GCS_BUCKET/silver/svineflytning/
+rclone lsd r2:landbruget-data/silver/svineflytning/
 
 # List CHR data
-gsutil ls gs://$GCS_BUCKET/bronze/chr/
+rclone lsd r2:landbruget-data/bronze/chr/
 
 # List animal welfare data
-gsutil ls gs://$GCS_BUCKET/silver/animal\ welfare/
+rclone ls r2:landbruget-data/silver/animal\ welfare/
 
 # List animal mortality data
-gsutil ls gs://$GCS_BUCKET/silver/animal\ mortality/
+rclone ls r2:landbruget-data/silver/animal\ mortality/
 ```
 
 ## Note on CHR vs CVR

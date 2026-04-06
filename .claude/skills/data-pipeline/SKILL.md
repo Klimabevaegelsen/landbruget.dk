@@ -58,7 +58,7 @@ This eliminates unnecessary transforms:
 
 ### Bronze Layer (Raw Data)
 - **Purpose**: Preserve data exactly as received
-- **Location**: `gs://landbruget-data/bronze/<source>/<date>/`
+- **Location**: `r2://landbruget-data/bronze/<source>/<date>/`
 - **CRS**: Keep native (usually EPSG:25832 from Danish WFS sources)
 - **Rules**:
   - Never modify raw data or geometry
@@ -157,63 +157,49 @@ buffer_sql = sql_buffer_meters("geometry", 100)  # 100 meters
 intersect_sql = sql_intersects_with_buffer_meters("a.geom", "b.geom", 1000)  # 1km
 ```
 
-## GCS Operations
+## Cloud Storage Operations (R2)
 
-**Bucket**: Set via `GCS_BUCKET` environment variable (see `.env`)
+**Bucket**: `landbruget-data` (set via `R2_BUCKET` or `STORAGE_BUCKET` env var)
 
-### Upload to GCS with DuckDB
-```python
-import os
-from google.cloud import storage
-import duckdb
-import io
+### Browse R2 with rclone
+```bash
+# List datasets in a layer
+rclone lsd r2:landbruget-data/silver/
 
-def upload_to_gcs_duckdb(query: str, gcs_path: str, bucket_name: str = None):
-    """Query with DuckDB and upload directly to GCS."""
-    bucket_name = bucket_name or os.environ.get('GCS_BUCKET')
+# List snapshots for a dataset
+rclone lsd r2:landbruget-data/silver/subsidies/
 
-    # Execute query and get result
-    result = duckdb.query(query)
-
-    # Export to parquet buffer
-    buffer = io.BytesIO()
-    result.write_parquet(buffer)
-    buffer.seek(0)
-
-    # Upload to GCS
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(gcs_path)
-    blob.upload_from_file(buffer, content_type='application/octet-stream')
-
-# Example usage
-upload_to_gcs_duckdb(
-    "SELECT * FROM 'input.csv' WHERE cvr_number ~ '^\\d{8}$'",
-    "silver/cleaned_data.parquet"
-)
+# List files
+rclone ls r2:landbruget-data/silver/subsidies/
 ```
 
-### Query Files Directly from GCS with DuckDB
+### Read/Write with StorageAccess
 ```python
-import os
+from common.storage.core import StorageAccess
+
+storage = StorageAccess()
+
+# Read parquet into DuckDB table
+storage.create_table_from_storage_parquet("my_table", "landbruget-data/silver/subsidies/*/data.parquet")
+
+# Write DuckDB table to R2
+storage.save_table_to_storage_parquet("my_table", "landbruget-data/gold/output/data.parquet")
+```
+
+### Query R2 Directly with DuckDB
+```python
 import duckdb
+from common.storage.filesystem import setup_duckdb_cloud_auth
 
-# Install and load httpfs extension
-duckdb.execute("INSTALL httpfs")
-duckdb.execute("LOAD httpfs")
+conn = duckdb.connect()
+setup_duckdb_cloud_auth(conn)
 
-bucket = os.environ.get('GCS_BUCKET')
-
-# Query parquet directly from GCS
-result = duckdb.query(f"""
+# Query parquet directly from R2
+result = conn.execute("""
     SELECT cvr_number, SUM(area_ha) as total_area
-    FROM 'gs://{bucket}/silver/fields.parquet'
+    FROM read_parquet('r2://landbruget-data/silver/fields/*/data.parquet')
     GROUP BY cvr_number
-""").df()
-
-# For authenticated access, set credentials first
-duckdb.execute(f"SET gcs_access_key_id='{key_id}'")
-duckdb.execute(f"SET gcs_secret_access_key='{secret}'")
+""").fetchdf()
 ```
 
 ## Running Pipelines

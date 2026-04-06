@@ -2,7 +2,7 @@
   "scripts": {
     "setup": "./scripts/setup-worktree.sh",
     "test": "cd frontend && npm test",
-    "test:backend": "cd backend && python -m pytest",
+    "test:backend": "uv run pytest backend/",
     "dev": "cd frontend && npm run dev",
     "lint": "cd frontend && npm run lint",
     "format": "cd frontend && npm run format"
