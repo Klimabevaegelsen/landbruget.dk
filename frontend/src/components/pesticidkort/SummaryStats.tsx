@@ -2,10 +2,11 @@
 
 import { cn } from '@/lib/utils';
 import { useCountUp } from '@/components/pesticidkort/useCountUp';
+import { formatBurden } from '@/components/pesticidkort/field-utils';
 
 interface SummaryStatsProps {
   fieldsCount: number;
-  pfasFieldsCount: number;
+  avgBurden: number;
   nearestFieldM: number;
 }
 
@@ -18,11 +19,10 @@ function formatDistance(meters: number): string {
 
 export function SummaryStats({
   fieldsCount,
-  pfasFieldsCount,
+  avgBurden,
   nearestFieldM,
 }: SummaryStatsProps) {
   const fieldsCountDisplay = useCountUp(fieldsCount);
-  const pfasFieldsCountDisplay = useCountUp(pfasFieldsCount);
   const nearestFieldDisplay = useCountUp(nearestFieldM);
 
   return (
@@ -43,26 +43,33 @@ export function SummaryStats({
       <div
         className={cn(
           'rounded-lg px-3 py-2 -mx-3 -my-2',
-          pfasFieldsCount > 0 && 'bg-warning/8'
+          avgBurden >= 8 && 'bg-destructive/8',
+          avgBurden >= 4 && avgBurden < 8 && 'bg-warning/8'
         )}
       >
         <span
           className={cn(
             'text-3xl font-bold tabular-nums',
-            pfasFieldsCount > 0 ? 'text-warning' : 'text-foreground'
+            avgBurden >= 8
+              ? 'text-destructive'
+              : avgBurden >= 4
+                ? 'text-warning'
+                : 'text-foreground'
           )}
         >
-          {Math.round(pfasFieldsCountDisplay)}
+          {formatBurden(avgBurden)}
         </span>
         <p
           className={cn(
             'mt-0.5 text-xs',
-            pfasFieldsCount > 0
-              ? 'text-warning/80 font-medium'
-              : 'text-muted-foreground'
+            avgBurden >= 8
+              ? 'text-destructive/80 font-medium'
+              : avgBurden >= 4
+                ? 'text-warning/80 font-medium'
+                : 'text-muted-foreground'
           )}
         >
-          bruger PFAS-stoffer
+          gns. belastning
         </p>
       </div>
 

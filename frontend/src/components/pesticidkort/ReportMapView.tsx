@@ -5,16 +5,13 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { PersonalReport } from '@/components/pesticidkort/PersonalReport';
 import { useBurdenHistogram } from '@/components/pesticidkort/useBurdenHistogram';
+import { useReportBuilder } from '@/components/pesticidkort/useReportBuilder';
 import { BottomSheet } from '@/components/pesticidkort/BottomSheet';
+import { DesktopSidebar } from '@/components/pesticidkort/DesktopSidebar';
 import { ReportHeader } from '@/components/pesticidkort/ReportHeader';
+import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
 import { StoryMode } from '@/components/pesticidkort/StoryMode';
-import { ReportSkeleton } from '@/components/pesticidkort/ReportSkeleton';
-import { ReportControls } from '@/components/pesticidkort/ReportControls';
-import { buildReport } from '@/components/pesticidkort/build-report';
-import type {
-  PesticideReport,
-  NearbyFieldSummary,
-} from '@/components/pesticidkort/types';
+import { ModeToggle } from '@/components/pesticidkort/ModeToggle';
 
 const PesticidkortMap = dynamic(
   () =>
@@ -53,7 +50,6 @@ export function ReportMapView({
   onYearChange,
   onBack,
 }: ReportMapViewProps) {
-  const [report, setReport] = useState<PesticideReport | null>(null);
   const [selectedField, setSelectedField] = useState<string | null>(null);
   const [showStory, setShowStory] = useState(false);
   const [sheetState, setSheetState] = useState<'peek' | 'half' | 'full'>(
@@ -61,12 +57,22 @@ export function ReportMapView({
   );
   const router = useRouter();
   const histogram = useBurdenHistogram(year);
+  const { report, handleFieldsLoaded } = useReportBuilder({
+    address,
+    lat,
+    lng,
+    radiusM,
+    year,
+  });
 
-  const handleFieldsLoaded = useCallback(
-    (fields: NearbyFieldSummary[]) =>
-      setReport(buildReport(fields, address, lat, lng, radiusM, year)),
-    [address, lat, lng, radiusM, year]
+  const handleMapFieldClick = useCallback(
+    (fieldUuid: string) => {
+      setSelectedField(fieldUuid);
+      if (sheetState === 'peek') setSheetState('half');
+    },
+    [sheetState]
   );
+
   const handleModeChange = useCallback(
     (m: 'citizen' | 'expert') => {
       if (m === 'expert') router.push(`/markanalyse?lat=${lat}&lng=${lng}`);
@@ -78,19 +84,29 @@ export function ReportMapView({
     <PersonalReport
       report={report}
       histogram={histogram}
+      selectedFieldUuid={selectedField}
       onFieldSelect={setSelectedField}
       onOpenStory={() => setShowStory(true)}
     />
   ) : (
-    <ReportSkeleton />
+    <div
+      aria-live="polite"
+      className="animate-fade-slide-up space-y-4 px-5 py-5 motion-reduce:animate-none"
+    >
+      <p className="text-muted-foreground text-sm">
+        Analyserer marker nær din adresse...
+      </p>
+      {['h-20', 'h-12', 'h-24'].map((h) => (
+        <div key={h} className={`bg-muted ${h} animate-pulse rounded-xl`} />
+      ))}
+    </div>
   );
+
   const controls = (
-    <ReportControls
-      mode="citizen"
-      onModeChange={handleModeChange}
-      year={year}
-      onYearChange={onYearChange}
-    />
+    <div className="bg-background/95 border-border border-t px-5 py-3 backdrop-blur-sm">
+      <ModeToggle mode="citizen" onChange={handleModeChange} />
+      <YearTimeline year={year} onChange={onYearChange} compact />
+    </div>
   );
 
   return (
@@ -103,27 +119,19 @@ export function ReportMapView({
           year={year}
           selectedFieldUuid={selectedField}
           onFieldsLoaded={handleFieldsLoaded}
+          onFieldClick={handleMapFieldClick}
         />
       </div>
       <ReportHeader address={address} year={year} onBack={onBack} />
+
       <div className="md:hidden">
         <BottomSheet state={sheetState} onStateChange={setSheetState}>
           {reportContent}
           {controls}
         </BottomSheet>
       </div>
-      <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-[420px] md:block">
-        <div className="bg-background/95 pointer-events-auto flex h-full flex-col border-r pt-14 backdrop-blur-sm">
-          <div
-            className="flex-1 overflow-y-auto"
-            role="region"
-            aria-label="Pesticidrapport"
-          >
-            {reportContent}
-          </div>
-          {controls}
-        </div>
-      </div>
+
+      <DesktopSidebar controls={controls}>{reportContent}</DesktopSidebar>
       {showStory && report && (
         <StoryMode report={report} onClose={() => setShowStory(false)} />
       )}

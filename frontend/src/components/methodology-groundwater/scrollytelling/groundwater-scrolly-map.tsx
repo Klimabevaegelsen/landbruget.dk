@@ -48,18 +48,27 @@ export function GroundwaterScrollyMap({
 
   const handleLoad = useCallback(() => setReady(true), []);
 
+  const isMobile = useMemo(
+    () => typeof window !== 'undefined' && window.innerWidth < 1024,
+    []
+  );
+
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
+    map.stop();
     const v = VIEWS[step];
     const overrides = FLY_TO_OVERRIDES[step];
+    const dur = isMobile
+      ? (overrides?.duration ?? 1600) * 0.5
+      : (overrides?.duration ?? 1600);
     map.flyTo({
       center: [v.lng, v.lat],
       zoom: v.zoom,
       pitch: v.pitch ?? 0,
       bearing: v.bearing ?? 0,
-      duration: overrides?.duration ?? 1600,
+      duration: dur,
       essential: true,
       curve: overrides?.curve ?? 1.2,
     });
@@ -68,7 +77,7 @@ export function GroundwaterScrollyMap({
     } else {
       map.dragRotate.disable();
     }
-  }, [step, ready]);
+  }, [step, ready, isMobile]);
 
   return (
     <Map

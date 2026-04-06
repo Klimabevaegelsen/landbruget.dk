@@ -73,18 +73,7 @@ export function computePesticideScore(
 
   for (const field of fields) {
     const distanceFraction = Math.max(0, 1 - field.distance_m / radius_m);
-    let fieldBurden = field.total_pesticide_belastning * distanceFraction;
-
-    if (field.pfas_applications > 0) {
-      fieldBurden *= 1.5;
-    }
-    if (
-      field.pfas_applications > 0 &&
-      field.bnbo_area_hectares &&
-      field.bnbo_area_hectares > 0
-    ) {
-      fieldBurden *= 1.3;
-    }
+    const fieldBurden = field.total_pesticide_belastning * distanceFraction;
 
     totalWeightedBurden += fieldBurden;
     totalWeight += distanceFraction;

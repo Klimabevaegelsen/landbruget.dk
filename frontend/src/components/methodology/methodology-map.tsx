@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import Map, { Source, Layer, type MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
@@ -51,20 +51,27 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     setTimeout(() => setReady(true), 5000);
   }, [pmtilesUrl]);
 
+  const isMobile = useMemo(
+    () => typeof window !== 'undefined' && window.innerWidth < 1024,
+    []
+  );
+
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
+    map.stop();
     const v = VIEWS[step];
+    const dur = (ms: number) => (isMobile ? ms * 0.5 : ms);
     if (v.bounds) {
-      map.fitBounds(v.bounds, { padding: 60, duration: 1600 });
+      map.fitBounds(v.bounds, { padding: 60, duration: dur(1600) });
     } else {
       map.flyTo({
         center: [v.lng, v.lat],
         zoom: v.zoom,
         pitch: v.pitch ?? 0,
         bearing: v.bearing ?? 0,
-        duration: step === 'scale' ? 2000 : 1600,
+        duration: dur(step === 'scale' ? 2000 : 1600),
         essential: true,
         curve: 1.2,
       });
@@ -74,7 +81,7 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     } catch (err) {
       console.warn('[MethodologyMap] Paint update failed:', err);
     }
-  }, [step, ready]);
+  }, [step, ready, isMobile]);
 
   if (!pmtilesUrl) {
     return (

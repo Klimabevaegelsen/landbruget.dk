@@ -7,8 +7,6 @@ import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import {
   getCropEmoji,
   formatBurden,
-  parseProductString,
-  formatProduct,
 } from '@/components/pesticidkort/field-utils';
 import {
   BurdenScale,
@@ -22,32 +20,34 @@ import {
 interface FieldCardProps {
   field: NearbyFieldSummary;
   histogram: HistogramBin[];
+  isSelected?: boolean;
   onSelect?: () => void;
 }
 
-export function FieldCard({ field, histogram, onSelect }: FieldCardProps) {
+export function FieldCard({
+  field,
+  histogram,
+  isSelected,
+  onSelect,
+}: FieldCardProps) {
   const [expanded, setExpanded] = useState(false);
   const burden = field.total_pesticide_belastning;
   const hasPfas = field.pfas_applications > 0;
   const isZeroBurden = burden === 0;
   const hasProducts =
-    field.other_products_detail || field.glyphosate_products_detail;
-
-  const pfasSummary =
-    hasPfas && field.pfas_products_detail
-      ? parseProductString(field.pfas_products_detail)
-          .slice(0, 1)
-          .map(formatProduct)
-          .join('')
-      : null;
+    field.pfas_products_detail ||
+    field.diquat_products_detail ||
+    field.glyphosate_products_detail ||
+    field.other_products_detail;
 
   return (
     <div
+      id={field.field_uuid}
       data-testid={`field-card-${field.field_uuid}`}
       className={cn(
         'bg-card mb-2 rounded-xl px-4 py-3 transition-all duration-200 hover:shadow-sm hover:-translate-y-0.5',
-        hasPfas && 'ring-warning/30 ring-1',
-        !hasPfas && burden >= 6 && 'ring-destructive/20 ring-1'
+        isSelected && 'ring-primary ring-2',
+        field.is_organic && !isSelected && 'border-success/40 border-l-2'
       )}
     >
       <button
@@ -58,11 +58,6 @@ export function FieldCard({ field, histogram, onSelect }: FieldCardProps) {
         <div className="flex items-center gap-2 text-sm">
           <span>{getCropEmoji(field.crop_name)}</span>
           <span className="text-foreground font-medium">{field.crop_name}</span>
-          {field.is_organic && (
-            <span className="bg-success/10 text-success rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium">
-              Øko
-            </span>
-          )}
           {hasPfas && (
             <span className="bg-warning/10 text-warning rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium">
               PFAS
@@ -84,10 +79,6 @@ export function FieldCard({ field, histogram, onSelect }: FieldCardProps) {
           </div>
         )}
       </button>
-
-      {pfasSummary && (
-        <p className="text-warning mt-2 text-xs">{pfasSummary}</p>
-      )}
 
       <FieldProximity field={field} />
 

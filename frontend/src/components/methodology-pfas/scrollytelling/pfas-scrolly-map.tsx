@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+
 import Map, { Marker, type MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
@@ -57,20 +58,26 @@ export function PfasScrollyMap({ step }: PfasScrollyMapProps) {
 
   useZoomLoop(mapRef, step === 'spoergsmaalet' && ready);
 
+  const isMobile = useMemo(
+    () => typeof window !== 'undefined' && window.innerWidth < 1024,
+    []
+  );
+
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
     if (step === 'spoergsmaalet') return;
+    map.stop();
     const v = VIEWS[step];
     map.flyTo({
       center: [v.lng, v.lat],
       zoom: v.zoom,
-      duration: 1600,
+      duration: isMobile ? 800 : 1600,
       essential: true,
       curve: 1.2,
     });
-  }, [step, ready]);
+  }, [step, ready, isMobile]);
 
   const isPrimaryWell = (dgu: string) => dgu === SKRYDSTRUP_WELL.dgu;
 
