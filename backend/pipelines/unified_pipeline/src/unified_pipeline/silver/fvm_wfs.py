@@ -1287,6 +1287,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     self.config.bucket,
                     "silver",
                     conn=self.conn,
+                    crs="EPSG:25832" if USE_UTM_PROCESSING else None,
                 )
 
             except Exception as e:
@@ -1502,6 +1503,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         self.config.bucket,
                         "silver",
                         conn=self.conn,
+                        crs="EPSG:25832" if USE_UTM_PROCESSING else None,
                     )
 
                     # Clean up temporary tables
@@ -2064,6 +2066,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     self.config.bucket,
                     "silver",
                     conn=self.conn,
+                    crs="EPSG:25832" if USE_UTM_PROCESSING else None,
                 )
 
             # Clean up temporary table
@@ -2289,6 +2292,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             self.config.bucket,
                             "silver",
                             conn=self.conn,
+                            crs="EPSG:25832" if USE_UTM_PROCESSING else None,
                         )
 
                         # Clean up temporary tables

@@ -254,6 +254,7 @@ class BaseSource(Generic[T], ABC):
         conn: Any = None,
         filename: str | None = None,
         source_datasets: list | None = None,  # For gold layer lineage
+        crs: str | None = None,
     ) -> str:
         """
         Enhanced save method with pipeline metadata for data tracing.
@@ -271,6 +272,7 @@ class BaseSource(Generic[T], ABC):
             conn: Optional DuckDB connection (deprecated - uses shared connection)
             filename: Optional filename override
             source_datasets: For gold datasets, list of source dataset keys
+            crs: Optional EPSG code for geometry columns (e.g. "EPSG:25832").
 
         Returns:
             str: Path where the data was saved
@@ -284,6 +286,7 @@ class BaseSource(Generic[T], ABC):
             subdataset=subdataset,
             conn=conn,
             filename=filename,
+            crs=crs,
         )
 
         # Create and save pipeline metadata if available
@@ -641,6 +644,7 @@ class BaseSource(Generic[T], ABC):
         subdataset: str | None = None,
         conn: Any = None,
         filename: str | None = None,
+        crs: str | None = None,
     ) -> None:
         """
         Save data using unified cloud storage access layer.
@@ -655,6 +659,8 @@ class BaseSource(Generic[T], ABC):
             stage: Pipeline stage (bronze/silver/gold)
             subdataset: Optional subdataset name for multi-table outputs
             conn: Optional DuckDB connection (deprecated - uses shared connection)
+            crs: Optional EPSG code for geometry columns (e.g. "EPSG:25832").
+                 Patches GeoParquet metadata since DuckDB cannot write CRS.
         """
         valid_stages = ["bronze", "silver", "gold"]
         if stage not in valid_stages:
@@ -686,7 +692,10 @@ class BaseSource(Generic[T], ABC):
             # ✅ MIGRATION: Save to cloud storage using optimized unified access
             storage_path = f"{bucket}/{path}"
             if isinstance(data, str):  # Table name
-                self.storage.upload_from_duckdb_table(data, storage_path)
+                upload_opts = {}
+                if crs:
+                    upload_opts["crs"] = crs
+                self.storage.upload_from_duckdb_table(data, storage_path, **upload_opts)
             elif isinstance(data, dict | list):  # JSON data
                 self.storage.upload_json(data, storage_path)
             else:
