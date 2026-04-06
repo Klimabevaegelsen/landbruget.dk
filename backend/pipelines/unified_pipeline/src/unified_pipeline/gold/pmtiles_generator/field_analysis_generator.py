@@ -161,7 +161,7 @@ class FieldAnalysisPMTilesGenerator:
             "block_id as markblok_id",  # Frontend expects markblok_id
             "cvr_number",
             "year as field_year",  # Frontend expects field_year
-            "area_ha * 100 as area_hectares",  # Convert ha to hectares for frontend
+            "area_ha as area_hectares",
             "crop_name",
             # Removed crop_code - not used by frontend and might be source of "00"/"000" display
             "is_organic",

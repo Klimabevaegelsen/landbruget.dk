@@ -636,15 +636,23 @@ class PMTilesDataLoader:
                         WHERE DosageUnit IN ('3', 'tablet', 'tabletter')
                     ) as pesticides_tablets_detail,
 
-                    -- BMD burden calculations for visualization (from BMD risk data)
-                    SUM(COALESCE(samlet_belastning, 0)) as total_pesticide_belastning,
-                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true
-                        THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_pfas_belastning,
-                    SUM(CASE WHEN COALESCE(contains_diquat, false) = true
-                        THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_diquat_belastning,
-                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true
-                        THEN COALESCE(samlet_belastning, 0)
-                        ELSE 0 END) as total_glyphosate_belastning,
+                    -- BMD burden calculations for visualization (B/ha)
+                    -- Formula matches api_export: SUM(DosageQuantity * samlet_belastning) / AllocatedArea
+                    CASE WHEN MAX(AllocatedArea) > 0
+                        THEN SUM(COALESCE(DosageQuantity * samlet_belastning, 0)) / MAX(AllocatedArea)
+                        ELSE 0 END as total_pesticide_belastning,
+                    CASE WHEN MAX(AllocatedArea) > 0
+                        THEN SUM(CASE WHEN COALESCE(contains_pfas, false) = true
+                            THEN COALESCE(DosageQuantity * samlet_belastning, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_pfas_belastning,
+                    CASE WHEN MAX(AllocatedArea) > 0
+                        THEN SUM(CASE WHEN COALESCE(contains_diquat, false) = true
+                            THEN COALESCE(DosageQuantity * samlet_belastning, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_diquat_belastning,
+                    CASE WHEN MAX(AllocatedArea) > 0
+                        THEN SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true
+                            THEN COALESCE(DosageQuantity * samlet_belastning, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_glyphosate_belastning,
 
                     -- Active ingredient calculations
                     SUM(CASE WHEN COALESCE(contains_pfas, false) = true
@@ -657,7 +665,7 @@ class PMTilesDataLoader:
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
-                    -- Total dosage by unit (frontend expects these)
+                    -- Total dosage by unit (frontend displays as total per field)
                     SUM(CASE WHEN DosageUnit IN ('2', 'kg')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
                     SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
@@ -748,7 +756,7 @@ class PMTilesDataLoader:
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
-                    -- Total dosage by unit (frontend expects these) - fallback version
+                    -- Total dosage by unit (frontend displays as total per field) - fallback version
                     SUM(CASE WHEN DosageUnit IN ('2', 'kg')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
                     SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
