@@ -20,10 +20,10 @@ export function GwDepthCallout({ visible }: GwDepthCalloutProps) {
         >
           <div className="bg-destructive/10 border-destructive rounded-lg border-2 border-dashed px-4 py-3 text-center backdrop-blur-sm">
             <p className="text-destructive text-2xl font-bold tabular-nums">
-              490&nbsp;&micro;g/L
+              490 µg/L
             </p>
             <p className="text-destructive/80 mt-1 text-xs font-medium">
-              4.900&times; over gr&aelig;nsev&aelig;rdien
+              4.900× over grænseværdien
             </p>
           </div>
         </motion.div>

@@ -9,7 +9,7 @@ export const EXAMPLE = {
   fieldYear: 2023,
   sjiRow: 268465,
   cvr: '41996528',
-  cropName: 'Silomajs med gr\u00e6sudl\u00e6g',
+  cropName: 'Silomajs med græsudlæg',
   municipality: 'Haderslev',
   pesticide: {
     name: 'Roundup PowerMax',

@@ -17,12 +17,8 @@ export function DisaggPulsingLabel({ lng, lat }: DisaggPulsingLabelProps) {
         className="bg-card/95 border-primary pointer-events-none rounded-lg border-2 px-3 py-1.5 text-center shadow-md backdrop-blur-sm"
         data-testid="pulsing-total-label"
       >
-        <p className="text-foreground text-xs font-bold">
-          Total: 38,47&nbsp;ha
-        </p>
-        <p className="text-primary text-[10px] font-semibold">
-          0&nbsp;% afvigelse
-        </p>
+        <p className="text-foreground text-xs font-bold">Total: 38,47 ha</p>
+        <p className="text-primary text-[10px] font-semibold">0 % afvigelse</p>
       </motion.div>
     </Marker>
   );

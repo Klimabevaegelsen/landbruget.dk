@@ -1,9 +1,7 @@
 import {
   SectionHeader,
   SubsectionHeader,
-  Figure,
 } from '@/components/methodology/article-layout';
-import { PipelineDiagram } from '@/components/methodology/pipeline-diagram';
 import { DeepDive } from '@/components/methodology/deep-dive';
 
 export function SectionDataSources() {
@@ -12,28 +10,18 @@ export function SectionDataSources() {
       <SectionHeader id="data" number="1" title="Datakilder" />
 
       <p>
-        Analysen bygger p&aring; tre prim&aelig;re datakilder fra de danske
-        myndigheder, suppleret med bygningsdata til afstandsanalyser. Alle data
-        hentes i maskinl&aelig;sbart format og behandles i en tretrinsproces
-        (kendt som en <em>Medallion-arkitektur</em>, Figur 1).
+        Analysen bygger på tre primære datakilder fra de danske myndigheder,
+        suppleret med bygningsdata til afstandsanalyser. Alle data hentes i
+        maskinlæsbart format, valideres og kobles på markniveau.
       </p>
-
-      <Figure
-        id="fig-pipeline"
-        number={1}
-        caption="Medallion-arkitekturen. Rå data bevares uændret i Bronze-laget, standardiseres i Silver og fordeles til markniveau i Gold."
-      >
-        <PipelineDiagram />
-      </Figure>
 
       <SubsectionHeader id="data-fvm" number="1.1" title="Markdata (FVM)" />
       <p>
-        Landbrugsstyrelsens F&aelig;llesskema indeholder markblokke og
-        afgr&oslash;dedata for samtlige danske landbrugsmarker. Hvert
-        datas&aelig;t er versioneret per kalender&aring;r og indeholder markens
-        areal (ha), afgr&oslash;dekode, CVR-nummer og geografiske koordinater
-        (EPSG:25832). Vi anvender markdata fra &aring;ret <em>efter</em>{' '}
-        pesticidanvendelsen (se afsnit 3.1 om tidsforskydning).
+        Landbrugsstyrelsens Fællesskema indeholder markblokke og afgrødedata for
+        samtlige danske landbrugsmarker. Hvert datasæt er versioneret per
+        kalenderår og indeholder markens areal (ha), afgrødekode, CVR-nummer og
+        geografiske koordinater (EPSG:25832). Vi anvender markdata fra året{' '}
+        <em>efter</em> pesticidanvendelsen (se afsnit 3.1 om tidsforskydning).
       </p>
 
       <SubsectionHeader
@@ -43,15 +31,14 @@ export function SectionDataSources() {
       />
       <p>
         Landbrugsvirksomheder indberetter deres pesticidanvendelse til
-        Milj&oslash;styrelsens Spr&oslash;jtejournalindberetning (SJI). Data
-        opsummeres per CVR-nummer, afgr&oslash;dtype og behandlet areal.
-        Indberetningen indeholder produktnavn, registreringsnummer, dosering
-        (liter eller kg) og behandlet areal (ha) for det p&aring;g&aelig;ldende
-        landbrugs&aring;r (august&ndash;juli). Bem&aelig;rk, at landmandens egen
-        fysiske spr&oslash;jtejournal indeholder specifikke datoer og marknumre,
-        men disse detaljer overf&oslash;res ikke til SJI-indberetningen. Det er
-        netop dette tab af detaljegrad, der g&oslash;r vores fordelingsmetode
-        n&oslash;dvendig (se afsnit 5.9). Bedrifter under 10 ha er fritaget for
+        Miljøstyrelsens Sprøjtejournalindberetning (SJI). Data opsummeres per
+        CVR-nummer, afgrødtype og behandlet areal. Indberetningen indeholder
+        produktnavn, registreringsnummer, dosering (liter eller kg) og behandlet
+        areal (ha) for det pågældende landbrugsår (august–juli). Bemærk, at
+        landmandens egen fysiske sprøjtejournal indeholder specifikke datoer og
+        marknumre, men disse detaljer overføres ikke til SJI-indberetningen. Det
+        er netop dette tab af detaljegrad, der gør vores fordelingsmetode
+        nødvendig (se afsnit 5.9). Bedrifter under 10 ha er fritaget for
         indberetningspligt.
       </p>
 
@@ -61,11 +48,10 @@ export function SectionDataSources() {
         title="Bekæmpelsesmiddeldatabasen (BMD)"
       />
       <p>
-        Milj&oslash;styrelsens BMD indeholder alle godkendte pesticider med
-        tilh&oslash;rende aktivstoffer, godkendelsesstatus og
-        tilbagetr&aelig;kningsdatoer. Disse data er afg&oslash;rende for
-        lovlighedskontrollen (afsnit 4.1), hvor vi identificerer brugen af
-        produkter efter deres officielle udl&oslash;bsdato.
+        Miljøstyrelsens BMD indeholder alle godkendte pesticider med tilhørende
+        aktivstoffer, godkendelsesstatus og tilbagetrækningsdatoer. Disse data
+        er afgørende for lovlighedskontrollen (afsnit 4.1), hvor vi
+        identificerer brugen af produkter efter deres officielle udløbsdato.
       </p>
 
       <SubsectionHeader
@@ -74,11 +60,10 @@ export function SectionDataSources() {
         title="Bygnings- og Boligregistret (BBR)"
       />
       <p>
-        Geodatastyrelsens bygningsregister bruges til at kortl&aelig;gge
-        potentielle eksponeringer (afsnit 4.2). Vi identificerer boliger, skoler
-        og institutioner inden for 100 meter af spr&oslash;jtede marker ved
-        hj&aelig;lp af geografiske dataforesp&oslash;rgsler (
-        <code>ST_DWithin</code>).
+        Geodatastyrelsens bygningsregister bruges til at kortlægge potentielle
+        eksponeringer (afsnit 4.2). Vi identificerer boliger, skoler og
+        institutioner inden for 100 meter af sprøjtede marker ved hjælp af
+        geografiske dataforespørgsler (<code>ST_DWithin</code>).
       </p>
 
       <DeepDive

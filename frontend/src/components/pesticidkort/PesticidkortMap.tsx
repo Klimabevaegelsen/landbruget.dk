@@ -13,6 +13,7 @@ import {
 } from '@/components/pesticidkort/map-highlight';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { usePesticidkortData } from '@/components/pesticidkort/usePesticidkortData';
+import { featureToFieldSummary } from '@/components/pesticidkort/map-utils';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
@@ -23,7 +24,7 @@ interface PesticidkortMapProps {
   year: number;
   selectedFieldUuid?: string | null;
   onFieldsLoaded: (fields: NearbyFieldSummary[]) => void;
-  onFieldClick?: (fieldUuid: string) => void;
+  onFieldClick?: (fieldUuid: string, fieldData: NearbyFieldSummary) => void;
 }
 
 export function PesticidkortMap({
@@ -38,6 +39,8 @@ export function PesticidkortMap({
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [isReady, setIsReady] = useState(false);
+  const onFieldClickRef = useRef(onFieldClick);
+  onFieldClickRef.current = onFieldClick;
 
   const { pmtilesUrl, buildingsUrl, queryNearbyFields, fieldsQueriedRef } =
     usePesticidkortData({
@@ -65,8 +68,20 @@ export function PesticidkortMap({
       if (!fieldsQueriedRef.current) queryNearbyFields();
     });
     rawMap.on('click', 'fields-fill', (e) => {
-      const uuid = String(e.features?.[0]?.properties.field_uuid ?? '');
-      if (uuid && onFieldClick) onFieldClick(uuid);
+      const feat = e.features?.[0];
+      if (!onFieldClickRef.current || !feat) return;
+      const uuid = String(feat.properties.field_uuid ?? '');
+      if (!uuid) return;
+      const clickLat = e.lngLat.lat;
+      const clickLng = e.lngLat.lng;
+      const fieldData = featureToFieldSummary(
+        feat.properties as Record<string, unknown>,
+        lat,
+        lng,
+        clickLat,
+        clickLng
+      );
+      onFieldClickRef.current(uuid, fieldData);
     });
     rawMap.on('mouseenter', 'fields-fill', () => {
       rawMap.getCanvas().style.cursor = 'pointer';
@@ -74,13 +89,7 @@ export function PesticidkortMap({
     rawMap.on('mouseleave', 'fields-fill', () => {
       rawMap.getCanvas().style.cursor = '';
     });
-  }, [
-    pmtilesUrl,
-    buildingsUrl,
-    queryNearbyFields,
-    fieldsQueriedRef,
-    onFieldClick,
-  ]);
+  }, [pmtilesUrl, buildingsUrl, queryNearbyFields, fieldsQueriedRef, lat, lng]);
 
   useEffect(() => {
     if (!mapRef.current || !pmtilesUrl) return;

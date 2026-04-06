@@ -10,9 +10,8 @@ export function SectionGrundvandDataSources() {
       <SectionHeader id="data" number="2" title="Datakilder" />
 
       <p>
-        Analysen bygger p&aring; tre offentlige datas&aelig;t. Alle data hentes
-        i maskinl&aelig;sbart format og renses gennem en standardiseret
-        datapipeline.
+        Analysen bygger på tre offentlige datasæt. Alle data hentes i
+        maskinlæsbart format og renses gennem en standardiseret datapipeline.
       </p>
 
       <DatasourceGrukos />

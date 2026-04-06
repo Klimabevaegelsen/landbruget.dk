@@ -52,7 +52,7 @@ export function ScrollyRecordOverlay({
         >
           <div className="text-muted-foreground flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-medium tracking-widest uppercase">
             <span className="bg-muted inline-block h-2 w-2 rounded-sm border" />
-            SJI-indberetning &mdash; CVR {EXAMPLE.cvr} &mdash; {EXAMPLE.year}/
+            SJI-indberetning — CVR {EXAMPLE.cvr} — {EXAMPLE.year}/
             {EXAMPLE.year + 1}
           </div>
           <div
@@ -122,10 +122,10 @@ function RecordTable({ spotlit, targetRef }: RecordTableProps) {
                 {row.product}
               </td>
               <td className="text-foreground/70 border-r px-2 py-1 text-right font-mono whitespace-nowrap">
-                {row.area}&nbsp;ha
+                {row.area} ha
               </td>
               <td className="text-foreground/70 px-2 py-1 text-right font-mono whitespace-nowrap">
-                {row.dose}&nbsp;{row.unit}
+                {row.dose} {row.unit}
               </td>
             </motion.tr>
           );

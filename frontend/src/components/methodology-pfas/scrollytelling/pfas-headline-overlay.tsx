@@ -23,7 +23,7 @@ export function PfasHeadlineOverlay({ visible }: PfasHeadlineOverlayProps) {
           64%
         </p>
         <p className="text-destructive/80 mt-1 text-2xl font-bold tracking-widest uppercase md:text-3xl">
-          uoverv&aring;get
+          uovervåget
         </p>
       </div>
     </motion.div>

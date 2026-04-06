@@ -9,10 +9,9 @@ export function PerspectivesSurfaceWater() {
         title="Overfladevand og akvatisk miljø"
       />
       <p>
-        N&aring;r m&aring;lestationer i &aring;er og s&oslash;er registrerer
-        forh&oslash;jede koncentrationer af spr&oslash;jtegift, kan vores data
-        bruges til at spore kilden l&aelig;ngere oppe ad vandl&oslash;bet og
-        skelne mellem punktkilder og generel forurening i oplandet.
+        Når målestationer i åer og søer registrerer forhøjede koncentrationer af
+        sprøjtegift, kan vores data bruges til at spore kilden længere oppe ad
+        vandløbet og skelne mellem punktkilder og generel forurening i oplandet.
       </p>
     </>
   );

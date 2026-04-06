@@ -7,19 +7,18 @@ export function SectionPfasReferences() {
 
       <ol className="list-decimal space-y-2 pl-6 text-sm">
         <li>
-          GEUS (2024). Jupiter-databasen &ndash; nationale grundvandskemidata.{' '}
+          GEUS (2024). Jupiter-databasen – nationale grundvandskemidata.{' '}
           <em>
-            De Nationale Geologiske Unders&oslash;gelser for Danmark og
-            Gr&oslash;nland.
+            De Nationale Geologiske Undersøgelser for Danmark og Grønland.
           </em>
         </li>
         <li>
-          Milj&oslash;styrelsen (2024). Grundvandskortl&aelig;gning (GRUKOS)
-          &ndash; indvindingsoplande for almene vandforsyninger.
+          Miljøstyrelsen (2024). Grundvandskortlægning (GRUKOS) –
+          indvindingsoplande for almene vandforsyninger.
         </li>
         <li>
-          Milj&oslash;styrelsen (2024). Bek&aelig;mpelsesmiddeldatabasen (BMD)
-          &ndash; registrerede pesticidprodukter og aktivstoffer.
+          Miljøstyrelsen (2024). Bekæmpelsesmiddeldatabasen (BMD) – registrerede
+          pesticidprodukter og aktivstoffer.
         </li>
         <li>
           Perkola, N. et al. (2023). Trifluoroacetic acid (TFA) in the
@@ -30,7 +29,7 @@ export function SectionPfasReferences() {
           Baken, K. A. et al. (2023). Per- and polyfluoroalkyl substances in
           Danish groundwater: widespread contamination from both legacy and
           emerging sources. <em>Environmental Science &amp; Technology</em>,
-          57(32), 11736&ndash;11747.
+          57(32), 11736–11747.
         </li>
         <li>
           European Food Safety Authority (2020). Risk assessment of

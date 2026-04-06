@@ -25,16 +25,15 @@ export function MethodologyHero() {
 
       <p className="text-muted-foreground mt-7 max-w-[600px] text-[17px] leading-[1.7]">
         Denne artikel beskriver den metode, vi anvender til at fordele
-        bedrifternes indberettede pesticiddata ud p&aring; de enkelte
-        landbrugsmarker. Vi gennemg&aring;r datakilderne, den statistiske
-        sammenkøring, lovlighedskontrollen samt metodens kendte
-        begr&aelig;nsninger.
+        bedrifternes indberettede pesticiddata ud på de enkelte landbrugsmarker.
+        Vi gennemgår datakilderne, den statistiske sammenkøring,
+        lovlighedskontrollen samt metodens kendte begrænsninger.
       </p>
 
       <div className="text-muted-foreground mt-5 flex items-center gap-3 text-[12px] tracking-wide">
         <span>Marts 2026</span>
         <span className="text-border">&bull;</span>
-        <span>~12 min l&aelig;setid</span>
+        <span>~12 min læsetid</span>
       </div>
 
       <div className="border-border mt-10 border-t" />

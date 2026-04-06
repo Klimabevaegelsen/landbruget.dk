@@ -11,11 +11,11 @@ export function FindingsCorrelations() {
       <p>
         Ud af de 11 stoffer viste{' '}
         <mark>
-          <strong className="text-foreground">7 stoffer (64&nbsp;%)</strong> en
-          statistisk signifikant sammenh&aelig;ng
+          <strong className="text-foreground">7 stoffer (64 %)</strong> en
+          statistisk signifikant sammenhæng
         </mark>
-        : Jo mere der spr&oslash;jtes p&aring; marken, des oftere findes stoffet
-        i grundvandet. Tre af stofferne klarede sig hele vejen gennem vores
+        : Jo mere der sprøjtes på marken, des oftere findes stoffet i
+        grundvandet. Tre af stofferne klarede sig hele vejen gennem vores
         strenge firetrins-validering:
       </p>
 
@@ -30,7 +30,7 @@ export function FindingsCorrelations() {
                 Korrelation (r)
               </th>
               <th className="text-muted-foreground px-4 py-2.5 text-right font-medium">
-                Fund (H&oslash;jeste vs. laveste forbrug)
+                Fund (Højeste vs. laveste forbrug)
               </th>
             </tr>
           </thead>
@@ -41,7 +41,7 @@ export function FindingsCorrelations() {
               </td>
               <td className="px-4 py-2.5 text-right">0,213</td>
               <td className="px-4 py-2.5 text-right font-semibold">
-                4,4&times; h&oslash;jere
+                4,4× højere
               </td>
             </tr>
             <tr className="border-border border-b">
@@ -50,7 +50,7 @@ export function FindingsCorrelations() {
               </td>
               <td className="px-4 py-2.5 text-right">0,232</td>
               <td className="px-4 py-2.5 text-right font-semibold">
-                3,8&times; h&oslash;jere
+                3,8× højere
               </td>
             </tr>
             <tr>
@@ -59,7 +59,7 @@ export function FindingsCorrelations() {
               </td>
               <td className="px-4 py-2.5 text-right">0,222</td>
               <td className="px-4 py-2.5 text-right font-semibold">
-                3,7&times; h&oslash;jere
+                3,7× højere
               </td>
             </tr>
           </tbody>
@@ -68,9 +68,9 @@ export function FindingsCorrelations() {
 
       <p className="text-muted-foreground text-sm">
         <em>
-          L&aelig;ses&aring;dan: I de oplande, hvor der blev spr&oslash;jtet
-          mest med bentazon, fandt man stoffet i grundvandet 4,4 gange oftere
-          end i de oplande, hvor der blev spr&oslash;jtet mindst.
+          Læsesådan: I de oplande, hvor der blev sprøjtet mest med bentazon,
+          fandt man stoffet i grundvandet 4,4 gange oftere end i de oplande,
+          hvor der blev sprøjtet mindst.
         </em>
       </p>
     </>

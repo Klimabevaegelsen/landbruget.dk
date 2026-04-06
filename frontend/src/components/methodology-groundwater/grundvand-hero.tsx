@@ -32,16 +32,16 @@ export function GrundvandHero() {
       </h1>
 
       <p className="text-muted-foreground mt-6 max-w-[620px] text-lg leading-relaxed">
-        Denne artikel beskriver, hvordan vi kobler pesticidforbrug p&aring;
-        markniveau med beskyttelsen af det danske grundvand &ndash; fra
-        grundvandskortl&aelig;gningens indsatsomr&aring;der og BNBO-zoner til
-        GEUS&apos; nationale grundvandsoverv&aring;gning.
+        Denne artikel beskriver, hvordan vi kobler pesticidforbrug på markniveau
+        med beskyttelsen af det danske grundvand – fra grundvandskortlægningens
+        indsatsområder og BNBO-zoner til GEUS&apos; nationale
+        grundvandsovervågning.
       </p>
 
       <div className="text-muted-foreground mt-4 flex gap-4 text-[13px]">
         <span>April 2026</span>
         <span>&middot;</span>
-        <span>~15 minutters l&aelig;setid</span>
+        <span>~15 minutters læsetid</span>
       </div>
 
       <hr className="border-border mt-8" />

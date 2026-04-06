@@ -6,13 +6,12 @@ export function DatasourceSubstanceMapping() {
       <SubsectionHeader
         id="data-mapping"
         number="2.4"
-        title="Stofkortl&aelig;gning (Overs&aelig;ttelse af kemi)"
+        title="Stofkortlægning (Oversættelse af kemi)"
       />
       <p>
-        Et pesticid skifter ofte &ldquo;identitet&rdquo;, n&aring;r det lander i
-        jorden. For at kunne koble landmandens spr&oslash;jtejournal med
-        GEUS&apos; vandpr&oslash;ver har vi kortlagt 138 kemiske relationer. For
-        eksempel:
+        Et pesticid skifter ofte &ldquo;identitet&rdquo;, når det lander i
+        jorden. For at kunne koble landmandens sprøjtejournal med GEUS&apos;
+        vandprøver har vi kortlagt 138 kemiske relationer. For eksempel:
       </p>
       <ul className="my-4 list-disc space-y-2 pl-6">
         <li>
@@ -26,7 +25,7 @@ export function DatasourceSubstanceMapping() {
       </ul>
       <p>
         Uden denne &ldquo;ordbog&rdquo; mellem moderstoffer og metabolitter
-        ville de st&aelig;rkeste sammenh&aelig;nge i analysen forblive usynlige.
+        ville de stærkeste sammenhænge i analysen forblive usynlige.
       </p>
     </>
   );

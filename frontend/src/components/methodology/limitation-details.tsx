@@ -52,12 +52,12 @@ export function LimitationDetails() {
       />
       <p>
         Den 100-meter grænse, vi anvender til at identificere naboer, er en
-        skrivebordsafstand &ndash; ikke en fysisk spredningsmodel. I
-        virkeligheden afhænger pesticidafdrift af vind, temperatur, sprøjtedyser
-        og afgrødens højde. Avancerede it-modeller kræver vejrdata og tekniske
-        detaljer om sprøjten, som simpelthen ikke findes i de danske
-        indberetninger. Resultaterne er derfor en rumlig kortlægning, ikke en
-        formel risikovurdering.
+        skrivebordsafstand – ikke en fysisk spredningsmodel. I virkeligheden
+        afhænger pesticidafdrift af vind, temperatur, sprøjtedyser og afgrødens
+        højde. Avancerede it-modeller kræver vejrdata og tekniske detaljer om
+        sprøjten, som simpelthen ikke findes i de danske indberetninger.
+        Resultaterne er derfor en rumlig kortlægning, ikke en formel
+        risikovurdering.
       </p>
 
       <SubsectionHeader

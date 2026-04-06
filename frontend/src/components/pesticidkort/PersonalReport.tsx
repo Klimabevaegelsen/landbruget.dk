@@ -7,13 +7,17 @@ import { SummaryStats } from '@/components/pesticidkort/SummaryStats';
 import { AlertCallout } from '@/components/pesticidkort/AlertCallout';
 import { FieldList } from '@/components/pesticidkort/FieldList';
 import type { HistogramBin } from '@/components/pesticidkort/BurdenScale';
-import type { PesticideReport } from '@/components/pesticidkort/types';
+import type {
+  PesticideReport,
+  NearbyFieldSummary,
+} from '@/components/pesticidkort/types';
 import { handleShare } from '@/components/pesticidkort/share-report';
 
 interface PersonalReportProps {
   report: PesticideReport;
   histogram: HistogramBin[];
   selectedFieldUuid?: string | null;
+  clickedField?: NearbyFieldSummary | null;
   onFieldSelect?: (fieldUuid: string) => void;
   onOpenStory?: () => void;
 }
@@ -22,6 +26,7 @@ export function PersonalReport({
   report,
   histogram,
   selectedFieldUuid,
+  clickedField,
   onFieldSelect,
   onOpenStory,
 }: PersonalReportProps) {
@@ -71,6 +76,7 @@ export function PersonalReport({
         fields={report.fields}
         histogram={histogram}
         selectedFieldUuid={selectedFieldUuid}
+        clickedField={clickedField}
         onFieldSelect={onFieldSelect}
       />
 

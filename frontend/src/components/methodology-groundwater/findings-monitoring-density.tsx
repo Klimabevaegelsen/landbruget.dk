@@ -6,7 +6,7 @@ export function FindingsMonitoringDensity() {
       <SubsectionHeader
         id="findings-monitoring-density"
         number="5.3"
-        title="Overv&aring;gningst&aelig;thedens betydning"
+        title="Overvågningstæthedens betydning"
       />
 
       <div className="border-primary/20 bg-primary/5 my-6 rounded-lg border-l-4 p-5">
@@ -16,11 +16,10 @@ export function FindingsMonitoringDensity() {
         <p className="text-muted-foreground mt-2 text-sm">
           Alle tre statistisk robuste korrelationer er{' '}
           <strong className="text-foreground">
-            kun p&aring;viselige i oplande med h&oslash;j
-            overv&aring;gningst&aelig;thed
+            kun påviselige i oplande med høj overvågningstæthed
           </strong>{' '}
-          (&gt;5 boringer). I oplande med f&aelig;rre boringer er
-          korrelationerne t&aelig;t p&aring; nul.
+          (&gt;5 boringer). I oplande med færre boringer er korrelationerne tæt
+          på nul.
         </p>
       </div>
 
@@ -35,7 +34,7 @@ export function FindingsMonitoringDensity() {
                 &le;2 boringer
               </th>
               <th className="text-muted-foreground px-4 py-2.5 text-right font-medium">
-                3&ndash;5 boringer
+                3–5 boringer
               </th>
               <th className="text-muted-foreground px-4 py-2.5 text-right font-medium">
                 &gt;5 boringer
@@ -78,15 +77,15 @@ export function FindingsMonitoringDensity() {
       </div>
       <p className="text-muted-foreground text-xs">
         *** p&lt;0,001. Korrelationer (point-biserial r) stratificeret efter
-        antal overv&aring;gningsboringer pr. opland.
+        antal overvågningsboringer pr. opland.
       </p>
 
       <p className="mt-4">
         To forklaringer er mulige: enten er den statistiske styrke
-        utilstr&aelig;kkelig i tyndt overv&aring;gede oplande, eller ogs&aring;
-        er overv&aring;gningsintensiteten en mere kompleks konfounder end en
-        enkelt variabel kan fange. Resultaterne kan derfor ikke generaliseres
-        til oplande med f&aring; boringer.
+        utilstrækkelig i tyndt overvågede oplande, eller også er
+        overvågningsintensiteten en mere kompleks konfounder end en enkelt
+        variabel kan fange. Resultaterne kan derfor ikke generaliseres til
+        oplande med få boringer.
       </p>
     </>
   );
