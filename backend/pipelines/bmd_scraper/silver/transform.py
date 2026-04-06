@@ -819,6 +819,16 @@ def upload_to_storage(local_path: Path, bucket_name: str) -> bool:
         if metadata_path.exists():
             storage.upload_file(metadata_path)
 
+        # Enforce retention: keep only the last 3 versions
+        if success:
+            try:
+                from common.storage import StorageAccess
+
+                sa = StorageAccess()
+                sa.enforce_retention(f"{bucket_name}/silver/bmd", keep=3)
+            except Exception as e:
+                logger.warning(f"Retention cleanup failed for silver/bmd: {e}")
+
         return success
     except Exception as e:
         logger.exception(f"Error uploading to cloud storage: {e}")
