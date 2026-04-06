@@ -278,3 +278,5 @@ data_samples/
 
 # Pipeline output
 backend/output/
+ESTAT_Census_2021_V2.parquet
+Eurostat_Census-GRID_2021_V2.2.zip

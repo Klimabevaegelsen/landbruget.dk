@@ -56,6 +56,59 @@ def _strip_protocol(path: str) -> str:
     return path
 
 
+def _patch_geoparquet_crs(parquet_path: str, crs: str, log: logging.Logger) -> None:
+    """Patch GeoParquet file metadata to include the correct CRS.
+
+    DuckDB's COPY TO PARQUET writes geometry as GeoParquet but omits the CRS
+    field, causing readers to default to OGC:CRS84.  This function reads the
+    file's metadata, injects a PROJJSON CRS definition via PyArrow, and
+    rewrites the file in-place.
+
+    Args:
+        parquet_path: Local path to the parquet file.
+        crs: EPSG code string, e.g. "EPSG:25832".
+        log: Logger instance.
+    """
+    try:
+        import pyarrow.parquet as pq
+        from pyproj import CRS as ProjCRS  # noqa: N811
+    except ImportError:
+        log.warning(
+            "pyarrow or pyproj not available — skipping CRS metadata patch. Install with: pip install pyarrow pyproj"
+        )
+        return
+
+    try:
+        pf = pq.ParquetFile(parquet_path)
+        geo_meta = pf.schema_arrow.metadata or {}
+        geo_key = b"geo"
+
+        if geo_key not in geo_meta:
+            log.debug("No GeoParquet metadata found — skipping CRS patch")
+            return
+
+        geo_json = json.loads(geo_meta[geo_key])
+
+        # Build PROJJSON from the EPSG code
+        projjson = ProjCRS.from_user_input(crs).to_json_dict()
+
+        # Inject CRS into each geometry column
+        for _col_name, col_meta in geo_json.get("columns", {}).items():
+            col_meta["crs"] = projjson
+
+        # Rewrite metadata
+        geo_meta_updated = {**geo_meta, geo_key: json.dumps(geo_json).encode()}
+
+        table = pq.read_table(parquet_path)
+        table = table.replace_schema_metadata(geo_meta_updated)
+        pq.write_table(table, parquet_path, compression="zstd")
+
+        log.info(f"Patched GeoParquet CRS metadata: {crs}")
+
+    except Exception as e:
+        log.warning(f"Failed to patch GeoParquet CRS metadata: {e}")
+
+
 class StorageAccess:
     """Unified cloud data access optimized for maximum performance.
 
@@ -741,6 +794,14 @@ class StorageAccess:
 
         Supports both Parquet and CSV formats based on file extension.
         For CSV files, uses human-readable formatting with proper headers and delimiters.
+
+        Args:
+            table_name: DuckDB table to export.
+            storage_path: Cloud storage destination.
+            **format_options: Format-specific options. Notable keys:
+                crs (str): EPSG code for geometry columns (e.g. "EPSG:25832").
+                    DuckDB cannot write CRS metadata to GeoParquet, so this
+                    patches it via PyArrow after export. Ignored for CSV.
         """
         storage_path = _strip_protocol(storage_path)
         self.monitor.check_resources("start_duckdb_upload")
@@ -779,9 +840,15 @@ class StorageAccess:
         with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
             tmp_path = tmp.name
 
+        crs = format_options.pop("crs", None)
+
         try:
             # DuckDB writes directly to the specified format
             self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp_path}' ({options_str})")
+
+            # Patch GeoParquet CRS metadata if requested (DuckDB can't write this)
+            if crs and file_suffix == ".parquet":
+                _patch_geoparquet_crs(tmp_path, crs, self.log)
 
             # Get file size for verification
             local_size = Path(tmp_path).stat().st_size

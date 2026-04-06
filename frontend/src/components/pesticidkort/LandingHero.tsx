@@ -50,8 +50,8 @@ export function LandingHero({
           variants={fadeSlideUp}
           className="text-muted-foreground mt-3 max-w-md text-lg leading-relaxed"
         >
-          Over 1,2 millioner danskere bor inden for 1 km af marker, der sprøjtes
-          med pesticider. Se hvad der sprøjtes tæt på din adresse.
+          Over 4 millioner danskere bor inden for 1 km af landbrugsmarker. Se
+          hvad der sprøjtes tæt på din adresse.
         </motion.p>
 
         <motion.div variants={fadeSlideUp} className="mt-8 max-w-lg">
