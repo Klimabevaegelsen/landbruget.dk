@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from .config import GOLD_BASE_DIR
+from .production_sites import process_production_sites
 from .transportation_analysis import process_transportation_analysis
 from .veterinary_timeline import process_veterinary_timeline
 
@@ -49,9 +50,20 @@ def process_gold_data(
             "gold_processing",
             "transportation_analysis",
         ]
+        run_sites = step is None or step in ["all", "gold_processing", "production_sites"]
 
-        timeline_success = True  # Default to success if not running
-        transport_success = True  # Default to success if not running
+        timeline_success = True
+        transport_success = True
+        sites_success = True
+
+        # Process production sites (if requested)
+        if run_sites:
+            logger.info("🏭 Processing production sites...")
+            sites_success = process_production_sites(
+                export_timestamp=export_timestamp, gold_dir=gold_dir
+            )
+        else:
+            logger.info("⏭️ Skipping production sites (not requested)")
 
         # Process veterinary timeline (if requested)
         if run_timeline:
@@ -72,28 +84,18 @@ def process_gold_data(
             logger.info("⏭️ Skipping transportation analysis (not requested)")
 
         # All requested products must succeed for overall success
-        overall_success = timeline_success and transport_success
+        overall_success = timeline_success and transport_success and sites_success
 
         if overall_success:
             logger.info("✅ CHR Gold Layer Processing completed successfully")
-            if run_timeline:
-                logger.info(
-                    f"   ✅ Veterinary timeline: {'SUCCESS' if timeline_success else 'FAILED'}"
-                )
-            if run_transport:
-                logger.info(
-                    f"   ✅ Transportation analysis: {'SUCCESS' if transport_success else 'FAILED'}"
-                )
             return True
         logger.error("❌ CHR Gold Layer Processing failed")
-        if run_timeline:
-            logger.error(
-                f"   ❌ Veterinary timeline: {'SUCCESS' if timeline_success else 'FAILED'}"
-            )
-        if run_transport:
-            logger.error(
-                f"   ❌ Transportation analysis: {'SUCCESS' if transport_success else 'FAILED'}"
-            )
+        for name, ok in [
+            ("Production sites", sites_success),
+            ("Veterinary timeline", timeline_success),
+            ("Transportation analysis", transport_success),
+        ]:
+            logger.error(f"   {'✅' if ok else '❌'} {name}")
         return False
 
     except Exception as e:

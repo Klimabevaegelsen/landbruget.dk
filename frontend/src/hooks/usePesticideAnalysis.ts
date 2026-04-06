@@ -34,9 +34,7 @@ export function usePesticideAnalysis(filters: PesticideAnalysisFilters) {
         }
       });
 
-      const response = await fetch(
-        `/api/supabase/functions/pesticide-analysis?${params}`
-      );
+      const response = await fetch(`/api/data/pesticide-analysis?${params}`);
 
       if (!response.ok) {
         throw new Error(`API request failed: ${response.status}`);

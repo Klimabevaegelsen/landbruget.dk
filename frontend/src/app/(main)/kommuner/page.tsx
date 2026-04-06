@@ -296,7 +296,7 @@ export default function MunicipalityRankingsPage() {
     try {
       setLoading(true);
       const response = await fetch(
-        `/api/supabase/functions/kommuner?category=all&year=${selectedYear}&limit=${limit}`
+        `/api/data/kommuner?category=all&year=${selectedYear}&limit=${limit}`
       );
 
       if (!response.ok) {

@@ -134,11 +134,11 @@ def main():
             CREATE OR REPLACE TABLE chr_sites_agg AS
             SELECT
                 LPAD(CAST(po.owner_cvr AS VARCHAR), 8, '0') AS cvr_number,
-                STRING_AGG(DISTINCT CAST(po.chr_number AS VARCHAR), ', ') AS chr_numbers,
-                STRING_AGG(DISTINCT p.address || ', ' || COALESCE(p.postal_code, '') || ' ' || COALESCE(p.municipality_name, ''),
+                STRING_AGG(DISTINCT CAST(po.chr AS VARCHAR), ', ') AS chr_numbers,
+                STRING_AGG(DISTINCT p.address || ', ' || COALESCE(p.postal_code, '') || ' ' || COALESCE(p.municipality, ''),
                     '; ') AS chr_addresses
             FROM chr_property_owners po
-            LEFT JOIN chr_properties p ON po.chr_number = p.chr_number
+            LEFT JOIN chr_properties p ON po.chr = p.chr
             WHERE po.owner_cvr IS NOT NULL AND po.owner_cvr != ''
             GROUP BY LPAD(CAST(po.owner_cvr AS VARCHAR), 8, '0')
         """)
@@ -158,7 +158,7 @@ def main():
                     ', '
                 ) AS organic_production
             FROM chr_property_owners po
-            JOIN chr_herds h ON po.chr_number = h.chr_number
+            JOIN chr_herds h ON po.chr = h.chr
             WHERE po.owner_cvr IS NOT NULL AND po.owner_cvr != ''
                 AND h.date_ceased IS NULL
             GROUP BY LPAD(CAST(po.owner_cvr AS VARCHAR), 8, '0')

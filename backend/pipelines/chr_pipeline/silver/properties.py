@@ -65,14 +65,14 @@ def create_properties_table(
                 SELECT
                     uuid() AS property_id,
                     -- Basic identifiers: cast to string, trim, nullif empty, then cast to int64
-                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                     -- Address fields
                     NULLIF(TRIM(CAST(address_raw AS VARCHAR)), '') AS address,
                     NULLIF(TRIM(CAST(postal_code_raw AS VARCHAR)), '') AS postal_code,
                     NULLIF(TRIM(CAST(postal_district_raw AS VARCHAR)), '') AS postal_district,
                     NULLIF(TRIM(CAST(city_raw AS VARCHAR)), '') AS city,
                     COALESCE(TRY_CAST(NULLIF(TRIM(CAST(municipality_code_raw AS VARCHAR)), '') AS INTEGER), NULL) AS municipality_code,
-                    NULLIF(TRIM(CAST(municipality_name_raw AS VARCHAR)), '') AS municipality_name,
+                    NULLIF(TRIM(CAST(municipality_name_raw AS VARCHAR)), '') AS municipality,
                     NULLIF(TRIM(CAST(country_raw AS VARCHAR)), '') AS country,
                     -- Contact fields
                     NULLIF(TRIM(CAST(phone_raw AS VARCHAR)), '') AS phone,
@@ -87,13 +87,13 @@ def create_properties_table(
             )
             SELECT
                 property_id,
-                chr_number,
+                chr,
                 address,
                 postal_code,
                 postal_district,
                 city,
                 municipality_code,
-                municipality_name,
+                municipality,
                 country,
                 phone,
                 mobile,
@@ -120,9 +120,9 @@ def create_properties_table(
                     WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
                         ST_Transform(ST_Point(geo_coord_x_measured, geo_coord_y_measured), '{SOURCE_CRS}', '{TARGET_CRS}')
                     ELSE NULL
-                END AS geometry
+                END AS location_geom
             FROM cleaned_data
-            WHERE chr_number IS NOT NULL
+            WHERE chr IS NOT NULL
         """)
 
         # Get row count
@@ -206,7 +206,7 @@ def create_property_owners_table(
             SELECT
                 uuid() AS owner_id,
                 -- Basic identifiers
-                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                 -- Owner identification
                 NULLIF(TRIM(CAST(owner_cvr_raw AS VARCHAR)), '') AS owner_cvr,
                 NULLIF(TRIM(CAST(owner_cpr_raw AS VARCHAR)), '') AS owner_cpr,
@@ -311,7 +311,7 @@ def create_property_users_table(
             SELECT
                 uuid() AS user_id,
                 -- Basic identifiers
-                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr,
                 -- User identification
                 NULLIF(TRIM(CAST(user_cvr_raw AS VARCHAR)), '') AS user_cvr,
                 NULLIF(TRIM(CAST(user_cpr_raw AS VARCHAR)), '') AS user_cpr,

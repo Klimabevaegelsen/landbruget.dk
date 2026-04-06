@@ -40,6 +40,11 @@ export function GwTimelineBar({
   const widthPct = useTransform(progress, [0, 1], ['0%', '100%']);
   const leftPct = useTransform(progress, [0, 1], ['0%', '100%']);
   const span = config.endYear - config.startYear;
+  const barWidthStyle = { width: widthPct };
+  const dotLeftStyle = { left: leftPct };
+  const midpointStyle = config.midpoint
+    ? { left: `${((config.midpoint.year - config.startYear) / span) * 100}%` }
+    : undefined;
 
   const isBentazon = variant === 'bentazon';
   const barColor = isBentazon
@@ -53,14 +58,12 @@ export function GwTimelineBar({
     <>
       <div className="relative h-2 w-full overflow-hidden rounded-full">
         <div className="bg-border absolute inset-0 rounded-full" />
-        <motion.div className={barColor} style={{ width: widthPct }} />
-        <motion.div className={dotColor} style={{ left: leftPct }} />
+        <motion.div className={barColor} style={barWidthStyle} />
+        <motion.div className={dotColor} style={dotLeftStyle} />
         {config.midpoint && (
           <div
             className="bg-warning absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-            style={{
-              left: `${((config.midpoint.year - config.startYear) / span) * 100}%`,
-            }}
+            style={midpointStyle}
           />
         )}
       </div>

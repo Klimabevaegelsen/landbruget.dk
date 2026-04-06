@@ -1012,8 +1012,8 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
             NULL as is_invalid,
             NULL as missing_animal_count
         FROM chr_dyr_movements chr
-        JOIN chr_properties sender_prop ON chr.reporting_herd_number = sender_prop.chr_number
-        JOIN chr_properties receiver_prop ON chr.counterparty_herd = receiver_prop.chr_number
+        JOIN chr_properties sender_prop ON chr.reporting_herd_number = sender_prop.chr
+        JOIN chr_properties receiver_prop ON chr.counterparty_herd = receiver_prop.chr
         JOIN unified_cattle_traces ct ON chr.movement_date = ct.movement_date
         WHERE
             -- Only process CHR movements that are flagged as international
@@ -1032,7 +1032,7 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                     LEFT(sender_prop.postal_code, 2) = LEFT(REGEXP_EXTRACT(ct.sender_address, '[0-9]{4}'), 2)
                     OR
                     -- Match by city/municipality name
-                    LOWER(sender_prop.municipality_name) = LOWER(ct.sender_city)
+                    LOWER(sender_prop.municipality) = LOWER(ct.sender_city)
                     OR
                     -- Match by address string similarity
                     (sender_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL
@@ -1047,7 +1047,7 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                     LEFT(receiver_prop.postal_code, 2) = LEFT(REGEXP_EXTRACT(ct.sender_address, '[0-9]{4}'), 2)
                     OR
                     -- Match by city/municipality name
-                    LOWER(receiver_prop.municipality_name) = LOWER(ct.sender_city)
+                    LOWER(receiver_prop.municipality) = LOWER(ct.sender_city)
                     OR
                     -- Match by address string similarity
                     (receiver_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL
@@ -1110,12 +1110,12 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
             -- Sender address information
             sender_p.address as sender_address,
             sender_p.postal_code as sender_postal_code,
-            sender_p.municipality_name as sender_municipality,
+            sender_p.municipality as sender_municipality,
 
             -- Receiver address information
             receiver_p.address as receiver_address,
             receiver_p.postal_code as receiver_postal_code,
-            receiver_p.municipality_name as receiver_municipality,
+            receiver_p.municipality as receiver_municipality,
 
             -- COMPREHENSIVE Destination type classification
             CASE
@@ -1228,10 +1228,10 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
             '1.0' as schema_version
 
         FROM certificate_matched_movements cm
-        LEFT JOIN chr_herds sender_h ON cm.sender_chr_number = sender_h.chr_number
-        LEFT JOIN chr_herds receiver_h ON cm.receiver_chr_number = receiver_h.chr_number
-        LEFT JOIN chr_properties sender_p ON cm.sender_chr_number = sender_p.chr_number
-        LEFT JOIN chr_properties receiver_p ON cm.receiver_chr_number = receiver_p.chr_number
+        LEFT JOIN chr_herds sender_h ON cm.sender_chr_number = sender_h.chr
+        LEFT JOIN chr_herds receiver_h ON cm.receiver_chr_number = receiver_h.chr
+        LEFT JOIN chr_properties sender_p ON cm.sender_chr_number = sender_p.chr
+        LEFT JOIN chr_properties receiver_p ON cm.receiver_chr_number = receiver_p.chr
     """)
 
     total_count = conn.execute("SELECT COUNT(*) FROM unified_transportation_dataset").fetchone()[0]

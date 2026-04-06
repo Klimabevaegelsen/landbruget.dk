@@ -1,4 +1,4 @@
-import { ClimateKPIs } from '@/services/supabase/types';
+import { ClimateKPIs } from '@/services/data/types';
 import { getClimateEmissions } from '@/lib/climate-data';
 import { CarbonAccountingKPIs } from '@/components/climate';
 

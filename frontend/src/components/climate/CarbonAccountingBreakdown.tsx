@@ -1,7 +1,7 @@
 'use client';
 
-import type { ClimateEmission } from '@/services/supabase/climate';
-import { HorizontalStackedBarChart } from '@/services/supabase/types';
+import type { ClimateEmission } from '@/services/data/climate';
+import { HorizontalStackedBarChart } from '@/services/data/types';
 import { BlockBarChart } from '@/components/pagebuilder/pageBlocks/block-bar-chart';
 
 interface CarbonAccountingBreakdownProps {

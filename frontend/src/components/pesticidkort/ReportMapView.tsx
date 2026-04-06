@@ -7,10 +7,10 @@ import { PersonalReport } from '@/components/pesticidkort/PersonalReport';
 import { useBurdenHistogram } from '@/components/pesticidkort/useBurdenHistogram';
 import { BottomSheet } from '@/components/pesticidkort/BottomSheet';
 import { ReportHeader } from '@/components/pesticidkort/ReportHeader';
-import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
 import { StoryMode } from '@/components/pesticidkort/StoryMode';
-import { ModeToggle } from '@/components/pesticidkort/ModeToggle';
-import { computePesticideScore } from '@/lib/pesticide-score';
+import { ReportSkeleton } from '@/components/pesticidkort/ReportSkeleton';
+import { ReportControls } from '@/components/pesticidkort/ReportControls';
+import { buildReport } from '@/components/pesticidkort/build-report';
 import type {
   PesticideReport,
   NearbyFieldSummary,
@@ -63,30 +63,10 @@ export function ReportMapView({
   const histogram = useBurdenHistogram(year);
 
   const handleFieldsLoaded = useCallback(
-    (fields: NearbyFieldSummary[]) => {
-      const { score, grade } = computePesticideScore(fields, radiusM);
-      const pfasFields = fields.filter((f) => f.pfas_applications > 0);
-      setReport({
-        address,
-        lat,
-        lng,
-        radius_m: radiusM,
-        year,
-        grade,
-        score,
-        fields_count: fields.length,
-        pfas_fields_count: pfasFields.length,
-        nearest_field_m: fields[0]?.distance_m ?? 0,
-        fields,
-        has_bnbo_overlap: fields.some(
-          (f) => f.bnbo_area_hectares && f.bnbo_area_hectares > 0
-        ),
-        has_violations: false,
-      });
-    },
+    (fields: NearbyFieldSummary[]) =>
+      setReport(buildReport(fields, address, lat, lng, radiusM, year)),
     [address, lat, lng, radiusM, year]
   );
-
   const handleModeChange = useCallback(
     (m: 'citizen' | 'expert') => {
       if (m === 'expert') router.push(`/markanalyse?lat=${lat}&lng=${lng}`);
@@ -102,24 +82,15 @@ export function ReportMapView({
       onOpenStory={() => setShowStory(true)}
     />
   ) : (
-    <div
-      aria-live="polite"
-      className="animate-fade-slide-up space-y-4 px-5 py-5 motion-reduce:animate-none"
-    >
-      <p className="text-muted-foreground text-sm">
-        Analyserer marker nær din adresse...
-      </p>
-      <div className="bg-muted h-20 animate-pulse rounded-xl" />
-      <div className="bg-muted h-12 animate-pulse rounded-xl" />
-      <div className="bg-muted h-24 animate-pulse rounded-xl" />
-    </div>
+    <ReportSkeleton />
   );
-
   const controls = (
-    <div className="bg-background/95 border-border border-t px-5 py-3 backdrop-blur-sm">
-      <ModeToggle mode="citizen" onChange={handleModeChange} />
-      <YearTimeline year={year} onChange={onYearChange} compact />
-    </div>
+    <ReportControls
+      mode="citizen"
+      onModeChange={handleModeChange}
+      year={year}
+      onYearChange={onYearChange}
+    />
   );
 
   return (
@@ -135,14 +106,12 @@ export function ReportMapView({
         />
       </div>
       <ReportHeader address={address} year={year} onBack={onBack} />
-
       <div className="md:hidden">
         <BottomSheet state={sheetState} onStateChange={setSheetState}>
           {reportContent}
           {controls}
         </BottomSheet>
       </div>
-
       <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-[420px] md:block">
         <div className="bg-background/95 pointer-events-auto flex h-full flex-col border-r pt-14 backdrop-blur-sm">
           <div
@@ -155,7 +124,6 @@ export function ReportMapView({
           {controls}
         </div>
       </div>
-
       {showStory && report && (
         <StoryMode report={report} onClose={() => setShowStory(false)} />
       )}

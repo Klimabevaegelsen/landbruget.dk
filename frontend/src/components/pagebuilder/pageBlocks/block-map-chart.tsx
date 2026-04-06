@@ -9,7 +9,7 @@ import Map, {
 } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
-import { MapChart, GeoJSONLayer } from '@/services/supabase/types';
+import { MapChart, GeoJSONLayer } from '@/services/data/types';
 import { VizColors } from '@/lib/utils';
 import { MapErrorBoundary } from './MapErrorBoundary';
 import { DocumentationAccordion } from '@/components/chart';

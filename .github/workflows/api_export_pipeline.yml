@@ -1,0 +1,86 @@
+name: API Export Pipeline
+
+on:
+  schedule:
+    # Run every Tuesday at 4 AM UTC (after weekly data pipelines complete)
+    - cron: '0 4 * * 2'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Run only specific exporters (comma-separated: homepage,search,municipalities,pesticides,companies)'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      only:
+        description: 'Run only specific exporters'
+        required: false
+        type: string
+
+jobs:
+  export-json:
+    name: Export JSON to R2
+    runs-on: ubuntu-latest
+
+    env:
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET || 'landbruget-data' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+
+          # Install common package (needed for storage/DuckDB auth)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+          # Install api_export dependencies
+          uv pip install --system duckdb s3fs python-dotenv
+
+      - name: Run API Export Pipeline
+        run: |
+          cd backend/pipelines/api_export
+          ARGS=""
+          ONLY_INPUT="${{ inputs.only || '' }}"
+          if [ -n "$ONLY_INPUT" ]; then
+            ARGS="--only $ONLY_INPUT"
+          fi
+          python main.py $ARGS
+
+      - name: Invalidate Next.js server cache
+        if: success()
+        env:
+          VERCEL_URL: ${{ vars.VERCEL_URL || 'https://landbruget.dk' }}
+        run: |
+          echo "Invalidating Next.js server-side caches..."
+          HTTP=$(curl -s -w "%{http_code}" -o /tmp/revalidate.txt -X POST \
+            "${VERCEL_URL}/api/revalidate-cache")
+          echo "Revalidation response: $HTTP"
+          cat /tmp/revalidate.txt
+          echo ""
+          if [ "$HTTP" != "200" ]; then
+            echo "⚠️ Cache invalidation returned $HTTP (non-fatal)"
+          fi
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "API Export Pipeline completed successfully on $(date)"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "API Export Pipeline failed on $(date)"

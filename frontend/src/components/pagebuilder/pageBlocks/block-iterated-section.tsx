@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { IteratedSection } from '@/services/supabase/types';
+import { IteratedSection } from '@/services/data/types';
 import { PageBlock } from '@/components/pagebuilder/pagebuilder';
 import { NavigationItem } from '@/components/layout/sidenav';
 import { BlockContainer } from './block-container';

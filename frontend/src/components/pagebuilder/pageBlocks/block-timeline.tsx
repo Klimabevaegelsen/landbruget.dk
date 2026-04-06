@@ -1,6 +1,6 @@
 'use client';
 
-import { Timeline } from '@/services/supabase/types';
+import { Timeline } from '@/services/data/types';
 import {
   VerticalTimeline,
   VerticalTimelineElement,

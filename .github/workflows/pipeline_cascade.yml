@@ -13,6 +13,7 @@ on:
       - "Field Production Matrix Pipeline"
       - "H3 PFAS Exposure Analysis"
       - "Generate PMTiles"
+      - "CVR Enrichment Pipeline"
     types: [completed]
     branches: [main]
 
@@ -61,6 +62,9 @@ jobs:
               ;;
             "H3 PFAS Exposure Analysis")
               TARGETS="generate-pmtiles.yml"
+              ;;
+            "CVR Enrichment Pipeline")
+              TARGETS="api_export_pipeline.yml"
               ;;
           esac
 

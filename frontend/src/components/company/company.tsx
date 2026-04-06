@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { CompanyResponse } from '@/services/supabase/types';
+import { CompanyResponse } from '@/services/data/types';
 import { CompanyHero } from './company-hero';
 import { Container } from '@/components/layout/container';
 import { PageBuilder } from '@/components/pagebuilder/pagebuilder';

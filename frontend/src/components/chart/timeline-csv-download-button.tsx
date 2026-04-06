@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
-import { Timeline } from '@/services/supabase/types';
+import { Timeline } from '@/services/data/types';
 import { downloadTimelineAsCSV } from '@/lib/csv-download';
 
 interface TimelineCSVDownloadButtonProps {

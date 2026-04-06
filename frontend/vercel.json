@@ -18,7 +18,7 @@
       ]
     },
     {
-      "source": "/api/supabase/functions/homepage-rankings",
+      "source": "/api/data/homepage-rankings",
       "headers": [
         {
           "key": "Cache-Control",
@@ -31,7 +31,7 @@
       ]
     },
     {
-      "source": "/api/supabase/functions/kommuner",
+      "source": "/api/data/kommuner",
       "headers": [
         {
           "key": "Cache-Control",
@@ -77,10 +77,10 @@
     "app/api/homepage-statistics/route.ts": {
       "maxDuration": 30
     },
-    "app/api/supabase/functions/homepage-rankings/route.ts": {
+    "app/api/data/homepage-rankings/route.ts": {
       "maxDuration": 30
     },
-    "app/api/supabase/functions/kommuner/route.ts": {
+    "app/api/data/kommuner/route.ts": {
       "maxDuration": 30
     },
     "app/api/pmtiles/[...path]/route.ts": {

@@ -48,7 +48,7 @@ test.describe('Kommune Rankings Page', () => {
     // Mock the API to avoid real network calls
     await mockApiResponse(
       page,
-      /\/api\/supabase\/functions\/kommuner/,
+      /\/api\/data\/kommuner/,
       MOCK_RANKINGS_RESPONSE
     );
 
@@ -62,7 +62,7 @@ test.describe('Kommune Rankings Page', () => {
   test('should display ranking tables with mocked data', async ({ page }) => {
     await mockApiResponse(
       page,
-      /\/api\/supabase\/functions\/kommuner/,
+      /\/api\/data\/kommuner/,
       MOCK_RANKINGS_RESPONSE
     );
 
@@ -80,7 +80,7 @@ test.describe('Kommune Rankings Page', () => {
 
   test('should show loading state initially', async ({ page }) => {
     // Delay the API response to observe loading state
-    await page.route(/\/api\/supabase\/functions\/kommuner/, async (route) => {
+    await page.route(/\/api\/data\/kommuner/, async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
       await route.fulfill({
         status: 200,
@@ -96,7 +96,7 @@ test.describe('Kommune Rankings Page', () => {
   });
 
   test('should show error state on API failure', async ({ page }) => {
-    await page.route(/\/api\/supabase\/functions\/kommuner/, (route) => {
+    await page.route(/\/api\/data\/kommuner/, (route) => {
       route.fulfill({
         status: 500,
         contentType: 'application/json',
@@ -118,7 +118,7 @@ test.describe('Kommune Rankings Page', () => {
   test('should have navigation visible', async ({ page }) => {
     await mockApiResponse(
       page,
-      /\/api\/supabase\/functions\/kommuner/,
+      /\/api\/data\/kommuner/,
       MOCK_RANKINGS_RESPONSE
     );
 

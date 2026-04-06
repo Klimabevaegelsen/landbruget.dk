@@ -1,4 +1,4 @@
-import { PageBuilderItem } from '@/services/supabase/types';
+import { PageBuilderItem } from '@/services/data/types';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function BlockPlaceholder({ block }: { block: PageBuilderItem }) {

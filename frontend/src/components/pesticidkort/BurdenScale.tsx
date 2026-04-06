@@ -18,6 +18,8 @@ interface BurdenScaleProps {
 
 export function BurdenScale({ burden, histogram }: BurdenScaleProps) {
   const dotPercent = burdenToPercent(burden);
+  const avgStyle = { left: `${NATIONAL_AVG_PERCENT}%` };
+  const dotStyle = { left: `${dotPercent}%` };
 
   const bars = useMemo(() => {
     if (histogram.length === 0) return [];
@@ -33,26 +35,29 @@ export function BurdenScale({ burden, histogram }: BurdenScaleProps) {
 
   return (
     <div className="relative h-5 flex-1" data-testid="burden-scale">
-      {bars.map((bar, i) => (
-        <div
-          key={i}
-          className="bg-muted-foreground/8 absolute bottom-0"
-          style={{
-            left: `${bar.left}%`,
-            width: `${Math.max(bar.width, 0.5)}%`,
-            height: `${Math.max(bar.height, 4)}%`,
-          }}
-        />
-      ))}
+      {bars.map((bar, i) => {
+        const barStyle = {
+          left: `${bar.left}%`,
+          width: `${Math.max(bar.width, 0.5)}%`,
+          height: `${Math.max(bar.height, 4)}%`,
+        };
+        return (
+          <div
+            key={i}
+            className="bg-muted-foreground/8 absolute bottom-0"
+            style={barStyle}
+          />
+        );
+      })}
       <div className="bg-muted absolute bottom-[3px] h-[2px] w-full rounded-full" />
       <div
         className="bg-muted-foreground/25 absolute bottom-0 h-full w-px"
-        style={{ left: `${NATIONAL_AVG_PERCENT}%` }}
+        style={avgStyle}
         title="Landsgennemsnit (2,15 B/ha)"
       />
       <div
         className="bg-foreground absolute bottom-[1px] h-[6px] w-[6px] -translate-x-1/2 rounded-full"
-        style={{ left: `${dotPercent}%` }}
+        style={dotStyle}
       />
     </div>
   );

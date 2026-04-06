@@ -12,42 +12,18 @@
 ### Client-Side (Browser)
 Must be prefixed with `NEXT_PUBLIC_`:
 ```typescript
-// ✅ OK - exposed to browser
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+// ✅ OK - exposed to browser (public CDN URL)
+process.env.NEXT_PUBLIC_DATA_URL
 
-// ❌ NEVER - service key in browser
-process.env.SUPABASE_SERVICE_ROLE_KEY
+// ❌ NEVER - secret keys in browser
+process.env.R2_SECRET_ACCESS_KEY
 ```
 
 ### Server-Side Only
 No prefix, never exposed to client:
 ```typescript
 // Server components and API routes only
-process.env.SUPABASE_SERVICE_ROLE_KEY
-```
-
-## Database Security
-
-### RLS Required
-Every table must have Row Level Security enabled:
-```sql
-ALTER TABLE [table] ENABLE ROW LEVEL SECURITY;
-```
-
-### Default Policy
-Most Landbruget.dk tables are public read:
-```sql
-CREATE POLICY "Allow public read"
-  ON [table] FOR SELECT
-  USING (true);
-```
-
-### Sensitive Tables
-Restrict access as needed:
-```sql
-CREATE POLICY "Users see own data"
-  ON [table] FOR SELECT
-  USING (auth.uid() = user_id);
+process.env.R2_SECRET_ACCESS_KEY
 ```
 
 ## Input Validation
@@ -62,14 +38,15 @@ const schema = z.object({
 });
 ```
 
-### SQL Injection Prevention
-Use parameterized queries (Supabase handles this):
+### Path Traversal Prevention
+When constructing R2 CDN paths from user input:
 ```typescript
-// ✅ Safe
-supabase.from('table').select('*').eq('column', userInput)
+// ✅ Safe - encode user input
+const safeMuni = encodeURIComponent(municipality);
+const url = `${DATA_URL}/municipalities/details/${safeMuni}_${category}.json`;
 
-// ❌ Dangerous
-supabase.rpc('search', { query: `%${userInput}%` })
+// ❌ Dangerous - raw interpolation
+const url = `${DATA_URL}/municipalities/details/${municipality}_${category}.json`;
 ```
 
 ## XSS Prevention
@@ -80,23 +57,11 @@ import DOMPurify from 'dompurify';
 <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }} />
 ```
 
-## Authentication
-
-Use Supabase session management:
-```typescript
-// ✅ Correct
-const { data: { session } } = await supabase.auth.getSession();
-
-// ❌ Don't store tokens manually
-localStorage.setItem('token', token); // No!
-```
-
 ## Code Review Security Checklist
 
 - [ ] No hardcoded secrets
 - [ ] Environment variables properly scoped
-- [ ] RLS enabled on new tables
 - [ ] User input validated
-- [ ] No SQL injection vectors
+- [ ] No path traversal in R2 URL construction
 - [ ] No XSS vectors
 - [ ] No sensitive data in logs

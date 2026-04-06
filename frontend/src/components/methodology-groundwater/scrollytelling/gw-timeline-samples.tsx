@@ -35,6 +35,7 @@ export function GwTimelineSamples({
       {samples.map((sample, i) => {
         const frac = (sample.year - startYear) / span;
         const visible = arrived || displayYear >= sample.year;
+        const sampleStyle = { left: `${frac * 100}%` };
         return (
           <motion.div
             key={`${sample.year}-${i}`}
@@ -45,7 +46,7 @@ export function GwTimelineSamples({
             }}
             transition={{ duration: 0.3, delay: visible ? i * 0.15 : 0 }}
             className="absolute -translate-x-1/2"
-            style={{ left: `${frac * 100}%` }}
+            style={sampleStyle}
           >
             <div
               className={`mx-auto h-1.5 w-1.5 rounded-full ${

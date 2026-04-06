@@ -1,4 +1,4 @@
-import { PageBuilderItem } from '@/services/supabase/types';
+import { PageBuilderItem } from '@/services/data/types';
 import {
   NavigationItem,
   NavigationGroup,

@@ -98,9 +98,7 @@ export function IndividualRankingTable({
         rankingId, // Pass specific ranking ID to get only this ranking
       });
 
-      const response = await fetch(
-        `/api/supabase/functions/homepage-rankings?${params}`
-      );
+      const response = await fetch(`/api/data/homepage-rankings?${params}`);
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status} ${response.statusText}`);
