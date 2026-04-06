@@ -76,7 +76,9 @@ class CompanyProfilesExporter(BaseExporter):
         # Direct R2 paths (no spaces)
         r2_tables = {
             "companies": _r2("gold/cvr_enrichment_companies/data.parquet"),
-            "financials": _r2("gold/cvr_enrichment_financial_statements/20260323_043837/financial_statements.parquet"),
+            "financials": _r2(
+                "gold/cvr_enrichment_financial_statements/20260323_043837/financial_statements.parquet"
+            ),
             "field_production": _r2("gold/field_production/latest/data.parquet"),
             "pesticides": _r2(
                 "gold/pesticide_disaggregation_2023_2024/20260317_074432/pesticide_disaggregation_2023_2024.parquet"
@@ -111,110 +113,11 @@ class CompanyProfilesExporter(BaseExporter):
         """Pre-compute per-company aggregates to avoid N+1 queries."""
         logger.info("Pre-computing per-company aggregates...")
 
-        # Field production summary per company (latest year + history)
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE company_field_summary AS
-            SELECT
-                cvr_number,
-                MAX(year) AS latest_year,
-                COUNT(DISTINCT year) AS years_active,
-                ROUND(SUM(CASE WHEN year = 2024 THEN area_ha ELSE 0 END), 1) AS area_2024_ha,
-                COUNT(CASE WHEN year = 2024 THEN 1 END) AS fields_2024,
-                COUNT(DISTINCT CASE WHEN year = 2024 THEN crop_type END) AS crops_2024,
-                ROUND(100.0 * SUM(CASE WHEN year = 2024 AND organic_farming THEN area_ha ELSE 0 END)
-                    / NULLIF(SUM(CASE WHEN year = 2024 THEN area_ha ELSE 0 END), 0), 1) AS organic_pct_2024
-            FROM field_production
-            GROUP BY cvr_number
-        """)
-
-        # Field production yearly totals
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE company_field_yearly AS
-            SELECT
-                cvr_number,
-                year,
-                ROUND(SUM(area_ha), 1) AS total_area_ha,
-                COUNT(*) AS field_count,
-                ROUND(SUM(production_estimate_hkg), 0) AS total_production_hkg
-            FROM field_production
-            GROUP BY cvr_number, year
-            ORDER BY cvr_number, year
-        """)
-
-        # Crop distribution for 2024
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE company_crops_2024 AS
-            SELECT
-                cvr_number,
-                crop_type,
-                organic_farming,
-                ROUND(SUM(area_ha), 2) AS area_ha,
-                COUNT(*) AS field_count
-            FROM field_production
-            WHERE year = 2024
-            GROUP BY cvr_number, crop_type, organic_farming
-            ORDER BY cvr_number, area_ha DESC
-        """)
-
-        # Financial summary (latest report per company)
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE company_financials AS
-            SELECT DISTINCT ON (cvr_number)
-                cvr_number,
-                net_profit_loss,
-                gross_profit_loss,
-                total_assets,
-                total_equity,
-                equity_ratio,
-                return_on_assets,
-                average_number_of_employees,
-                property_plant_equipment,
-                reporting_period_end
-            FROM financials
-            ORDER BY cvr_number, reporting_period_end DESC
-        """)
-
-        # Pesticide summary per company
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE company_pesticides AS
-            SELECT
-                cvr_number,
-                COUNT(*) AS total_applications,
-                COUNT(DISTINCT PesticideName) AS unique_pesticides,
-                ROUND(SUM(AllocatedArea), 1) AS total_treated_area_ha,
-                ROUND(SUM(DosageQuantity), 2) AS total_dosage
-            FROM pesticides
-            GROUP BY cvr_number
-        """)
-
-        # Worker safety per company (injury_count can be ranges like '1-5')
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE company_worker_safety AS
-            SELECT
-                cvr_number,
-                year,
-                SUM(TRY_CAST(
-                    CASE WHEN injury_count LIKE '%-%'
-                        THEN SPLIT_PART(injury_count, '-', 1)
-                        ELSE injury_count
-                    END AS INTEGER
-                )) AS total_injuries
-            FROM worker_safety
-            GROUP BY cvr_number, year
-            ORDER BY cvr_number, year
-        """)
-
-        # Work permits per company
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE company_work_permits AS
-            SELECT
-                company_id AS cvr_number,
-                year,
-                SUM(first_permits_count) AS total_permits
-            FROM work_permits
-            GROUP BY company_id, year
-            ORDER BY company_id, year
-        """)
+        self._precompute_field_production()
+        self._precompute_financials()
+        self._precompute_pesticides()
+        self._precompute_worker_safety()
+        self._precompute_work_permits()
 
         # Environmental analysis per company (BNBO, wetlands, grukos)
         self._precompute_env()
@@ -232,6 +135,127 @@ class CompanyProfilesExporter(BaseExporter):
         self._precompute_fertiliser()
 
         logger.info("Pre-computation complete")
+
+    def _precompute_field_production(self) -> None:
+        """Field production summary, yearly totals, and crop distribution."""
+        try:
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_field_summary AS
+                SELECT
+                    cvr_number,
+                    MAX(year) AS latest_year,
+                    COUNT(DISTINCT year) AS years_active,
+                    ROUND(SUM(CASE WHEN year = 2024 THEN area_ha ELSE 0 END), 1) AS area_2024_ha,
+                    COUNT(CASE WHEN year = 2024 THEN 1 END) AS fields_2024,
+                    COUNT(DISTINCT CASE WHEN year = 2024 THEN crop_type END) AS crops_2024,
+                    ROUND(100.0 * SUM(CASE WHEN year = 2024 AND organic_farming THEN area_ha ELSE 0 END)
+                        / NULLIF(SUM(CASE WHEN year = 2024 THEN area_ha ELSE 0 END), 0), 1) AS organic_pct_2024
+                FROM field_production
+                GROUP BY cvr_number
+            """)
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_field_yearly AS
+                SELECT
+                    cvr_number,
+                    year,
+                    ROUND(SUM(area_ha), 1) AS total_area_ha,
+                    COUNT(*) AS field_count,
+                    ROUND(SUM(production_estimate_hkg), 0) AS total_production_hkg
+                FROM field_production
+                GROUP BY cvr_number, year
+                ORDER BY cvr_number, year
+            """)
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_crops_2024 AS
+                SELECT
+                    cvr_number,
+                    crop_type,
+                    organic_farming,
+                    ROUND(SUM(area_ha), 2) AS area_ha,
+                    COUNT(*) AS field_count
+                FROM field_production
+                WHERE year = 2024
+                GROUP BY cvr_number, crop_type, organic_farming
+                ORDER BY cvr_number, area_ha DESC
+            """)
+        except Exception:
+            logger.warning("Could not compute field production aggregates")
+
+    def _precompute_financials(self) -> None:
+        """Financial summary — latest report per company."""
+        try:
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_financials AS
+                SELECT DISTINCT ON (cvr_number)
+                    cvr_number,
+                    net_profit_loss,
+                    gross_profit_loss,
+                    total_assets,
+                    total_equity,
+                    equity_ratio,
+                    return_on_assets,
+                    average_number_of_employees,
+                    property_plant_equipment,
+                    reporting_period_end
+                FROM financials
+                ORDER BY cvr_number, reporting_period_end DESC
+            """)
+        except Exception:
+            logger.warning("Could not compute financial aggregates")
+
+    def _precompute_pesticides(self) -> None:
+        """Pesticide summary per company."""
+        try:
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_pesticides AS
+                SELECT
+                    cvr_number,
+                    COUNT(*) AS total_applications,
+                    COUNT(DISTINCT PesticideName) AS unique_pesticides,
+                    ROUND(SUM(AllocatedArea), 1) AS total_treated_area_ha,
+                    ROUND(SUM(DosageQuantity), 2) AS total_dosage
+                FROM pesticides
+                GROUP BY cvr_number
+            """)
+        except Exception:
+            logger.warning("Could not compute pesticide aggregates")
+
+    def _precompute_worker_safety(self) -> None:
+        """Worker safety per company (injury_count can be ranges like '1-5')."""
+        try:
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_worker_safety AS
+                SELECT
+                    cvr_number,
+                    year,
+                    SUM(TRY_CAST(
+                        CASE WHEN injury_count LIKE '%-%'
+                            THEN SPLIT_PART(injury_count, '-', 1)
+                            ELSE injury_count
+                        END AS INTEGER
+                    )) AS total_injuries
+                FROM worker_safety
+                GROUP BY cvr_number, year
+                ORDER BY cvr_number, year
+            """)
+        except Exception:
+            logger.warning("Could not compute worker safety aggregates")
+
+    def _precompute_work_permits(self) -> None:
+        """Work permits per company."""
+        try:
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_work_permits AS
+                SELECT
+                    company_id AS cvr_number,
+                    year,
+                    SUM(first_permits_count) AS total_permits
+                FROM work_permits
+                GROUP BY company_id, year
+                ORDER BY company_id, year
+            """)
+        except Exception:
+            logger.warning("Could not compute work permit aggregates")
 
     def _precompute_env(self) -> None:
         """Environmental analysis: BNBO status counts per company.
@@ -340,7 +364,15 @@ class CompanyProfilesExporter(BaseExporter):
             ORDER BY cvr_number
         """).fetchall()
 
-        columns = ["cvr", "company_name", "municipality", "address", "company_type", "latitude", "longitude"]
+        columns = [
+            "cvr",
+            "company_name",
+            "municipality",
+            "address",
+            "company_type",
+            "latitude",
+            "longitude",
+        ]
         now = datetime.now(UTC).isoformat()
         count = 0
 
@@ -382,7 +414,26 @@ class CompanyProfilesExporter(BaseExporter):
         logger.info("Generating full company profiles...")
 
         # Companies with any agricultural-related data
-        ag_companies = self.conn.execute("""
+        # Build UNION dynamically from tables that were actually loaded
+        cvr_sources = {
+            "field_production": "SELECT DISTINCT cvr_number FROM field_production",
+            "pesticides": "SELECT DISTINCT cvr_number FROM pesticides",
+            "worker_safety": "SELECT DISTINCT cvr_number::VARCHAR FROM worker_safety",
+            "env_fields": "SELECT DISTINCT cvr_number FROM env_fields WHERE cvr_number IS NOT NULL",
+            "nitrogen": "SELECT DISTINCT cvr_number FROM nitrogen WHERE cvr_number IS NOT NULL",
+        }
+        available_tables = self.conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()
+        existing = {row[0] for row in available_tables}
+        union_parts = [sql for table, sql in cvr_sources.items() if table in existing]
+
+        if not union_parts:
+            logger.warning("No data tables available for full profiles — skipping")
+            return 0
+
+        union_sql = " UNION ".join(union_parts)
+        ag_companies = self.conn.execute(f"""
             SELECT
                 c.cvr_number::VARCHAR AS cvr,
                 c.company_name,
@@ -391,13 +442,7 @@ class CompanyProfilesExporter(BaseExporter):
                 c.company_type_description AS company_type,
                 c.primary_industry_description AS industry
             FROM companies c
-            WHERE c.cvr_number::VARCHAR IN (
-                SELECT DISTINCT cvr_number FROM field_production
-                UNION SELECT DISTINCT cvr_number FROM pesticides
-                UNION SELECT DISTINCT cvr_number::VARCHAR FROM worker_safety
-                UNION SELECT DISTINCT cvr_number FROM env_fields WHERE cvr_number IS NOT NULL
-                UNION SELECT DISTINCT cvr_number FROM nitrogen WHERE cvr_number IS NOT NULL
-            )
+            WHERE c.cvr_number::VARCHAR IN ({union_sql})
             ORDER BY c.cvr_number
         """).fetchall()
 
@@ -508,7 +553,12 @@ class CompanyProfilesExporter(BaseExporter):
     # --- Component builders ---
 
     def _get_field_kpis(self, cvr: str) -> dict | None:
-        rows = self.conn.execute("SELECT * FROM company_field_summary WHERE cvr_number = ?", [cvr]).fetchall()
+        try:
+            rows = self.conn.execute(
+                "SELECT * FROM company_field_summary WHERE cvr_number = ?", [cvr]
+            ).fetchall()
+        except Exception:
+            return None
         if not rows:
             return None
         desc = [d[0] for d in self.conn.description]
@@ -518,7 +568,12 @@ class CompanyProfilesExporter(BaseExporter):
             "_type": "kpiGroup",
             "title": "Arealanvendelse nøgletal",
             "kpis": [
-                {"key": "total_ha", "label": "Antal Hektar (2024)", "value": data["area_2024_ha"], "format": "number"},
+                {
+                    "key": "total_ha",
+                    "label": "Antal Hektar (2024)",
+                    "value": data["area_2024_ha"],
+                    "format": "number",
+                },
                 {"key": "fields", "label": "Antal Marker (2024)", "value": data["fields_2024"]},
                 {"key": "crops", "label": "Antal Afgrøder (2024)", "value": data["crops_2024"]},
                 {
@@ -532,10 +587,13 @@ class CompanyProfilesExporter(BaseExporter):
         }
 
     def _get_crop_chart(self, cvr: str) -> dict | None:
-        rows = self.conn.execute(
-            "SELECT crop_type, organic_farming, area_ha FROM company_crops_2024 WHERE cvr_number = ? ORDER BY area_ha DESC LIMIT 15",
-            [cvr],
-        ).fetchall()
+        try:
+            rows = self.conn.execute(
+                "SELECT crop_type, organic_farming, area_ha FROM company_crops_2024 WHERE cvr_number = ? ORDER BY area_ha DESC LIMIT 15",
+                [cvr],
+            ).fetchall()
+        except Exception:
+            return None
         if not rows:
             return None
 
@@ -571,10 +629,13 @@ class CompanyProfilesExporter(BaseExporter):
         }
 
     def _get_field_history_chart(self, cvr: str) -> dict | None:
-        rows = self.conn.execute(
-            "SELECT year, total_area_ha, total_production_hkg FROM company_field_yearly WHERE cvr_number = ? ORDER BY year",
-            [cvr],
-        ).fetchall()
+        try:
+            rows = self.conn.execute(
+                "SELECT year, total_area_ha, total_production_hkg FROM company_field_yearly WHERE cvr_number = ? ORDER BY year",
+                [cvr],
+            ).fetchall()
+        except Exception:
+            return None
         if not rows:
             return None
 
@@ -584,7 +645,9 @@ class CompanyProfilesExporter(BaseExporter):
 
         series = [{"name": "Areal (ha)", "data": areas, "type": "bar", "yAxis": "left"}]
         if any(p > 0 for p in production):
-            series.append({"name": "Produktion (hkg)", "data": production, "type": "line", "yAxis": "right"})
+            series.append(
+                {"name": "Produktion (hkg)", "data": production, "type": "line", "yAxis": "right"}
+            )
 
         return {
             "_key": "field-production-history",
@@ -598,7 +661,12 @@ class CompanyProfilesExporter(BaseExporter):
         }
 
     def _get_financial_kpis(self, cvr: str) -> dict | None:
-        rows = self.conn.execute("SELECT * FROM company_financials WHERE cvr_number = ?::INTEGER", [cvr]).fetchall()
+        try:
+            rows = self.conn.execute(
+                "SELECT * FROM company_financials WHERE cvr_number = ?::INTEGER", [cvr]
+            ).fetchall()
+        except Exception:
+            return None
         if not rows:
             return None
         desc = [d[0] for d in self.conn.description]
@@ -631,7 +699,9 @@ class CompanyProfilesExporter(BaseExporter):
 
     def _get_env_kpis(self, cvr: str) -> dict | None:
         try:
-            rows = self.conn.execute("SELECT * FROM company_environment WHERE cvr_number = ?", [cvr]).fetchall()
+            rows = self.conn.execute(
+                "SELECT * FROM company_environment WHERE cvr_number = ?", [cvr]
+            ).fetchall()
         except Exception:
             return None
         if not rows:
@@ -640,8 +710,16 @@ class CompanyProfilesExporter(BaseExporter):
         data = dict(zip(desc, rows[0], strict=False))
 
         kpis = [
-            {"key": "bnbo_affected_fields", "label": "Marker i BNBO-område", "value": data["bnbo_affected_fields"]},
-            {"key": "bnbo_statuses", "label": "BNBO-statusser", "value": data["total_bnbo_statuses"]},
+            {
+                "key": "bnbo_affected_fields",
+                "label": "Marker i BNBO-område",
+                "value": data["bnbo_affected_fields"],
+            },
+            {
+                "key": "bnbo_statuses",
+                "label": "BNBO-statusser",
+                "value": data["total_bnbo_statuses"],
+            },
             {"key": "total_fields", "label": "Marker i alt (2024)", "value": data["total_fields"]},
         ]
 
@@ -678,14 +756,29 @@ class CompanyProfilesExporter(BaseExporter):
                 "xAxis": {"label": "År", "values": years},
                 "yAxis": {"label": "Kg kvælstof"},
                 "series": [
-                    {"name": "Total N udvasket (kg)", "data": total_n, "type": "bar", "yAxis": "left"},
-                    {"name": "N pr. hektar (kg/ha)", "data": n_per_ha, "type": "line", "yAxis": "right"},
+                    {
+                        "name": "Total N udvasket (kg)",
+                        "data": total_n,
+                        "type": "bar",
+                        "yAxis": "left",
+                    },
+                    {
+                        "name": "N pr. hektar (kg/ha)",
+                        "data": n_per_ha,
+                        "type": "line",
+                        "yAxis": "right",
+                    },
                 ],
             },
         }
 
     def _get_pesticide_kpis(self, cvr: str) -> dict | None:
-        rows = self.conn.execute("SELECT * FROM company_pesticides WHERE cvr_number = ?", [cvr]).fetchall()
+        try:
+            rows = self.conn.execute(
+                "SELECT * FROM company_pesticides WHERE cvr_number = ?", [cvr]
+            ).fetchall()
+        except Exception:
+            return None
         if not rows:
             return None
         desc = [d[0] for d in self.conn.description]
@@ -695,21 +788,36 @@ class CompanyProfilesExporter(BaseExporter):
             "_type": "kpiGroup",
             "title": "Pesticidanvendelse (2023-2024)",
             "kpis": [
-                {"key": "applications", "label": "Antal Udspredninger", "value": data["total_applications"]},
-                {"key": "pesticides", "label": "Unikke Pesticider", "value": data["unique_pesticides"]},
+                {
+                    "key": "applications",
+                    "label": "Antal Udspredninger",
+                    "value": data["total_applications"],
+                },
+                {
+                    "key": "pesticides",
+                    "label": "Unikke Pesticider",
+                    "value": data["unique_pesticides"],
+                },
                 {
                     "key": "area",
                     "label": "Behandlet Areal (ha)",
                     "value": data["total_treated_area_ha"],
                     "format": "number",
                 },
-                {"key": "dosage", "label": "Total Dosering", "value": data["total_dosage"], "format": "number"},
+                {
+                    "key": "dosage",
+                    "label": "Total Dosering",
+                    "value": data["total_dosage"],
+                    "format": "number",
+                },
             ],
         }
 
     def _get_inspection_kpis(self, cvr: str) -> dict | None:
         try:
-            rows = self.conn.execute("SELECT * FROM company_inspections WHERE cvr_number = ?", [cvr]).fetchall()
+            rows = self.conn.execute(
+                "SELECT * FROM company_inspections WHERE cvr_number = ?", [cvr]
+            ).fetchall()
         except Exception:
             return None
         if not rows:
@@ -718,7 +826,11 @@ class CompanyProfilesExporter(BaseExporter):
         data = dict(zip(desc, rows[0], strict=False))
 
         kpis = [
-            {"key": "total_inspections", "label": "Antal Tilsyn", "value": data["total_inspections"]},
+            {
+                "key": "total_inspections",
+                "label": "Antal Tilsyn",
+                "value": data["total_inspections"],
+            },
             {"key": "total_cases", "label": "Antal Sager", "value": data["total_cases"]},
         ]
         if data.get("immediate_orders") and data["immediate_orders"] > 0:
@@ -742,10 +854,13 @@ class CompanyProfilesExporter(BaseExporter):
         }
 
     def _get_worker_safety_chart(self, cvr: str) -> dict | None:
-        rows = self.conn.execute(
-            "SELECT year, total_injuries FROM company_worker_safety WHERE cvr_number = ?::BIGINT ORDER BY year",
-            [cvr],
-        ).fetchall()
+        try:
+            rows = self.conn.execute(
+                "SELECT year, total_injuries FROM company_worker_safety WHERE cvr_number = ?::BIGINT ORDER BY year",
+                [cvr],
+            ).fetchall()
+        except Exception:
+            return None
         if not rows:
             return None
         return {
@@ -760,10 +875,13 @@ class CompanyProfilesExporter(BaseExporter):
         }
 
     def _get_work_permits_chart(self, cvr: str) -> dict | None:
-        rows = self.conn.execute(
-            "SELECT year, total_permits FROM company_work_permits WHERE cvr_number = ? ORDER BY year",
-            [cvr],
-        ).fetchall()
+        try:
+            rows = self.conn.execute(
+                "SELECT year, total_permits FROM company_work_permits WHERE cvr_number = ? ORDER BY year",
+                [cvr],
+            ).fetchall()
+        except Exception:
+            return None
         if not rows:
             return None
         return {
@@ -779,7 +897,9 @@ class CompanyProfilesExporter(BaseExporter):
 
     def _get_subsidy_kpis(self, cvr: str) -> dict | None:
         try:
-            rows = self.conn.execute("SELECT * FROM company_subsidies WHERE cvr_number = ?", [cvr]).fetchall()
+            rows = self.conn.execute(
+                "SELECT * FROM company_subsidies WHERE cvr_number = ?", [cvr]
+            ).fetchall()
         except Exception:
             return None
         if not rows:
@@ -794,9 +914,23 @@ class CompanyProfilesExporter(BaseExporter):
 
         kpis = []
         if total_eu > 0:
-            kpis.append({"key": "total_eu", "label": "EU-tilskud i alt (DKK)", "value": total_eu, "format": "number"})
+            kpis.append(
+                {
+                    "key": "total_eu",
+                    "label": "EU-tilskud i alt (DKK)",
+                    "value": total_eu,
+                    "format": "number",
+                }
+            )
         if total_eagf > 0:
-            kpis.append({"key": "eagf", "label": "EGFL-tilskud (DKK)", "value": total_eagf, "format": "number"})
+            kpis.append(
+                {
+                    "key": "eagf",
+                    "label": "EGFL-tilskud (DKK)",
+                    "value": total_eagf,
+                    "format": "number",
+                }
+            )
         kpis.append({"key": "records", "label": "Tilskudsposter", "value": data["subsidy_records"]})
 
         return {
