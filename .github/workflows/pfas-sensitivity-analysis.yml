@@ -1,0 +1,126 @@
+name: PFAS Year-Window Sensitivity Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: true
+        default: "sensitivity-run"
+        type: choice
+        options:
+          - "sensitivity-run"
+          - "single-window"
+      year_window:
+        description: "Year window (for single-window mode)"
+        required: false
+        default: "original"
+        type: choice
+        options:
+          - "original"
+          - "extended-early"
+          - "all"
+          - "high-coverage"
+          - "early-only"
+
+env:
+  R2_BUCKET: ${{ secrets.R2_BUCKET }}
+  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
+
+jobs:
+  pfas-sensitivity:
+    name: PFAS Sensitivity Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            libgeos-dev \
+            libproj-dev \
+            libgdal-dev \
+            libsqlite3-dev \
+            zlib1g-dev
+
+      - name: Install Python dependencies
+        working-directory: backend
+        run: |
+          # Install common package first
+          cd common
+          uv pip install --system -e .
+          cd ..
+
+          # Install unified pipeline (needed for storage/R2 access)
+          cd pipelines/unified_pipeline
+          uv pip install --system -e .
+          cd ../..
+
+          # Install analysis script dependencies
+          uv pip install --system duckdb numpy scipy scikit-learn statsmodels
+
+      - name: Run analysis
+        working-directory: backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}/backend
+        run: |
+          if [[ "${{ github.event.inputs.mode }}" == "sensitivity-run" ]]; then
+            echo "Running full sensitivity analysis across all 5 year windows..."
+            python scripts/verify_pfas_groundwater_correlations.py \
+              --sensitivity-run \
+              --export-json scripts/reports/sensitivity_results.json \
+              --verbose
+          else
+            echo "Running single window: ${{ github.event.inputs.year_window }}"
+            python scripts/verify_pfas_groundwater_correlations.py \
+              --year-window "${{ github.event.inputs.year_window }}" \
+              --export-json "scripts/reports/sensitivity_${{ github.event.inputs.year_window }}.json" \
+              --verbose
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pfas-sensitivity-results-${{ github.run_id }}
+          path: backend/scripts/reports/sensitivity*.json
+          retention-days: 30
+
+      - name: Print summary
+        if: always()
+        run: |
+          echo "=== Results ==="
+          if [[ -f backend/scripts/reports/sensitivity_results.json ]]; then
+            python3 -c "
+          import json
+          with open('backend/scripts/reports/sensitivity_results.json') as f:
+              data = json.load(f)
+          comp = data.get('comparison', {})
+          print(f'Windows tested: {len(comp)}')
+          for name, metrics in comp.items():
+              if 'error' in metrics:
+                  print(f'  {name}: ERROR - {metrics[\"error\"]}')
+              else:
+                  print(f'  {name}: T2={metrics.get(\"tier2_fdr_sig\",\"?\")}, MV={metrics.get(\"mv_survivors\",\"?\")}, PFOA r={metrics.get(\"pfoa_r\",\"?\")}, PFAS-22 p={metrics.get(\"pfas22_p\",\"?\")}')
+          "
+          else
+            echo "No results file found"
+            ls -la backend/scripts/reports/ 2>/dev/null || echo "reports dir not found"
+          fi
