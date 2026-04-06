@@ -61,19 +61,19 @@ class BaseExporter:
                 f.write(json_str)
             logger.info(f"Uploaded s3://{r2_path} ({len(json_str)} bytes)")
 
-    def load_parquet_table(self, gcs_path: str, table_name: str) -> int:
-        """Load a parquet file from GCS into a DuckDB table.
+    def load_parquet_table(self, parquet_path: str, table_name: str) -> int:
+        """Load a parquet file into a DuckDB table.
 
         Args:
-            gcs_path: Full gs:// path to parquet file
+            parquet_path: Path to parquet file (cloud or local)
             table_name: Name for the DuckDB table
 
         Returns:
             Row count of loaded table
         """
-        self.conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM '{gcs_path}'")
+        self.conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM '{parquet_path}'")
         count = self.conn.execute(f"SELECT count(*) FROM {table_name}").fetchone()[0]
-        logger.info(f"Loaded {table_name}: {count:,} rows from {gcs_path}")
+        logger.info(f"Loaded {table_name}: {count:,} rows from {parquet_path}")
         return count
 
     def query_to_dicts(self, sql: str) -> list[dict]:

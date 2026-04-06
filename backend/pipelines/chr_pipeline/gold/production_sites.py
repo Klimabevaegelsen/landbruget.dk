@@ -16,12 +16,12 @@ import duckdb
 from .export import export_gold_table
 
 try:
-    from common.gcs import GCSDataAccess
+    from common.storage import StorageAccess
 
-    GCS_AVAILABLE = True
+    STORAGE_AVAILABLE = True
 except ImportError:
-    GCS_AVAILABLE = False
-    GCSDataAccess = None
+    STORAGE_AVAILABLE = False
+    StorageAccess = None
 
 logger = logging.getLogger(__name__)
 
@@ -131,24 +131,24 @@ def process_production_sites(
 
 
 def _load_silver_tables(conn: duckdb.DuckDBPyConnection) -> bool:
-    """Load CHR silver parquet from GCS/R2 into DuckDB tables."""
-    if not GCS_AVAILABLE:
-        logger.error("GCS utilities not available")
+    """Load CHR silver parquet from cloud storage into DuckDB tables."""
+    if not STORAGE_AVAILABLE:
+        logger.error("Storage utilities not available")
         return False
 
     try:
-        gcs = GCSDataAccess()
+        storage = StorageAccess()
         bucket = "landbruget-data"
 
         for table_name, pattern in DATA_PATTERNS.items():
-            files = gcs.list_files(bucket, pattern)
+            files = storage.list_files(bucket, pattern)
             if not files:
                 logger.warning(f"No files found for {table_name}: {pattern}")
                 continue
 
             # Use latest file (sorted by timestamp in path)
             latest = sorted(files)[-1]
-            path = f"gs://{bucket}/{latest}" if not latest.startswith("gs://") else latest
+            path = f"{bucket}/{latest}" if not latest.startswith(bucket) else latest
 
             conn.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} AS
