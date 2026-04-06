@@ -50,9 +50,12 @@ export function LiteratureNovelty() {
 
       <p>
         Sammenfattende udfylder denne tilgang et hul i den eksisterende
-        litteratur: Ingen publiceret undersøgelse har før kombineret
-        obligatoriske forbrugsdata med nationale markgrænser for at producere
-        validerede markniveau-estimater i national skala.
+        litteratur:{' '}
+        <mark>
+          Ingen publiceret undersøgelse har før kombineret obligatoriske
+          forbrugsdata med nationale markgrænser for at producere validerede
+          markniveau-estimater i national skala.
+        </mark>
       </p>
     </>
   );

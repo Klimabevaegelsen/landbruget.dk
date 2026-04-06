@@ -17,7 +17,7 @@ export function MethodologyHero() {
         Landbruget.dk &middot; Metode
       </p>
 
-      <h1 className="font-display text-foreground text-[36px] leading-[1.1] font-semibold tracking-tight lg:text-[42px]">
+      <h1 className="font-display text-foreground text-[30px] leading-[1.1] font-semibold tracking-tight sm:text-[36px] lg:text-[42px]">
         Disaggregering af pesticidanvendelse
         <br />
         <span className="text-primary">fra virksomhed til mark</span>

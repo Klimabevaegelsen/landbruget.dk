@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { SimpleThemeToggle } from '@/components/theme/theme-toggle';
 
 const analyserLinks = [
+  { href: '/pesticidkort', label: 'Pesticidkort' },
   { href: '/markanalyse', label: 'Markanalyse' },
   { href: '/pesticidanalyse', label: 'Pesticidanalyse' },
   { href: '/kommuner', label: 'Kommuneanalyse' },

@@ -9,6 +9,16 @@ import type { ScrollyStepId } from './scrolly-constants';
 const STAT_ROWS: Partial<
   Record<ScrollyStepId, { label: string; value: string }[]>
 > = {
+  location: [
+    { label: 'Vandværk', value: 'Espe' },
+    { label: 'Placering', value: 'Midtfyn' },
+  ],
+  fields: [
+    { label: 'Marker', value: '6' },
+    { label: 'Areal', value: '42,2 ha' },
+    { label: 'Afgrøder', value: 'Silomajs + vårbyg' },
+    { label: 'Stof', value: 'Bentazon' },
+  ],
   detection: [
     { label: 'Boring', value: 'DGU 155. 1899' },
     { label: 'Dybde', value: '6 m' },

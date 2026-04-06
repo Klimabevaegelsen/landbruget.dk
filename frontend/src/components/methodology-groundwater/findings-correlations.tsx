@@ -11,9 +11,11 @@ export function FindingsCorrelations() {
       <p>
         Af 11 kvalificerende stoffer (med &ge;30 detektioner pr. opland i
         2018+-vinduet) viser{' '}
-        <strong className="text-foreground">7 (64&nbsp;%)</strong> statistisk
-        signifikante positive korrelationer efter
-        Benjamini&ndash;Hochberg-korrektion (q&lt;0,05) mellem
+        <mark>
+          <strong className="text-foreground">7 (64&nbsp;%)</strong> statistisk
+          signifikante positive korrelationer
+        </mark>{' '}
+        efter Benjamini&ndash;Hochberg-korrektion (q&lt;0,05) mellem
         anvendelsesintensitet og detektionssandsynlighed i grundvandet. Tre af
         disse overlever desuden alle fire valideringslag (se afsnit 4).
       </p>
@@ -21,9 +23,11 @@ export function FindingsCorrelations() {
         De st&aelig;rkeste korrelationer ses for 1,2,4-triazol (r=0,232),
         4-chlor-2-methylphenol (r=0,222) og bentazon (r=0,213). For de tre
         robuste stoffer er detektionsrater{' '}
-        <strong className="text-foreground">3,7&ndash;4,4&times;</strong>{' '}
-        h&oslash;jere i det &oslash;verste anvendelseskvartil sammenlignet med
-        det laveste.
+        <mark>
+          <strong className="text-foreground">3,7&ndash;4,4&times;</strong>{' '}
+          h&oslash;jere
+        </mark>{' '}
+        i det &oslash;verste anvendelseskvartil sammenlignet med det laveste.
       </p>
       <div className="border-border bg-card my-6 rounded border p-5">
         <p className="text-foreground text-sm font-semibold">

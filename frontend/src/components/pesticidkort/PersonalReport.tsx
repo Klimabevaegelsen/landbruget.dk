@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Share2 } from 'lucide-react';
+import { Share2, BookOpen } from 'lucide-react';
 import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { PesticideProximityScore } from '@/components/pesticidkort/PesticideProximityScore';
@@ -144,9 +144,10 @@ export function PersonalReport({
         <Link
           href="/pesticidanalyse/metode"
           data-testid="report-methodology-link"
-          className="text-primary mt-2 inline-block text-xs font-medium underline-offset-4 hover:underline"
+          className="text-primary mt-2 inline-flex items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline"
         >
-          Læs om vores metode →
+          <BookOpen className="h-3.5 w-3.5" />
+          Læs om vores metode
         </Link>
       </footer>
     </div>

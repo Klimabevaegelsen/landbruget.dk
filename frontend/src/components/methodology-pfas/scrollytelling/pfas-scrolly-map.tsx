@@ -16,6 +16,7 @@ import {
 } from '@/components/methodology-pfas/scrollytelling/scrolly-constants';
 import { CatchmentLayers } from '@/components/methodology-groundwater/scrollytelling/catchment-layers';
 import { CatchmentChoropleth } from './catchment-choropleth';
+import { PfasMapAnnotations } from './pfas-map-annotations';
 
 function buildGeo(
   catchment: typeof SKRYDSTRUP_CATCHMENT,
@@ -104,7 +105,11 @@ export function PfasScrollyMap({ step }: PfasScrollyMapProps) {
   return (
     <Map
       ref={mapRef}
-      initialViewState={{ longitude: 9.251, latitude: 55.248, zoom: 13.5 }}
+      initialViewState={{
+        longitude: VIEWS.intro.lng,
+        latitude: VIEWS.intro.lat,
+        zoom: VIEWS.intro.zoom,
+      }}
       mapStyle={mapStyle}
       onLoad={handleLoad}
       attributionControl={false}
@@ -142,6 +147,7 @@ export function PfasScrollyMap({ step }: PfasScrollyMapProps) {
             />
           </Marker>
         ))}
+      <PfasMapAnnotations step={step} />
     </Map>
   );
 }

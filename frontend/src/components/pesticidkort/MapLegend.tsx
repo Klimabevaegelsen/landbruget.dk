@@ -48,7 +48,7 @@ export function MapLegend() {
           <Link
             href="/pesticidanalyse/metode"
             data-testid="legend-methodology-link"
-            className="text-primary/70 hover:text-primary mt-2 block text-[10px] underline-offset-4 hover:underline"
+            className="text-primary mt-2 block text-xs font-medium underline-offset-4 hover:underline"
           >
             Om metoden
           </Link>

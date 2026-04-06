@@ -23,18 +23,18 @@ export function DeepDive({
   testId,
 }: DeepDiveProps) {
   return (
-    <Accordion type="single" collapsible className={cn('my-6', className)}>
+    <Accordion type="single" collapsible className={cn('my-8', className)}>
       <AccordionItem
         value="detail"
         className="border-primary/20 bg-primary/[0.03] rounded border px-4"
       >
         <AccordionTrigger
-          className="text-primary/70 hover:text-primary text-[13px] hover:no-underline"
+          className="text-primary text-[15px] font-medium hover:no-underline"
           data-testid={testId ?? 'deep-dive-trigger'}
         >
           {title}
         </AccordionTrigger>
-        <AccordionContent className="text-foreground/80 text-[14px] leading-relaxed">
+        <AccordionContent className="text-foreground/85 text-[16px] leading-relaxed">
           {children}
         </AccordionContent>
       </AccordionItem>

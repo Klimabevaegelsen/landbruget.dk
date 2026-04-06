@@ -17,6 +17,7 @@ import {
   type ScrollyStepId,
 } from '@/components/methodology-groundwater/scrollytelling/scrolly-constants';
 import { CatchmentLayers } from '@/components/methodology-groundwater/scrollytelling/catchment-layers';
+import { GwMapAnnotations } from './gw-map-annotations';
 
 function buildGeo(
   catchment: typeof ESPE_CATCHMENT | typeof VEJEN_CATCHMENT,
@@ -39,6 +40,23 @@ function buildGeo(
   };
 }
 
+const ESPE_STEPS = new Set<ScrollyStepId>([
+  'fields',
+  'ingredient',
+  'soil',
+  'vadose',
+  'detection',
+  'doseresponse',
+  'conclusion',
+]);
+const VEJEN_STEPS = new Set<ScrollyStepId>(['metabolite', 'conclusion']);
+const ESPE_WELL_STEPS = new Set<ScrollyStepId>([
+  'detection',
+  'doseresponse',
+  'conclusion',
+]);
+const VEJEN_WELL_STEPS = new Set<ScrollyStepId>(['metabolite', 'conclusion']);
+
 interface GroundwaterScrollyMapProps {
   step: ScrollyStepId;
 }
@@ -48,11 +66,8 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
   const [ready, setReady] = useState(false);
   const { mapStyle } = useMapTheme();
 
-  const showVejen = step === 'metabolite' || step === 'conclusion';
-  const showEspe = !showVejen || step === 'conclusion';
-  const showEspeWell =
-    step === 'detection' || step === 'doseresponse' || step === 'conclusion';
-  const showVejenWell = step === 'metabolite' || step === 'conclusion';
+  const showEspe = ESPE_STEPS.has(step);
+  const showVejen = VEJEN_STEPS.has(step);
 
   const espeGeo = useMemo(() => buildGeo(ESPE_CATCHMENT, ESPE_FIELDS), []);
   const vejenGeo = useMemo(() => buildGeo(VEJEN_CATCHMENT, VEJEN_FIELDS), []);
@@ -76,7 +91,11 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
   return (
     <Map
       ref={mapRef}
-      initialViewState={{ longitude: 10.46, latitude: 55.202, zoom: 13 }}
+      initialViewState={{
+        longitude: VIEWS.intro.lng,
+        latitude: VIEWS.intro.lat,
+        zoom: VIEWS.intro.zoom,
+      }}
       mapStyle={mapStyle}
       onLoad={handleLoad}
       attributionControl={false}
@@ -99,30 +118,31 @@ export function GroundwaterScrollyMap({ step }: GroundwaterScrollyMapProps) {
           fieldColor="#f59e0b"
         />
       )}
-      {showEspeWell && (
+      {ESPE_WELL_STEPS.has(step) && (
         <Marker
           longitude={ESPE_WELL.lng}
           latitude={ESPE_WELL.lat}
           anchor="center"
         >
           <div
-            className="bg-destructive h-4 w-4 animate-pulse rounded-full border-2 border-white shadow-md"
+            className="bg-destructive border-background h-4 w-4 animate-pulse rounded-full border-2 shadow-md"
             data-testid="espe-well-marker"
           />
         </Marker>
       )}
-      {showVejenWell && (
+      {VEJEN_WELL_STEPS.has(step) && (
         <Marker
           longitude={VEJEN_WELL.lng}
           latitude={VEJEN_WELL.lat}
           anchor="center"
         >
           <div
-            className="h-4 w-4 animate-pulse rounded-full border-2 border-white bg-amber-500 shadow-md"
+            className="border-background h-4 w-4 animate-pulse rounded-full border-2 bg-amber-500 shadow-md"
             data-testid="vejen-well-marker"
           />
         </Marker>
       )}
+      <GwMapAnnotations step={step} />
     </Map>
   );
 }

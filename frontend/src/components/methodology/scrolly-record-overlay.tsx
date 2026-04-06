@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { EXAMPLE } from '@/components/methodology/scrolly-example-data';
-import type { MapStep } from '@/components/methodology/methodology-map';
+import type { DisaggStepId } from '@/components/methodology/scrolly-disagg-views';
 
 const P = EXAMPLE.pesticide;
 
@@ -27,7 +27,7 @@ const COLS = [
 ];
 
 interface ScrollyRecordOverlayProps {
-  step: MapStep;
+  step: DisaggStepId;
   visible: boolean;
 }
 

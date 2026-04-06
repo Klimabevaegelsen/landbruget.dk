@@ -10,7 +10,7 @@ export function ArticleLayout({ children, className }: ArticleLayoutProps) {
   return (
     <article
       className={cn(
-        'mx-auto max-w-[720px] px-6 pb-32 pt-12 text-[17px] leading-[1.7] text-foreground',
+        'mx-auto max-w-[65ch] px-5 pb-32 pt-12 text-[18px] leading-[1.6] text-foreground selection:bg-primary/20 selection:text-foreground [&_p+p]:mt-5 [&_ol]:my-5 [&_ul]:my-5 [&_strong]:mr-[0.1em] [&_mark]:bg-primary/[0.12] [&_mark]:px-1 [&_mark]:py-0.5 [&_mark]:rounded-sm [&_mark]:text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[0.9em] sm:px-6',
         className
       )}
       data-testid="article-layout"
@@ -39,13 +39,13 @@ export function Figure({
     <figure
       id={id}
       className={cn(
-        'my-10 rounded border border-border bg-card p-5',
+        'my-12 rounded border border-border bg-card p-5',
         className
       )}
       data-testid={`figure-${number}`}
     >
       {children}
-      <figcaption className="text-muted-foreground mt-3 text-[13px] leading-snug">
+      <figcaption className="text-muted-foreground mt-4 text-[14px] leading-normal">
         <strong className="text-primary/70 font-semibold">
           Figur {number}.
         </strong>{' '}
@@ -83,7 +83,7 @@ export function SectionHeader({ id, number, title }: SectionHeaderProps) {
   return (
     <h2
       id={id}
-      className="font-display border-border text-foreground mt-16 mb-4 border-b pb-3 text-2xl font-semibold tracking-tight"
+      className="font-display border-border text-foreground mt-20 mb-6 border-b pb-4 text-[28px] leading-tight font-semibold tracking-tight"
     >
       <span className="text-primary/60 mr-2">{number}</span>
       {title}
@@ -101,7 +101,7 @@ export function SubsectionHeader({ id, number, title }: SubsectionHeaderProps) {
   return (
     <h3
       id={id}
-      className="font-display text-foreground mt-10 mb-2 text-lg font-semibold"
+      className="font-display text-foreground mt-12 mb-4 text-[22px] leading-snug font-semibold"
     >
       <span className="text-primary/50 mr-2">{number}</span>
       {title}

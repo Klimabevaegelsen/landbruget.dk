@@ -20,12 +20,15 @@ export const VEJEN_WELL = {
 } as const;
 
 export type ScrollyStepId =
+  | 'intro'
+  | 'location'
   | 'fields'
   | 'ingredient'
   | 'soil'
   | 'vadose'
   | 'detection'
   | 'doseresponse'
+  | 'transition'
   | 'metabolite'
   | 'conclusion';
 
@@ -36,12 +39,15 @@ export interface ScrollyViewState {
 }
 
 export const VIEWS: Record<ScrollyStepId, ScrollyViewState> = {
+  intro: { lng: 10.5, lat: 56.0, zoom: 6.5 },
+  location: { lng: 10.46, lat: 55.25, zoom: 9 },
   fields: { lng: 10.46, lat: 55.202, zoom: 13 },
   ingredient: { lng: 10.46, lat: 55.202, zoom: 14 },
-  soil: { lng: 10.46, lat: 55.202, zoom: 13 },
-  vadose: { lng: 10.46, lat: 55.202, zoom: 13 },
+  soil: { lng: 10.46, lat: 55.205, zoom: 13.5 },
+  vadose: { lng: 10.44, lat: 55.204, zoom: 12.5 },
   detection: { lng: ESPE_WELL.lng, lat: ESPE_WELL.lat, zoom: 14.5 },
-  doseresponse: { lng: ESPE_WELL.lng, lat: ESPE_WELL.lat, zoom: 13 },
+  doseresponse: { lng: 10.46, lat: 55.22, zoom: 11 },
+  transition: { lng: 9.8, lat: 55.35, zoom: 9 },
   metabolite: { lng: VEJEN_WELL.lng, lat: VEJEN_WELL.lat, zoom: 12 },
   conclusion: { lng: 9.8, lat: 55.35, zoom: 8 },
 };

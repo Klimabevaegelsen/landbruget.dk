@@ -8,22 +8,24 @@ import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
 import { addFieldLayers } from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { EXAMPLE } from '@/components/methodology/scrolly-example-data';
+import {
+  VIEWS,
+  type DisaggStepId,
+} from '@/components/methodology/scrolly-disagg-views';
+import { DisaggMapAnnotations } from '@/components/methodology/disagg-map-annotations';
 
-const C = EXAMPLE.center;
 const UUIDS = EXAMPLE.fields.map((f) => f.uuid);
 
-const VIEWS = {
-  overview: { zoom: 6.5, lng: 10.5, lat: 56.0 },
-  zoom: { zoom: 12.5, lng: C[0], lat: C[1] },
-  fields: { zoom: 14, lng: C[0], lat: C[1] },
-  match: { zoom: 14.5, lng: C[0], lat: C[1] },
-  result: { zoom: 13.5, lng: C[0], lat: C[1] },
-} as const;
-
-export type MapStep = keyof typeof VIEWS;
+const HIGHLIGHT_STEPS = new Set<DisaggStepId>([
+  'fields',
+  'match',
+  'result',
+  'summary',
+]);
+const DIM_STEPS = new Set<DisaggStepId>(['context', 'location']);
 
 interface MethodologyMapProps {
-  step: MapStep;
+  step: DisaggStepId;
 }
 
 export function MethodologyMap({ step }: MethodologyMapProps) {
@@ -38,40 +40,37 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     const urls = await pmtilesCacheService.getFieldAnalysisUrls(2023);
     addFieldLayers(map as never, urls.fields);
 
-    // Smooth transitions for field layers
-    map.setPaintProperty('fields-fill', 'fill-opacity-transition', {
-      duration: 600,
-      delay: 0,
+    map.on('sourcedata', (e) => {
+      if (e.sourceId !== 'fields' || !map.isSourceLoaded('fields')) return;
+      if (map.getLayer('method-highlight')) {
+        setReady(true);
+        return;
+      }
+      map.setPaintProperty('fields-fill', 'fill-opacity-transition', {
+        duration: 600,
+        delay: 0,
+      });
+      map.addLayer({
+        id: 'method-highlight',
+        source: 'fields',
+        'source-layer': 'field_analysis',
+        type: 'line',
+        paint: {
+          'line-color': '#f59e0b',
+          'line-width': 3,
+          'line-opacity': 0,
+          'line-opacity-transition': { duration: 500, delay: 0 },
+        },
+        filter: ['in', 'field_uuid', ...UUIDS],
+      });
+      setReady(true);
     });
-    map.setPaintProperty('fields-outline', 'line-opacity-transition', {
-      duration: 600,
-      delay: 0,
-    });
-
-    // Highlight layer for the example fields
-    map.addLayer({
-      id: 'method-highlight',
-      source: 'fields',
-      'source-layer': 'field_analysis',
-      type: 'line',
-      paint: {
-        'line-color': '#f59e0b',
-        'line-width': 3,
-        'line-opacity': 0,
-        'line-opacity-transition': { duration: 500, delay: 0 },
-        'line-width-transition': { duration: 400, delay: 0 },
-      },
-      filter: ['in', 'field_uuid', ...UUIDS],
-    });
-
-    setReady(true);
   }, []);
 
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
-
     const v = VIEWS[step];
     map.flyTo({
       center: [v.lng, v.lat],
@@ -80,63 +79,52 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
       essential: true,
       curve: 1.2,
     });
-
-    const showHighlight =
-      step === 'fields' || step === 'match' || step === 'result';
-
     try {
-      const burdenColor =
-        step === 'result'
-          ? [
-              'interpolate',
-              ['linear'],
-              ['coalesce', ['get', 'total_pesticide_belastning'], 0],
-              0,
-              '#6abf69',
-              2,
-              '#d4c54a',
-              5,
-              '#d89135',
-              10,
-              '#c4512c',
-            ]
-          : '#6abf69';
-
+      const isResult = step === 'result' || step === 'summary';
+      const burdenColor = isResult
+        ? [
+            'interpolate',
+            ['linear'],
+            ['coalesce', ['get', 'total_pesticide_belastning'], 0],
+            0,
+            '#6abf69',
+            2,
+            '#d4c54a',
+            5,
+            '#d89135',
+            10,
+            '#c4512c',
+          ]
+        : '#6abf69';
+      const dim = DIM_STEPS.has(step);
       map.setPaintProperty('fields-fill', 'fill-color', burdenColor);
-      map.setPaintProperty(
-        'fields-fill',
-        'fill-opacity',
-        step === 'overview' ? 0.15 : 0.7
-      );
-      map.setPaintProperty(
-        'fields-outline',
-        'line-opacity',
-        step === 'overview' ? 0.1 : 0.5
-      );
+      map.setPaintProperty('fields-fill', 'fill-opacity', dim ? 0.15 : 0.7);
+      map.setPaintProperty('fields-outline', 'line-opacity', dim ? 0.1 : 0.5);
       map.setPaintProperty(
         'method-highlight',
         'line-opacity',
-        showHighlight ? 1 : 0
+        HIGHLIGHT_STEPS.has(step) ? 1 : 0
       );
-      map.setPaintProperty(
-        'method-highlight',
-        'line-width',
-        step === 'result' ? 2 : 3
-      );
-    } catch {
-      /* layers not yet added */
+    } catch (err) {
+      console.warn('[MethodologyMap] Paint update failed:', err);
     }
   }, [step, ready]);
 
   return (
     <Map
       ref={mapRef}
-      initialViewState={{ longitude: 10.5, latitude: 56.0, zoom: 6.5 }}
+      initialViewState={{
+        longitude: VIEWS.context.lng,
+        latitude: VIEWS.context.lat,
+        zoom: VIEWS.context.zoom,
+      }}
       mapStyle={mapStyle}
       onLoad={handleLoad}
       attributionControl={false}
       dragRotate={false}
       data-testid="methodology-map"
-    />
+    >
+      <DisaggMapAnnotations step={step} />
+    </Map>
   );
 }

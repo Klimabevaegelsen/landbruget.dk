@@ -85,7 +85,7 @@ export function SectionDataSources() {
         <p className="mb-2">
           Alle data lagres i Apache Parquet-format på Google Cloud Storage:
         </p>
-        <ul className="list-disc space-y-1 pl-5 font-mono text-[13px]">
+        <ul className="list-disc space-y-2 pl-5 font-mono text-[14px]">
           <li>
             FVM marker:{' '}
             <code>gs://&hellip;/silver/fvm_marker_YYYY/data.parquet</code>

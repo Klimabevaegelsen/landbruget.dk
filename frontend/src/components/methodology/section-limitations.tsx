@@ -28,7 +28,7 @@ export function SectionLimitations() {
       <p>
         Tolerancen på &plusmn;2 % mellem indberettet behandlingsareal og
         beregnet markareal er valgt erfaringsmæssigt som det punkt, der sikrer
-        højest mulig datadækning (&ge; 92 %) uden at skabe åbenlyse
+        højest mulig datadækning (<mark>&ge; 92 %</mark>) uden at skabe åbenlyse
         fejlkoblinger. Værdien bygger ikke på en teoretisk model for usikkerhed
         ved opmåling. En strammere regel (f.eks. 1 % tolerance) koster på
         dækningen (falder til ca. 85 %), mens en løsere regel øger risikoen for

@@ -6,12 +6,12 @@ export function SectionIntroduction() {
       <SectionHeader id="introduction" number="1" title="Introduktion" />
 
       <p>
-        Danmark er et af de eneste lande i Europa, hvor 100&nbsp;% af
-        drikkevandet stammer fra grundvand. Det g&oslash;r beskyttelsen af
-        grundvandsressourcen til et centralt milj&oslash;politisk
-        indsatsomr&aring;de &ndash; og g&oslash;r det s&aelig;rligt relevant at
-        forst&aring;, hvordan pesticidanvendelsen p&aring; landbrugsmarker
-        p&aring;virker det underliggende grundvand.
+        Danmark er et af de eneste lande i Europa, hvor{' '}
+        <mark>100&nbsp;% af drikkevandet stammer fra grundvand</mark>. Det
+        g&oslash;r beskyttelsen af grundvandsressourcen til et centralt
+        milj&oslash;politisk indsatsomr&aring;de &ndash; og g&oslash;r det
+        s&aelig;rligt relevant at forst&aring;, hvordan pesticidanvendelsen
+        p&aring; landbrugsmarker p&aring;virker det underliggende grundvand.
       </p>
 
       <p>
