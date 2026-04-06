@@ -29,13 +29,16 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from common.storage.filesystem import setup_duckdb_cloud_auth
+
 from exporters.company_profiles import CompanyProfilesExporter
 from exporters.homepage import HomepageExporter
 from exporters.municipalities import MunicipalitiesExporter
 from exporters.pesticides import PesticidesExporter
 from exporters.search_index import SearchIndexExporter
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger("api_export")
 
 EXPORTERS = {
@@ -64,7 +67,9 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Generate JSON API files for R2")
     parser.add_argument("--local", type=str, help="Output to local directory instead of R2")
-    parser.add_argument("--only", type=str, help=f"Run only specific exporter: {','.join(EXPORTERS)}")
+    parser.add_argument(
+        "--only", type=str, help=f"Run only specific exporter: {','.join(EXPORTERS)}"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Show what would be exported")
     parser.add_argument("--bucket", type=str, help="Override GCS source bucket")
     args = parser.parse_args()
