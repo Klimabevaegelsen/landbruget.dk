@@ -108,6 +108,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
         self.phase_times: dict[str, float] = {}
         self.storage = StorageAccess()
+        self.storage_access = self.storage
         self.conn = self.storage.duckdb_conn
         self._configure_duckdb()
 

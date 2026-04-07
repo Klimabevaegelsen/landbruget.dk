@@ -184,10 +184,29 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
 
         self.log.info("✅ Silver data loaded successfully")
 
+    def _get_first_column_name(self, table_name: str) -> str:
+        """Get the first column name from a DuckDB table.
+
+        The silver data has extremely long auto-generated Danish column names
+        that can change between data refreshes.  Instead of hard-coding these
+        brittle identifiers we detect them at runtime.
+        """
+        cols = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+        if not cols:
+            raise ValueError(f"Table {table_name} has no columns")
+        first_col = cols[0][0]
+        self.log.info(f"Detected first column of {table_name}: {first_col}")
+        return first_col
+
     async def _process_injury_data(self) -> None:
         """Process and transform worker safety data into clean structured format."""
 
         self.log.info("📊 Processing and cleaning worker safety data...")
+
+        # Detect the first (CVR) column name dynamically — these are very long
+        # auto-generated Danish names that may change between data refreshes.
+        injury_cvr_col = self._get_first_column_name("worker_safety_injury_types_raw")
+        main_cvr_col = self._get_first_column_name("worker_safety_raw")
 
         # Create clean injury data table combining both data sources
         self.log.info("Creating clean worker safety data from both main and injury type data...")
@@ -198,7 +217,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             injury_type_data AS (
                 SELECT
                     CAST(
-                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart
+                        "{injury_cvr_col}"
                         AS BIGINT
                     ) as cvr_number,
                     column_1 as injury_type,
@@ -210,7 +229,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                     column_7 as year_2024
                 FROM worker_safety_injury_types_raw
                 WHERE
-                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart
+                    "{injury_cvr_col}"
                     ~ '^[0-9]+$'
                 AND column_1 IS NOT NULL
                 AND column_1 != ''
@@ -220,7 +239,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             main_data AS (
                 SELECT
                     CAST(
-                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer
+                        "{main_cvr_col}"
                         AS BIGINT
                     ) as cvr_number,
                     column_1 as year_2019,
@@ -231,10 +250,10 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                     column_6 as year_2024
                 FROM worker_safety_raw
                 WHERE
-                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer
+                    "{main_cvr_col}"
                     ~ '^[0-9]+$'
                 AND
-                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer
+                    "{main_cvr_col}"
                     != 'CVR-nr.'
             ),
             -- Get CVRs that have detailed injury type data
