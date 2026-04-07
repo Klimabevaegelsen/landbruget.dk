@@ -27,6 +27,9 @@ class PMTilesGeneratorConfig(BaseJobConfig):
     tippecanoe_min_zoom: int = Field(default=0, description="Minimum zoom level for PMTiles")
     tippecanoe_buffer: int = Field(default=64, description="Buffer size for tippecanoe")
     tippecanoe_simplification: int = Field(default=10, description="Simplification level")
+    tippecanoe_overview_simplification: int = Field(
+        default=15, description="Simplification level for lightweight overview tiles"
+    )
 
     # Data inclusion settings
     include_nles5_data: bool = Field(

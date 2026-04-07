@@ -5,7 +5,10 @@ import Map, { Marker, MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
-import { addFieldLayers } from '@/components/pesticidkort/map-layers';
+import {
+  addFieldLayers,
+  addOverviewLayers,
+} from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { ProximityRings } from '@/components/pesticidkort/ProximityRings';
 import type { StoryChapter } from '@/components/pesticidkort/story-chapters';
@@ -29,6 +32,7 @@ export function StoryMapInner({
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
+  const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -36,19 +40,19 @@ export function StoryMapInner({
   }, []);
 
   useEffect(() => {
-    pmtilesCacheService
-      .getFieldAnalysisUrls(year)
-      .then((urls) => setPmtilesUrl(urls.fields));
+    pmtilesCacheService.getFieldAnalysisUrls(year).then((urls) => {
+      setPmtilesUrl(urls.fields);
+      setOverviewUrl(urls.overview);
+    });
   }, [year]);
 
   const handleLoad = useCallback(() => {
     if (!mapRef.current || !pmtilesUrl) return;
-    addFieldLayers(
-      mapRef.current.getMap() as unknown as MapInstance,
-      pmtilesUrl
-    );
+    const map = mapRef.current.getMap() as unknown as MapInstance;
+    addFieldLayers(map, pmtilesUrl);
+    if (overviewUrl) addOverviewLayers(map, overviewUrl);
     setReady(true);
-  }, [pmtilesUrl]);
+  }, [pmtilesUrl, overviewUrl]);
 
   useEffect(() => {
     if (!mapRef.current || !ready) return;
@@ -84,17 +88,23 @@ function applyPaintMode(
   map: ReturnType<MapRef['getMap']>,
   mode: StoryChapter['paintMode']
 ) {
-  if (!map.getLayer('fields-fill')) return;
+  const layers = ['fields-fill', 'fields-overview-fill'].filter((id) =>
+    map.getLayer(id)
+  );
+  if (layers.length === 0) return;
+
+  let color: unknown;
+  let opacity: number;
   if (mode === 'pfas') {
-    map.setPaintProperty('fields-fill', 'fill-color', [
+    color = [
       'case',
       ['>', ['coalesce', ['get', 'pfas_applications'], 0], 0],
       '#d06a3a',
       '#dfe6f2',
-    ]);
-    map.setPaintProperty('fields-fill', 'fill-opacity', 0.8);
+    ];
+    opacity = 0.8;
   } else if (mode === 'burden') {
-    map.setPaintProperty('fields-fill', 'fill-color', [
+    color = [
       'interpolate',
       ['linear'],
       ['coalesce', ['get', 'total_pesticide_belastning'], 0],
@@ -106,10 +116,14 @@ function applyPaintMode(
       '#d89135',
       10,
       '#c4512c',
-    ]);
-    map.setPaintProperty('fields-fill', 'fill-opacity', 0.7);
+    ];
+    opacity = 0.7;
   } else {
-    map.setPaintProperty('fields-fill', 'fill-color', '#3a9d5d');
-    map.setPaintProperty('fields-fill', 'fill-opacity', 0.5);
+    color = '#3a9d5d';
+    opacity = 0.5;
+  }
+  for (const id of layers) {
+    map.setPaintProperty(id, 'fill-color', color);
+    map.setPaintProperty(id, 'fill-opacity', opacity);
   }
 }

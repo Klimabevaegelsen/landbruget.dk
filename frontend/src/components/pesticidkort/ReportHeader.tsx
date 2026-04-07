@@ -8,7 +8,7 @@ interface ReportHeaderProps {
 
 export function ReportHeader({ address, year, onBack }: ReportHeaderProps) {
   return (
-    <header className="bg-background/90 absolute top-0 right-0 left-0 z-20 flex items-center gap-3 border-b px-4 py-2.5 backdrop-blur-sm md:left-[420px]">
+    <header className="bg-background/90 absolute top-0 right-0 left-0 z-20 flex items-center gap-3 border-b px-4 py-2.5 backdrop-blur-sm md:right-[420px]">
       <button
         onClick={onBack}
         data-testid="back-to-search-button"

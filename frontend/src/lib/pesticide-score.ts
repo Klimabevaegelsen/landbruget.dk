@@ -27,27 +27,27 @@ const GRADE_THRESHOLDS: { max: number; grade: PesticideGrade }[] = [
 
 const GRADE_DEFINITIONS: Record<PesticideGrade, Omit<GradeInfo, 'grade'>> = {
   A: {
-    label: 'Meget lav belastning',
+    label: 'Meget lav eksponering',
     description:
       'Der sprøjtes markant mindre med pesticider nær din adresse end de fleste steder i Danmark',
   },
   B: {
-    label: 'Under gennemsnit',
+    label: 'Lav eksponering',
     description:
       'Der sprøjtes mindre med pesticider nær din adresse end landsgennemsnittet',
   },
   C: {
-    label: 'Omkring gennemsnit',
+    label: 'Moderat eksponering',
     description:
       'Pesticidbrugen nær din adresse svarer til et typisk dansk landbrugsområde',
   },
   D: {
-    label: 'Over gennemsnit',
+    label: 'Høj eksponering',
     description:
       'Der sprøjtes mere med pesticider nær din adresse end landsgennemsnittet',
   },
   E: {
-    label: 'Meget høj belastning',
+    label: 'Meget høj eksponering',
     description:
       'Der sprøjtes markant mere med pesticider nær din adresse end de fleste steder i Danmark',
   },
@@ -98,10 +98,10 @@ function burdenToGrade(burden: number): PesticideGrade {
 
 export function getGradeColor(grade: PesticideGrade): string {
   const colors: Record<PesticideGrade, string> = {
-    A: 'text-[oklch(65%_0.15_155)]',
-    B: 'text-[oklch(60%_0.15_142)]',
+    A: 'text-[oklch(60%_0.18_145)]',
+    B: 'text-[oklch(65%_0.16_130)]',
     C: 'text-[oklch(70%_0.14_85)]',
-    D: 'text-[oklch(65%_0.15_45)]',
+    D: 'text-[oklch(65%_0.15_50)]',
     E: 'text-destructive',
   };
   return colors[grade];
@@ -109,10 +109,10 @@ export function getGradeColor(grade: PesticideGrade): string {
 
 export function getGradeBgColor(grade: PesticideGrade): string {
   const colors: Record<PesticideGrade, string> = {
-    A: 'bg-[oklch(65%_0.15_155)]',
-    B: 'bg-[oklch(60%_0.15_142)]',
+    A: 'bg-[oklch(60%_0.18_145)]',
+    B: 'bg-[oklch(65%_0.16_130)]',
     C: 'bg-[oklch(70%_0.14_85)]',
-    D: 'bg-[oklch(65%_0.15_45)]',
+    D: 'bg-[oklch(65%_0.15_50)]',
     E: 'bg-destructive',
   };
   return colors[grade];

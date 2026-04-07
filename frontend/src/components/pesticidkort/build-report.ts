@@ -2,7 +2,25 @@ import { computePesticideScore } from '@/lib/pesticide-score';
 import type {
   PesticideReport,
   NearbyFieldSummary,
+  ExposureSummary,
 } from '@/components/pesticidkort/types';
+
+function computeExposure(
+  fields: NearbyFieldSummary[],
+  maxDist: number
+): ExposureSummary {
+  const nearby = fields.filter((f) => f.distance_m <= maxDist);
+  return {
+    radius_m: maxDist,
+    fields_sprayed: nearby.filter((f) => f.total_pesticide_belastning > 0)
+      .length,
+    total_applications: nearby.reduce(
+      (s, f) => s + f.total_pesticide_applications,
+      0
+    ),
+    pfas_fields_count: nearby.filter((f) => f.pfas_applications > 0).length,
+  };
+}
 
 export function buildReport(
   fields: NearbyFieldSummary[],
@@ -34,5 +52,7 @@ export function buildReport(
       (f) => f.bnbo_area_hectares && f.bnbo_area_hectares > 0
     ),
     has_violations: false,
+    exposure_100m: computeExposure(fields, 100),
+    exposure_1000m: computeExposure(fields, radiusM),
   };
 }

@@ -46,21 +46,23 @@ class PMTilesCacheService {
    */
   async getFieldAnalysisUrls(year: number): Promise<{
     fields: string;
+    overview: string;
     bnbo: string;
     wetlands: string;
     water_projects: string;
     buildings: string;
   }> {
-    const [fields, bnbo, wetlands, water_projects, buildings] =
+    const [fields, overview, bnbo, wetlands, water_projects, buildings] =
       await Promise.all([
         this.getPMTilesUrl(`pmtiles/field_analysis_${year}.pmtiles`),
-        this.getPMTilesUrl('pmtiles/bnbo_areas.pmtiles'), // BNBO areas from environmental generator
-        this.getPMTilesUrl('pmtiles/wetlands_all.pmtiles'), // Match actual R2 upload names
-        this.getPMTilesUrl('pmtiles/water_projects.pmtiles'), // Match actual R2 upload names
-        this.getPMTilesUrl('pmtiles/buildings_proximity.pmtiles'), // Match actual R2 upload names
+        this.getPMTilesUrl(`pmtiles/field_analysis_overview_${year}.pmtiles`),
+        this.getPMTilesUrl('pmtiles/bnbo_areas.pmtiles'),
+        this.getPMTilesUrl('pmtiles/wetlands_all.pmtiles'),
+        this.getPMTilesUrl('pmtiles/water_projects.pmtiles'),
+        this.getPMTilesUrl('pmtiles/buildings_proximity.pmtiles'),
       ]);
 
-    return { fields, bnbo, wetlands, water_projects, buildings };
+    return { fields, overview, bnbo, wetlands, water_projects, buildings };
   }
 
   /**

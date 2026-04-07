@@ -26,12 +26,14 @@ export function usePesticidkortData({
   onFieldsLoaded,
 }: UsePesticidkortDataOptions) {
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
+  const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
   const [buildingsUrl, setBuildingsUrl] = useState<string | null>(null);
   const fieldsQueriedRef = useRef(false);
 
   useEffect(() => {
     pmtilesCacheService.getFieldAnalysisUrls(year).then((urls) => {
       setPmtilesUrl(urls.fields);
+      setOverviewUrl(urls.overview);
       setBuildingsUrl(urls.buildings);
     });
   }, [year]);
@@ -74,5 +76,11 @@ export function usePesticidkortData({
     onFieldsLoaded(fields);
   }, [lat, lng, radiusM, mapRef, onFieldsLoaded]);
 
-  return { pmtilesUrl, buildingsUrl, queryNearbyFields, fieldsQueriedRef };
+  return {
+    pmtilesUrl,
+    overviewUrl,
+    buildingsUrl,
+    queryNearbyFields,
+    fieldsQueriedRef,
+  };
 }
