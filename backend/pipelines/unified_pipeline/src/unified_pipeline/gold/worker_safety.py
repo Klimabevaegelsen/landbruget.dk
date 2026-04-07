@@ -152,10 +152,17 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             ]
             self.log.info(f"Single file columns: {columns}")
 
-            # The mv sheet has CVR + year columns without injury type
-            # The skadeart sheet has CVR + injury_type + year columns
-            # Detect by checking for injury-type-like column patterns
+            # The mv sheet has CVR + year columns (7 cols) without injury type
+            # The skadeart sheet has CVR + injury_type + year columns (8 cols)
+            # Detect by column name content first, then fall back to column count
             has_injury_type_col = any("skadeart" in c.lower() for c in columns)
+            # With generic names (field1, field2, ...), use count: 8+ = skadeart, 7 = mv
+            if not has_injury_type_col and len(columns) >= 8:
+                has_injury_type_col = True
+                self.log.info(
+                    f"Generic column names detected; using column count ({len(columns)}) "
+                    "to infer skadeart format"
+                )
 
             if has_injury_type_col:
                 self.log.info("Detected as skadeart (injury type) data")
@@ -184,29 +191,35 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
 
         self.log.info("✅ Silver data loaded successfully")
 
-    def _get_first_column_name(self, table_name: str) -> str:
-        """Get the first column name from a DuckDB table.
+    def _get_column_names(self, table_name: str) -> list[str]:
+        """Get all column names from a DuckDB table.
 
-        The silver data has extremely long auto-generated Danish column names
-        that can change between data refreshes.  Instead of hard-coding these
-        brittle identifiers we detect them at runtime.
+        The silver data has auto-generated column names (e.g. field1..field8 or
+        column_1..column_7 or long Danish names) that change between data
+        refreshes.  We detect them at runtime by position.
         """
         cols = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
         if not cols:
             raise ValueError(f"Table {table_name} has no columns")
-        first_col = cols[0][0]
-        self.log.info(f"Detected first column of {table_name}: {first_col}")
-        return first_col
+        names = [c[0] for c in cols]
+        self.log.info(f"Detected columns of {table_name}: {names}")
+        return names
 
     async def _process_injury_data(self) -> None:
         """Process and transform worker safety data into clean structured format."""
 
         self.log.info("📊 Processing and cleaning worker safety data...")
 
-        # Detect the first (CVR) column name dynamically — these are very long
-        # auto-generated Danish names that may change between data refreshes.
-        injury_cvr_col = self._get_first_column_name("worker_safety_injury_types_raw")
-        main_cvr_col = self._get_first_column_name("worker_safety_raw")
+        # Detect all column names dynamically — the silver data uses auto-generated
+        # names (field1..fieldN, column_1..column_N, or long Danish names) that
+        # change between data refreshes. We reference by position.
+        inj_cols = self._get_column_names("worker_safety_injury_types_raw")
+        main_cols = self._get_column_names("worker_safety_raw")
+
+        # Injury type table: col[0]=CVR, col[1]=injury_type, col[2..7]=years 2019-2024
+        ic = [f'"{c}"' for c in inj_cols]  # quoted column refs
+        # Main table: col[0]=CVR, col[1..6]=years 2019-2024
+        mc = [f'"{c}"' for c in main_cols]  # quoted column refs
 
         # Create clean injury data table combining both data sources
         self.log.info("Creating clean worker safety data from both main and injury type data...")
@@ -216,45 +229,33 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             -- Detailed injury type data (34 companies)
             injury_type_data AS (
                 SELECT
-                    CAST(
-                        "{injury_cvr_col}"
-                        AS BIGINT
-                    ) as cvr_number,
-                    column_1 as injury_type,
-                    column_2 as year_2019,
-                    column_3 as year_2020,
-                    column_4 as year_2021,
-                    column_5 as year_2022,
-                    column_6 as year_2023,
-                    column_7 as year_2024
+                    CAST({ic[0]} AS BIGINT) as cvr_number,
+                    {ic[1]} as injury_type,
+                    {ic[2]} as year_2019,
+                    {ic[3]} as year_2020,
+                    {ic[4]} as year_2021,
+                    {ic[5]} as year_2022,
+                    {ic[6]} as year_2023,
+                    {ic[7]} as year_2024
                 FROM worker_safety_injury_types_raw
-                WHERE
-                    "{injury_cvr_col}"
-                    ~ '^[0-9]+$'
-                AND column_1 IS NOT NULL
-                AND column_1 != ''
-                AND column_1 != 'Skadeart'
+                WHERE {ic[0]} ~ '^[0-9]+$'
+                AND {ic[1]} IS NOT NULL
+                AND {ic[1]} != ''
+                AND {ic[1]} != 'Skadeart'
             ),
             -- Main total data (190 companies)
             main_data AS (
                 SELECT
-                    CAST(
-                        "{main_cvr_col}"
-                        AS BIGINT
-                    ) as cvr_number,
-                    column_1 as year_2019,
-                    column_2 as year_2020,
-                    column_3 as year_2021,
-                    column_4 as year_2022,
-                    column_5 as year_2023,
-                    column_6 as year_2024
+                    CAST({mc[0]} AS BIGINT) as cvr_number,
+                    {mc[1]} as year_2019,
+                    {mc[2]} as year_2020,
+                    {mc[3]} as year_2021,
+                    {mc[4]} as year_2022,
+                    {mc[5]} as year_2023,
+                    {mc[6]} as year_2024
                 FROM worker_safety_raw
-                WHERE
-                    "{main_cvr_col}"
-                    ~ '^[0-9]+$'
-                AND
-                    "{main_cvr_col}"
-                    != 'CVR-nr.'
+                WHERE {mc[0]} ~ '^[0-9]+$'
+                AND {mc[0]} != 'CVR-nr.'
             ),
             -- Get CVRs that have detailed injury type data
             detailed_cvrs AS (
