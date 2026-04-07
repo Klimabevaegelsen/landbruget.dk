@@ -31,6 +31,13 @@ export interface NearbyFieldSummary {
   total_glyphosate_active_ingredient_kg?: number;
 }
 
+export interface ExposureSummary {
+  radius_m: number;
+  fields_sprayed: number;
+  total_applications: number;
+  pfas_fields_count: number;
+}
+
 export interface PesticideReport {
   address: string;
   lat: number;
@@ -46,6 +53,8 @@ export interface PesticideReport {
   fields: NearbyFieldSummary[];
   has_bnbo_overlap: boolean;
   has_violations: boolean;
+  exposure_100m: ExposureSummary;
+  exposure_1000m: ExposureSummary;
 }
 
 export interface AddressResult {

@@ -5,7 +5,10 @@ import Map, { Source, Layer, type MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
-import { addFieldLayers } from '@/components/pesticidkort/map-layers';
+import {
+  addFieldLayers,
+  addOverviewLayers,
+} from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { EXAMPLE } from '@/components/methodology/scrolly-example-data';
 import {
@@ -13,14 +16,12 @@ import {
   type DisaggStepId,
 } from '@/components/methodology/scrolly-disagg-views';
 import { DisaggMapAnnotations } from '@/components/methodology/disagg-map-annotations';
-import {
-  addHighlightLayers,
-  updateStepPaint,
-} from '@/components/methodology/disagg-map-layers';
+import { addHighlightLayers } from '@/components/methodology/disagg-map-layers';
 import {
   HEATMAP_POINTS,
   HADERSLEV_POLYGON,
 } from '@/components/methodology/disagg-map-geodata';
+import { animateToStep } from '@/components/methodology/methodology-map-nav';
 
 const UUIDS = EXAMPLE.fields.map((f) => f.uuid);
 
@@ -31,6 +32,7 @@ interface MethodologyMapProps {
 export function MethodologyMap({ step }: MethodologyMapProps) {
   const mapRef = useRef<MapRef>(null);
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
+  const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const { mapStyle } = useMapTheme();
 
@@ -38,7 +40,10 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     registerPmtilesProtocol();
     pmtilesCacheService
       .getFieldAnalysisUrls(2023)
-      .then((urls) => setPmtilesUrl(urls.fields))
+      .then((urls) => {
+        setPmtilesUrl(urls.fields);
+        setOverviewUrl(urls.overview);
+      })
       .catch(() => setPmtilesUrl(null));
   }, []);
 
@@ -46,10 +51,11 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
     const map = mapRef.current?.getMap();
     if (!map || !pmtilesUrl) return;
     addFieldLayers(map as never, pmtilesUrl);
+    if (overviewUrl) addOverviewLayers(map as never, overviewUrl);
     addHighlightLayers(map, UUIDS);
     map.once('idle', () => setReady(true));
     setTimeout(() => setReady(true), 5000);
-  }, [pmtilesUrl]);
+  }, [pmtilesUrl, overviewUrl]);
 
   const isMobile = useMemo(
     () => typeof window !== 'undefined' && window.innerWidth < 1024,
@@ -58,29 +64,7 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
 
   useEffect(() => {
     if (!ready) return;
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-    map.stop();
-    const v = VIEWS[step];
-    const dur = (ms: number) => (isMobile ? ms * 0.5 : ms);
-    if (v.bounds) {
-      map.fitBounds(v.bounds, { padding: 60, duration: dur(1600) });
-    } else {
-      map.flyTo({
-        center: [v.lng, v.lat],
-        zoom: v.zoom,
-        pitch: v.pitch ?? 0,
-        bearing: v.bearing ?? 0,
-        duration: dur(step === 'scale' ? 2000 : 1600),
-        essential: true,
-        curve: 1.2,
-      });
-    }
-    try {
-      updateStepPaint(map, step);
-    } catch (err) {
-      console.warn('[MethodologyMap] Paint update failed:', err);
-    }
+    animateToStep(mapRef, step, isMobile);
   }, [step, ready, isMobile]);
 
   if (!pmtilesUrl) {

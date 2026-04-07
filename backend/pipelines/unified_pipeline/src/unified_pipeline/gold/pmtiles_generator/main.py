@@ -128,9 +128,19 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
                 logger.info("Generating field analysis PMTiles")
                 field_pmtiles = await self.field_generator.generate_multiple_years(years_to_process)
                 results["field_analysis_pmtiles"] = field_pmtiles
+
+                # Generate lightweight overview PMTiles for each year
+                logger.info("Generating overview PMTiles")
+                overview_pmtiles = {}
+                for year in years_to_process:
+                    overview_path = await self.field_generator.generate_overview_pmtiles(year)
+                    if overview_path:
+                        overview_pmtiles[year] = overview_path
+                results["overview_pmtiles"] = overview_pmtiles
             else:
                 logger.info("No years to process for field analysis")
                 results["field_analysis_pmtiles"] = {}
+                results["overview_pmtiles"] = {}
 
             # Generate environmental layers PMTiles (year-independent)
             logger.info("Generating environmental layers PMTiles")
@@ -147,8 +157,12 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
             # Upload to Cloudflare R2
             if self._should_upload():
                 logger.info("Uploading PMTiles to Cloudflare R2")
+                overview_pmtiles = results.get("overview_pmtiles", {})
                 upload_results = await self._upload_all_pmtiles(
-                    field_pmtiles, environmental_pmtiles, buildings_pmtiles
+                    field_pmtiles,
+                    environmental_pmtiles,
+                    buildings_pmtiles,
+                    overview_pmtiles=overview_pmtiles,
                 )
                 results["upload_results"] = upload_results
 
@@ -171,6 +185,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         field_pmtiles: dict[int, str | None],
         environmental_pmtiles: dict[str, str | None],
         buildings_pmtiles: dict[str, str | None],
+        overview_pmtiles: dict[int, str | None] | None = None,
     ) -> dict[str, dict[str, str | None]]:
         """Upload all generated PMTiles to R2 with automatic cleanup.
 
@@ -192,6 +207,13 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
             if file_path and os.path.exists(file_path):
                 r2_key = f"pmtiles/field_analysis_{year}.pmtiles"
                 all_files[r2_key] = file_path
+
+        # Add overview PMTiles
+        if overview_pmtiles:
+            for year, file_path in overview_pmtiles.items():
+                if file_path and os.path.exists(file_path):
+                    r2_key = f"pmtiles/field_analysis_overview_{year}.pmtiles"
+                    all_files[r2_key] = file_path
 
         # Add environmental PMTiles
         for layer_name, file_path in environmental_pmtiles.items():
@@ -302,18 +324,25 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
 
         # Generate field analysis PMTiles for the specific year
         field_pmtiles_path = await self.field_generator.generate_field_analysis_pmtiles(year)
+        overview_pmtiles_path = await self.field_generator.generate_overview_pmtiles(year)
 
         results = {
             "year": year,
             "field_analysis_pmtiles": field_pmtiles_path,
+            "overview_pmtiles": overview_pmtiles_path,
             "success": field_pmtiles_path is not None,
         }
 
         # Upload if successful and credentials available
-        if field_pmtiles_path and self._should_upload():
-            r2_key = f"pmtiles/field_analysis_{year}.pmtiles"
-            public_url = await self.uploader.upload_pmtiles(field_pmtiles_path, r2_key)
-            results["public_url"] = public_url
+        if self._should_upload():
+            if field_pmtiles_path:
+                r2_key = f"pmtiles/field_analysis_{year}.pmtiles"
+                public_url = await self.uploader.upload_pmtiles(field_pmtiles_path, r2_key)
+                results["public_url"] = public_url
+            if overview_pmtiles_path:
+                r2_key = f"pmtiles/field_analysis_overview_{year}.pmtiles"
+                public_url = await self.uploader.upload_pmtiles(overview_pmtiles_path, r2_key)
+                results["overview_public_url"] = public_url
 
         return results
 

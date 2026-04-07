@@ -117,6 +117,136 @@ class FieldAnalysisPMTilesGenerator:
                 logger.error(f"Error generating field analysis PMTiles for year {year}: {e}")
                 return None
 
+    async def generate_overview_pmtiles(self, year: int) -> str | None:
+        """Generate lightweight overview PMTiles with only rendering properties.
+
+        Contains only field_uuid, total_pesticide_belastning, and pfas_applications
+        so tiles are small enough to include all features at every zoom level.
+
+        Args:
+            year: Target year
+
+        Returns:
+            Path to generated PMTiles file or None if failed
+        """
+        logger.info(f"Generating overview PMTiles for year {year}")
+
+        with FileManager(self.config.temp_dir) as file_manager:
+            try:
+                integrated_table = await self.data_loader.load_and_integrate_field_data(year)
+                if not integrated_table:
+                    logger.error(f"Failed to load integrated data for overview year {year}")
+                    return None
+
+                geojson_path = file_manager.create_temp_file(
+                    suffix=".geojson", prefix=f"field_overview_{year}_"
+                )
+
+                success = await self._export_overview_geojson(integrated_table, geojson_path)
+                if not success:
+                    logger.error(f"Failed to export overview GeoJSON for year {year}")
+                    return None
+
+                pmtiles_path = file_manager.create_temp_file(
+                    suffix=".pmtiles", prefix=f"field_overview_{year}_"
+                )
+
+                success = await self.tippecanoe.generate_pmtiles(
+                    geojson_path=geojson_path,
+                    output_path=pmtiles_path,
+                    layer_name="field_analysis",
+                    max_zoom=self.config.tippecanoe_max_zoom,
+                    min_zoom=self.config.tippecanoe_min_zoom,
+                    buffer=self.config.tippecanoe_buffer,
+                    simplification=self.config.tippecanoe_overview_simplification,
+                    additional_args=[
+                        "--no-tile-size-limit",
+                        "--no-feature-limit",
+                        "--detect-shared-borders",
+                        "--attribute-type=total_pesticide_belastning:float",
+                        "--attribute-type=pfas_applications:int",
+                    ],
+                )
+
+                if not success:
+                    logger.error(f"Failed to generate overview PMTiles for year {year}")
+                    return None
+
+                if os.path.exists(pmtiles_path):
+                    size_mb = os.path.getsize(pmtiles_path) / (1024 * 1024)
+                    logger.info(f"Generated overview PMTiles for {year}: {size_mb:.1f} MB")
+
+                final_path = os.path.join(
+                    os.path.dirname(self.config.temp_dir),
+                    f"field_analysis_overview_{year}.pmtiles",
+                )
+
+                import shutil
+
+                shutil.copy2(pmtiles_path, final_path)
+
+                logger.info(f"Overview PMTiles saved to: {final_path}")
+                return final_path
+
+            except Exception as e:
+                logger.error(f"Error generating overview PMTiles for year {year}: {e}")
+                return None
+
+    async def _export_overview_geojson(self, table_name: str, output_path: str) -> bool:
+        """Export minimal field data as GeoJSON for overview tiles.
+
+        Args:
+            table_name: Name of the integrated data table
+            output_path: Path for output GeoJSON file
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            schema_result = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            available_columns = {row[0] for row in schema_result}
+
+            fields = ["field_uuid"]
+
+            if "total_pesticide_belastning" in available_columns:
+                fields.append(
+                    "COALESCE(total_pesticide_belastning, 0) as total_pesticide_belastning"
+                )
+            else:
+                fields.append("0 as total_pesticide_belastning")
+
+            if "pfas_applications" in available_columns:
+                fields.append("COALESCE(pfas_applications, 0) as pfas_applications")
+            else:
+                fields.append("0 as pfas_applications")
+
+            if "geometry" in available_columns:
+                if USE_UTM_PROCESSING:
+                    geom_expr = "ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))"
+                else:
+                    geom_expr = "ST_AsGeoJSON(ST_FlipCoordinates(geometry))"
+                fields.append(f"{geom_expr} as geometry")
+            else:
+                logger.error("No geometry column found for overview")
+                return False
+
+            fields_str = ",\n    ".join(fields)
+            query = f"""
+            SELECT
+                {fields_str}
+            FROM {table_name}
+            WHERE geometry IS NOT NULL
+            ORDER BY field_uuid
+            """
+
+            return await GeoJSONWriter.write_geojson_from_query(
+                self.conn, query, output_path, properties_columns=None
+            )
+
+        except Exception as e:
+            logger.error(f"Error exporting overview GeoJSON: {e}")
+            return False
+
     async def _export_field_analysis_geojson(
         self, table_name: str, output_path: str, year: int
     ) -> bool:

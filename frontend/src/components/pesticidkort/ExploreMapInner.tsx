@@ -5,7 +5,10 @@ import Map, { NavigationControl, MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
-import { addFieldLayers } from '@/components/pesticidkort/map-layers';
+import {
+  addFieldLayers,
+  addOverviewLayers,
+} from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
@@ -20,11 +23,13 @@ export function ExploreMapInner({ year }: ExploreMapInnerProps) {
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
+  const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    pmtilesCacheService
-      .getFieldAnalysisUrls(year)
-      .then((urls) => setPmtilesUrl(urls.fields));
+    pmtilesCacheService.getFieldAnalysisUrls(year).then((urls) => {
+      setPmtilesUrl(urls.fields);
+      setOverviewUrl(urls.overview);
+    });
   }, [year]);
 
   useEffect(() => {
@@ -35,18 +40,24 @@ export function ExploreMapInner({ year }: ExploreMapInnerProps) {
     if (!mapRef.current || !pmtilesUrl) return;
     const map = mapRef.current.getMap();
     addFieldLayers(map as unknown as MapInstance, pmtilesUrl);
-  }, [pmtilesUrl]);
+    if (overviewUrl)
+      addOverviewLayers(map as unknown as MapInstance, overviewUrl);
+  }, [pmtilesUrl, overviewUrl]);
 
   useEffect(() => {
     if (!mapRef.current || !pmtilesUrl) return;
     const map = mapRef.current.getMap();
-    const src = map.getSource('fields');
-    if (src && 'setUrl' in src) {
-      (src as unknown as { setUrl: (url: string) => void }).setUrl(
-        `pmtiles://${pmtilesUrl}`
-      );
-    }
-  }, [pmtilesUrl]);
+    const setSourceUrl = (name: string, url: string) => {
+      const src = map.getSource(name);
+      if (src && 'setUrl' in src) {
+        (src as unknown as { setUrl: (u: string) => void }).setUrl(
+          `pmtiles://${url}`
+        );
+      }
+    };
+    setSourceUrl('fields', pmtilesUrl);
+    if (overviewUrl) setSourceUrl('fields-overview', overviewUrl);
+  }, [pmtilesUrl, overviewUrl]);
 
   if (!pmtilesUrl) return null;
 

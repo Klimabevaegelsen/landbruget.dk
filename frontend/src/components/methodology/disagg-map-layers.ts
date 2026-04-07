@@ -28,10 +28,16 @@ export function addHighlightLayers(map: MapInstance, uuids: string[]) {
   const src = { source: 'fields', 'source-layer': 'field_analysis' } as const;
   const t = { duration: 600, delay: 0 };
 
-  map.setPaintProperty('fields-fill', 'fill-color', '#a3b18a');
-  map.setPaintProperty('fields-fill', 'fill-opacity', 0);
-  map.setPaintProperty('fields-fill', 'fill-opacity-transition', t);
-  map.setPaintProperty('fields-outline', 'line-opacity', 0);
+  for (const id of ['fields-fill', 'fields-overview-fill']) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, 'fill-color', '#a3b18a');
+    map.setPaintProperty(id, 'fill-opacity', 0);
+    map.setPaintProperty(id, 'fill-opacity-transition', t);
+  }
+  for (const id of ['fields-outline', 'fields-overview-outline']) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, 'line-opacity', 0);
+  }
 
   map.addLayer({
     id: 'method-highlight-fill',
@@ -67,27 +73,22 @@ export function updateStepPaint(map: MapInstance, step: DisaggStepId) {
   const closeUp = highlight && !isScale;
 
   // Surrounding fields: light green fill + visible dark-green borders in close-up
-  map.setPaintProperty(
-    'fields-fill',
-    'fill-color',
-    isScale ? BURDEN_COLOR : '#d4e4c1'
-  );
-  map.setPaintProperty(
-    'fields-fill',
-    'fill-opacity',
-    isScale ? 0.6 : closeUp ? 0.5 : 0.08
-  );
-  map.setPaintProperty(
-    'fields-outline',
-    'line-color',
-    closeUp ? '#4a6741' : '#5f6b80'
-  );
-  map.setPaintProperty(
-    'fields-outline',
-    'line-opacity',
-    isScale ? 0.4 : closeUp ? 0.8 : 0.06
-  );
-  map.setPaintProperty('fields-outline', 'line-width', closeUp ? 1.5 : 0.5);
+  const fillColor = isScale ? BURDEN_COLOR : '#d4e4c1';
+  const fillOpacity = isScale ? 0.6 : closeUp ? 0.5 : 0.08;
+  for (const id of ['fields-fill', 'fields-overview-fill']) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, 'fill-color', fillColor);
+    map.setPaintProperty(id, 'fill-opacity', fillOpacity);
+  }
+  const lineColor = closeUp ? '#4a6741' : '#5f6b80';
+  const lineOpacity = isScale ? 0.4 : closeUp ? 0.8 : 0.06;
+  const lineWidth = closeUp ? 1.5 : 0.5;
+  for (const id of ['fields-outline', 'fields-overview-outline']) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, 'line-color', lineColor);
+    map.setPaintProperty(id, 'line-opacity', lineOpacity);
+    map.setPaintProperty(id, 'line-width', lineWidth);
+  }
 
   // Highlighted example fields
   map.setPaintProperty('method-highlight-fill', 'fill-color', color);

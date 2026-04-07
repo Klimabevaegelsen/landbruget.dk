@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Share2, BookOpen } from 'lucide-react';
 import { PesticideProximityScore } from '@/components/pesticidkort/PesticideProximityScore';
 import { SummaryStats } from '@/components/pesticidkort/SummaryStats';
+import { AddressExposure } from '@/components/pesticidkort/AddressExposure';
 import { AlertCallout } from '@/components/pesticidkort/AlertCallout';
 import { FieldList } from '@/components/pesticidkort/FieldList';
 import type { HistogramBin } from '@/components/pesticidkort/BurdenScale';
@@ -65,6 +66,11 @@ export function PersonalReport({
           )}
         </div>
       </div>
+
+      <AddressExposure
+        exposure100m={report.exposure_100m}
+        exposure1000m={report.exposure_1000m}
+      />
 
       <SummaryStats
         fieldsCount={report.fields_count}

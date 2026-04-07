@@ -4,10 +4,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
-import {
-  getCropEmoji,
-  formatBurden,
-} from '@/components/pesticidkort/field-utils';
+import { formatBurden } from '@/components/pesticidkort/field-utils';
 import {
   BurdenScale,
   type HistogramBin,
@@ -56,18 +53,17 @@ export function FieldCard({
         className="w-full text-left"
       >
         <div className="flex items-center gap-2 text-sm">
-          <span>{getCropEmoji(field.crop_name)}</span>
-          <span className="text-foreground font-medium">{field.crop_name}</span>
+          <span className="text-foreground font-medium">
+            {Math.round(field.distance_m)} m fra dig
+          </span>
+          <span className="text-muted-foreground text-xs">
+            · {field.area_hectares.toFixed(1)} ha
+          </span>
           {hasPfas && (
             <span className="bg-warning/10 text-warning rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium">
               PFAS
             </span>
           )}
-        </div>
-        <div className="text-muted-foreground mt-1 flex items-center gap-2 text-xs tabular-nums">
-          <span>{field.area_hectares.toFixed(1)} ha</span>
-          <span>·</span>
-          <span>{Math.round(field.distance_m)} m væk</span>
         </div>
 
         {!isZeroBurden && (

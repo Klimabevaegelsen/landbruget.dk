@@ -6,10 +6,9 @@ import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 
 const LEGEND_ITEMS = [
-  { bg: 'bg-[#6abf69]', label: 'Under gennemsnit' },
-  { bg: 'bg-[#d4c54a]', label: 'Omkring gennemsnit' },
-  { bg: 'bg-[#d89135]', label: 'Over gennemsnit' },
-  { bg: 'bg-[#c4512c]', label: 'Højeste' },
+  { bg: 'bg-[#dc2626]', label: 'Sprøjtet mark' },
+  { bg: 'bg-[#9333ea]', label: 'PFAS-pesticider' },
+  { bg: 'bg-[#9ca3af]', label: 'Brak / ingen pesticider' },
 ] as const;
 
 export function MapLegend() {
@@ -25,7 +24,7 @@ export function MapLegend() {
         data-testid="map-legend-toggle-button"
         className="flex min-h-[32px] w-full items-center justify-between gap-2 text-xs font-medium"
       >
-        <span className="text-foreground">Pesticidbelastning</span>
+        <span className="text-foreground">Pesticideksponering</span>
         <ChevronDown
           className={cn(
             'text-muted-foreground h-3.5 w-3.5 transition-transform',

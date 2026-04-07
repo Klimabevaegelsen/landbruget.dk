@@ -5,7 +5,10 @@ import Map, { NavigationControl, Marker, MapRef } from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { ProximityRings } from '@/components/pesticidkort/ProximityRings';
-import { addFieldLayers } from '@/components/pesticidkort/map-layers';
+import {
+  addFieldLayers,
+  addOverviewLayers,
+} from '@/components/pesticidkort/map-layers';
 import { addBuildingLayers } from '@/components/pesticidkort/map-layers-buildings';
 import {
   highlightField,
@@ -13,7 +16,7 @@ import {
 } from '@/components/pesticidkort/map-highlight';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { usePesticidkortData } from '@/components/pesticidkort/usePesticidkortData';
-import { featureToFieldSummary } from '@/components/pesticidkort/map-utils';
+import { setupFieldClickHandlers } from '@/components/pesticidkort/map-events';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
@@ -42,15 +45,20 @@ export function PesticidkortMap({
   const onFieldClickRef = useRef(onFieldClick);
   onFieldClickRef.current = onFieldClick;
 
-  const { pmtilesUrl, buildingsUrl, queryNearbyFields, fieldsQueriedRef } =
-    usePesticidkortData({
-      lat,
-      lng,
-      radiusM,
-      year,
-      mapRef,
-      onFieldsLoaded,
-    });
+  const {
+    pmtilesUrl,
+    overviewUrl,
+    buildingsUrl,
+    queryNearbyFields,
+    fieldsQueriedRef,
+  } = usePesticidkortData({
+    lat,
+    lng,
+    radiusM,
+    year,
+    mapRef,
+    onFieldsLoaded,
+  });
 
   useEffect(() => {
     registerPmtilesProtocol();
@@ -60,6 +68,7 @@ export function PesticidkortMap({
     if (!mapRef.current || !pmtilesUrl) return;
     const map = mapRef.current.getMap() as unknown as MapInstance;
     addFieldLayers(map, pmtilesUrl);
+    if (overviewUrl) addOverviewLayers(map, overviewUrl);
     if (buildingsUrl) addBuildingLayers(map, buildingsUrl);
     setIsReady(true);
 
@@ -67,41 +76,32 @@ export function PesticidkortMap({
     rawMap.on('idle', () => {
       if (!fieldsQueriedRef.current) queryNearbyFields();
     });
-    rawMap.on('click', 'fields-fill', (e) => {
-      const feat = e.features?.[0];
-      if (!onFieldClickRef.current || !feat) return;
-      const uuid = String(feat.properties.field_uuid ?? '');
-      if (!uuid) return;
-      const clickLat = e.lngLat.lat;
-      const clickLng = e.lngLat.lng;
-      const fieldData = featureToFieldSummary(
-        feat.properties as Record<string, unknown>,
-        lat,
-        lng,
-        clickLat,
-        clickLng
-      );
-      onFieldClickRef.current(uuid, fieldData);
-    });
-    rawMap.on('mouseenter', 'fields-fill', () => {
-      rawMap.getCanvas().style.cursor = 'pointer';
-    });
-    rawMap.on('mouseleave', 'fields-fill', () => {
-      rawMap.getCanvas().style.cursor = '';
-    });
-  }, [pmtilesUrl, buildingsUrl, queryNearbyFields, fieldsQueriedRef, lat, lng]);
+    setupFieldClickHandlers(rawMap, lat, lng, onFieldClickRef);
+  }, [
+    pmtilesUrl,
+    overviewUrl,
+    buildingsUrl,
+    queryNearbyFields,
+    fieldsQueriedRef,
+    lat,
+    lng,
+  ]);
 
   useEffect(() => {
     if (!mapRef.current || !pmtilesUrl) return;
     const map = mapRef.current.getMap();
-    const src = map.getSource('fields');
-    if (src && 'setUrl' in src) {
-      (src as unknown as { setUrl: (url: string) => void }).setUrl(
-        `pmtiles://${pmtilesUrl}`
-      );
-    }
+    const setSourceUrl = (name: string, url: string) => {
+      const src = map.getSource(name);
+      if (src && 'setUrl' in src) {
+        (src as unknown as { setUrl: (u: string) => void }).setUrl(
+          `pmtiles://${url}`
+        );
+      }
+    };
+    setSourceUrl('fields', pmtilesUrl);
+    if (overviewUrl) setSourceUrl('fields-overview', overviewUrl);
     fieldsQueriedRef.current = false;
-  }, [pmtilesUrl, fieldsQueriedRef]);
+  }, [pmtilesUrl, overviewUrl, fieldsQueriedRef]);
 
   useEffect(() => {
     if (!isReady) return;

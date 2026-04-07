@@ -27,6 +27,9 @@ export function PesticideProximityScore({
       aria-live="polite"
       className="pt-6 pb-8"
     >
+      <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-widest uppercase">
+        Pesticideksponering
+      </p>
       <div className="flex items-end gap-4">
         <motion.span
           aria-label={`Karakter ${grade}`}
@@ -48,14 +51,14 @@ export function PesticideProximityScore({
             {description}
           </p>
           <p className="text-muted-foreground mt-2 text-xs">
-            A = mindst sprøjtning, E = mest sprøjtning i dit område.
+            A = lavest eksponering, E = højest eksponering i dit område.
           </p>
         </div>
       </div>
 
       <div
         role="meter"
-        aria-label="Pesticidbelastning"
+        aria-label="Pesticideksponering"
         aria-valuemin={0}
         aria-valuemax={4}
         aria-valuenow={ALL_GRADES.indexOf(grade)}
@@ -80,7 +83,7 @@ export function PesticideProximityScore({
                 ease: [0.25, 1, 0.5, 1],
               }}
               className={cn(
-                'h-1.5 flex-1 origin-left rounded-full transition-all',
+                'h-2.5 flex-1 origin-left rounded-full transition-all',
                 isFilled ? getGradeBgColor(grade) : 'bg-muted'
               )}
             />
@@ -88,8 +91,8 @@ export function PesticideProximityScore({
         })}
       </div>
       <div className="text-muted-foreground mt-1.5 flex justify-between text-[10px]">
-        <span>A (lavest)</span>
-        <span>E (højest)</span>
+        <span>A (tryg)</span>
+        <span>E (farlig)</span>
       </div>
     </div>
   );
