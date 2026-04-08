@@ -77,17 +77,19 @@ class PMTilesCacheService {
       return; // Skip on server-side
     }
 
-    const [{ PMTiles }, { getPmtilesProtocol }] = await Promise.all([
-      import('pmtiles'),
-      import('@/components/pesticidkort/pmtiles-protocol'),
-    ]);
+    const [{ PMTiles }, { getPmtilesProtocol, getSharedPmtilesCache }] =
+      await Promise.all([
+        import('pmtiles'),
+        import('@/components/pesticidkort/pmtiles-protocol'),
+      ]);
 
     const protocol = getPmtilesProtocol();
+    const cache = getSharedPmtilesCache();
 
     const preloadPromises = filenames.map(async (filename) => {
       try {
         const url = await this.getPMTilesUrl(filename);
-        const p = new PMTiles(url);
+        const p = cache ? new PMTiles(url, cache) : new PMTiles(url);
         if (protocol) {
           protocol.add(p);
         }
