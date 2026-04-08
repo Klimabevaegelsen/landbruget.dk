@@ -1,4 +1,5 @@
 import { featureToFieldSummary } from '@/components/pesticidkort/map-utils';
+import { pointToPolygonEdgeDistance } from '@/utils/geo';
 import type {
   NearbyFieldSummary,
   FieldHoverData,
@@ -29,12 +30,10 @@ export function setupFieldClickHandlers(
     if (!onFieldClick.current || !feat) return;
     const uuid = String(feat.properties.field_uuid ?? '');
     if (!uuid) return;
+    const dist = pointToPolygonEdgeDistance(lat, lng, feat.geometry);
     const fieldData = featureToFieldSummary(
       feat.properties as Record<string, unknown>,
-      lat,
-      lng,
-      e.lngLat.lat,
-      e.lngLat.lng
+      dist
     );
     onFieldClick.current(uuid, fieldData);
   });

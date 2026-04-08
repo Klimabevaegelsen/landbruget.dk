@@ -66,7 +66,7 @@ export function YearTimeline({ year, onChange, compact }: YearTimelineProps) {
 
   return (
     <div
-      className={cn('select-none', compact ? 'py-2' : 'py-4')}
+      className={cn('select-none', compact ? 'pt-2 pb-5' : 'py-4')}
       data-testid="year-timeline"
     >
       {!compact && (
@@ -138,15 +138,13 @@ export function YearTimeline({ year, onChange, compact }: YearTimelineProps) {
                     data-testid={`year-dot-${y}`}
                     className={cn(
                       'absolute left-1/2 -translate-x-1/2 tabular-nums transition-opacity',
-                      compact
-                        ? 'top-full mt-0.5 text-[9px]'
-                        : 'top-full mt-1 text-[10px]',
+                      'top-full mt-1 text-[10px]',
                       isActive
                         ? 'text-foreground font-semibold opacity-100'
                         : 'text-muted-foreground opacity-0 group-hover:opacity-100 sm:opacity-60'
                     )}
                   >
-                    {compact ? `'${String(y).slice(2)}` : y}
+                    {y}
                   </span>
                 )}
               </button>
