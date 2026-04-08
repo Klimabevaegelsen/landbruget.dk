@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
@@ -36,6 +36,14 @@ export function FieldCard({
     field.diquat_products_detail ||
     field.glyphosate_products_detail ||
     field.other_products_detail;
+
+  const prevSelectedRef = useRef(isSelected);
+  useEffect(() => {
+    if (isSelected && !prevSelectedRef.current && hasProducts) {
+      setExpanded(true);
+    }
+    prevSelectedRef.current = isSelected;
+  }, [isSelected, hasProducts]);
 
   return (
     <div

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 interface DesktopSidebarProps {
   children: ReactNode;
-  controls: ReactNode;
+  controls?: ReactNode;
 }
 
 export function DesktopSidebar({ children, controls }: DesktopSidebarProps) {

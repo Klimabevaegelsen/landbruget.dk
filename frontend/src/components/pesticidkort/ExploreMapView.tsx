@@ -6,6 +6,8 @@ import { AddressAutocomplete } from '@/components/pesticidkort/AddressAutocomple
 import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
 import { MapLegend } from '@/components/pesticidkort/MapLegend';
 import { MapOnboardingHint } from '@/components/pesticidkort/MapOnboardingHint';
+import { ChemicalFilterPills } from '@/components/pesticidkort/ChemicalFilterPills';
+import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 import type { AddressResult } from '@/components/pesticidkort/types';
 
 const ExploreMap = dynamic(
@@ -41,6 +43,8 @@ export function ExploreMapView({
   onBack,
 }: ExploreMapViewProps) {
   const [searchOpen, setSearchOpen] = useState(true);
+  const [chemFilter, setChemFilter] = useState<ChemicalFilter>('none');
+  const [zoomLevel, setZoomLevel] = useState(7);
 
   const handleSelect = useCallback(
     (result: AddressResult) => {
@@ -52,10 +56,14 @@ export function ExploreMapView({
   return (
     <main className="relative h-screen w-full">
       <div className="absolute inset-0" role="region" aria-label="Pesticidkort">
-        <ExploreMap year={year} />
+        <ExploreMap
+          year={year}
+          activeFilter={chemFilter}
+          onZoomChange={setZoomLevel}
+        />
       </div>
 
-      <MapLegend />
+      <MapLegend activeFilter={chemFilter} />
       <MapOnboardingHint />
 
       <div className="absolute top-0 right-0 left-0 z-20 px-4 pt-3">
@@ -66,7 +74,7 @@ export function ExploreMapView({
             aria-label="Tilbage"
             className="bg-background/90 text-muted-foreground flex h-12 w-12 shrink-0 items-center justify-center rounded-full backdrop-blur-sm"
           >
-            ←
+            &larr;
           </button>
           {searchOpen && (
             <div className="bg-background/90 flex-1 rounded-full backdrop-blur-sm">
@@ -79,15 +87,20 @@ export function ExploreMapView({
               data-testid="explore-search-open-button"
               className="bg-background/90 text-muted-foreground h-12 rounded-full px-5 text-sm backdrop-blur-sm"
             >
-              Søg adresse...
+              S&oslash;g adresse...
             </button>
           )}
         </div>
 
-        <div className="mx-auto mt-2 max-w-xs">
+        <div className="mx-auto mt-2 flex max-w-md flex-col items-center gap-2">
           <div className="bg-background/90 rounded-full px-5 py-1 backdrop-blur-sm">
             <YearTimeline year={year} onChange={onYearChange} compact />
           </div>
+          <ChemicalFilterPills
+            active={chemFilter}
+            onChange={setChemFilter}
+            zoomLevel={zoomLevel}
+          />
         </div>
       </div>
     </main>

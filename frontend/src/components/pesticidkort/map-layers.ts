@@ -1,20 +1,14 @@
 import type { MapInstance } from '@/components/field-analysis/map-constants';
+import {
+  GRADE_FILL_COLOR,
+  GRADE_FILL_OPACITY,
+} from '@/components/pesticidkort/map-chemical-filter';
 
-const FIELD_FILL_COLOR = [
-  'case',
-  ['>', ['coalesce', ['get', 'pfas_applications'], 0], 0],
-  '#9333ea',
-  ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],
-  '#9ca3af',
-  '#dc2626',
-] as const;
-
-const FIELD_FILL_OPACITY = [
-  'case',
-  ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],
-  0.4,
-  0.7,
-] as const;
+export type { ChemicalFilter } from '@/components/pesticidkort/map-chemical-filter';
+export {
+  CHEMICAL_COLORS,
+  applyChemicalFilter,
+} from '@/components/pesticidkort/map-chemical-filter';
 
 /** Detail layers — full property data, used for queries at high zoom. */
 export function addFieldLayers(map: MapInstance, pmtilesUrl: string) {
@@ -33,8 +27,8 @@ export function addFieldLayers(map: MapInstance, pmtilesUrl: string) {
       type: 'fill',
       minzoom: 12,
       paint: {
-        'fill-color': FIELD_FILL_COLOR as unknown as string,
-        'fill-opacity': FIELD_FILL_OPACITY as unknown as number,
+        'fill-color': GRADE_FILL_COLOR as unknown as string,
+        'fill-opacity': GRADE_FILL_OPACITY as unknown as number,
       },
     });
     map.addLayer({
@@ -69,8 +63,8 @@ export function addOverviewLayers(map: MapInstance, overviewUrl: string) {
       type: 'fill',
       maxzoom: 12,
       paint: {
-        'fill-color': FIELD_FILL_COLOR as unknown as string,
-        'fill-opacity': FIELD_FILL_OPACITY as unknown as number,
+        'fill-color': GRADE_FILL_COLOR as unknown as string,
+        'fill-opacity': GRADE_FILL_OPACITY as unknown as number,
       },
     });
     map.addLayer({
