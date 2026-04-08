@@ -49,20 +49,14 @@ export function FieldList({
     );
     if (idx >= INITIAL_VISIBLE && !showAll) {
       setShowAll(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          document
-            .getElementById(selectedFieldUuid)
-            ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        });
-      });
-      return;
     }
-    requestAnimationFrame(() => {
+    // Allow DOM to settle (expand animation, show-all list) before scrolling
+    const timer = setTimeout(() => {
       document
         .getElementById(selectedFieldUuid)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+    return () => clearTimeout(timer);
   }, [selectedFieldUuid, sortedFields, showAll]);
 
   return (
