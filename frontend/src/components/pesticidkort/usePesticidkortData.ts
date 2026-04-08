@@ -1,10 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
-import {
-  featureToFieldSummary,
-  haversineDistance,
-} from '@/components/pesticidkort/map-utils';
-import { computeCentroid } from '@/utils/geo';
+import { featureToFieldSummary } from '@/components/pesticidkort/map-utils';
+import { pointToPolygonEdgeDistance } from '@/utils/geo';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import type { MapRef } from '@vis.gl/react-maplibre';
 
@@ -58,18 +55,10 @@ export function usePesticidkortData({
       const uuid = String(feat.properties.field_uuid ?? '');
       if (!uuid || seen.has(uuid)) continue;
       seen.add(uuid);
-      const centroid = computeCentroid(feat.geometry);
-      if (!centroid) continue;
-      const dist = haversineDistance(lat, lng, centroid.lat, centroid.lng);
+      const dist = pointToPolygonEdgeDistance(lat, lng, feat.geometry);
       if (dist > radiusM) continue;
       fields.push(
-        featureToFieldSummary(
-          feat.properties as Record<string, unknown>,
-          lat,
-          lng,
-          centroid.lat,
-          centroid.lng
-        )
+        featureToFieldSummary(feat.properties as Record<string, unknown>, dist)
       );
     }
     fields.sort((a, b) => a.distance_m - b.distance_m);

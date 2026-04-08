@@ -3,16 +3,13 @@ import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 /** Convert PMTiles feature properties to NearbyFieldSummary */
 export function featureToFieldSummary(
   props: Record<string, unknown>,
-  userLat: number,
-  userLng: number,
-  centroidLat: number,
-  centroidLng: number
+  distance_m: number
 ): NearbyFieldSummary {
   return {
     field_uuid: String(props.field_uuid ?? ''),
     crop_name: String(props.crop_name ?? 'Ukendt'),
     area_hectares: Number(props.area_hectares ?? 0),
-    distance_m: haversineDistance(userLat, userLng, centroidLat, centroidLng),
+    distance_m,
     is_organic: props.is_organic === true || props.is_organic === 'true',
     kommune: String(props.kommune ?? ''),
     total_pesticide_belastning: Number(props.total_pesticide_belastning ?? 0),
