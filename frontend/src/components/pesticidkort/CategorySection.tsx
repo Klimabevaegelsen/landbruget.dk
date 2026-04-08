@@ -1,12 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/formatting';
 import type { ParsedEnhancedPesticide } from '@/components/pesticidkort/field-utils';
 import { classifyRisk } from '@/app/markanalyse/components/shared/field-details/pesticide-risk';
 import { getGHSRiskIcon } from '@/components/field-analysis/ghs-risk-icons';
+import {
+  getProductUrl,
+  loadMapping,
+} from '@/components/pesticidkort/middeldatabasen-links';
 
 /** Maps raw BMD produktgruppe_pesticid values to citizen-friendly Danish labels. */
 const GROUP_LABELS: Record<string, string> = {
@@ -41,6 +45,12 @@ export function CategorySection({
   defaultExpanded = false,
 }: CategorySectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [productIds, setProductIds] = useState<Record<string, string> | null>(
+    null
+  );
+  useEffect(() => {
+    if (expanded) loadMapping().then(setProductIds);
+  }, [expanded]);
   const sorted = [...products].sort(
     (a, b) => (b.burden ?? b.dosage) - (a.burden ?? a.dosage)
   );
@@ -97,10 +107,11 @@ export function CategorySection({
                 >
                   <div className="flex items-center gap-2">
                     <a
-                      href={`https://www.middeldatabasen.dk/QuickSearch.asp?SearchString=${encodeURIComponent(p.name)}`}
+                      href={getProductUrl(p.name, productIds)}
                       target="_blank"
                       rel="noopener noreferrer"
                       data-testid={`product-link-${i}`}
+                      title={`Se "${p.name}" på Middeldatabasen`}
                       className="text-foreground group/link min-w-0 flex-1 truncate font-medium underline decoration-dotted underline-offset-2 hover:decoration-solid"
                     >
                       {p.name}

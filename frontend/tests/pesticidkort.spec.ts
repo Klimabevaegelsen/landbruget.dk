@@ -65,6 +65,9 @@ test.describe('Pesticidkort', () => {
     await expect(pills).toBeVisible({ timeout: 10000 });
 
     await expect(
+      page.locator('[data-testid="chemical-filter-none"]')
+    ).toBeVisible();
+    await expect(
       page.locator('[data-testid="chemical-filter-pfas"]')
     ).toBeVisible();
     await expect(

@@ -116,13 +116,13 @@ export function ReportMapView({
           activeFilter={chemFilter}
         />
       </div>
-      <ReportHeader address={address} year={year} onBack={onBack} />
+      <ReportHeader address={address} onBack={onBack} />
 
       <MapLegend activeFilter={chemFilter} />
 
       {/* Floating map controls: year + chemical pills */}
       <div className="pointer-events-none absolute inset-x-0 bottom-[55%] z-40 flex flex-col items-center gap-2 px-4 md:right-[420px] md:bottom-6">
-        <div className="bg-background/90 pointer-events-auto rounded-full px-5 py-1 backdrop-blur-sm">
+        <div className="bg-background/90 pointer-events-auto max-w-xs min-w-[200px] self-stretch rounded-full px-5 py-1 backdrop-blur-sm md:min-w-[280px] md:self-auto">
           <YearTimeline year={year} onChange={onYearChange} compact />
         </div>
         <ChemicalFilterPills
