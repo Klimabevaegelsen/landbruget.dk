@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import type { FieldHoverData } from '@/components/pesticidkort/types';
 import { setupFieldHoverHandlers } from '@/components/pesticidkort/map-events';
 import type { Map as MaplibreMap } from 'maplibre-gl';
@@ -8,9 +8,9 @@ export function useFieldHover() {
   const hoverRef = useRef(setHoverData);
   hoverRef.current = setHoverData;
 
-  const attachHover = (map: MaplibreMap) => {
+  const attachHover = useCallback((map: MaplibreMap) => {
     setupFieldHoverHandlers(map, hoverRef);
-  };
+  }, []);
 
   return { hoverData, attachHover };
 }

@@ -47,12 +47,12 @@ export function ExploreFieldPanel({ field, onClose }: ExploreFieldPanelProps) {
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {field.is_organic && (
-          <span className="bg-success/10 text-success rounded-full px-2 py-0.5 text-[10px] font-medium">
+          <span className="bg-success/10 text-success rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium">
             Økologisk
           </span>
         )}
         {hasPfas && (
-          <span className="bg-warning/10 text-warning rounded-full px-2 py-0.5 text-[10px] font-medium">
+          <span className="bg-warning/10 text-warning rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium">
             PFAS
           </span>
         )}
