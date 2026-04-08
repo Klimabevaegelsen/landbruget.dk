@@ -49,14 +49,22 @@ export function FieldList({
     );
     if (idx >= INITIAL_VISIBLE && !showAll) {
       setShowAll(true);
+      return; // re-run after showAll flips and DOM has the element
     }
-    // Allow DOM to settle (expand animation, show-all list) before scrolling
-    const timer = setTimeout(() => {
-      document
-        .getElementById(selectedFieldUuid)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 80);
-    return () => clearTimeout(timer);
+    // Poll until the element is in the DOM (handles expand + motion animation)
+    let frame: number;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.getElementById(selectedFieldUuid);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (attempts < 10) {
+        attempts++;
+        frame = requestAnimationFrame(tryScroll);
+      }
+    };
+    frame = requestAnimationFrame(tryScroll);
+    return () => cancelAnimationFrame(frame);
   }, [selectedFieldUuid, sortedFields, showAll]);
 
   return (
