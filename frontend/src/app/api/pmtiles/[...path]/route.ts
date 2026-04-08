@@ -24,10 +24,6 @@ export async function GET(
     requestHeaders['Cache-Control'] =
       `public, max-age=${CACHE_DURATION}, immutable`;
 
-    console.log(
-      `🗺️ Proxying PMTiles request: ${pmtilesPath}${range ? ` (range: ${range})` : ''}`
-    );
-
     const response = await fetch(pmtilesUrl, {
       headers: requestHeaders,
     });
@@ -78,14 +74,14 @@ export async function GET(
     responseHeaders.set('Access-Control-Allow-Origin', '*');
     responseHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     responseHeaders.set('Access-Control-Allow-Headers', 'Range, Cache-Control');
+    responseHeaders.set(
+      'Access-Control-Expose-Headers',
+      'ETag, Content-Range, Content-Length, Accept-Ranges'
+    );
 
     // Add performance headers
     responseHeaders.set('X-PMTiles-Cached', 'true');
     responseHeaders.set('X-Cache-Status', 'ENABLED');
-
-    console.log(
-      `✅ PMTiles served: ${pmtilesPath} (${response.headers.get('content-length')} bytes)`
-    );
 
     return new NextResponse(response.body, {
       status: response.status,
