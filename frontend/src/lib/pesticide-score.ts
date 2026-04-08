@@ -27,27 +27,27 @@ const GRADE_THRESHOLDS: { max: number; grade: PesticideGrade }[] = [
 
 const GRADE_DEFINITIONS: Record<PesticideGrade, Omit<GradeInfo, 'grade'>> = {
   A: {
-    label: 'Meget lav eksponering',
+    label: 'Meget under landsgennemsnit',
     description:
       'Der sprøjtes markant mindre med pesticider nær din adresse end de fleste steder i Danmark',
   },
   B: {
-    label: 'Lav eksponering',
+    label: 'Under landsgennemsnit',
     description:
       'Der sprøjtes mindre med pesticider nær din adresse end landsgennemsnittet',
   },
   C: {
-    label: 'Moderat eksponering',
+    label: 'Omkring landsgennemsnit',
     description:
       'Pesticidbrugen nær din adresse svarer til et typisk dansk landbrugsområde',
   },
   D: {
-    label: 'Høj eksponering',
+    label: 'Over landsgennemsnit',
     description:
       'Der sprøjtes mere med pesticider nær din adresse end landsgennemsnittet',
   },
   E: {
-    label: 'Meget høj eksponering',
+    label: 'Meget over landsgennemsnit',
     description:
       'Der sprøjtes markant mere med pesticider nær din adresse end de fleste steder i Danmark',
   },

@@ -91,8 +91,8 @@ export function PesticideProximityScore({
         })}
       </div>
       <div className="text-muted-foreground mt-1.5 flex justify-between text-[10px]">
-        <span>A (tryg)</span>
-        <span>E (farlig)</span>
+        <span>A (lavest)</span>
+        <span>E (højest)</span>
       </div>
     </div>
   );

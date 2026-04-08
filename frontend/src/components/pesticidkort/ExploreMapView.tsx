@@ -7,8 +7,12 @@ import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
 import { MapLegend } from '@/components/pesticidkort/MapLegend';
 import { MapOnboardingHint } from '@/components/pesticidkort/MapOnboardingHint';
 import { ChemicalFilterPills } from '@/components/pesticidkort/ChemicalFilterPills';
+import { ExploreFieldPanel } from '@/components/pesticidkort/ExploreFieldPanel';
 import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
-import type { AddressResult } from '@/components/pesticidkort/types';
+import type {
+  AddressResult,
+  NearbyFieldSummary,
+} from '@/components/pesticidkort/types';
 
 const ExploreMap = dynamic(
   () =>
@@ -45,12 +49,22 @@ export function ExploreMapView({
   const [searchOpen, setSearchOpen] = useState(true);
   const [chemFilter, setChemFilter] = useState<ChemicalFilter>('none');
   const [zoomLevel, setZoomLevel] = useState(7);
+  const [selectedField, setSelectedField] = useState<NearbyFieldSummary | null>(
+    null
+  );
 
   const handleSelect = useCallback(
     (result: AddressResult) => {
       onAddressSelect(result);
     },
     [onAddressSelect]
+  );
+
+  const handleFieldClick = useCallback(
+    (_uuid: string, data: NearbyFieldSummary) => {
+      setSelectedField(data);
+    },
+    []
   );
 
   return (
@@ -60,6 +74,8 @@ export function ExploreMapView({
           year={year}
           activeFilter={chemFilter}
           onZoomChange={setZoomLevel}
+          onFieldClick={handleFieldClick}
+          selectedFieldUuid={selectedField?.field_uuid ?? null}
         />
       </div>
 
@@ -103,6 +119,13 @@ export function ExploreMapView({
           />
         </div>
       </div>
+
+      {selectedField && (
+        <ExploreFieldPanel
+          field={selectedField}
+          onClose={() => setSelectedField(null)}
+        />
+      )}
     </main>
   );
 }

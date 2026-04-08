@@ -12,6 +12,11 @@ import {
 } from '@/components/pesticidkort/map-layers';
 import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
+import { setupFieldClickHandlers } from '@/components/pesticidkort/map-events';
+import { highlightField } from '@/components/pesticidkort/map-highlight';
+import { FieldHoverTooltip } from '@/components/pesticidkort/FieldHoverTooltip';
+import { useFieldHover } from '@/components/pesticidkort/useFieldHover';
+import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
 const DENMARK_CENTER = { longitude: 10.4, latitude: 56.0 };
@@ -21,18 +26,25 @@ interface ExploreMapInnerProps {
   year: number;
   activeFilter?: ChemicalFilter;
   onZoomChange?: (zoom: number) => void;
+  onFieldClick?: (fieldUuid: string, fieldData: NearbyFieldSummary) => void;
+  selectedFieldUuid?: string | null;
 }
 
 export function ExploreMapInner({
   year,
   activeFilter = 'none',
   onZoomChange,
+  onFieldClick,
+  selectedFieldUuid,
 }: ExploreMapInnerProps) {
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
   const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const { hoverData, attachHover } = useFieldHover();
+  const onFieldClickRef = useRef(onFieldClick);
+  onFieldClickRef.current = onFieldClick;
 
   useEffect(() => {
     pmtilesCacheService.getFieldAnalysisUrls(year).then((urls) => {
@@ -52,7 +64,10 @@ export function ExploreMapInner({
     if (overviewUrl)
       addOverviewLayers(map as unknown as MapInstance, overviewUrl);
     setMapReady(true);
-  }, [pmtilesUrl, overviewUrl]);
+
+    setupFieldClickHandlers(map, 0, 0, onFieldClickRef);
+    attachHover(map);
+  }, [pmtilesUrl, overviewUrl, attachHover]);
 
   useEffect(() => {
     if (!mapRef.current || !pmtilesUrl) return;
@@ -69,14 +84,17 @@ export function ExploreMapInner({
     if (overviewUrl) setSourceUrl('fields-overview', overviewUrl);
   }, [pmtilesUrl, overviewUrl]);
 
-  // Apply chemical filter when it changes
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
     const map = mapRef.current.getMap() as unknown as MapInstance;
     applyChemicalFilter(map, activeFilter);
   }, [activeFilter, mapReady]);
 
-  // Track zoom level
+  useEffect(() => {
+    if (!mapReady) return;
+    highlightField(mapRef.current, selectedFieldUuid ?? null);
+  }, [selectedFieldUuid, mapReady]);
+
   const handleZoom = useCallback(() => {
     if (!mapRef.current || !onZoomChange) return;
     onZoomChange(mapRef.current.getMap().getZoom());
@@ -85,20 +103,23 @@ export function ExploreMapInner({
   if (!pmtilesUrl) return null;
 
   return (
-    <Map
-      ref={mapRef}
-      initialViewState={{
-        longitude: DENMARK_CENTER.longitude,
-        latitude: DENMARK_CENTER.latitude,
-        zoom: DENMARK_ZOOM,
-      }}
-      mapStyle={mapStyle}
-      onLoad={handleMapLoad}
-      onZoom={handleZoom}
-      attributionControl={false}
-      data-testid="explore-map"
-    >
-      <NavigationControl position="top-right" />
-    </Map>
+    <>
+      <Map
+        ref={mapRef}
+        initialViewState={{
+          longitude: DENMARK_CENTER.longitude,
+          latitude: DENMARK_CENTER.latitude,
+          zoom: DENMARK_ZOOM,
+        }}
+        mapStyle={mapStyle}
+        onLoad={handleMapLoad}
+        onZoom={handleZoom}
+        attributionControl={false}
+        data-testid="explore-map"
+      >
+        <NavigationControl position="top-right" />
+      </Map>
+      {hoverData && <FieldHoverTooltip {...hoverData} />}
+    </>
   );
 }
