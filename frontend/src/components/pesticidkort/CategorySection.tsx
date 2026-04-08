@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/formatting';
 import type { ParsedEnhancedPesticide } from '@/components/pesticidkort/field-utils';
-import { getRiskIcon } from '@/components/pesticidkort/field-utils';
+import { classifyRisk } from '@/app/markanalyse/components/shared/field-details/pesticide-risk';
+import { getGHSRiskIcon } from '@/components/field-analysis/ghs-risk-icons';
 
 /** Maps raw BMD produktgruppe_pesticid values to citizen-friendly Danish labels. */
 const GROUP_LABELS: Record<string, string> = {
@@ -84,7 +85,8 @@ export function CategorySection({
             )}
           >
             {sorted.map((p, i) => {
-              const risk = getRiskIcon(p.healthRisk, p.envRisk, p.signalWord);
+              const cls = classifyRisk(p.healthRisk, p.envRisk, p.signalWord);
+              const risk = cls ? getGHSRiskIcon(cls) : null;
               const groupLabel = p.productGroup
                 ? GROUP_LABELS[p.productGroup] || p.productGroup.toLowerCase()
                 : null;
@@ -94,9 +96,16 @@ export function CategorySection({
                   className="hover:bg-muted/40 -mx-1 rounded px-1 text-xs transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-foreground min-w-0 flex-1 truncate font-medium">
+                    <a
+                      href={`https://www.middeldatabasen.dk/QuickSearch.asp?SearchString=${encodeURIComponent(p.name)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid={`product-link-${i}`}
+                      className="text-foreground group/link min-w-0 flex-1 truncate font-medium underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                    >
                       {p.name}
-                    </span>
+                      <ExternalLink className="ml-0.5 inline h-2.5 w-2.5 opacity-0 transition-opacity group-hover/link:opacity-60" />
+                    </a>
                     {risk && (
                       <span
                         className={cn(
@@ -105,7 +114,7 @@ export function CategorySection({
                         )}
                         title={`Klassificeret som ${risk.level.toLowerCase()}`}
                       >
-                        <risk.Icon className={cn('h-3 w-3', risk.color)} />
+                        <risk.Icon className="h-3.5 w-3.5" />
                         <span
                           className={cn('text-[10px] font-medium', risk.color)}
                         >

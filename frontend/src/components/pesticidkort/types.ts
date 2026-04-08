@@ -57,6 +57,14 @@ export interface PesticideReport {
   exposure_1000m: ExposureSummary;
 }
 
+export interface FieldHoverData {
+  cropName: string;
+  cvrNumber?: string;
+  burden: number;
+  x: number;
+  y: number;
+}
+
 export interface AddressResult {
   lat: number;
   lng: number;
