@@ -67,21 +67,30 @@ class PMTilesCacheService {
 
   /**
    * Preload PMTiles directory headers for better performance.
-   * Uses PMTiles.getHeader() which fetches only the ~16KB directory,
-   * not the full file. <link rel="preload"> doesn't work for
-   * range-requested resources.
+   * Creates PMTiles instances and registers them with Protocol via
+   * protocol.add(), so the cached headers are reused when MapLibre
+   * later requests tiles. Falls back to standalone instances if
+   * Protocol isn't registered yet.
    */
   async preloadPMTiles(filenames: string[]): Promise<void> {
     if (typeof window === 'undefined') {
       return; // Skip on server-side
     }
 
-    const { PMTiles } = await import('pmtiles');
+    const [{ PMTiles }, { getPmtilesProtocol }] = await Promise.all([
+      import('pmtiles'),
+      import('@/components/pesticidkort/pmtiles-protocol'),
+    ]);
+
+    const protocol = getPmtilesProtocol();
 
     const preloadPromises = filenames.map(async (filename) => {
       try {
         const url = await this.getPMTilesUrl(filename);
         const p = new PMTiles(url);
+        if (protocol) {
+          protocol.add(p);
+        }
         await p.getHeader();
       } catch {
         // Preload failures are non-critical
