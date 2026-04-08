@@ -30,7 +30,7 @@ function ExposureRow({ summary }: { summary: ExposureSummary }) {
             {summary.total_applications}
           </p>
           <p className="text-muted-foreground text-[10px] leading-tight">
-            sprøjtninger
+            pesticider
           </p>
         </div>
         <div>

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { PersonalReport } from '@/components/pesticidkort/PersonalReport';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
@@ -11,8 +10,10 @@ import { BottomSheet } from '@/components/pesticidkort/BottomSheet';
 import { DesktopSidebar } from '@/components/pesticidkort/DesktopSidebar';
 import { ReportHeader } from '@/components/pesticidkort/ReportHeader';
 import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
+import { ChemicalFilterPills } from '@/components/pesticidkort/ChemicalFilterPills';
+import { MapLegend } from '@/components/pesticidkort/MapLegend';
 import { StoryMode } from '@/components/pesticidkort/StoryMode';
-import { ModeToggle } from '@/components/pesticidkort/ModeToggle';
+import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 
 const PesticidkortMap = dynamic(
   () =>
@@ -26,7 +27,7 @@ const PesticidkortMap = dynamic(
         role="status"
         className="bg-muted flex h-full items-center justify-center"
       >
-        <p className="text-muted-foreground text-sm">Indlæser kort...</p>
+        <p className="text-muted-foreground text-sm">Indl&aelig;ser kort...</p>
       </div>
     ),
   }
@@ -59,7 +60,7 @@ export function ReportMapView({
   const [sheetState, setSheetState] = useState<'peek' | 'half' | 'full'>(
     'half'
   );
-  const router = useRouter();
+  const [chemFilter, setChemFilter] = useState<ChemicalFilter>('none');
   const histogram = useBurdenHistogram(year);
   const { report, handleFieldsLoaded } = useReportBuilder({
     address,
@@ -78,13 +79,6 @@ export function ReportMapView({
     [sheetState]
   );
 
-  const handleModeChange = useCallback(
-    (m: 'citizen' | 'expert') => {
-      if (m === 'expert') router.push(`/markanalyse?lat=${lat}&lng=${lng}`);
-    },
-    [router, lat, lng]
-  );
-
   const reportContent = report ? (
     <PersonalReport
       report={report}
@@ -100,18 +94,11 @@ export function ReportMapView({
       className="animate-fade-slide-up space-y-4 px-5 py-5 motion-reduce:animate-none"
     >
       <p className="text-muted-foreground text-sm">
-        Analyserer marker nær din adresse...
+        Analyserer marker n&aelig;r din adresse...
       </p>
       {['h-20', 'h-12', 'h-24'].map((h) => (
         <div key={h} className={`bg-muted ${h} animate-pulse rounded-xl`} />
       ))}
-    </div>
-  );
-
-  const controls = (
-    <div className="bg-background/95 border-border border-t px-5 py-3 backdrop-blur-sm">
-      <ModeToggle mode="citizen" onChange={handleModeChange} />
-      <YearTimeline year={year} onChange={onYearChange} compact />
     </div>
   );
 
@@ -126,18 +113,32 @@ export function ReportMapView({
           selectedFieldUuid={selectedField}
           onFieldsLoaded={handleFieldsLoaded}
           onFieldClick={handleMapFieldClick}
+          activeFilter={chemFilter}
         />
       </div>
       <ReportHeader address={address} year={year} onBack={onBack} />
 
+      <MapLegend activeFilter={chemFilter} />
+
+      {/* Floating map controls: year + chemical pills */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-[55%] z-40 flex flex-col items-center gap-2 px-4 md:right-[420px] md:bottom-6">
+        <div className="bg-background/90 pointer-events-auto rounded-full px-5 py-1 backdrop-blur-sm">
+          <YearTimeline year={year} onChange={onYearChange} compact />
+        </div>
+        <ChemicalFilterPills
+          active={chemFilter}
+          onChange={setChemFilter}
+          zoomLevel={14}
+        />
+      </div>
+
       <div className="md:hidden">
         <BottomSheet state={sheetState} onStateChange={setSheetState}>
           {reportContent}
-          {controls}
         </BottomSheet>
       </div>
 
-      <DesktopSidebar controls={controls}>{reportContent}</DesktopSidebar>
+      <DesktopSidebar>{reportContent}</DesktopSidebar>
       {showStory && report && (
         <StoryMode report={report} onClose={() => setShowStory(false)} />
       )}

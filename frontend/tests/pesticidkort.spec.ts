@@ -55,12 +55,24 @@ test.describe('Pesticidkort', () => {
     ).toBeVisible();
   });
 
-  test('should show mode toggle defaulting to citizen', async ({ page }) => {
-    await expect(page.locator('[data-testid="mode-toggle"]')).toBeVisible();
+  test('should show chemical filter pills in explore mode', async ({
+    page,
+  }) => {
+    const exploreButton = page.locator('[data-testid="explore-map-button"]');
+    await exploreButton.click();
 
-    const citizenButton = page.locator('[data-testid="mode-citizen-button"]');
-    await expect(citizenButton).toBeVisible();
-    await expect(citizenButton).toHaveAttribute('aria-pressed', 'true');
+    const pills = page.locator('[data-testid="chemical-filter-pills"]');
+    await expect(pills).toBeVisible({ timeout: 10000 });
+
+    await expect(
+      page.locator('[data-testid="chemical-filter-pfas"]')
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="chemical-filter-glyphosate"]')
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="chemical-filter-diquat"]')
+    ).toBeVisible();
   });
 
   test('should adapt landing page to mobile viewport', async ({ page }) => {

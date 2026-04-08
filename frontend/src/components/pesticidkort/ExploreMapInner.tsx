@@ -8,7 +8,9 @@ import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
 import {
   addFieldLayers,
   addOverviewLayers,
+  applyChemicalFilter,
 } from '@/components/pesticidkort/map-layers';
+import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
@@ -17,13 +19,20 @@ const DENMARK_ZOOM = 7;
 
 interface ExploreMapInnerProps {
   year: number;
+  activeFilter?: ChemicalFilter;
+  onZoomChange?: (zoom: number) => void;
 }
 
-export function ExploreMapInner({ year }: ExploreMapInnerProps) {
+export function ExploreMapInner({
+  year,
+  activeFilter = 'none',
+  onZoomChange,
+}: ExploreMapInnerProps) {
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
   const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     pmtilesCacheService.getFieldAnalysisUrls(year).then((urls) => {
@@ -42,6 +51,7 @@ export function ExploreMapInner({ year }: ExploreMapInnerProps) {
     addFieldLayers(map as unknown as MapInstance, pmtilesUrl);
     if (overviewUrl)
       addOverviewLayers(map as unknown as MapInstance, overviewUrl);
+    setMapReady(true);
   }, [pmtilesUrl, overviewUrl]);
 
   useEffect(() => {
@@ -59,6 +69,19 @@ export function ExploreMapInner({ year }: ExploreMapInnerProps) {
     if (overviewUrl) setSourceUrl('fields-overview', overviewUrl);
   }, [pmtilesUrl, overviewUrl]);
 
+  // Apply chemical filter when it changes
+  useEffect(() => {
+    if (!mapRef.current || !mapReady) return;
+    const map = mapRef.current.getMap() as unknown as MapInstance;
+    applyChemicalFilter(map, activeFilter);
+  }, [activeFilter, mapReady]);
+
+  // Track zoom level
+  const handleZoom = useCallback(() => {
+    if (!mapRef.current || !onZoomChange) return;
+    onZoomChange(mapRef.current.getMap().getZoom());
+  }, [onZoomChange]);
+
   if (!pmtilesUrl) return null;
 
   return (
@@ -71,6 +94,7 @@ export function ExploreMapInner({ year }: ExploreMapInnerProps) {
       }}
       mapStyle={mapStyle}
       onLoad={handleMapLoad}
+      onZoom={handleZoom}
       attributionControl={false}
       data-testid="explore-map"
     >
