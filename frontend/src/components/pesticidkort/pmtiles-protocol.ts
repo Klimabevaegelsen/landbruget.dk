@@ -1,6 +1,6 @@
 /** Register PMTiles protocol with MapLibre (idempotent). */
 export async function registerPmtilesProtocol() {
-  const [maplibregl, { Protocol }] = await Promise.all([
+  const [maplibregl, { Protocol, SharedCache }] = await Promise.all([
     import('maplibre-gl'),
     import('pmtiles'),
   ]);
@@ -8,7 +8,8 @@ export async function registerPmtilesProtocol() {
     __pmtiles_protocol_registered?: boolean;
   };
   if (!win.__pmtiles_protocol_registered) {
-    const protocol = new Protocol();
+    const cache = new SharedCache();
+    const protocol = new Protocol(cache);
     maplibregl.default.addProtocol('pmtiles', protocol.tile);
     win.__pmtiles_protocol_registered = true;
   }

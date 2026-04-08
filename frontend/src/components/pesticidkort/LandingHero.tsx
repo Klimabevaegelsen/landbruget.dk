@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
@@ -27,8 +28,20 @@ export function LandingHero({
       variants={staggerContainer(!!reducedMotion)}
       initial={reducedMotion ? false : 'hidden'}
       animate="visible"
-      className="bg-primary/[0.02] relative flex min-h-screen flex-col overflow-hidden px-6 sm:px-8"
+      className="relative flex min-h-screen flex-col overflow-hidden px-6 sm:px-8"
     >
+      {/* Map background */}
+      <div className="absolute inset-0 -z-10" aria-hidden="true">
+        <Image
+          src="/images/pesticidkort-bg.webp"
+          alt=""
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="from-background/85 via-background/80 to-background/70 absolute inset-0 bg-gradient-to-b" />
+      </div>
+
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center py-16">
         <motion.p
           variants={fadeSlideUp}

@@ -29,7 +29,7 @@ class PMTilesCacheService {
 
     // Determine URL based on proxy setting
     const url = this.USE_PROXY
-      ? `${this.PROXY_BASE_URL}/api/pmtiles/${filename}?v=${Date.now()}` // Use our caching proxy
+      ? `${this.PROXY_BASE_URL}/api/pmtiles/${filename}` // Use our caching proxy
       : `https://data.pesticidkortet.dk/pmtiles/${filename}`; // Direct R2 URL
 
     // Cache the URL
@@ -66,33 +66,23 @@ class PMTilesCacheService {
   }
 
   /**
-   * Preload PMTiles files for better performance
+   * Preload PMTiles directory headers for better performance.
+   * Uses PMTiles.getHeader() which fetches only the ~16KB directory,
+   * not the full file. <link rel="preload"> doesn't work for
+   * range-requested resources.
    */
   async preloadPMTiles(filenames: string[]): Promise<void> {
     if (typeof window === 'undefined') {
       return; // Skip on server-side
     }
 
+    const { PMTiles } = await import('pmtiles');
+
     const preloadPromises = filenames.map(async (filename) => {
       try {
         const url = await this.getPMTilesUrl(filename);
-
-        // Use link preload for better browser caching
-        const link = document.createElement('link');
-        link.rel = 'preload';
-        link.href = url;
-        // PMTiles are binary data, don't specify 'as' attribute
-        link.crossOrigin = 'anonymous';
-
-        // Add to document head
-        document.head.appendChild(link);
-
-        // Optional: Remove link after a delay to clean up DOM
-        setTimeout(() => {
-          if (link.parentNode) {
-            link.parentNode.removeChild(link);
-          }
-        }, 30000); // Remove after 30 seconds
+        const p = new PMTiles(url);
+        await p.getHeader();
       } catch {
         // Preload failures are non-critical
       }
