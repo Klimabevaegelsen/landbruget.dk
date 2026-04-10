@@ -39,7 +39,7 @@ export function MethodologyMap({ step }: MethodologyMapProps) {
   useEffect(() => {
     registerPmtilesProtocol();
     pmtilesCacheService
-      .getFieldAnalysisUrls(2023)
+      .getFieldAnalysisUrls(2024)
       .then((urls) => {
         setPmtilesUrl(urls.fields);
         setOverviewUrl(urls.overview);

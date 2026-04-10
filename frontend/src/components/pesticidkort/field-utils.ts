@@ -21,11 +21,11 @@ export function getCropEmoji(crop: string): string {
 
 /**
  * Scale max for the burden histogram track.
- * Kartofler peak at ~10.2 B/ha (Bekæmpelsesmiddelstatistik 2023).
+ * Kartofler peak at ~10.2 B/ha (Bekæmpelsesmiddelstatistik).
  */
 const SCALE_MAX = 12;
 
-/** National average PBI: 2.15 B/ha (Bekæmpelsesmiddelstatistik 2023). */
+/** National average PBI: 2.15 B/ha (Bekæmpelsesmiddelstatistik). */
 const NATIONAL_AVG = 2.15;
 
 export const NATIONAL_AVG_PERCENT = (NATIONAL_AVG / SCALE_MAX) * 100;

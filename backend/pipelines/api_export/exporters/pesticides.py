@@ -40,10 +40,25 @@ class PesticidesExporter(BaseExporter):
         logger.info(f"Found disaggregation data for years: {sorted(year_paths.keys())}")
 
         # Load latest year for national/municipality/company exports
-        companies_path = f"r2://{BUCKET}/gold/cvr_enrichment_companies/data.parquet"
+        # Discover latest timestamped CVR enrichment file
+        cvr_pattern = f"{self._r2_bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+        try:
+            cvr_files = sorted(self.r2_fs.glob(cvr_pattern))
+            companies_path = f"r2://{cvr_files[-1]}" if cvr_files else None
+        except Exception:
+            logger.warning("Could not discover CVR enrichment files")
+            companies_path = None
+
         try:
             self.load_parquet_table(year_paths[latest_year], "pesticides")
-            self.load_parquet_table(companies_path, "companies")
+            if companies_path:
+                self.load_parquet_table(companies_path, "companies")
+            else:
+                logger.warning("No CVR enrichment data found, proceeding without company names")
+                self.conn.execute(
+                    "CREATE TABLE companies (cvr_number VARCHAR, company_name VARCHAR, "
+                    "current_municipality_name VARCHAR)"
+                )
         except Exception:
             logger.exception("Failed to load pesticide data")
             return stats

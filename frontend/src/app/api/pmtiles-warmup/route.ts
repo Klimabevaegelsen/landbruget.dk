@@ -5,7 +5,6 @@ const PMTILES_BASE_URL = 'https://data.pesticidkortet.dk';
 // PMTiles files to proactively warm (in priority order)
 const WARMUP_FILES = [
   // Current year files (highest priority)
-  'field_analysis_2023.pmtiles',
   'field_analysis_2024.pmtiles',
 
   // Background layers (used by all users)
@@ -15,6 +14,7 @@ const WARMUP_FILES = [
   'water_projects.pmtiles', // Water projects (year-independent)
 
   // Historical years (medium priority)
+  'field_analysis_2023.pmtiles',
   'field_analysis_2022.pmtiles',
   'field_analysis_2021.pmtiles',
   'field_analysis_2020.pmtiles',

@@ -102,8 +102,8 @@ async def run_cumulative_analysis(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage)
 
         # Load BMD data once for all analyses
         logger.info("📊 Loading shared BMD data for cumulative analysis")
@@ -560,8 +560,8 @@ async def run_cumulative_analysis_optimized(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage)
 
         # Determine years to process
         if years is None:
@@ -600,7 +600,7 @@ async def run_cumulative_analysis_optimized(
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.storage_access.list_files(pattern)
+                        files = processor.storage.list_files(pattern)
                         if files:
                             found_file = sorted(files)[-1]  # Get the most recent result
                             logger.info(
@@ -673,7 +673,7 @@ async def run_cumulative_analysis_optimized(
                 # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.storage_access.create_table_from_storage(year_table, file_path)
+                    processor.storage.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -862,7 +862,7 @@ async def run_cumulative_analysis_optimized(
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.storage_access.list_files(pattern)
+                        files = processor.storage.list_files(pattern)
                         if files:
                             found_file = sorted(files)[-1]
                             logger.info(
@@ -945,7 +945,7 @@ async def run_cumulative_analysis_optimized(
                     # Load year results from cloud storage
                     year_table = f"year_kommune_results_{year}"
                     try:
-                        processor.storage_access.create_table_from_storage(year_table, file_path)
+                        processor.storage.create_table_from_storage(year_table, file_path)
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""
@@ -1137,8 +1137,8 @@ async def run_cumulative_analysis_github_actions_optimized(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage)
 
         # Determine years to process
         if years is None:
@@ -1184,7 +1184,7 @@ async def run_cumulative_analysis_github_actions_optimized(
                 for pattern in patterns:
                     try:
                         # List files with timestamps
-                        files = processor.storage_access.list_files_with_timestamps(pattern)
+                        files = processor.storage.list_files_with_timestamps(pattern)
                         if files:
                             # Sort by timestamp (most recent first) and take the freshest
                             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
@@ -1268,7 +1268,7 @@ async def run_cumulative_analysis_github_actions_optimized(
                 # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.storage_access.create_table_from_storage(year_table, file_path)
+                    processor.storage.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -1450,7 +1450,7 @@ async def run_cumulative_analysis_github_actions_optimized(
                 found_file = None
                 for pattern in patterns:
                     try:
-                        files = processor.storage_access.list_files_with_timestamps(pattern)
+                        files = processor.storage.list_files_with_timestamps(pattern)
                         if files:
                             files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
                             most_recent_file, timestamp = files_sorted[0]
@@ -1529,9 +1529,7 @@ async def run_cumulative_analysis_github_actions_optimized(
                     # Load year kommune results from cloud storage
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
-                        processor.storage_access.create_table_from_storage(
-                            year_kommune_table, file_path
-                        )
+                        processor.storage.create_table_from_storage(year_kommune_table, file_path)
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""
@@ -1717,8 +1715,8 @@ async def run_combined_analysis(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
+        data_loader = H3DataLoader(processor.conn, processor.config, processor.storage)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage)
 
         # Load BMD data once for all analyses (shared across all resolutions and modes)
         logger.info("📊 Loading shared BMD data for all analyses")
@@ -1960,8 +1958,8 @@ async def run_cumulative_analysis_from_artifacts(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        H3DataLoader(processor.conn, processor.config, processor.storage_access)
-        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage_access)
+        H3DataLoader(processor.conn, processor.config, processor.storage)
+        result_saver = H3ResultSaver(processor.conn, processor.config, processor.storage)
 
         # Read artifacts to get cloud storage paths
         artifacts_path = Path(artifacts_dir)
@@ -2099,7 +2097,7 @@ async def run_cumulative_analysis_from_artifacts(
                 # Load year results from cloud storage
                 year_table = f"year_results_{year}_res{resolution}"
                 try:
-                    processor.storage_access.create_table_from_storage(year_table, file_path)
+                    processor.storage.create_table_from_storage(year_table, file_path)
 
                     # Check if we have the expected columns (handle both regular and kepler formats)
                     columns = processor.conn.execute(f"PRAGMA table_info({year_table})").fetchall()
@@ -2346,9 +2344,7 @@ async def run_cumulative_analysis_from_artifacts(
                     # Load year kommune results from cloud storage
                     year_kommune_table = f"year_kommune_results_{year}"
                     try:
-                        processor.storage_access.create_table_from_storage(
-                            year_kommune_table, file_path
-                        )
+                        processor.storage.create_table_from_storage(year_kommune_table, file_path)
 
                         # Insert into cumulative table
                         processor.conn.execute(f"""

@@ -93,8 +93,8 @@ jobs:
               requested_years=("${{ github.event.inputs.years }}")
             fi
           else
-            # Default to all available years (2010-2023)
-            requested_years=("2010" "2011" "2012" "2013" "2014" "2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
+            # Default to all available years (2010-2024)
+            requested_years=("2010" "2011" "2012" "2013" "2014" "2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023" "2024")
           fi
 
           # Check which years have pesticide disaggregation data available in R2
@@ -102,7 +102,9 @@ jobs:
           available_years=()
           for year in "${requested_years[@]}"; do
             # Check if pesticide disaggregation data exists for this year
-            if aws s3 ls "s3://${{ env.R2_BUCKET }}/gold/pesticide_disaggregation_${year}/" --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com &>/dev/null; then
+            # Directory naming follows Y+1 pattern: pesticide_disaggregation_YYYY_YYYY+1/
+            next_year=$((year + 1))
+            if aws s3 ls "s3://${{ env.R2_BUCKET }}/gold/pesticide_disaggregation_${year}_${next_year}/" --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com &>/dev/null; then
               echo "  ✅ Year ${year}: Data available"
               available_years+=("$year")
             else

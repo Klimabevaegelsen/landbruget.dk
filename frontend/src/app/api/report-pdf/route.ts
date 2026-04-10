@@ -34,7 +34,7 @@ export function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
 
   const addr = escapeHtml(searchParams.get('addr') ?? 'Ukendt adresse');
-  const year = escapeHtml(searchParams.get('y') ?? '2023');
+  const year = escapeHtml(searchParams.get('y') ?? '2024');
   const rawGrade = searchParams.get('grade') ?? 'C';
   const grade: PesticideGrade = isValidGrade(rawGrade) ? rawGrade : 'C';
   const score = escapeHtml(searchParams.get('score') ?? '0');

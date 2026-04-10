@@ -11,7 +11,7 @@ const CACHE_HEADERS = {
 };
 
 export async function GET(request: NextRequest) {
-  const year = Number(new URL(request.url).searchParams.get('year') ?? '2023');
+  const year = Number(new URL(request.url).searchParams.get('year') ?? '2024');
 
   const data = await getCachedBurdenHistogram(year);
 

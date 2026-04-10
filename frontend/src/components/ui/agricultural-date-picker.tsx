@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const DATA_YEAR = 2024;
+
 export interface DateRange {
   from: Date | undefined;
   to: Date | undefined;
@@ -46,11 +48,11 @@ interface AgriculturalDatePickerProps {
 const agriculturalPresets = {
   pesticide: [
     {
-      label: 'Sprøjtesæson 2024',
-      description: 'Mar - Sep 2024',
+      label: `Sprøjtesæson ${DATA_YEAR}`,
+      description: `Mar - Sep ${DATA_YEAR}`,
       range: {
-        from: new Date(2024, 2, 1),
-        to: new Date(2024, 8, 30),
+        from: new Date(DATA_YEAR, 2, 1),
+        to: new Date(DATA_YEAR, 8, 30),
       },
       icon: <Droplets className="h-4 w-4" />,
     },
@@ -58,8 +60,8 @@ const agriculturalPresets = {
       label: 'Forårssæson',
       description: 'Mar - Maj',
       range: {
-        from: new Date(2024, 2, 1),
-        to: new Date(2024, 4, 31),
+        from: new Date(DATA_YEAR, 2, 1),
+        to: new Date(DATA_YEAR, 4, 31),
       },
       icon: <Wheat className="h-4 w-4" />,
     },
@@ -67,19 +69,19 @@ const agriculturalPresets = {
       label: 'Sommersæson',
       description: 'Jun - Aug',
       range: {
-        from: new Date(2024, 5, 1),
-        to: new Date(2024, 7, 31),
+        from: new Date(DATA_YEAR, 5, 1),
+        to: new Date(DATA_YEAR, 7, 31),
       },
       icon: <Wheat className="h-4 w-4" />,
     },
   ],
   harvest: [
     {
-      label: 'Høstsæson 2024',
-      description: 'Jul - Oct 2024',
+      label: `Høstsæson ${DATA_YEAR}`,
+      description: `Jul - Oct ${DATA_YEAR}`,
       range: {
-        from: new Date(2024, 6, 1),
-        to: new Date(2024, 9, 31),
+        from: new Date(DATA_YEAR, 6, 1),
+        to: new Date(DATA_YEAR, 9, 31),
       },
       icon: <Wheat className="h-4 w-4" />,
     },
@@ -87,8 +89,8 @@ const agriculturalPresets = {
       label: 'Vinterhvede høst',
       description: 'Jul - Aug',
       range: {
-        from: new Date(2024, 6, 15),
-        to: new Date(2024, 7, 31),
+        from: new Date(DATA_YEAR, 6, 15),
+        to: new Date(DATA_YEAR, 7, 31),
       },
       icon: <Wheat className="h-4 w-4" />,
     },
@@ -96,7 +98,7 @@ const agriculturalPresets = {
   analysis: [
     {
       label: 'Indeværende år',
-      description: '2024',
+      description: String(DATA_YEAR),
       range: {
         from: startOfYear(new Date()),
         to: endOfYear(new Date()),

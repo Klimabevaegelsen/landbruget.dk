@@ -2131,7 +2131,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     IsPartialFieldCoverage,
                     DisaggregationDate,
                     field_uuid,
-                    primary_field_id
+                    primary_field_id,
+                    municipality
                 )
                 SELECT
                     uuid() as DisaggregatedID,
@@ -2264,7 +2265,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     IsPartialFieldCoverage,
                     DisaggregationDate,
                     field_uuid,
-                    primary_field_id
+                    primary_field_id,
+                    municipality
                 )
                 SELECT
                     uuid() as DisaggregatedID,
