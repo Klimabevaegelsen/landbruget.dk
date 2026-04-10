@@ -106,27 +106,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         geometry_expr: str,
         where_clause: str | None = None,
     ) -> str:
-        """Resolve geometry expression to EPSG:25832 using SRID first, bounds detection fallback."""
+        """Resolve geometry expression to EPSG:25832 using bounds-based CRS detection."""
         where_sql = f"WHERE {where_clause}" if where_clause else ""
-        srid_result = self.conn.execute(
-            f"""
-            SELECT ST_SRID({geometry_expr})
-            FROM {table_name}
-            {where_sql}
-            LIMIT 1
-            """
-        ).fetchone()
-        srid = srid_result[0] if srid_result and srid_result[0] else 0
-
-        if srid > 0:
-            source_crs = f"EPSG:{srid}"
-            if source_crs == DANISH_UTM:
-                return geometry_expr
-            self.log.info(
-                f"🔄 {table_name}.{geometry_expr} is {source_crs}, transforming to {DANISH_UTM}"
-            )
-            return sql_transform_to_processing_crs(geometry_expr, source_crs)
-
         bounds = self.conn.execute(
             f"""
             SELECT
