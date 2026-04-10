@@ -17,6 +17,12 @@ import os
 import time
 from typing import Any
 
+from common.crs_utils import (
+    DANISH_UTM,
+    WGS84,
+    detect_crs_from_bounds,
+    sql_transform_to_processing_crs,
+)
 from loguru import logger
 from pydantic import ConfigDict, Field
 from tqdm import tqdm
@@ -93,6 +99,72 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
     def __init__(self, config: PesticideProximityGoldConfig):
         super().__init__(config)
         self.log = logger
+
+    def _resolve_to_utm_expr(
+        self,
+        table_name: str,
+        geometry_expr: str,
+        where_clause: str | None = None,
+    ) -> str:
+        """Resolve geometry expression to EPSG:25832 using SRID first, bounds detection fallback."""
+        where_sql = f"WHERE {where_clause}" if where_clause else ""
+        srid_result = self.conn.execute(
+            f"""
+            SELECT ST_SRID({geometry_expr})
+            FROM {table_name}
+            {where_sql}
+            LIMIT 1
+            """
+        ).fetchone()
+        srid = srid_result[0] if srid_result and srid_result[0] else 0
+
+        if srid > 0:
+            source_crs = f"EPSG:{srid}"
+            if source_crs == DANISH_UTM:
+                return geometry_expr
+            self.log.info(
+                f"🔄 {table_name}.{geometry_expr} is {source_crs}, transforming to {DANISH_UTM}"
+            )
+            return sql_transform_to_processing_crs(geometry_expr, source_crs)
+
+        bounds = self.conn.execute(
+            f"""
+            SELECT
+                MIN(ST_XMin({geometry_expr})) as min_x,
+                MAX(ST_XMax({geometry_expr})) as max_x,
+                MIN(ST_YMin({geometry_expr})) as min_y,
+                MAX(ST_YMax({geometry_expr})) as max_y
+            FROM {table_name}
+            {where_sql}
+            """
+        ).fetchone()
+        if not bounds or bounds[0] is None:
+            raise ValueError(f"No valid geometries found in {table_name}.{geometry_expr}")
+
+        min_x, max_x, min_y, max_y = bounds
+        detected_crs, coord_order = detect_crs_from_bounds(min_x, max_x, min_y, max_y)
+        if detected_crs is None:
+            raise ValueError(
+                f"Cannot detect CRS for {table_name}.{geometry_expr} from bounds: "
+                f"X=[{min_x:.3f}, {max_x:.3f}], Y=[{min_y:.3f}, {max_y:.3f}]"
+            )
+
+        normalized_expr = geometry_expr
+        if detected_crs == WGS84 and coord_order == "lat_lon_swapped":
+            self.log.warning(
+                f"⚠️ {table_name}.{geometry_expr} appears lat/lon-swapped WGS84; flipping coordinates"
+            )
+            normalized_expr = f"ST_FlipCoordinates({geometry_expr})"
+
+        if detected_crs == DANISH_UTM:
+            self.log.info(f"✅ {table_name}.{geometry_expr} detected as {DANISH_UTM} from bounds")
+            return normalized_expr
+
+        self.log.info(
+            f"🔄 {table_name}.{geometry_expr} detected as {detected_crs} ({coord_order}), "
+            f"transforming to {DANISH_UTM}"
+        )
+        return sql_transform_to_processing_crs(normalized_expr, detected_crs)
 
     async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """Main execution method for pesticide proximity analysis."""
@@ -306,27 +378,18 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         # DuckDB CTE alias issues
 
         # Step 1: Create fields with geometry
-        # Detect field geometry CRS and transform to EPSG:25832 if needed
-        field_srid = self.conn.execute(
-            f"SELECT ST_SRID(geometry) FROM {field_table} WHERE geometry IS NOT NULL LIMIT 1"
-        ).fetchone()
-        field_srid = field_srid[0] if field_srid else 0
-        if field_srid == 25832:
-            field_geom_expr = "f.geometry"
-        elif field_srid == 0:
-            # FVM marker geometries should be EPSG:25832 even when SRID metadata is missing.
-            field_geom_expr = "ST_SetSRID(f.geometry, 25832)"
-            self.log.warning(
-                "⚠️ Field geometry SRID is missing; assuming EPSG:25832 and setting SRID metadata"
-            )
-        else:
-            field_geom_expr = f"ST_Transform(f.geometry, 'EPSG:{field_srid}', 'EPSG:25832')"
-            self.log.info(f"🔄 Field geometry is EPSG:{field_srid}, transforming to EPSG:25832")
+        # Resolve field geometry CRS via utility-backed SRID/bounds detection
+        field_geom_expr = self._resolve_to_utm_expr(
+            table_name=field_table,
+            geometry_expr="geometry",
+            where_clause="geometry IS NOT NULL",
+        )
+        field_geom_expr_join = field_geom_expr.replace("geometry", "f.geometry")
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE fields_with_geometry AS
             SELECT DISTINCT
                 cd.field_uuid,
-                {field_geom_expr} as field_geom_utm
+                {field_geom_expr_join} as field_geom_utm
             FROM current_disaggregation cd
             JOIN {field_table} f ON cd.field_uuid = f.field_uuid
             WHERE f.geometry IS NOT NULL
@@ -340,24 +403,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         )
 
         # Pre-filter buildings to residential only (created ONCE, reused across all chunks)
-        # Detect building geometry CRS and transform to EPSG:25832 if needed
-        bldg_srid = self.conn.execute(
-            "SELECT ST_SRID(geometry) FROM data_bbr_buildings_silver WHERE geometry IS NOT NULL LIMIT 1"
-        ).fetchone()
-        bldg_srid = bldg_srid[0] if bldg_srid else 0
-        if bldg_srid == 25832:
-            building_geom_expr = "geometry"
-        elif bldg_srid == 0:
-            # BBR geometries can come in OGC:CRS84 without SRID metadata.
-            building_geom_expr = (
-                "ST_Transform(ST_SetCRS(geometry, 'OGC:CRS84'), 'OGC:CRS84', 'EPSG:25832')"
-            )
-            self.log.warning(
-                "⚠️ Building geometry SRID is missing; assuming OGC:CRS84 and transforming to EPSG:25832"
-            )
-        else:
-            building_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
-            self.log.info(f"🔄 Building geometry is EPSG:{bldg_srid}, transforming to EPSG:25832")
+        # Resolve building geometry CRS via utility-backed SRID/bounds detection
+        building_geom_expr = self._resolve_to_utm_expr(
+            table_name="data_bbr_buildings_silver",
+            geometry_expr="geometry",
+            where_clause="geometry IS NOT NULL",
+        )
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE residential_buildings AS
             SELECT
@@ -462,15 +513,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info("🏫 Processing educational facility proximity...")
 
         # Pre-filter buildings to educational only (created ONCE, reused across all chunks)
-        # Reuse bldg_srid detected above for residential buildings (same source table)
-        if bldg_srid == 25832:
-            building_geom_expr = "geometry"
-        elif bldg_srid == 0:
-            building_geom_expr = (
-                "ST_Transform(ST_SetCRS(geometry, 'OGC:CRS84'), 'OGC:CRS84', 'EPSG:25832')"
-            )
-        else:
-            building_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
+        # Reuse utility-backed geometry resolver for educational buildings
+        building_geom_expr = self._resolve_to_utm_expr(
+            table_name="data_bbr_buildings_silver",
+            geometry_expr="geometry",
+            where_clause="geometry IS NOT NULL",
+        )
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE educational_buildings AS
             SELECT
@@ -574,31 +622,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info("💧 Processing water feature proximity...")
 
         # Pre-filter water features (created ONCE, reused across all chunks)
-        # Detect water geometry CRS — water data stores geometry as WKT text
-        water_srid = self.conn.execute(
-            "SELECT ST_SRID(ST_GeomFromText(geometry)) FROM data_water_typology_silver "
-            "WHERE geometry IS NOT NULL AND geometry != '' LIMIT 1"
-        ).fetchone()
-        water_srid = water_srid[0] if water_srid else 0
-        if water_srid == 25832:
-            water_geom_expr = "ST_GeomFromText(geometry)"
-        elif water_srid == 0:
-            # Water WKT often defaults to lon/lat with missing SRID metadata.
-            water_geom_expr = (
-                "ST_Transform("
-                "ST_SetCRS(ST_GeomFromText(geometry), 'OGC:CRS84'),"
-                "'OGC:CRS84',"
-                "'EPSG:25832'"
-                ")"
-            )
-            self.log.warning(
-                "⚠️ Water geometry SRID is missing; assuming OGC:CRS84 and transforming to EPSG:25832"
-            )
-        else:
-            water_geom_expr = (
-                f"ST_Transform(ST_GeomFromText(geometry), 'EPSG:{water_srid}', 'EPSG:25832')"
-            )
-            self.log.info(f"🔄 Water geometry is EPSG:{water_srid}, transforming to EPSG:25832")
+        # Resolve water geometry CRS (WKT source) via utility-backed SRID/bounds detection
+        water_geom_expr = self._resolve_to_utm_expr(
+            table_name="data_water_typology_silver",
+            geometry_expr="ST_GeomFromText(geometry)",
+            where_clause="geometry IS NOT NULL AND geometry != ''",
+        )
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE water_features AS
             SELECT
