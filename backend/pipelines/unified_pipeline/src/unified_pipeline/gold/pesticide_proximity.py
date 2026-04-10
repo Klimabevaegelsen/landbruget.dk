@@ -311,8 +311,14 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             f"SELECT ST_SRID(geometry) FROM {field_table} WHERE geometry IS NOT NULL LIMIT 1"
         ).fetchone()
         field_srid = field_srid[0] if field_srid else 0
-        if field_srid in (0, 25832):
+        if field_srid == 25832:
             field_geom_expr = "f.geometry"
+        elif field_srid == 0:
+            # FVM marker geometries should be EPSG:25832 even when SRID metadata is missing.
+            field_geom_expr = "ST_SetSRID(f.geometry, 25832)"
+            self.log.warning(
+                "⚠️ Field geometry SRID is missing; assuming EPSG:25832 and setting SRID metadata"
+            )
         else:
             field_geom_expr = f"ST_Transform(f.geometry, 'EPSG:{field_srid}', 'EPSG:25832')"
             self.log.info(f"🔄 Field geometry is EPSG:{field_srid}, transforming to EPSG:25832")
@@ -339,8 +345,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             "SELECT ST_SRID(geometry) FROM data_bbr_buildings_silver WHERE geometry IS NOT NULL LIMIT 1"
         ).fetchone()
         bldg_srid = bldg_srid[0] if bldg_srid else 0
-        if bldg_srid in (0, 25832):
+        if bldg_srid == 25832:
             building_geom_expr = "geometry"
+        elif bldg_srid == 0:
+            # BBR geometries can come in OGC:CRS84 without SRID metadata.
+            building_geom_expr = (
+                "ST_Transform(ST_SetCRS(geometry, 'OGC:CRS84'), 'OGC:CRS84', 'EPSG:25832')"
+            )
+            self.log.warning(
+                "⚠️ Building geometry SRID is missing; assuming OGC:CRS84 and transforming to EPSG:25832"
+            )
         else:
             building_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
             self.log.info(f"🔄 Building geometry is EPSG:{bldg_srid}, transforming to EPSG:25832")
@@ -449,8 +463,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         # Pre-filter buildings to educational only (created ONCE, reused across all chunks)
         # Reuse bldg_srid detected above for residential buildings (same source table)
-        if bldg_srid in (0, 25832):
+        if bldg_srid == 25832:
             building_geom_expr = "geometry"
+        elif bldg_srid == 0:
+            building_geom_expr = (
+                "ST_Transform(ST_SetCRS(geometry, 'OGC:CRS84'), 'OGC:CRS84', 'EPSG:25832')"
+            )
         else:
             building_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
         self.conn.execute(f"""
@@ -562,8 +580,20 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             "WHERE geometry IS NOT NULL AND geometry != '' LIMIT 1"
         ).fetchone()
         water_srid = water_srid[0] if water_srid else 0
-        if water_srid in (0, 25832):
+        if water_srid == 25832:
             water_geom_expr = "ST_GeomFromText(geometry)"
+        elif water_srid == 0:
+            # Water WKT often defaults to lon/lat with missing SRID metadata.
+            water_geom_expr = (
+                "ST_Transform("
+                "ST_SetCRS(ST_GeomFromText(geometry), 'OGC:CRS84'),"
+                "'OGC:CRS84',"
+                "'EPSG:25832'"
+                ")"
+            )
+            self.log.warning(
+                "⚠️ Water geometry SRID is missing; assuming OGC:CRS84 and transforming to EPSG:25832"
+            )
         else:
             water_geom_expr = (
                 f"ST_Transform(ST_GeomFromText(geometry), 'EPSG:{water_srid}', 'EPSG:25832')"
