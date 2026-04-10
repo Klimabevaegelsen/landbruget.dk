@@ -111,7 +111,7 @@ export function PersonalReport({
       <footer className="text-muted-foreground pt-4 pb-4">
         <p className="text-xs leading-relaxed">
           Data fra Miljøstyrelsen, Landbrugsstyrelsen, Geodatastyrelsen og 18+
-          andre offentlige kilder. Sidst opdateret 2023.
+          andre offentlige kilder. Sidst opdateret 2024.
         </p>
         <Link
           href="/pesticidanalyse/metode"

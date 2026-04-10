@@ -311,6 +311,28 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         bldg_table = f"data_{self.config.buildings_dataset}_silver"
         radius = self.config.drift_search_radius_m
 
+        # Detect field geometry CRS and transform to EPSG:25832 if needed
+        field_srid = self.conn.execute(
+            f"SELECT ST_SRID(geometry) FROM {field_table} WHERE geometry IS NOT NULL LIMIT 1"
+        ).fetchone()
+        field_srid = field_srid[0] if field_srid else 0
+        if field_srid in (0, 25832):
+            field_geom_expr = "f.geometry"
+        else:
+            field_geom_expr = f"ST_Transform(f.geometry, 'EPSG:{field_srid}', 'EPSG:25832')"
+            self.log.info(f"🔄 Field geometry is EPSG:{field_srid}, transforming to EPSG:25832")
+
+        # Detect building geometry CRS and transform to EPSG:25832 if needed
+        bldg_srid = self.conn.execute(
+            f"SELECT ST_SRID(geometry) FROM {bldg_table} WHERE geometry IS NOT NULL LIMIT 1"
+        ).fetchone()
+        bldg_srid = bldg_srid[0] if bldg_srid else 0
+        if bldg_srid in (0, 25832):
+            bldg_geom_expr = "geometry"
+        else:
+            bldg_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
+            self.log.info(f"🔄 Building geometry is EPSG:{bldg_srid}, transforming to EPSG:25832")
+
         # Step 1: Create field centroids with pesticide data
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE drift_fields AS
@@ -319,8 +341,8 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                 cd.DosageQuantity,
                 cd.AllocatedArea,
                 cd.PesticideName,
-                f.geometry AS field_geom_utm,
-                ST_Centroid(f.geometry) AS field_centroid_utm
+                {field_geom_expr} AS field_geom_utm,
+                ST_Centroid({field_geom_expr}) AS field_centroid_utm
             FROM current_disaggregation cd
             JOIN {field_table} f ON cd.field_uuid = f.field_uuid
             WHERE f.geometry IS NOT NULL
@@ -337,9 +359,9 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                 bbruuid,
                 address,
                 category_group,
-                geometry AS building_geom_utm,
-                ST_X(ST_Centroid(geometry)) AS bldg_utm_e,
-                ST_Y(ST_Centroid(geometry)) AS bldg_utm_n
+                {bldg_geom_expr} AS building_geom_utm,
+                ST_X(ST_Centroid({bldg_geom_expr})) AS bldg_utm_e,
+                ST_Y(ST_Centroid({bldg_geom_expr})) AS bldg_utm_n
             FROM {bldg_table}
             WHERE category_group IN ('residential', 'publicServices')
               AND geometry IS NOT NULL

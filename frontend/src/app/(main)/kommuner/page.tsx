@@ -90,6 +90,7 @@ const formatValue = (value: number, metric: string): string => {
 function SimpleRankingTable({
   title,
   description,
+  year,
   items,
   showTop = 20,
   category,
@@ -97,6 +98,7 @@ function SimpleRankingTable({
 }: {
   title: string;
   description: string;
+  year: string;
   items: MunicipalityRanking[];
   showTop?: number;
   category: string;
@@ -252,7 +254,7 @@ function SimpleRankingTable({
                     <div className="text-foreground text-sm font-semibold">
                       {formatValue(item.value, item.metric)}
                     </div>
-                    <div className="text-muted-foreground text-xs">2024</div>
+                    <div className="text-muted-foreground text-xs">{year}</div>
                   </td>
                 </tr>
               ))}
@@ -388,7 +390,6 @@ export default function MunicipalityRankingsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="2024">2024</SelectItem>
-              <SelectItem value="2025">2025</SelectItem>
             </SelectContent>
           </Select>
 
@@ -421,7 +422,8 @@ export default function MunicipalityRankingsPage() {
           {data.rankings.land_use && (
             <SimpleRankingTable
               title="Størst landbrugsareal"
-              description="Kommuner med det største samlede landbrugsareal i 2024"
+              description={`Kommuner med det største samlede landbrugsareal i ${selectedYear}`}
+              year={selectedYear}
               items={data.rankings.land_use}
               showTop={20}
               category="land_use"
@@ -433,7 +435,8 @@ export default function MunicipalityRankingsPage() {
           {data.rankings.organic_farming && (
             <SimpleRankingTable
               title="Højest økologisk andel"
-              description="Kommuner med den højeste andel økologisk landbrug i 2024"
+              description={`Kommuner med den højeste andel økologisk landbrug i ${selectedYear}`}
+              year={selectedYear}
               items={data.rankings.organic_farming}
               showTop={20}
               category="organic_farming"
@@ -445,7 +448,8 @@ export default function MunicipalityRankingsPage() {
           {data.rankings.production && (
             <SimpleRankingTable
               title="Størst dyreproduktion"
-              description="Kommuner med den største samlede dyreproduktionskapacitet i 2024"
+              description={`Kommuner med den største samlede dyreproduktionskapacitet i ${selectedYear}`}
+              year={selectedYear}
               items={data.rankings.production}
               showTop={20}
               category="production"
@@ -457,7 +461,8 @@ export default function MunicipalityRankingsPage() {
           {data.rankings.pesticide_burden && (
             <SimpleRankingTable
               title="Højest pesticidbelastning"
-              description="Kommuner med den største samlede pesticidbelastning i 2023"
+              description={`Kommuner med den største samlede pesticidbelastning i ${selectedYear}`}
+              year={selectedYear}
               items={data.rankings.pesticide_burden}
               showTop={20}
               category="pesticide_burden"
@@ -469,7 +474,8 @@ export default function MunicipalityRankingsPage() {
           {data.rankings.pesticide_pfas && (
             <SimpleRankingTable
               title="Højest PFAS-pesticid belastning"
-              description="Kommuner med den største PFAS-pesticid belastning i 2023"
+              description={`Kommuner med den største PFAS-pesticid belastning i ${selectedYear}`}
+              year={selectedYear}
               items={data.rankings.pesticide_pfas}
               showTop={20}
               category="pesticide_pfas"
@@ -481,7 +487,8 @@ export default function MunicipalityRankingsPage() {
           {data.rankings.pesticide_glyphosate && (
             <SimpleRankingTable
               title="Højest glyfosat belastning"
-              description="Kommuner med den største glyfosat belastning i 2023"
+              description={`Kommuner med den største glyfosat belastning i ${selectedYear}`}
+              year={selectedYear}
               items={data.rankings.pesticide_glyphosate}
               showTop={20}
               category="pesticide_glyphosate"
@@ -493,7 +500,8 @@ export default function MunicipalityRankingsPage() {
           {data.rankings.antibiotic_usage && (
             <SimpleRankingTable
               title="Højest antibiotikaforbrug"
-              description="Kommuner med det største antibiotikaforbrug på produktionssteder i 2024"
+              description={`Kommuner med det største antibiotikaforbrug på produktionssteder i ${selectedYear}`}
+              year={selectedYear}
               items={data.rankings.antibiotic_usage}
               showTop={20}
               category="antibiotic_usage"
@@ -506,6 +514,7 @@ export default function MunicipalityRankingsPage() {
             <SimpleRankingTable
               title="Højest kvælstofudledning"
               description="Kommuner med den højeste gennemsnitlige kvælstofudledning pr. hektar"
+              year={selectedYear}
               items={data.rankings.environmental}
               showTop={20}
               category="environmental"
@@ -518,6 +527,7 @@ export default function MunicipalityRankingsPage() {
             <SimpleRankingTable
               title="Flest arbejdsulykker"
               description="Kommuner med flest rapporterede arbejdsulykker i landbruget"
+              year={selectedYear}
               items={data.rankings.worker_safety}
               showTop={20}
               category="worker_safety"
@@ -530,6 +540,7 @@ export default function MunicipalityRankingsPage() {
             <SimpleRankingTable
               title="Flest hændelser"
               description="Kommuner med flest rapporterede hændelser og ulykker i landbruget"
+              year={selectedYear}
               items={data.rankings.incidents}
               showTop={20}
               category="incidents"
@@ -547,7 +558,7 @@ export default function MunicipalityRankingsPage() {
             ? new Date(data.metadata.generated_at).toLocaleDateString('da-DK')
             : ''}{' '}
           • {data?.metadata.categories_included.length || 0} ranglister baseret
-          på officielle data fra 2024
+          på officielle data fra {selectedYear}
         </p>
       </div>
 

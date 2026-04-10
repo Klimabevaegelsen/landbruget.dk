@@ -23,10 +23,6 @@ from tqdm import tqdm
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 
-# CRS Strategy: With silver layer now producing EPSG:25832 data, no transformation needed
-# Set to True when silver layer is confirmed to produce 25832 data
-USE_UTM_PROCESSING = True
-
 
 class PesticideProximityGoldConfig(BaseJobConfig):
     """Configuration for pesticide proximity analysis gold processor."""
@@ -310,12 +306,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         # DuckDB CTE alias issues
 
         # Step 1: Create fields with geometry
-        # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
-        field_geom_expr = (
-            "f.geometry"
-            if USE_UTM_PROCESSING
-            else "ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832')"
-        )
+        # Detect field geometry CRS and transform to EPSG:25832 if needed
+        field_srid = self.conn.execute(
+            f"SELECT ST_SRID(geometry) FROM {field_table} WHERE geometry IS NOT NULL LIMIT 1"
+        ).fetchone()
+        field_srid = field_srid[0] if field_srid else 0
+        if field_srid in (0, 25832):
+            field_geom_expr = "f.geometry"
+        else:
+            field_geom_expr = f"ST_Transform(f.geometry, 'EPSG:{field_srid}', 'EPSG:25832')"
+            self.log.info(f"🔄 Field geometry is EPSG:{field_srid}, transforming to EPSG:25832")
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE fields_with_geometry AS
             SELECT DISTINCT
@@ -334,12 +334,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         )
 
         # Pre-filter buildings to residential only (created ONCE, reused across all chunks)
-        # With USE_UTM_PROCESSING, silver layer already provides data in EPSG:25832
-        building_geom_expr = (
-            "geometry"
-            if USE_UTM_PROCESSING
-            else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
-        )
+        # Detect building geometry CRS and transform to EPSG:25832 if needed
+        bldg_srid = self.conn.execute(
+            "SELECT ST_SRID(geometry) FROM data_bbr_buildings_silver WHERE geometry IS NOT NULL LIMIT 1"
+        ).fetchone()
+        bldg_srid = bldg_srid[0] if bldg_srid else 0
+        if bldg_srid in (0, 25832):
+            building_geom_expr = "geometry"
+        else:
+            building_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
+            self.log.info(f"🔄 Building geometry is EPSG:{bldg_srid}, transforming to EPSG:25832")
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE residential_buildings AS
             SELECT
@@ -444,11 +448,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info("🏫 Processing educational facility proximity...")
 
         # Pre-filter buildings to educational only (created ONCE, reused across all chunks)
-        building_geom_expr = (
-            "geometry"
-            if USE_UTM_PROCESSING
-            else "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
-        )
+        # Reuse bldg_srid detected above for residential buildings (same source table)
+        if bldg_srid in (0, 25832):
+            building_geom_expr = "geometry"
+        else:
+            building_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE educational_buildings AS
             SELECT
@@ -552,12 +556,19 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info("💧 Processing water feature proximity...")
 
         # Pre-filter water features (created ONCE, reused across all chunks)
-        # With USE_UTM_PROCESSING, silver layer stores WKT in EPSG:25832
-        water_geom_expr = (
-            "ST_GeomFromText(geometry)"
-            if USE_UTM_PROCESSING
-            else "ST_Transform(ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832')"
-        )
+        # Detect water geometry CRS — water data stores geometry as WKT text
+        water_srid = self.conn.execute(
+            "SELECT ST_SRID(ST_GeomFromText(geometry)) FROM data_water_typology_silver "
+            "WHERE geometry IS NOT NULL AND geometry != '' LIMIT 1"
+        ).fetchone()
+        water_srid = water_srid[0] if water_srid else 0
+        if water_srid in (0, 25832):
+            water_geom_expr = "ST_GeomFromText(geometry)"
+        else:
+            water_geom_expr = (
+                f"ST_Transform(ST_GeomFromText(geometry), 'EPSG:{water_srid}', 'EPSG:25832')"
+            )
+            self.log.info(f"🔄 Water geometry is EPSG:{water_srid}, transforming to EPSG:25832")
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE water_features AS
             SELECT

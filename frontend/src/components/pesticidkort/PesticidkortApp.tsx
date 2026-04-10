@@ -20,7 +20,7 @@ function parseUrlState(params: URLSearchParams) {
   const y = parseInt(params.get('y') ?? '', 10);
   const addr = params.get('addr') ?? '';
   if (!isNaN(lat) && !isNaN(lng) && addr) {
-    return { lat, lng, address: addr, year: isNaN(y) ? 2023 : y };
+    return { lat, lng, address: addr, year: isNaN(y) ? 2024 : y };
   }
   return null;
 }
@@ -38,7 +38,7 @@ export function PesticidkortApp() {
   const [mode, setMode] = useState<'landing' | 'report' | 'map'>(
     urlState ? 'report' : 'landing'
   );
-  const [year, setYear] = useState(urlState?.year ?? 2023);
+  const [year, setYear] = useState(urlState?.year ?? 2024);
 
   useEffect(() => {
     if (mode === 'report' && search) {

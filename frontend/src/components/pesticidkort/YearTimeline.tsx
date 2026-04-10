@@ -4,7 +4,9 @@
 import { useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
-const YEARS = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023] as const;
+const YEARS = [
+  2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024,
+] as const;
 const FIRST = YEARS[0];
 const LAST = YEARS[YEARS.length - 1];
 
@@ -54,13 +56,14 @@ export function YearTimeline({ year, onChange, compact }: YearTimelineProps) {
   const activeIdx = YEARS.indexOf(year as (typeof YEARS)[number]);
   const progressWidths = [
     'w-0',
-    'w-1/8',
-    'w-2/8',
-    'w-3/8',
-    'w-4/8',
-    'w-5/8',
-    'w-6/8',
-    'w-7/8',
+    'w-[11.111111%]',
+    'w-[22.222222%]',
+    'w-[33.333333%]',
+    'w-[44.444444%]',
+    'w-[55.555556%]',
+    'w-[66.666667%]',
+    'w-[77.777778%]',
+    'w-[88.888889%]',
     'w-full',
   ] as const;
 
@@ -109,7 +112,7 @@ export function YearTimeline({ year, onChange, compact }: YearTimelineProps) {
         />
 
         {/* Year dots */}
-        <div className="absolute inset-0 grid grid-cols-9">
+        <div className="absolute inset-0 grid grid-cols-10">
           {YEARS.map((y) => {
             const isActive = y === year;
             return (
