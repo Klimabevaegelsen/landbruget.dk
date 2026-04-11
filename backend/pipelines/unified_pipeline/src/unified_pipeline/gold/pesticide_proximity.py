@@ -359,7 +359,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         # DuckDB CTE alias issues
 
         # Step 1: Create fields with geometry
-        # Resolve field geometry CRS via utility-backed SRID/bounds detection
+        # Resolve field geometry CRS via utility-backed bounds detection
         field_geom_expr = self._resolve_to_utm_expr(
             table_name=field_table,
             geometry_expr="geometry",
@@ -384,7 +384,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         )
 
         # Pre-filter buildings to residential only (created ONCE, reused across all chunks)
-        # Resolve building geometry CRS via utility-backed SRID/bounds detection
+        # Resolve building geometry CRS via utility-backed bounds detection
         building_geom_expr = self._resolve_to_utm_expr(
             table_name="data_bbr_buildings_silver",
             geometry_expr="geometry",
@@ -603,7 +603,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log.info("💧 Processing water feature proximity...")
 
         # Pre-filter water features (created ONCE, reused across all chunks)
-        # Resolve water geometry CRS (WKT source) via utility-backed SRID/bounds detection
+        # Resolve water geometry CRS (WKT source) via utility-backed bounds detection
         water_geom_expr = self._resolve_to_utm_expr(
             table_name="data_water_typology_silver",
             geometry_expr="ST_GeomFromText(geometry)",
