@@ -74,7 +74,7 @@ class TestDenmarkBounds:
         """UTM bounds should represent Denmark's projected extent."""
         # Easting values for UTM Zone 32N in Denmark
         assert DENMARK_BOUNDS_UTM["min_x"] == 400000
-        assert DENMARK_BOUNDS_UTM["max_x"] == 900000
+        assert DENMARK_BOUNDS_UTM["max_x"] == 950000
         # Northing values for UTM Zone 32N in Denmark
         assert DENMARK_BOUNDS_UTM["min_y"] == 6000000
         assert DENMARK_BOUNDS_UTM["max_y"] == 6500000
@@ -167,6 +167,13 @@ class TestDetectCRSFromBounds:
         """Should detect UTM Zone 32N for Danish easting/northing coordinates."""
         # Copenhagen in UTM: easting ~723626, northing ~6176067
         crs, order = detect_crs_from_bounds(500000, 800000, 6100000, 6400000)
+        assert crs == DANISH_UTM
+        assert order == "easting_northing"
+
+    def test_detect_utm_bornholm_area(self):
+        """Should detect UTM Zone 32N for Bornholm-area coordinates (easting >900k)."""
+        # Bornholm projects to ~915k easting in UTM 32N
+        crs, order = detect_crs_from_bounds(419288, 915280, 6037373, 6424480)
         assert crs == DANISH_UTM
         assert order == "easting_northing"
 

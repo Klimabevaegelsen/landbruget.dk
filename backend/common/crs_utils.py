@@ -47,7 +47,7 @@ DENMARK_BOUNDS_WGS84 = {
 
 DENMARK_BOUNDS_UTM = {
     "min_x": 400000,  # min easting
-    "max_x": 900000,  # max easting
+    "max_x": 950000,  # max easting (includes Bornholm ~915k in UTM 32N)
     "min_y": 6000000,  # min northing
     "max_y": 6500000,  # max northing
 }
