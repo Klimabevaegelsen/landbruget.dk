@@ -270,6 +270,40 @@ result = duckdb.query("""
 - **Multiple formats**: CSV, Parquet, JSON
 - **Joins**: Combine multiple files efficiently
 
+### DuckDB Spatial — Functions That Do NOT Exist
+
+DuckDB's spatial extension is **not PostGIS**. These PostGIS functions do not exist in DuckDB:
+
+| PostGIS Function | DuckDB Alternative |
+|---|---|
+| `ST_SRID(geometry)` | Use bounds-based CRS detection: `detect_crs_from_bounds()` from `common/crs_utils.py` |
+| `ST_SetSRID(geometry, srid)` | Not needed — DuckDB geometries don't carry SRID metadata |
+| `ST_GeogFromText()` | Use `ST_GeomFromText()` |
+| `ST_DistanceSphere()` | Transform to UTM first, then use `ST_Distance()` in meters |
+| `ST_DWithin()` (geography) | Transform to UTM, then `ST_Distance(a, b) < threshold_meters` |
+
+**CRS detection pattern** (use instead of ST_SRID):
+```python
+from common.crs_utils import detect_crs_from_bounds, sql_transform_to_processing_crs, DANISH_UTM
+
+bounds = conn.execute(f"""
+    SELECT MIN(ST_XMin(geometry)), MAX(ST_XMax(geometry)),
+           MIN(ST_YMin(geometry)), MAX(ST_YMax(geometry))
+    FROM {table} WHERE geometry IS NOT NULL
+""").fetchone()
+detected_crs, _ = detect_crs_from_bounds(*bounds)
+
+if detected_crs == DANISH_UTM:
+    geom_expr = "geometry"  # already UTM, use directly
+else:
+    geom_expr = sql_transform_to_processing_crs("geometry", detected_crs)
+```
+
+**Other DuckDB 1.5+ spatial gotchas:**
+- Wrap geometry ops with `TRY()` to handle invalid geometries gracefully
+- Use `delim` parameter, not `DELIMITER` (breaking change in 1.5)
+- `ST_Area_Spheroid` uses LON/LAT (x, y) order with `geometry_always_xy=true` default
+
 ## Troubleshooting
 
 ### "Module not found"
