@@ -374,7 +374,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE drift_buildings AS
             SELECT
-                bbruuid,
+                building_uuid,
                 address,
                 category_group,
                 {bldg_geom_expr} AS building_geom_utm,
@@ -383,7 +383,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
             FROM {bldg_table}
             WHERE category_group IN ('residential', 'publicServices')
               AND geometry IS NOT NULL
-              AND bbruuid IS NOT NULL
+              AND building_uuid IS NOT NULL
         """)
         bldg_count = self.conn.execute("SELECT COUNT(*) FROM drift_buildings").fetchone()[0]
         self.log.info(f"Prepared {bldg_count:,} buildings for drift analysis")
@@ -398,7 +398,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         # Process in batches of buildings
         self.conn.execute("""
             CREATE OR REPLACE TABLE drift_exposure (
-                bbruuid VARCHAR,
+                building_uuid VARCHAR,
                 address VARCHAR,
                 category_group VARCHAR,
                 pesticide_year INTEGER,
@@ -428,7 +428,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_bldg_batch AS
                 SELECT * FROM drift_buildings
-                ORDER BY bbruuid
+                ORDER BY building_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
 
@@ -436,7 +436,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE batch_pairs AS
                 SELECT
-                    b.bbruuid,
+                    b.building_uuid,
                     b.address,
                     b.category_group,
                     b.bldg_utm_e,
@@ -471,7 +471,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
             self.conn.execute(f"""
                 INSERT INTO drift_exposure
                 SELECT
-                    bbruuid,
+                    building_uuid,
                     address,
                     category_group,
                     {year} AS pesticide_year,
@@ -485,7 +485,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                     bldg_utm_n,
                     building_geom_utm AS geometry
                 FROM batch_pairs
-                GROUP BY bbruuid, address, category_group, bldg_utm_e, bldg_utm_n,
+                GROUP BY building_uuid, address, category_group, bldg_utm_e, bldg_utm_n,
                          building_geom_utm
             """)
 
@@ -590,7 +590,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         self.conn.execute("""
             CREATE OR REPLACE TABLE drift_export AS
             SELECT
-                bbruuid,
+                building_uuid,
                 address,
                 category_group,
                 pesticide_year,
@@ -611,7 +611,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
     def get_schema_info(self) -> dict[str, Any]:
         return {
             "output_columns": [
-                "bbruuid: VARCHAR (building ID)",
+                "building_uuid: VARCHAR (building ID)",
                 "address: VARCHAR (building address)",
                 "category_group: VARCHAR (residential/publicServices)",
                 "pesticide_year: INTEGER",
