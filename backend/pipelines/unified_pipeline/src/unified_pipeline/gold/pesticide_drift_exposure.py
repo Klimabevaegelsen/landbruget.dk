@@ -29,6 +29,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from common.crs_utils import (
+    DANISH_UTM,
+    detect_crs_from_bounds,
+    sql_transform_to_processing_crs,
+)
 from loguru import logger
 from pydantic import ConfigDict, Field
 from tqdm import tqdm
@@ -311,27 +316,40 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         bldg_table = f"data_{self.config.buildings_dataset}_silver"
         radius = self.config.drift_search_radius_m
 
-        # Detect field geometry CRS and transform to EPSG:25832 if needed
-        field_srid = self.conn.execute(
-            f"SELECT ST_SRID(geometry) FROM {field_table} WHERE geometry IS NOT NULL LIMIT 1"
+        # Detect field geometry CRS via bounds and transform to EPSG:25832 if needed
+        # Note: DuckDB spatial has no ST_SRID — use bounds-based detection from crs_utils
+        field_bounds = self.conn.execute(
+            f"""SELECT MIN(ST_XMin(geometry)), MAX(ST_XMax(geometry)),
+                       MIN(ST_YMin(geometry)), MAX(ST_YMax(geometry))
+                FROM {field_table} WHERE geometry IS NOT NULL"""
         ).fetchone()
-        field_srid = field_srid[0] if field_srid else 0
-        if field_srid in (0, 25832):
+        if field_bounds and field_bounds[0] is not None:
+            field_crs, _ = detect_crs_from_bounds(*field_bounds)
+        else:
+            field_crs = DANISH_UTM
+        if field_crs == DANISH_UTM or field_crs is None:
             field_geom_expr = "f.geometry"
         else:
-            field_geom_expr = f"ST_Transform(f.geometry, 'EPSG:{field_srid}', 'EPSG:25832')"
-            self.log.info(f"🔄 Field geometry is EPSG:{field_srid}, transforming to EPSG:25832")
+            field_geom_expr = sql_transform_to_processing_crs("f.geometry", field_crs)
+            self.log.info(f"🔄 Field geometry detected as {field_crs}, transforming to EPSG:25832")
 
-        # Detect building geometry CRS and transform to EPSG:25832 if needed
-        bldg_srid = self.conn.execute(
-            f"SELECT ST_SRID(geometry) FROM {bldg_table} WHERE geometry IS NOT NULL LIMIT 1"
+        # Detect building geometry CRS via bounds and transform to EPSG:25832 if needed
+        bldg_bounds = self.conn.execute(
+            f"""SELECT MIN(ST_XMin(geometry)), MAX(ST_XMax(geometry)),
+                       MIN(ST_YMin(geometry)), MAX(ST_YMax(geometry))
+                FROM {bldg_table} WHERE geometry IS NOT NULL"""
         ).fetchone()
-        bldg_srid = bldg_srid[0] if bldg_srid else 0
-        if bldg_srid in (0, 25832):
+        if bldg_bounds and bldg_bounds[0] is not None:
+            bldg_crs, _ = detect_crs_from_bounds(*bldg_bounds)
+        else:
+            bldg_crs = DANISH_UTM
+        if bldg_crs == DANISH_UTM or bldg_crs is None:
             bldg_geom_expr = "geometry"
         else:
-            bldg_geom_expr = f"ST_Transform(geometry, 'EPSG:{bldg_srid}', 'EPSG:25832')"
-            self.log.info(f"🔄 Building geometry is EPSG:{bldg_srid}, transforming to EPSG:25832")
+            bldg_geom_expr = sql_transform_to_processing_crs("geometry", bldg_crs)
+            self.log.info(
+                f"🔄 Building geometry detected as {bldg_crs}, transforming to EPSG:25832"
+            )
 
         # Step 1: Create field centroids with pesticide data
         self.conn.execute(f"""
