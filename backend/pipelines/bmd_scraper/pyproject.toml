@@ -35,7 +35,7 @@ packages = ["bronze", "silver"]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
-    "ruff>=0.8.0",
+    "ruff>=0.15.10",
     "ty>=0.0.1a0",
 ]
 
