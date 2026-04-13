@@ -41,7 +41,7 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.8.0",
-    "ty>=0.0.1a0",
+    "ty>=0.0.29",
 ]
 
 [tool.ruff]
