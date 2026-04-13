@@ -17,7 +17,7 @@ dependencies = [
     "google-cloud-secret-manager>=2.0.0",
     "google-cloud-storage>=2.10.0",
     "python-dotenv>=1.0.0",
-    "duckdb>=1.5.0",
+    "duckdb>=1.5.2",
     "landbruget-common",
 ]
 
