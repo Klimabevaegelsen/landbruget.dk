@@ -66,7 +66,7 @@
     "next": "^16.2.3",
     "next-themes": "^0.4.6",
     "playwright-core": "^1.55.0",
-    "pmtiles": "^4.4.0",
+    "pmtiles": "^4.4.1",
     "react": "^19.2.5",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.4",
