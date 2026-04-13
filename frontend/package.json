@@ -18,7 +18,7 @@
     "test:smoke:fast": "./scripts/smoke-test-fast.sh"
   },
   "dependencies": {
-    "@headlessui/react": "^2.2.9",
+    "@headlessui/react": "^2.2.10",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^5.2.2",
     "@mdx-js/loader": "^3.1.1",
