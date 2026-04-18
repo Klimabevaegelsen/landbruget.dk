@@ -13,8 +13,8 @@ dependencies = [
     "beautifulsoup4>=4.9.3",
     "python-dotenv>=1.0.0",
     "pyarrow>=14.0.0",
-    "duckdb>=1.5.0",
-    "s3fs>=2024.1.0",
+    "duckdb",
+    "s3fs",
     "simple-singleton>=2.0.0",
     "landbruget-common",
 ]
@@ -35,8 +35,8 @@ packages = ["bronze", "silver"]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
-    "ruff>=0.8.0",
-    "ty>=0.0.1a0",
+    "ruff",
+    "ty",
 ]
 
 [tool.ruff]

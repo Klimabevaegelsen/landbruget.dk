@@ -10,16 +10,15 @@ authors = [
 ]
 dependencies = [
     "python-dotenv>=1.0.0",
-    "s3fs>=2024.1.0",
+    "s3fs",
     "pyarrow>=14.0.0",
     "loguru>=0.7.0",
     "playwright>=1.40.0",
     "fastapi>=0.100.0",
     "uvicorn>=0.20.0",
-    "pydantic>=2.0.0",
+    "pydantic",
     "numpy>=1.24.0",
-    "duckdb>=1.5.0",
-    "ibis-framework[duckdb]>=10.5.0",
+    "duckdb",
     "simple-singleton>=2.0.0",
     "landbruget-common",
 ]
@@ -41,8 +40,8 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=4.0.0",
-    "ruff>=0.8.0",
-    "ty>=0.0.1a0",
+    "ruff",
+    "ty",
 ]
 
 [tool.ruff]

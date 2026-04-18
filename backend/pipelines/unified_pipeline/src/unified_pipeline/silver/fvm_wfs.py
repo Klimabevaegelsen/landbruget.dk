@@ -24,7 +24,6 @@ import asyncio
 import json
 from typing import Any, ClassVar
 
-import pandas as pd
 from common.geometry_validator import (
     validate_and_normalize_to_utm,
     validate_and_transform_geometries_duckdb,
@@ -1696,18 +1695,17 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             for year in self.config.marker_years:
                 marker_table = f"final_processed_marker_{year}"
                 try:
-                    year_cvrs = (
-                        self.conn.execute(f"""
-                        SELECT DISTINCT cvr_number
-                        FROM {marker_table}
-                        WHERE cvr_number IS NOT NULL
-                          AND cvr_number != ''
-                          AND cvr_number != '0'
-                          AND LENGTH(TRIM(cvr_number)) = 8
-                    """)
-                        .df()["cvr_number"]
-                        .tolist()
-                    )
+                    year_cvrs = [
+                        row[0]
+                        for row in self.conn.execute(f"""
+                            SELECT DISTINCT cvr_number
+                            FROM {marker_table}
+                            WHERE cvr_number IS NOT NULL
+                              AND cvr_number != ''
+                              AND cvr_number != '0'
+                              AND LENGTH(TRIM(cvr_number)) = 8
+                        """).fetchall()
+                    ]
                     existing_cvrs.extend(year_cvrs)
                 except Exception as e:
                     self.log.debug(f"Could not extract CVRs from {marker_table}: {e}")
@@ -1730,7 +1728,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Create GKEA operations (CVR + journal_number) - ONLY multi-field operations
             self.log.info("🌾 Creating GKEA operations (multi-field only, missing CVRs only)...")
-            gkea_ops_df = self.conn.execute("""
+            self.conn.execute("""
+                CREATE OR REPLACE TEMP TABLE gkea_ops AS
                 SELECT
                     cvr_number,
                     gkea_journal_number,
@@ -1746,9 +1745,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 HAVING COUNT(*) > 1  -- Only multi-field operations
                    AND SUM(area_ha) > 0
                 ORDER BY cvr_number, gkea_journal_number
-            """).df()
+            """)
 
-            if len(gkea_ops_df) == 0:
+            gkea_ops_count = self.conn.execute("SELECT COUNT(*) FROM gkea_ops").fetchone()[0]
+            if gkea_ops_count == 0:
                 self.log.warning("No GKEA multi-field operations with missing CVRs found")
                 return
 
@@ -1773,85 +1773,146 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 ]
                 has_crop_code = "crop_code" in table_columns
 
-                # Create FVM operations for this year (journal_number)
-                # ONLY multi-field operations with missing CVRs
                 if has_crop_code:
-                    fvm_ops_df = self.conn.execute(f"""
-                        SELECT
-                            journal_number as fvm_journal_number,
-                            COUNT(*) as field_count,
-                            SUM(area_ha) as total_area,
-                            AVG(area_ha) as avg_field_size,
-                            COUNT(DISTINCT crop_code) as crop_diversity,
-                            STRING_AGG(
-                                CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code
-                            ) as crop_composition
-                        FROM {marker_table}
-                        WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
-                          AND journal_number IS NOT NULL
-                          AND area_ha > 0
-                          AND crop_code IS NOT NULL
-                        GROUP BY journal_number
-                        HAVING COUNT(*) > 1  -- Only multi-field operations
-                           AND SUM(area_ha) > 0
-                        ORDER BY journal_number
-                    """).df()
+                    crop_diversity_expr = "COUNT(DISTINCT crop_code)"
+                    crop_composition_expr = (
+                        "STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code)"
+                    )
+                    crop_where = "AND crop_code IS NOT NULL"
                 else:
-                    # For years without crop_code, create simplified operations
                     self.log.info(f"   No crop_code column in {year} - using simplified operations")
-                    fvm_ops_df = self.conn.execute(f"""
-                        SELECT
-                            journal_number as fvm_journal_number,
-                            COUNT(*) as field_count,
-                            SUM(area_ha) as total_area,
-                            AVG(area_ha) as avg_field_size,
-                            0 as crop_diversity,
-                            '' as crop_composition
-                        FROM {marker_table}
-                        WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
-                          AND journal_number IS NOT NULL
-                          AND area_ha > 0
-                        GROUP BY journal_number
-                        HAVING COUNT(*) > 1  -- Only multi-field operations
-                           AND SUM(area_ha) > 0
-                        ORDER BY journal_number
-                    """).df()
+                    crop_diversity_expr = "0"
+                    crop_composition_expr = "''"
+                    crop_where = ""
 
-                if len(fvm_ops_df) == 0:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TEMP TABLE fvm_ops AS
+                    SELECT
+                        journal_number as fvm_journal_number,
+                        COUNT(*) as field_count,
+                        SUM(area_ha) as total_area,
+                        AVG(area_ha) as avg_field_size,
+                        {crop_diversity_expr} as crop_diversity,
+                        {crop_composition_expr} as crop_composition
+                    FROM {marker_table}
+                    WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
+                      AND journal_number IS NOT NULL
+                      AND area_ha > 0
+                      {crop_where}
+                    GROUP BY journal_number
+                    HAVING COUNT(*) > 1
+                       AND SUM(area_ha) > 0
+                    ORDER BY journal_number
+                """)
+
+                fvm_ops_count = self.conn.execute("SELECT COUNT(*) FROM fvm_ops").fetchone()[0]
+                if fvm_ops_count == 0:
                     self.log.info(f"   No FVM operations with missing CVRs found for year {year}")
                     continue
 
                 self.log.info(
-                    f"   Found {len(fvm_ops_df):,} FVM operations and "
-                    f"{len(gkea_ops_df):,} GKEA operations"
+                    f"   Found {fvm_ops_count:,} FVM operations and "
+                    f"{gkea_ops_count:,} GKEA operations"
                 )
 
-                # Find candidate pairs to avoid massive cross-product
-                # (exact same as standalone script)
-                candidate_pairs = self._find_candidate_pairs(
-                    fvm_ops_df, gkea_ops_df, max_candidates_per_fvm=50
-                )
-
-                if not candidate_pairs:
-                    self.log.info(f"   No candidate pairs found for year {year}")
-                    continue
-
-                # Calculate similarities only for candidate pairs
-                # (exact same as standalone script)
-                matches = self._calculate_similarities_and_match(
-                    fvm_ops_df, gkea_ops_df, candidate_pairs
-                )
+                # Pre-filter: ±80% area and ±5 field count, cap at 50 candidates per FVM
+                # (ordered by area_diff); score with weighted similarity + crop Jaccard.
+                matches = self.conn.execute("""
+                    WITH candidates AS (
+                        SELECT
+                            f.fvm_journal_number,
+                            g.cvr_number,
+                            g.gkea_journal_number,
+                            f.total_area AS fvm_total_area,
+                            g.total_area AS gkea_total_area,
+                            f.field_count AS fvm_field_count,
+                            g.field_count AS gkea_field_count,
+                            f.avg_field_size AS fvm_avg_field_size,
+                            g.avg_field_size AS gkea_avg_field_size,
+                            f.crop_diversity AS fvm_crop_diversity,
+                            g.crop_diversity AS gkea_crop_diversity,
+                            f.crop_composition AS fvm_crop_composition,
+                            g.crop_composition AS gkea_crop_composition
+                        FROM fvm_ops f
+                        JOIN gkea_ops g ON
+                            g.total_area BETWEEN f.total_area * 0.2 AND f.total_area * 1.8
+                            AND g.field_count
+                                BETWEEN GREATEST(1, f.field_count - 5) AND f.field_count + 5
+                        QUALIFY ROW_NUMBER() OVER (
+                            PARTITION BY f.fvm_journal_number
+                            ORDER BY ABS(f.total_area - g.total_area)
+                        ) <= 50
+                    ),
+                    scored AS (
+                        SELECT
+                            fvm_journal_number,
+                            cvr_number,
+                            gkea_journal_number,
+                            1.0 - ABS(fvm_total_area - gkea_total_area)
+                                / GREATEST(fvm_total_area, gkea_total_area) AS area_sim,
+                            1.0 - CAST(ABS(fvm_field_count - gkea_field_count) AS DOUBLE)
+                                / GREATEST(fvm_field_count, gkea_field_count) AS field_sim,
+                            1.0 - ABS(fvm_avg_field_size - gkea_avg_field_size)
+                                / GREATEST(fvm_avg_field_size, gkea_avg_field_size) AS size_sim,
+                            CASE
+                                WHEN GREATEST(fvm_crop_diversity, gkea_crop_diversity) = 0
+                                    THEN 1.0
+                                ELSE 1.0
+                                    - CAST(ABS(fvm_crop_diversity - gkea_crop_diversity) AS DOUBLE)
+                                        / GREATEST(fvm_crop_diversity, gkea_crop_diversity)
+                            END AS diversity_sim,
+                            CASE
+                                WHEN fvm_crop_composition IS NULL OR fvm_crop_composition = ''
+                                    OR gkea_crop_composition IS NULL OR gkea_crop_composition = ''
+                                    THEN 0.0
+                                ELSE CAST(len(list_intersect(
+                                        str_split(fvm_crop_composition, ','),
+                                        str_split(gkea_crop_composition, ',')
+                                    )) AS DOUBLE)
+                                    / NULLIF(len(list_distinct(list_concat(
+                                        str_split(fvm_crop_composition, ','),
+                                        str_split(gkea_crop_composition, ',')
+                                    ))), 0)
+                            END AS crop_sim
+                        FROM candidates
+                    )
+                    SELECT
+                        fvm_journal_number,
+                        cvr_number,
+                        gkea_journal_number,
+                        0.3 * area_sim + 0.2 * field_sim + 0.2 * size_sim
+                            + 0.15 * diversity_sim + 0.15 * COALESCE(crop_sim, 0.0)
+                            AS combined_sim,
+                        COALESCE(crop_sim, 0.0) AS crop_sim
+                    FROM scored
+                    WHERE (0.3 * area_sim + 0.2 * field_sim + 0.2 * size_sim
+                            + 0.15 * diversity_sim + 0.15 * COALESCE(crop_sim, 0.0)) >= 0.9
+                      AND COALESCE(crop_sim, 0.0) >= 0.5
+                    ORDER BY combined_sim DESC, fvm_journal_number, gkea_journal_number
+                """).fetchall()
 
                 if not matches:
                     self.log.info(f"   No high-quality matches found for year {year}")
                     continue
 
-                self.log.info(f"   Found {len(matches):,} high-quality CVR matches for year {year}")
+                # Greedy 1-to-1 assignment over the pre-sorted match list.
+                used_fvm: set[Any] = set()
+                used_gkea: set[tuple[Any, Any]] = set()
+                accepted: list[tuple[Any, Any]] = []
+                for fvm_journal, cvr_number, gkea_journal, _combined, _crop in matches:
+                    gkea_key = (cvr_number, gkea_journal)
+                    if fvm_journal in used_fvm or gkea_key in used_gkea:
+                        continue
+                    used_fvm.add(fvm_journal)
+                    used_gkea.add(gkea_key)
+                    accepted.append((fvm_journal, cvr_number))
+
+                self.log.info(
+                    f"   Found {len(accepted):,} high-quality CVR matches for year {year}"
+                )
 
                 # Apply CVR updates to the marker table
-                fields_updated = self._apply_cvr_updates(
-                    marker_table, matches, fvm_ops_df, gkea_ops_df
-                )
+                fields_updated = self._apply_cvr_updates(marker_table, accepted)
                 total_fields_updated += fields_updated
 
                 self.log.info(
@@ -1868,197 +1929,34 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Don't fail the entire pipeline if CVR identification fails
             pass
 
-    def _find_candidate_pairs(
-        self, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame, max_candidates_per_fvm: int = 50
-    ) -> list:
+    def _apply_cvr_updates(self, marker_table: str, matches: list[tuple[Any, Any]]) -> int:
+        """Apply CVR updates from ``matches`` [(fvm_journal, cvr), ...] to marker_table
+        and persist to cloud storage. Returns the number of rows changed.
         """
-        Find reasonable candidate pairs to avoid massive cross-product calculation.
-        Pre-filter based on area and field count similarity.
-        EXACT SAME IMPLEMENTATION AS STANDALONE SCRIPT.
-        """
-        self.log.info("🎯 Finding candidate pairs with pre-filtering...")
+        if not matches:
+            return 0
 
-        candidate_pairs = []
-
-        for fvm_idx, fvm_row in fvm_ops_df.iterrows():
-            # Pre-filter GKEA operations by reasonable area and field count ranges
-            area_tolerance = 0.8  # 80% area difference tolerance
-            field_tolerance = 5  # Max 5 field difference
-
-            area_min = fvm_row["total_area"] * (1 - area_tolerance)
-            area_max = fvm_row["total_area"] * (1 + area_tolerance)
-            field_min = max(1, fvm_row["field_count"] - field_tolerance)
-            field_max = fvm_row["field_count"] + field_tolerance
-
-            # Find GKEA operations within reasonable ranges
-            candidates = gkea_ops_df[
-                (gkea_ops_df["total_area"] >= area_min)
-                & (gkea_ops_df["total_area"] <= area_max)
-                & (gkea_ops_df["field_count"] >= field_min)
-                & (gkea_ops_df["field_count"] <= field_max)
-            ]
-
-            # Limit candidates per FVM operation
-            if len(candidates) > max_candidates_per_fvm:
-                # Sort by area similarity and take top candidates
-                candidates = candidates.copy()
-                candidates["area_diff"] = abs(candidates["total_area"] - fvm_row["total_area"])
-                candidates = candidates.nsmallest(max_candidates_per_fvm, "area_diff")
-
-            # Add candidate pairs
-            candidate_pairs.extend((fvm_idx, gkea_idx) for gkea_idx in candidates.index)
-
-        self.log.info(
-            f"   Found {len(candidate_pairs):,} candidate pairs "
-            f"(reduced from {len(fvm_ops_df) * len(gkea_ops_df):,})"
-        )
-        return candidate_pairs
-
-    def _calculate_similarities_and_match(
-        self, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame, candidate_pairs: list
-    ) -> list:
-        """
-        Calculate similarities for candidate pairs and find matches.
-        EXACT SAME IMPLEMENTATION AS STANDALONE SCRIPT.
-        """
-        self.log.info("📊 Calculating similarities for candidate pairs...")
-        similarities = []
-
-        for fvm_idx, gkea_idx in candidate_pairs:
-            fvm_row = fvm_ops_df.iloc[fvm_idx]
-            gkea_row = gkea_ops_df.iloc[gkea_idx]
-
-            # Calculate individual similarities (exact same as standalone)
-            area_sim = 1.0 - abs(fvm_row["total_area"] - gkea_row["total_area"]) / max(
-                fvm_row["total_area"], gkea_row["total_area"]
-            )
-            field_sim = 1.0 - abs(fvm_row["field_count"] - gkea_row["field_count"]) / max(
-                fvm_row["field_count"], gkea_row["field_count"]
-            )
-            size_sim = 1.0 - abs(fvm_row["avg_field_size"] - gkea_row["avg_field_size"]) / max(
-                fvm_row["avg_field_size"], gkea_row["avg_field_size"]
-            )
-            diversity_sim = 1.0 - abs(fvm_row["crop_diversity"] - gkea_row["crop_diversity"]) / max(
-                fvm_row["crop_diversity"], gkea_row["crop_diversity"]
-            )
-
-            # Calculate crop composition similarity
-            crop_sim = self._calculate_crop_jaccard_similarity(
-                fvm_row["crop_composition"], gkea_row["crop_composition"]
-            )
-
-            # Combined weighted similarity (exact same weights as standalone)
-            combined_sim = (
-                0.3 * area_sim
-                + 0.2 * field_sim
-                + 0.2 * size_sim
-                + 0.15 * diversity_sim
-                + 0.15 * crop_sim
-            )
-
-            similarities.append((fvm_idx, gkea_idx, combined_sim, crop_sim))
-
-        self.log.info(f"   Calculated {len(similarities):,} similarities")
-
-        # Filter similarities by thresholds and find best matches (exact same as standalone)
-        self.log.info("🎯 Finding optimal matches with constraints...")
-        valid_similarities = [
-            (fvm_idx, gkea_idx, combined_sim, crop_sim)
-            for fvm_idx, gkea_idx, combined_sim, crop_sim in similarities
-            if combined_sim >= 0.9 and crop_sim >= 0.5
-        ]
-
-        self.log.info(f"   Found {len(valid_similarities):,} similarities above thresholds")
-
-        if not valid_similarities:
-            return []
-
-        # Sort by similarity score and apply 1-to-1 matching (exact same as standalone)
-        valid_similarities.sort(key=lambda x: x[2], reverse=True)  # Sort by combined_sim descending
-
-        used_fvm = set()
-        used_gkea = set()
-        matches = []
-
-        for fvm_idx, gkea_idx, combined_sim, crop_sim in valid_similarities:
-            if fvm_idx not in used_fvm and gkea_idx not in used_gkea:
-                matches.append((fvm_idx, gkea_idx, combined_sim, crop_sim))
-                used_fvm.add(fvm_idx)
-                used_gkea.add(gkea_idx)
-
-        self.log.info(f"   Found {len(matches):,} optimal 1-to-1 matches")
-        return matches
-
-    def _calculate_crop_jaccard_similarity(self, crop_list_1: str, crop_list_2: str) -> float:
-        """Calculate true Jaccard similarity between crop compositions"""
-        if not crop_list_1 or not crop_list_2:
-            return 0.0
-
-        # Convert comma-separated strings to sets
-        crops_1 = set(crop_list_1.split(","))
-        crops_2 = set(crop_list_2.split(","))
-
-        # Calculate Jaccard similarity
-        intersection = len(crops_1.intersection(crops_2))
-        union = len(crops_1.union(crops_2))
-
-        return intersection / union if union > 0 else 0.0
-
-    def _apply_cvr_updates(
-        self, marker_table: str, matches: list, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame
-    ) -> int:
-        """Apply CVR updates to the marker table and save back to cloud storage"""
+        staging_table = f"temp_cvr_stage_{marker_table}"
         fields_updated = 0
 
         try:
-            # Create a temporary table for updates
-            temp_table = f"temp_cvr_updates_{marker_table}"
+            self.conn.execute(
+                f"CREATE OR REPLACE TEMP TABLE {staging_table} "
+                "(fvm_journal VARCHAR, identified_cvr VARCHAR)"
+            )
+            self.conn.executemany(
+                f"INSERT INTO {staging_table} VALUES (?, ?)",
+                [(str(j), str(c)) for j, c in matches],
+            )
 
-            # Build the update cases for each match
-            update_cases = []
-            for fvm_idx, gkea_idx, _combined_sim, _crop_sim in matches:
-                fvm_journal = fvm_ops_df.iloc[fvm_idx]["fvm_journal_number"]
-                identified_cvr = gkea_ops_df.iloc[gkea_idx]["cvr_number"]
-
-                update_cases.append(
-                    f"WHEN journal_number = '{fvm_journal}' THEN '{identified_cvr}'"
-                )
-
-            if not update_cases:
-                return 0
-
-            # Apply the CVR updates
-            update_sql = f"""
-                CREATE OR REPLACE TABLE {temp_table} AS
-                SELECT *,
-                    CASE {" ".join(update_cases)}
-                         ELSE cvr_number
-                    END as updated_cvr_number
-                FROM {marker_table}
-            """
-
-            self.conn.execute(update_sql)
-
-            # Count how many fields were updated
             fields_updated = self.conn.execute(f"""
-                SELECT COUNT(*) as count
-                FROM {temp_table}
-                WHERE updated_cvr_number != cvr_number
-                   OR (cvr_number IS NULL AND updated_cvr_number IS NOT NULL)
-                   OR (cvr_number = '' AND updated_cvr_number != '')
-                   OR (cvr_number = '0' AND updated_cvr_number != '0')
+                UPDATE {marker_table} AS m
+                SET cvr_number = s.identified_cvr
+                FROM {staging_table} s
+                WHERE m.journal_number = s.fvm_journal
             """).fetchone()[0]
 
             if fields_updated > 0:
-                # Replace the original table with updated data
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {marker_table} AS
-                    SELECT * EXCLUDE updated_cvr_number,
-                           updated_cvr_number as cvr_number
-                    FROM {temp_table}
-                """)
-
-                # Save the updated data back to cloud storage
                 dataset_name = marker_table.replace("final_processed_", "")
                 self._save_data(
                     marker_table,
@@ -2069,11 +1967,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     crs="EPSG:25832" if USE_UTM_PROCESSING else None,
                 )
 
-            # Clean up temporary table
-            self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
-
         except Exception as e:
             self.log.error(f"Error applying CVR updates to {marker_table}: {e}")
+        finally:
+            self.conn.execute(f"DROP TABLE IF EXISTS {staging_table}")
 
         return fields_updated
 

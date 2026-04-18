@@ -56,6 +56,30 @@ def _strip_protocol(path: str) -> str:
     return path
 
 
+def _patch_parquet_kv_metadata(
+    parquet_path: str,
+    updates: dict[bytes, bytes],
+    log: logging.Logger | None = None,
+    compression: str = "snappy",
+) -> None:
+    """Merge ``updates`` into the parquet file's schema KV metadata, preserving other keys.
+
+    Reads the parquet file, merges ``updates`` on top of any existing KV metadata
+    (overwriting only the keys in ``updates``), and rewrites the file in-place.
+    """
+    active_log = log or logger
+    try:
+        import pyarrow.parquet as pq
+
+        table = pq.read_table(parquet_path)
+        merged: dict[bytes, bytes] = dict(table.schema.metadata or {})
+        merged.update(updates)
+        table = table.replace_schema_metadata(merged)
+        pq.write_table(table, parquet_path, compression=compression)
+    except Exception as e:
+        active_log.warning(f"Failed to patch parquet KV metadata at {parquet_path}: {e}")
+
+
 def _patch_geoparquet_crs(parquet_path: str, crs: str, log: logging.Logger) -> None:
     """Patch GeoParquet file metadata to include the correct CRS.
 
@@ -88,20 +112,16 @@ def _patch_geoparquet_crs(parquet_path: str, crs: str, log: logging.Logger) -> N
             return
 
         geo_json = json.loads(geo_meta[geo_key])
-
-        # Build PROJJSON from the EPSG code
         projjson = ProjCRS.from_user_input(crs).to_json_dict()
-
-        # Inject CRS into each geometry column
         for _col_name, col_meta in geo_json.get("columns", {}).items():
             col_meta["crs"] = projjson
 
-        # Rewrite metadata
-        geo_meta_updated = {**geo_meta, geo_key: json.dumps(geo_json).encode()}
-
-        table = pq.read_table(parquet_path)
-        table = table.replace_schema_metadata(geo_meta_updated)
-        pq.write_table(table, parquet_path, compression="zstd")
+        _patch_parquet_kv_metadata(
+            parquet_path,
+            {geo_key: json.dumps(geo_json).encode()},
+            log=log,
+            compression="zstd",
+        )
 
         log.info(f"Patched GeoParquet CRS metadata: {crs}")
 

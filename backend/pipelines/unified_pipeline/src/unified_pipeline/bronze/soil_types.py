@@ -114,8 +114,6 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
             full_url = f"{self.config.wfs_url}?{param_string}"
 
             async with AsyncTimer("Fetch soil types data from WFS"):
-                # For now, return the URL for silver layer to process with ibis/duckdb
-                # The silver layer will handle the actual data fetching using proper tools
                 self.log.info(f"Prepared WFS URL for silver layer processing: {full_url}")
 
                 # Return metadata for silver layer processing

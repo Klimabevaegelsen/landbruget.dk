@@ -5,13 +5,6 @@ from typing import Any
 
 import duckdb
 
-# pandas import needed for DataFrame type annotation
-try:
-    import pandas as pd
-
-    DataFrame = pd.DataFrame
-except ImportError:
-    DataFrame = Any
 from ..utils.logging import get_logger
 
 # Get logger
@@ -40,7 +33,7 @@ class DuckDBHelper:
             self.conn = duckdb.connect(self.db_path)
             logger.info("Connected to in-memory DuckDB database")
 
-    def register_dataframe(self, df: DataFrame, table_name: str) -> str:
+    def register_dataframe(self, df: Any, table_name: str) -> str:
         """Register a pandas DataFrame as a DuckDB table.
 
         Args:

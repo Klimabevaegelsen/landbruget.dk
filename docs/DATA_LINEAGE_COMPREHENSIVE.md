@@ -138,7 +138,7 @@ Source: CVR API + Collected CVR numbers → Processing: Geocoding + enrichment �
 ```
 Source: Danmarks Statistik API → Bronze: JSONSTAT format → Silver: Relational tables → Gold: Agricultural statistics
 ```
-- **Transformations**: JSONSTAT parsing using ibis, multi-dimensional data flattening, table-specific processing
+- **Transformations**: JSONSTAT parsing, multi-dimensional data flattening, table-specific processing
 - **Quality Checks**: Dimension validation, value consistency, temporal alignment
 - **Output**: Agricultural production and economic statistics
 
@@ -203,7 +203,7 @@ FVM SOAP Services → Bronze: Raw XML → Silver: Structured tables → Gold: An
 - XML digital signature processing for VetStat
 - Complex pagination handling for large datasets
 - Species-driven herd discovery algorithms
-- `ibis` framework processing for silver layer transformations
+- DuckDB-based processing for silver layer transformations
 - Privacy protection through PII exclusion
 
 **Quality Checks**:

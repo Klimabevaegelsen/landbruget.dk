@@ -32,7 +32,6 @@ def check_required_packages() -> list[tuple[bool, str]]:
         "aiohttp",
         "s3fs",
         "google.cloud.storage",
-        "ibis",
         "duckdb",
         "pyarrow",
         "lxml",

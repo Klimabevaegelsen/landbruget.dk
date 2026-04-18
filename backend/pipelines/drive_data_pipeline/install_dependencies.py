@@ -53,7 +53,6 @@ def install_dependencies() -> None:
         # Try importing some key packages
         import_checks = [
             "duckdb",
-            "ibis",
             "geopandas",
             "pyarrow",
             "shapely",

@@ -111,8 +111,8 @@ def _create_and_save_lookup(
     """Creates a distinct lookup table from columns and saves it locally (temporary use during processing).
 
     Args:
-        con: DuckDB connection (either duckdb.DuckDBPyConnection or ibis backend with .con attribute)
-        table_or_name: Either a table name string registered in DuckDB, an ibis Table, or None
+        con: DuckDB connection or a wrapper exposing the raw connection on `.con`
+        table_or_name: Either a table name string registered in DuckDB, a table-like object, or None
         pk_col: Primary key column name in the source table
         name_col: Name column in the source table
         output_path: Path where to save the parquet file
@@ -122,7 +122,7 @@ def _create_and_save_lookup(
         The lookup table name if successful, None otherwise
     """
     try:
-        # Get the raw DuckDB connection if we have an ibis backend
+        # Get the raw DuckDB connection if we have a wrapper object
         if hasattr(con, "con"):
             raw_con = con.con
         else:
@@ -138,10 +138,10 @@ def _create_and_save_lookup(
         if isinstance(table_or_name, str):
             source_table = table_or_name
         elif hasattr(table_or_name, "get_name"):
-            # ibis Table object - get the table name
+            # Table-like object exposing a name
             source_table = table_or_name.get_name()
         elif hasattr(table_or_name, "columns"):
-            # ibis Table object without get_name - try to extract name from op
+            # Fallback for table-like objects without get_name
             try:
                 if hasattr(table_or_name, "op") and hasattr(table_or_name.op(), "name"):
                     source_table = table_or_name.op().name
@@ -251,7 +251,6 @@ def _create_and_save_lookup(
         return None
 
 
-# Backwards compatibility alias for the deprecated ibis function name
 def sanitize_string_ibis(col):
     """DEPRECATED: Use sanitize_string_sql() for SQL expressions instead.
 
