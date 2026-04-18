@@ -111,7 +111,7 @@ This pipeline fetches and processes Danish building data from Bygnings- og Bolig
 **Objective**: Clean, harmonize, and filter building data
 
 **Processing Steps**:
-1. **Data Loading**: Load both GeoPackage building and otherConstruction layers using ibis-framework/duckdb
+1. **Data Loading**: Load both GeoPackage building and otherConstruction layers using DuckDB-based processing
 2. **Filtering**: Apply building usage type filters
 3. **Geospatial Processing**:
    - Validate geometries
@@ -154,7 +154,6 @@ last_updated: DATE
 [dependencies]
 geopandas = ">=0.14.0"
 duckdb = ">=0.9.0"
-ibis-framework = {version = ">=6.0.0", extras = ["duckdb", "geospatial"]}
 requests = ">=2.31.0"
 pyogrio = ">=0.7.0"  # Fast GDAL I/O
 google-cloud-storage = ">=2.10.0"
@@ -178,19 +177,19 @@ def fetch_geodanmark_samples(credentials: dict, output_dir: Path) -> None:
 
 #### Silver Layer
 ```python
-def load_and_filter_buildings(input_path: Path) -> ibis.Table:
+def load_and_filter_buildings(input_path: Path):
     """Load buildings and apply usage filters"""
-    # Load with ibis/duckdb for performance
+    # Load with DuckDB-based processing for performance
     # Filter by currentUse values
     # Validate geometries
 
-def standardize_schema(buildings: ibis.Table) -> ibis.Table:
+def standardize_schema(buildings):
     """Apply project naming conventions and data types"""
     # Rename fields per project standards
     # Cast types, handle nulls
     # Add derived fields
 
-def enhance_classification(buildings: ibis.Table, wfs_data: dict) -> ibis.Table:
+def enhance_classification(buildings, wfs_data: dict):
     """Cross-reference with GeoDanmark WFS for detailed classification"""
     # Match BBR UUIDs
     # Refine educational facility classification
@@ -310,7 +309,7 @@ act workflow_dispatch -W .github/workflows/bbr_buildings.yml -n
 
 ### Performance Considerations
 - **Large Dataset**: 5.56M records require chunked processing
-- **Memory Usage**: Use ibis/duckdb streaming for large operations
+- **Memory Usage**: Use DuckDB streaming for large operations
 - **Geometry Processing**: Leverage spatial indexing for performance
 
 ### Data Quality Issues
@@ -331,7 +330,7 @@ act workflow_dispatch -W .github/workflows/bbr_buildings.yml -n
 ## Contributing
 
 1. Follow project medallion architecture guidelines
-2. Use ibis-framework/duckdb for data processing
+2. Use DuckDB for data processing
 3. Ensure EPSG:4326 for all geospatial outputs
 4. Include comprehensive logging and error handling
 5. Test locally before submitting PRs

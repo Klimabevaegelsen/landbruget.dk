@@ -99,10 +99,7 @@ def create_property_vet_events_table(
             FROM extracted_events
         """)
 
-        # Optionally join with lookup tables if they exist
-        # Note: In the original ibis code, lookups were left joined but column selection
-        # at the end only kept the core columns, so the joins didn't add new columns to output.
-        # We maintain the same behavior by not adding lookup columns.
+        # Lookup joins intentionally omitted: only core columns are selected downstream.
 
         # Get row count
         rows = con.execute("SELECT COUNT(*) FROM property_vet_events").fetchone()[0]

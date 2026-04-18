@@ -163,13 +163,15 @@ async def test_run_success(
     mock_download_rds: AsyncMock,
     geus_dataverse_bronze: GEUSDataversePesticidesBronze,
 ) -> None:
-    """Test successful run of the pipeline downloading both pest and pfas files."""
+    """Test successful run of the pipeline downloading pest, pfas, and clean files."""
     mock_pest_content = b"test pest rds content bytes"
     mock_pfas_content = b"test pfas rds content bytes"
-    mock_download_rds.side_effect = [mock_pest_content, mock_pfas_content]
+    mock_clean_content = b"test clean rds content bytes"
+    mock_download_rds.side_effect = [mock_pest_content, mock_pfas_content, mock_clean_content]
     mock_save_rds.side_effect = [
         "bronze/test_geus_dataverse_pesticides/2024-01-15/AM_pest.rds",
         "bronze/test_geus_dataverse_pesticides/2024-01-15/AM_pfas.rds",
+        "bronze/test_geus_dataverse_pesticides/2024-01-15/clean_dataset.rds",
     ]
 
     # Mock storage_access
@@ -183,14 +185,16 @@ async def test_run_success(
     assert result["source_crs"] == "EPSG:25832"
     # Backwards compatible field
     assert "rds_path" in result
-    # New fields for both files
+    # New fields for all three files
     assert "pest_rds_path" in result
     assert "pfas_rds_path" in result
+    assert "clean_rds_path" in result
     assert result["pest_file_size_bytes"] == len(mock_pest_content)
     assert result["pfas_file_size_bytes"] == len(mock_pfas_content)
+    assert result["clean_file_size_bytes"] == len(mock_clean_content)
 
-    assert mock_download_rds.call_count == 2
-    assert mock_save_rds.call_count == 2
+    assert mock_download_rds.call_count == 3
+    assert mock_save_rds.call_count == 3
 
 
 @pytest.mark.asyncio

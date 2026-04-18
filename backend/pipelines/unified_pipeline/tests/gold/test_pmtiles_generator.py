@@ -455,12 +455,16 @@ class TestPMTilesGeneratorPipeline:
             mock_generator.generate_field_analysis_pmtiles = AsyncMock(
                 return_value="/tmp/test.pmtiles"
             )
+            mock_generator.generate_overview_pmtiles = AsyncMock(
+                return_value="/tmp/test_overview.pmtiles"
+            )
 
             result = await pipeline.generate_year_specific(2021)
 
             assert result["year"] == 2021
             assert result["success"] is True
             assert result["field_analysis_pmtiles"] == "/tmp/test.pmtiles"
+            assert result["overview_pmtiles"] == "/tmp/test_overview.pmtiles"
 
     def test_should_upload_with_credentials(self, test_config):
         """Test upload decision with credentials."""

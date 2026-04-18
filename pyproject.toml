@@ -12,6 +12,19 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 exclude-newer = "7 days"
+environments = [
+    "sys_platform == 'darwin' and python_version >= '3.11' and python_version < '3.13'",
+    "sys_platform == 'linux' and python_version >= '3.11' and python_version < '3.13'",
+]
+# Keep shared backend versions in one place for the uv workspace.
+# Pipeline-specific compatibility constraints such as xmlsec/lxml stay local.
+constraint-dependencies = [
+    "duckdb>=1.5.0",
+    "pydantic>=2.11.4",
+    "s3fs>=2026.3.0",
+    "ruff>=0.15.10",
+    "ty>=0.0.29",
+]
 
 [tool.uv.workspace]
 members = [

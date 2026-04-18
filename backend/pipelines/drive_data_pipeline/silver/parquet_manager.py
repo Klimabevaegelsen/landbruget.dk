@@ -1,4 +1,4 @@
-"""Parquet and GeoParquet output management for Silver layer - DuckDB optimized."""
+"""Parquet and GeoParquet output management for Silver layer."""
 
 import json
 import os
@@ -7,19 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import pyarrow.parquet as pq
-
-try:
-    import geopandas as gpd
-    import pandas as pd
-
-    DataFrame = pd.DataFrame
-    GeoDataFrame = gpd.GeoDataFrame
-except ImportError:
-    DataFrame = Any
-    GeoDataFrame = Any
-
-# ✅ MIGRATION: Removed shapely import - using DuckDB ST_Point for all spatial operations
+from common.storage.core import _patch_parquet_kv_metadata
 
 # Handle imports for both standalone and package usage
 try:
@@ -96,26 +84,13 @@ class ParquetManager(DuckDBProcessor):
                          ROW_GROUP_SIZE {row_group_size})
                     """)
 
-                    # Add schema metadata if provided
                     if schema_metadata:
-                        # Read the parquet file and add metadata
-                        table = pq.read_table(temp_path)
-                        schema_json = json.dumps(schema_metadata)
-
-                        # Update metadata
-                        new_metadata = {b"schema": schema_json.encode("utf-8")}
-                        if table.schema.metadata:
-                            new_metadata.update(
-                                {
-                                    key: value
-                                    for key, value in table.schema.metadata.items()
-                                    if key != b"schema"
-                                }
-                            )
-
-                        # Write with updated metadata
-                        table = table.replace_schema_metadata(new_metadata)
-                        pq.write_table(table, temp_path, compression=self.compression)
+                        _patch_parquet_kv_metadata(
+                            temp_path,
+                            {b"schema": json.dumps(schema_metadata).encode("utf-8")},
+                            log=logger,
+                            compression=self.compression,
+                        )
 
                     # Upload to cloud storage
                     with open(temp_path, "rb") as f:
@@ -154,23 +129,13 @@ class ParquetManager(DuckDBProcessor):
                      ROW_GROUP_SIZE {row_group_size})
                 """)
 
-                # Add schema metadata if provided (requires reading and rewriting)
                 if schema_metadata:
-                    table = pq.read_table(output_path)
-                    schema_json = json.dumps(schema_metadata)
-
-                    new_metadata = {b"schema": schema_json.encode("utf-8")}
-                    if table.schema.metadata:
-                        new_metadata.update(
-                            {
-                                key: value
-                                for key, value in table.schema.metadata.items()
-                                if key != b"schema"
-                            }
-                        )
-
-                    table = table.replace_schema_metadata(new_metadata)
-                    pq.write_table(table, output_path, compression=self.compression)
+                    _patch_parquet_kv_metadata(
+                        str(output_path),
+                        {b"schema": json.dumps(schema_metadata).encode("utf-8")},
+                        log=logger,
+                        compression=self.compression,
+                    )
 
                 logger.info(f"Saved Parquet file to {output_path}")
                 return output_path
@@ -180,38 +145,20 @@ class ParquetManager(DuckDBProcessor):
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
-    # Legacy method for backward compatibility during migration
     def save_dataframe_to_parquet(
         self,
-        df: DataFrame | str,  # Could be pandas DataFrame or table name
+        df: Any,
         output_path: Path,
         schema_metadata: dict | None = None,
         row_group_size: int = 100000,
     ) -> Path:
-        """Save a DataFrame to Parquet format (compatibility method).
-
-        Args:
-            df: DataFrame or table name to save
-            output_path: Path to save to
-            schema_metadata: Optional schema metadata to include
-            row_group_size: Number of rows per group
-
-        Returns:
-            Path to the saved file
-        """
+        """Save a pandas DataFrame or a DuckDB table name to Parquet."""
         if isinstance(df, str):
-            # It's already a table name
             return self.save_table_to_parquet(df, output_path, schema_metadata, row_group_size)
-        # It's a pandas DataFrame - register it first
-        import pandas as pd
 
-        if isinstance(df, pd.DataFrame):
-            table_name = f"temp_df_{int(time.time())}"
-            self.register_dataframe(df, table_name)
-            return self.save_table_to_parquet(
-                table_name, output_path, schema_metadata, row_group_size
-            )
-        raise ValueError(f"Unsupported data type: {type(df)}")
+        table_name = f"temp_df_{int(time.time())}"
+        self.register_dataframe(df, table_name)
+        return self.save_table_to_parquet(table_name, output_path, schema_metadata, row_group_size)
 
     def create_spatial_table_from_coords(
         self,
@@ -265,140 +212,45 @@ class ParquetManager(DuckDBProcessor):
         geometry_column: str = "geometry",
         schema_metadata: dict | None = None,
     ) -> Path:
-        """Save a spatial DuckDB table to GeoParquet format.
+        """Save a spatial DuckDB table to GeoParquet.
 
-        Args:
-            table_name: Name of spatial table to save
-            output_path: Path to save to
-            geometry_column: Name of the geometry column
-            schema_metadata: Optional schema metadata to include
-
-        Returns:
-            Path to the saved file
+        DuckDB's spatial extension writes GeoParquet 1.1 metadata but omits the
+        CRS field — callers must standardize geometries to EPSG:4326 upstream
+        (handled here by GeospatialValidator.standardize()).
         """
-        try:
-            logger.info(f"Saving spatial table '{table_name}' to GeoParquet: {output_path}")
+        logger.info(f"Saving spatial table '{table_name}' to GeoParquet: {output_path}")
 
-            # Check if we're using R2 cloud storage
-            if self.storage_manager.storage_type.lower() == "r2":
-                # Cloud storage - need to convert through geopandas for GeoParquet
-                with tempfile.NamedTemporaryFile(suffix=".geoparquet", delete=False) as temp_file:
-                    temp_path = temp_file.name
-
-                try:
-                    # Export geometry as WKT for geopandas conversion
-                    df = self.conn.execute(f"""
-                        SELECT
-                            * EXCLUDE ({geometry_column}),
-                            ST_AsText({geometry_column}) as {geometry_column}
-                        FROM {table_name}
-                    """).df()
-
-                    # Convert to GeoDataFrame
-                    import geopandas as gpd
-                    from shapely import wkt
-
-                    df[geometry_column] = df[geometry_column].apply(wkt.loads)
-                    gdf = gpd.GeoDataFrame(df, geometry=geometry_column, crs="EPSG:4326")
-
-                    # Save to GeoParquet
-                    if schema_metadata:
-                        metadata = {"schema": schema_metadata}
-                        gdf.to_parquet(temp_path, compression=self.compression, metadata=metadata)
-                    else:
-                        gdf.to_parquet(temp_path, compression=self.compression)
-
-                    # Upload to R2
-                    with open(temp_path, "rb") as f:
-                        self.storage_manager.save_file(f.read(), output_path)
-
-                    logger.info(f"Saved GeoParquet file to R2: {output_path}")
-                    return output_path
-
-                finally:
-                    # Clean up temp file
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-            else:
-                # Local storage - convert through geopandas
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Export geometry as WKT for geopandas conversion
-                df = self.conn.execute(f"""
-                    SELECT
-                        * EXCLUDE ({geometry_column}),
-                        ST_AsText({geometry_column}) as {geometry_column}
-                    FROM {table_name}
-                """).df()
-
-                # Convert to GeoDataFrame
-                import geopandas as gpd
-                from shapely import wkt
-
-                df[geometry_column] = df[geometry_column].apply(wkt.loads)
-                gdf = gpd.GeoDataFrame(df, geometry=geometry_column, crs="EPSG:4326")
-
-                # Save to GeoParquet
+        if self.storage_manager.storage_type.lower() == "r2":
+            with tempfile.NamedTemporaryFile(suffix=".geoparquet", delete=False) as temp_file:
+                temp_path = Path(temp_file.name)
+            try:
+                self._copy_to_parquet(table_name, temp_path)
                 if schema_metadata:
-                    metadata = {"schema": schema_metadata}
-                    gdf.to_parquet(output_path, compression=self.compression, metadata=metadata)
-                else:
-                    gdf.to_parquet(output_path, compression=self.compression)
-
-                logger.info(f"Saved GeoParquet file to {output_path}")
+                    self._splice_schema_metadata(temp_path, schema_metadata)
+                with open(temp_path, "rb") as f:
+                    self.storage_manager.save_file(f.read(), output_path)
+                logger.info(f"Saved GeoParquet file to R2: {output_path}")
                 return output_path
+            finally:
+                if temp_path.exists():
+                    os.unlink(temp_path)
 
-        except Exception as e:
-            error_msg = f"Failed to save spatial table to GeoParquet: {e!s}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg) from e
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        self._copy_to_parquet(table_name, output_path)
+        if schema_metadata:
+            self._splice_schema_metadata(output_path, schema_metadata)
+        logger.info(f"Saved GeoParquet file to {output_path}")
+        return output_path
 
-    # Legacy methods for backward compatibility
-    def save_geodataframe_to_geoparquet(
-        self,
-        gdf: GeoDataFrame | str,  # Could be GeoDataFrame or table name
-        output_path: Path,
-        geometry_column: str = "geometry",
-        schema_metadata: dict | None = None,
-    ) -> Path:
-        """Save a GeoDataFrame to GeoParquet format (compatibility method)."""
-        if isinstance(gdf, str):
-            # It's already a table name
-            return self.save_spatial_table_to_geoparquet(
-                gdf, output_path, geometry_column, schema_metadata
-            )
-        # It's a GeoDataFrame - register it first as spatial table
-        import time
+    def _copy_to_parquet(self, table_name: str, path: Path) -> None:
+        self.conn.execute(
+            f"COPY {table_name} TO '{path}' (FORMAT PARQUET, COMPRESSION {self.compression})"
+        )
 
-        import geopandas as gpd
-
-        if isinstance(gdf, gpd.GeoDataFrame):
-            table_name = f"temp_gdf_{int(time.time())}"
-
-            # Convert geometry to WKT for DuckDB
-            df_wkt = gdf.copy()
-            df_wkt[f"{geometry_column}_wkt"] = gdf[geometry_column].to_wkt()
-            df_wkt = df_wkt.drop(geometry_column, axis=1)
-
-            # Register as regular table first
-            self.register_dataframe(df_wkt, f"{table_name}_temp")
-
-            # Create spatial table
-            self.conn.execute(f"""
-                    CREATE TABLE {table_name} AS
-                    SELECT
-                        * EXCLUDE ({geometry_column}_wkt),
-                        ST_GeomFromText({geometry_column}_wkt) as {geometry_column}
-                    FROM {table_name}_temp
-                """)
-
-            # Clean up temp table
-            self.drop_table(f"{table_name}_temp")
-
-            return self.save_spatial_table_to_geoparquet(
-                table_name, output_path, geometry_column, schema_metadata
-            )
-        raise ValueError(f"Unsupported data type: {type(gdf)}")
-
-    # ✅ REMOVED: Legacy dataframe_to_geodataframe method
-    # Use create_spatial_table_from_coords() instead for DuckDB-optimized spatial operations
+    def _splice_schema_metadata(self, path: Path, schema_metadata: dict) -> None:
+        _patch_parquet_kv_metadata(
+            str(path),
+            {b"schema": json.dumps(schema_metadata).encode("utf-8")},
+            log=logger,
+            compression=self.compression,
+        )

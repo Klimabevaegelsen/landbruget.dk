@@ -42,7 +42,7 @@ cd pipelines/chr_pipeline && python main.py --step bronze
 
 - **Python 3.11+** (< 3.13)
 - **DuckDB** (>= 1.5.0) — primary processing engine, not Pandas
-- **ibis-framework** — SQL abstraction
+- **DuckDB** — in-process analytical SQL engine used for transformations and validation
 - **Pydantic** — data validation
 - **Cloudflare R2** — cloud storage (S3-compatible, accessed via s3fs)
 - **GitHub Actions** — pipeline orchestration

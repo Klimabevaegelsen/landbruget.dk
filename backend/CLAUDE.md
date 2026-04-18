@@ -1,6 +1,6 @@
 # Backend — Landbruget.dk
 
-Python 3.11+ (<3.13), DuckDB >=1.5.0, ibis-framework, Pydantic, s3fs/gcsfs. Package manager: **uv** (not pip).
+Python 3.11+ (<3.13), DuckDB >=1.5.0, Pydantic, s3fs/gcsfs. Package manager: **uv** (not pip).
 
 ## Commands
 

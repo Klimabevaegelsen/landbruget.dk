@@ -238,7 +238,7 @@ if __name__ == "__main__":
 
 #### Database Sources
 - Use connection pooling
-- Stream large result sets using methods appropriate for your database connector or libraries like `pandas` or `ibis`.
+- Stream large result sets using methods appropriate for your database connector or libraries like `pandas`.
 - Handle connection timeouts
 - Example (using pandas):
   ```python
@@ -274,7 +274,7 @@ if __name__ == "__main__":
 
 - Use timestamped directories for each run
 - Save metadata with each data file (e.g., source, timestamp, record count)
-- Use appropriate file formats. Parquet is strongly preferred for structured data due to its efficiency and excellent compatibility with `ibis` and `duckdb`. JSON/XML might be necessary only to preserve the exact raw source format if required.
+- Use appropriate file formats. Parquet is strongly preferred for structured data due to its efficiency and excellent compatibility with `duckdb`. JSON/XML might be necessary only to preserve the exact raw source format if required.
 - **In production, both Bronze and Silver layer data are stored in Google Cloud Storage (GCS).** Silver data should typically be stored as Parquet/GeoParquet files.
 - Example:
   ```python
@@ -314,7 +314,7 @@ if __name__ == "__main__":
 The CHR pipeline demonstrates:
 - Handling multiple related data types from a SOAP API (species, herds, movements).
 - Complex authentication using certificates (`xmlsec`, `cryptography`).
-- Using `ibis-framework[duckdb]` for efficient data transformation and processing (preferred approach).
+- Using DuckDB directly for efficient data transformation and processing (preferred approach).
 - Using `pandas` and `geopandas` for initial data loading or specific geo-processing tasks where necessary.
 - Structured logging and error handling.
 
@@ -337,7 +337,7 @@ A pipeline fetching data from public Google Drive should:
 ### Unit and Integration Tests
 1. Create test fixtures or use sample data.
 2. Test data fetching logic for different scenarios (e.g., date ranges, connection issues).
-3. Test data processing/transformation logic, **preferably using `ibis` expressions and `duckdb`** for validation against expected outcomes.
+3. Test data processing/transformation logic, preferably using DuckDB queries and expected outputs for validation.
 4. Verify output format (ideally Parquet) and metadata correctness.
 5. Check error handling mechanisms.
 
@@ -436,9 +436,9 @@ The typical development and deployment flow is:
 ## Tooling Recommendations
 
 - **Dependency Management**: `uv` for faster installation and environment management.
-- **Data Manipulation**: **`ibis-framework` with the `duckdb` backend is the preferred choice** for performant, scalable, and database-agnostic transformations. Use `pandas` or `geopandas` primarily for initial data loading, simple manipulations, or when specific features (like advanced geospatial operations in `geopandas`) are required that `ibis` doesn't cover directly.
+- **Data Manipulation**: **DuckDB is the preferred choice** for performant, scalable transformations. Use `pandas` or `geopandas` primarily for initial data loading, simple manipulations, or when specific dataframe/geospatial features are required.
 - **API Interaction**: `requests` for REST, `zeep` for SOAP.
-- **Cloud Storage**: `google-cloud-storage` and `gcsfs` for seamless GCS integration, especially useful with `ibis` and `duckdb` reading/writing Parquet files directly from/to GCS.
+- **Cloud Storage**: `google-cloud-storage` and `gcsfs` for seamless GCS integration, especially useful when DuckDB reads or writes Parquet files directly from/to cloud storage.
 
 ## Contributing
 
