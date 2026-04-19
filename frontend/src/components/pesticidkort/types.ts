@@ -50,7 +50,7 @@ export interface PesticideReport {
   lng: number;
   radius_m: number;
   year: number;
-  grade: GradeInfo;
+  grade: GradeInfo | null;
   score: number;
   fields_count: number;
   pfas_fields_count: number;

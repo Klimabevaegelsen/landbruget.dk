@@ -328,6 +328,10 @@ def sql_transform_to_utm(geometry_expr: str, source_crs: str = WGS84) -> str:
     """
     Generate SQL to transform geometry to Danish UTM for metric operations.
 
+    Uses ``always_xy := true`` so EPSG:4326 is interpreted as (lon, lat) regardless
+    of DuckDB's session default — PROJ's canonical axis order for 4326 is (lat, lon)
+    and relying on the default has silently produced garbage UTM coords.
+
     Args:
         geometry_expr: SQL expression for geometry
         source_crs: Source CRS (default WGS84)
@@ -335,12 +339,15 @@ def sql_transform_to_utm(geometry_expr: str, source_crs: str = WGS84) -> str:
     Returns:
         SQL expression for transformed geometry
     """
-    return f"ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}')"
+    return f"ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}', always_xy := true)"
 
 
 def sql_transform_to_wgs84(geometry_expr: str, source_crs: str = DANISH_UTM) -> str:
     """
     Generate SQL to transform geometry to WGS84 for storage.
+
+    Uses ``always_xy := true`` to emit (lon, lat) — what PostGIS/Supabase and our
+    R2 JSON consumers expect.
 
     Args:
         geometry_expr: SQL expression for geometry
@@ -349,7 +356,7 @@ def sql_transform_to_wgs84(geometry_expr: str, source_crs: str = DANISH_UTM) -> 
     Returns:
         SQL expression for transformed geometry
     """
-    return f"ST_Transform({geometry_expr}, '{source_crs}', '{WGS84}')"
+    return f"ST_Transform({geometry_expr}, '{source_crs}', '{WGS84}', always_xy := true)"
 
 
 def sql_buffer_meters(geometry_expr: str, meters: float, source_crs: str = WGS84) -> str:
@@ -368,7 +375,7 @@ def sql_buffer_meters(geometry_expr: str, meters: float, source_crs: str = WGS84
 
     Example:
         >>> sql_buffer_meters("geometry", 100)
-        "ST_Transform(ST_Buffer(ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832'), 100), 'EPSG:25832', 'EPSG:4326')"
+        "ST_Transform(ST_Buffer(ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true), 100), 'EPSG:25832', 'EPSG:4326', always_xy := true)"
     """
     if source_crs == DANISH_UTM:
         # Already in UTM, just buffer
@@ -376,8 +383,8 @@ def sql_buffer_meters(geometry_expr: str, meters: float, source_crs: str = WGS84
     # Transform to UTM, buffer, transform back
     return (
         f"ST_Transform("
-        f"ST_Buffer(ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}'), {meters}), "
-        f"'{DANISH_UTM}', '{source_crs}')"
+        f"ST_Buffer(ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}', always_xy := true), {meters}), "
+        f"'{DANISH_UTM}', '{source_crs}', always_xy := true)"
     )
 
 
@@ -397,8 +404,8 @@ def sql_intersects_with_buffer_meters(geom1_expr: str, geom2_expr: str, meters: 
     if source_crs == DANISH_UTM:
         return f"ST_Intersects({geom1_expr}, ST_Buffer({geom2_expr}, {meters}))"
     # Transform both to UTM for the operation
-    geom1_utm = f"ST_Transform({geom1_expr}, '{source_crs}', '{DANISH_UTM}')"
-    geom2_utm = f"ST_Transform({geom2_expr}, '{source_crs}', '{DANISH_UTM}')"
+    geom1_utm = f"ST_Transform({geom1_expr}, '{source_crs}', '{DANISH_UTM}', always_xy := true)"
+    geom2_utm = f"ST_Transform({geom2_expr}, '{source_crs}', '{DANISH_UTM}', always_xy := true)"
     return f"ST_Intersects({geom1_utm}, ST_Buffer({geom2_utm}, {meters}))"
 
 
@@ -418,12 +425,12 @@ def sql_transform_for_supabase(geometry_expr: str, source_crs: str = DANISH_UTM)
 
     Example:
         >>> sql_transform_for_supabase("geometry")
-        "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')"
+        "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)"
     """
     if source_crs == WGS84:
         # Already in WGS84, no transform needed
         return geometry_expr
-    return f"ST_Transform({geometry_expr}, '{source_crs}', '{WGS84}')"
+    return f"ST_Transform({geometry_expr}, '{source_crs}', '{WGS84}', always_xy := true)"
 
 
 def sql_transform_to_processing_crs(geometry_expr: str, source_crs: str) -> str:
@@ -442,9 +449,12 @@ def sql_transform_to_processing_crs(geometry_expr: str, source_crs: str) -> str:
 
     Example:
         >>> sql_transform_to_processing_crs("geometry", "EPSG:4326")
-        "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
+        "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true)"
     """
     if source_crs == DANISH_UTM:
         # Already in processing CRS, no transform needed
         return geometry_expr
-    return f"ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}')"
+    # always_xy := true forces (lon, lat) input semantics for EPSG:4326 — PROJ's
+    # canonical axis order for 4326 is (lat, lon), so without this flag UTM
+    # coords come out reflected and spatial joins silently return 0 matches.
+    return f"ST_Transform({geometry_expr}, '{source_crs}', '{DANISH_UTM}', always_xy := true)"

@@ -58,6 +58,10 @@ def create_connection() -> duckdb.DuckDBPyConnection:
     conn = duckdb.connect()
     conn.execute("SET memory_limit = '4GB'")
     conn.execute("SET threads = 4")
+    # Spatial extension is required by exporters that do geometry filtering
+    # (e.g. drift_exposure uses ST_Within). Loading unconditionally is cheap.
+    conn.execute("INSTALL spatial")
+    conn.execute("LOAD spatial")
 
     if not setup_duckdb_cloud_auth(conn):
         logger.warning("No cloud auth configured — will only work with local files")
