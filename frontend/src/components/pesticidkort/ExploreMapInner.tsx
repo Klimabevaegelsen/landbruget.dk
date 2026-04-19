@@ -117,7 +117,7 @@ export function ExploreMapInner({
         attributionControl={false}
         data-testid="explore-map"
       >
-        <NavigationControl position="top-right" />
+        <NavigationControl position="top-left" />
       </Map>
       {hoverData && <FieldHoverTooltip {...hoverData} />}
     </>

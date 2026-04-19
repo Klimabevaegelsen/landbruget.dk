@@ -108,9 +108,9 @@ export function ExploreMapView({
           )}
         </div>
 
-        <div className="mx-auto mt-2 flex max-w-md flex-col items-center gap-2">
-          <div className="bg-background/90 w-full max-w-xs min-w-[200px] rounded-full px-5 py-1 backdrop-blur-sm">
-            <YearTimeline year={year} onChange={onYearChange} compact />
+        <div className="mx-auto mt-2 flex max-w-lg flex-col items-center gap-2">
+          <div className="bg-background/90 w-full max-w-xs min-w-[200px] rounded-full px-2 py-1 backdrop-blur-sm md:max-w-md md:min-w-[480px] md:px-3">
+            <YearTimeline year={year} onChange={onYearChange} />
           </div>
           <ChemicalFilterPills
             active={chemFilter}

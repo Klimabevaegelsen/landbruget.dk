@@ -551,4 +551,14 @@
       color 0.3s ease,
       border-color 0.3s ease;
   }
+
+  /* Pesticidkort explore map: sit the zoom/compass control below the
+     top overlay (back + search + year timeline + chemical filter pills)
+     so it stays fully visible across mobile and desktop, and clear of
+     the ExploreFieldPanel (right side on desktop, bottom sheet on mobile)
+     and MapLegend (bottom-left). Match the sibling PesticidkortMap's
+     top-left placement for consistency within the feature. */
+  [data-testid='explore-map'] .maplibregl-ctrl-top-left {
+    top: calc(env(safe-area-inset-top, 0px) + 10rem);
+  }
 }
