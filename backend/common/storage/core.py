@@ -161,6 +161,9 @@ class StorageAccess:
             self.log.info("StorageAccess: Created new DuckDB connection")
 
         self.monitor = ResourceMonitor()
+        # Default URL scheme for native cloud access; `_check_native_cloud_support`
+        # may refine this based on which DuckDB secret is actually configured.
+        self._native_cloud_scheme: str = "r2://"
         self._native_cloud_available = self._check_native_cloud_support()
 
     def _register_filesystem(self):
@@ -213,7 +216,14 @@ class StorageAccess:
             self.log.warning(f"DuckDB configuration warning: {e}")
 
     def _check_native_cloud_support(self) -> bool:
-        """Check if native cloud storage access is available."""
+        """Check if native cloud storage access is available.
+
+        DuckDB's httpfs extension needs an ``r2://`` scheme prefix to read
+        from R2; bare ``bucket/key`` paths are interpreted as local globs
+        and fail.  ``self._native_cloud_scheme`` is already defaulted to
+        ``r2://`` in ``__init__`` — this method just confirms that an R2
+        secret or R2 credentials are actually configured.
+        """
         try:
             # Check if httpfs extension is loaded
             result = self.duckdb_conn.execute(
@@ -222,20 +232,29 @@ class StorageAccess:
             if not result:
                 return False
 
-            # Check if a cloud storage secret exists
+            if os.getenv("R2_ACCESS_KEY_ID") and os.getenv("R2_SECRET_ACCESS_KEY"):
+                return True
+
+            # Fallback: inspect DuckDB secrets (env vars absent but a secret may
+            # have been injected directly by the caller).
             try:
-                secrets = self.duckdb_conn.execute("SELECT name FROM duckdb_secrets()").fetchall()
-                return any("r2" in s[0].lower() or "gcs" in s[0].lower() for s in secrets)
-            except Exception:
-                # Some DuckDB versions don't support listing secrets
-                return bool(
-                    (os.getenv("R2_ACCESS_KEY_ID") and os.getenv("R2_SECRET_ACCESS_KEY"))
-                    or (os.getenv("GCS_ACCESS_KEY_ID") and os.getenv("GCS_SECRET_ACCESS_KEY"))
-                )
+                secrets = self.duckdb_conn.execute("SELECT name, type FROM duckdb_secrets()").fetchall()
+                for row in secrets:
+                    stype = (row[1] or "").lower() if len(row) > 1 and row[1] else ""
+                    if stype == "r2":
+                        return True
+            except Exception as e:
+                self.log.debug(f"duckdb_secrets() inspection failed: {e}")
+
+            return False
 
         except Exception as e:
             self.log.debug(f"Native storage check failed: {e}")
             return False
+
+    def _native_url(self, storage_path: str) -> str:
+        """Return ``storage_path`` as a DuckDB-native R2 URL (scheme-prefixed)."""
+        return f"{self._native_cloud_scheme}{_strip_protocol(storage_path)}"
 
     def check_file_size_limits(self, storage_path: str) -> bool:
         """Check if file is too large for runner constraints."""
@@ -475,7 +494,8 @@ class StorageAccess:
             Table name containing the results
         """
         if self._native_cloud_available:
-            self.log.info(f"Using native cloud access for {storage_path}")
+            native_url = self._native_url(storage_path)
+            self.log.info(f"Using native cloud access for {native_url}")
             self.monitor.check_resources("start_native_query")
 
             try:
@@ -488,7 +508,7 @@ class StorageAccess:
                         # Complete SELECT with FROM - replace the FROM source
                         full_query = f"""
                             CREATE OR REPLACE TABLE {table_name} AS
-                            {query.replace("FROM read_parquet", f"FROM read_parquet('{storage_path}')")}
+                            {query.replace("FROM read_parquet", f"FROM read_parquet('{native_url}')")}
                         """
                     elif "WHERE" in query_upper:
                         # SELECT with WHERE but no FROM - split and reassemble
@@ -499,27 +519,27 @@ class StorageAccess:
                             where_part = query[where_start:].strip()
                             full_query = f"""
                                 CREATE OR REPLACE TABLE {table_name} AS
-                                {select_part} FROM read_parquet('{storage_path}')
+                                {select_part} FROM read_parquet('{native_url}')
                                 {where_part}
                             """
                         else:
                             # Fallback if regex fails
                             full_query = f"""
                                 CREATE OR REPLACE TABLE {table_name} AS
-                                {query} FROM read_parquet('{storage_path}')
+                                {query} FROM read_parquet('{native_url}')
                             """
                     else:
                         # Simple SELECT with no WHERE or FROM
                         full_query = f"""
                             CREATE OR REPLACE TABLE {table_name} AS
-                            {query} FROM read_parquet('{storage_path}')
+                            {query} FROM read_parquet('{native_url}')
                         """
                 else:
                     # WHERE clause or other fragment - build full SELECT
                     where_clause = query if query.strip() and query.strip().upper() != "SELECT *" else ""
                     full_query = f"""
                         CREATE OR REPLACE TABLE {table_name} AS
-                        SELECT * FROM read_parquet('{storage_path}')
+                        SELECT * FROM read_parquet('{native_url}')
                         {where_clause}
                     """
                 self.duckdb_conn.execute(full_query)
@@ -566,7 +586,8 @@ class StorageAccess:
             except Exception as e:
                 self.log.debug(f"Could not configure R2 auth on external connection: {e}")
         if self._native_cloud_available:
-            self.log.info(f"Using native cloud export to {storage_path}")
+            native_url = self._native_url(storage_path)
+            self.log.info(f"Using native cloud export to {native_url}")
             self.monitor.check_resources("start_native_export")
 
             try:
@@ -581,7 +602,7 @@ class StorageAccess:
                 options_str = ", ".join(copy_options)
 
                 # Direct native export - no temp files!
-                conn.execute(f"COPY {table_name} TO '{storage_path}' ({options_str})")
+                conn.execute(f"COPY {table_name} TO '{native_url}' ({options_str})")
 
                 # Log success
                 count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
