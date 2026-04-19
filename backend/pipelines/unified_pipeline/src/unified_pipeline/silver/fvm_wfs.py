@@ -2020,197 +2020,212 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         """
         self.log.info("Starting field UUID enrichment of subsidy tables")
 
-        try:
-            # Define subsidy layer types to process
-            subsidy_layers = [
-                (
-                    "OrganicSubsidies",
-                    self.config.organic_subsidies_years,
-                    self.config.dataset_organic_subsidies,
-                ),
-                (
-                    "GrasslandSubsidies",
-                    self.config.grassland_subsidies_years,
-                    self.config.dataset_grassland_subsidies,
-                ),
-                (
-                    "EnvironmentalSubsidies",
-                    self.config.environmental_subsidies_years,
-                    self.config.dataset_environmental_subsidies,
-                ),
-            ]
+        per_year_failures: list[tuple[str, int, str]] = []
 
-            total_enriched = 0
+        # Define subsidy layer types to process
+        subsidy_layers = [
+            (
+                "OrganicSubsidies",
+                self.config.organic_subsidies_years,
+                self.config.dataset_organic_subsidies,
+            ),
+            (
+                "GrasslandSubsidies",
+                self.config.grassland_subsidies_years,
+                self.config.dataset_grassland_subsidies,
+            ),
+            (
+                "EnvironmentalSubsidies",
+                self.config.environmental_subsidies_years,
+                self.config.dataset_environmental_subsidies,
+            ),
+        ]
 
-            for layer_type, layer_years, dataset_name in subsidy_layers:
-                # Find overlapping years with marker data
-                overlapping_years = sorted(set(layer_years) & set(self.config.marker_years))
-                if not overlapping_years:
-                    self.log.warning(
-                        f"No overlapping years between {layer_type} and marker data - skipping"
-                    )
-                    continue
+        total_enriched = 0
 
-                self.log.info(f"Enriching {layer_type} fields for years: {overlapping_years}")
+        for layer_type, layer_years, dataset_name in subsidy_layers:
+            # Find overlapping years with marker data
+            overlapping_years = sorted(set(layer_years) & set(self.config.marker_years))
+            if not overlapping_years:
+                self.log.warning(
+                    f"No overlapping years between {layer_type} and marker data - skipping"
+                )
+                continue
 
-                for year in overlapping_years:
+            self.log.info(f"Enriching {layer_type} fields for years: {overlapping_years}")
+
+            for year in overlapping_years:
+                try:
+                    # Define table names
+                    subsidy_table = f"{dataset_name}_{year}"
+                    marker_table = f"fvm_marker_{year}"
+
+                    # Check if both datasets exist for this year
+                    subsidy_path = f"{self.config.bucket}/silver/{subsidy_table}/"
+                    marker_path = f"{self.config.bucket}/silver/{marker_table}/"
+
+                    # Load subsidy data using StorageAccess
                     try:
-                        # Define table names
-                        subsidy_table = f"{dataset_name}_{year}"
-                        marker_table = f"fvm_marker_{year}"
-
-                        # Check if both datasets exist for this year
-                        subsidy_path = f"{self.config.bucket}/silver/{subsidy_table}/"
-                        marker_path = f"{self.config.bucket}/silver/{marker_table}/"
-
-                        # Load subsidy data using StorageAccess
-                        try:
-                            # Find the latest timestamped file
-                            subsidy_pattern = f"{subsidy_path}*/data.parquet"
-                            subsidy_files = self.storage.list_files(subsidy_pattern)
-                            if not subsidy_files:
-                                raise FileNotFoundError(
-                                    f"No files found matching pattern: {subsidy_pattern}"
-                                )
-
-                            latest_subsidy_file = sorted(subsidy_files)[-1]  # Latest by timestamp
-                            self.storage.query_parquet_direct(
-                                latest_subsidy_file, "SELECT *", f"temp_subsidy_{year}"
+                        # Find the latest timestamped file
+                        subsidy_pattern = f"{subsidy_path}*/data.parquet"
+                        subsidy_files = self.storage.list_files(subsidy_pattern)
+                        if not subsidy_files:
+                            raise FileNotFoundError(
+                                f"No files found matching pattern: {subsidy_pattern}"
                             )
-                            subsidy_count = self.conn.execute(
-                                f"SELECT COUNT(*) FROM temp_subsidy_{year}"
-                            ).fetchone()[0]
-                            self.log.info(
-                                f"Loaded {subsidy_count:,} {layer_type} records for {year} "
-                                f"from {latest_subsidy_file}"
-                            )
-                        except Exception as e:
-                            self.log.warning(f"Could not load {layer_type} data for {year}: {e}")
-                            continue
 
-                        # Load marker data
-                        try:
-                            # Find the latest timestamped file
-                            marker_pattern = f"{marker_path}*/data.parquet"
-                            marker_files = self.storage.list_files(marker_pattern)
-                            if not marker_files:
-                                raise FileNotFoundError(
-                                    f"No files found matching pattern: {marker_pattern}"
-                                )
-
-                            latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
-                            self.storage.query_parquet_direct(
-                                latest_marker_file, "SELECT *", f"temp_marker_{year}"
-                            )
-                            # Filter the loaded data in DuckDB
-                            self.conn.execute(f"""
-                                CREATE OR REPLACE TABLE temp_marker_{year} AS
-                                SELECT * FROM temp_marker_{year}
-                                WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL
-                            """)
-                            marker_count = self.conn.execute(
-                                f"SELECT COUNT(*) FROM temp_marker_{year}"
-                            ).fetchone()[0]
-                            self.log.info(
-                                f"Loaded {marker_count:,} marker fields with UUID for {year} "
-                                f"from {latest_marker_file}"
-                            )
-                        except Exception as e:
-                            self.log.warning(f"Could not load marker data for {year}: {e}")
-                            continue
-
-                        if subsidy_count == 0 or marker_count == 0:
-                            self.log.warning(
-                                f"Insufficient data for {layer_type} {year} - skipping"
-                            )
-                            continue
-
-                        # Pre-filter to remove NULL geometries for optimal performance
-                        self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE temp_subsidy_filtered_{year} AS
-                            SELECT * FROM temp_subsidy_{year}
-                            WHERE geometry IS NOT NULL AND field_id IS NOT NULL
-                        """)
-
-                        filtered_subsidy_count = self.conn.execute(
-                            f"SELECT COUNT(*) FROM temp_subsidy_filtered_{year}"
+                        latest_subsidy_file = sorted(subsidy_files)[-1]  # Latest by timestamp
+                        self.storage.query_parquet_direct(
+                            latest_subsidy_file, "SELECT *", f"temp_subsidy_{year}"
+                        )
+                        subsidy_count = self.conn.execute(
+                            f"SELECT COUNT(*) FROM temp_subsidy_{year}"
                         ).fetchone()[0]
                         self.log.info(
-                            f"Filtered to {filtered_subsidy_count:,} {layer_type} records with "
-                            f"valid geometry and field_id"
+                            f"Loaded {subsidy_count:,} {layer_type} records for {year} "
+                            f"from {latest_subsidy_file}"
                         )
-
-                        # Add field_uuid column to subsidy table if it doesn't exist
-                        self.conn.execute(f"""
-                            ALTER TABLE temp_subsidy_{year}
-                            ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
-                        """)
-
-                        # Two-step approach: SELECT with spatial join (triggers
-                        # SPATIAL_JOIN R-tree operator), then UPDATE from result.
-                        # Single-step UPDATE...FROM doesn't trigger the optimizer.
-                        self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE temp_spatial_matches_{year} AS
-                            SELECT DISTINCT
-                                s.rowid as subsidy_rowid,
-                                m.field_uuid
-                            FROM temp_subsidy_filtered_{year} s
-                            INNER JOIN temp_marker_{year} m
-                                ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
-                            WHERE s.field_id = m.field_id
-                        """)
-
-                        matches_updated = self.conn.execute(f"""
-                            UPDATE temp_subsidy_{year} SET
-                                field_uuid = fm.field_uuid
-                            FROM temp_spatial_matches_{year} fm
-                            WHERE temp_subsidy_{year}.rowid = fm.subsidy_rowid
-                        """).fetchone()[0]
-
-                        self.conn.execute(f"DROP TABLE IF EXISTS temp_spatial_matches_{year}")
-                        total_enriched += matches_updated
-
-                        self.log.info(
-                            f"Enriched {matches_updated:,} {layer_type} records "
-                            f"with field_uuid for {year}"
-                        )
-
-                        # Save the enriched subsidy data back to cloud storage
-                        enriched_subsidy_table = f"enriched_{dataset_name}_{year}"
-                        self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE {enriched_subsidy_table} AS
-                            SELECT * FROM temp_subsidy_{year}
-                        """)
-
-                        # Save using the standard pattern (overwrite the original)
-                        self._save_data(
-                            enriched_subsidy_table,
-                            subsidy_table,  # Keep the same dataset name to overwrite
-                            self.config.bucket,
-                            "silver",
-                            conn=self.conn,
-                            crs="EPSG:25832" if USE_UTM_PROCESSING else None,
-                        )
-
-                        # Clean up temporary tables
-                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
-                        self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
-                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_filtered_{year}")
-                        self.conn.execute(f"DROP TABLE IF EXISTS {enriched_subsidy_table}")
-
                     except Exception as e:
-                        self.log.error(f"Error enriching {layer_type} data for year {year}: {e}")
+                        self.log.warning(f"Could not load {layer_type} data for {year}: {e}")
                         continue
 
-            self.log.info(
-                f"Subsidy field UUID enrichment completed - "
-                f"enriched {total_enriched:,} total subsidy records"
-            )
+                    # Load marker data
+                    try:
+                        # Find the latest timestamped file
+                        marker_pattern = f"{marker_path}*/data.parquet"
+                        marker_files = self.storage.list_files(marker_pattern)
+                        if not marker_files:
+                            raise FileNotFoundError(
+                                f"No files found matching pattern: {marker_pattern}"
+                            )
 
-        except Exception as e:
-            self.log.error(f"Error during subsidy field UUID enrichment: {e}")
-            # Don't fail the entire pipeline if enrichment fails
-            pass
+                        latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
+                        self.storage.query_parquet_direct(
+                            latest_marker_file, "SELECT *", f"temp_marker_{year}"
+                        )
+                        # Filter the loaded data in DuckDB
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE temp_marker_{year} AS
+                            SELECT * FROM temp_marker_{year}
+                            WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL
+                        """)
+                        marker_count = self.conn.execute(
+                            f"SELECT COUNT(*) FROM temp_marker_{year}"
+                        ).fetchone()[0]
+                        self.log.info(
+                            f"Loaded {marker_count:,} marker fields with UUID for {year} "
+                            f"from {latest_marker_file}"
+                        )
+                    except Exception as e:
+                        self.log.warning(f"Could not load marker data for {year}: {e}")
+                        continue
+
+                    if subsidy_count == 0 or marker_count == 0:
+                        self.log.warning(f"Insufficient data for {layer_type} {year} - skipping")
+                        continue
+
+                    # Pre-filter to remove NULL geometries for optimal performance.
+                    # cvr_number is required because the spatial join keys on it (see below).
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE temp_subsidy_filtered_{year} AS
+                        SELECT * FROM temp_subsidy_{year}
+                        WHERE geometry IS NOT NULL
+                          AND field_id IS NOT NULL
+                          AND cvr_number IS NOT NULL
+                    """)
+
+                    filtered_subsidy_count = self.conn.execute(
+                        f"SELECT COUNT(*) FROM temp_subsidy_filtered_{year}"
+                    ).fetchone()[0]
+                    self.log.info(
+                        f"Filtered to {filtered_subsidy_count:,} {layer_type} records with "
+                        f"valid geometry, field_id, and cvr_number"
+                    )
+
+                    # Add field_uuid column to subsidy table if it doesn't exist
+                    self.conn.execute(f"""
+                        ALTER TABLE temp_subsidy_{year}
+                        ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
+                    """)
+
+                    # field_id alone is non-unique (per-farmer field number, reused
+                    # across CVRs), so joining on it cross-products into hundreds of
+                    # millions of rows and OOMs the runner. Adding cvr_number to the
+                    # equi-predicate makes (cvr, field_id) near-unique and lets the
+                    # planner hash-join down to ~1.4M candidates before the spatial
+                    # filter, finishing in well under a second on 2019 data.
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE temp_spatial_matches_{year} AS
+                        SELECT DISTINCT
+                            s.rowid as subsidy_rowid,
+                            m.field_uuid
+                        FROM temp_subsidy_filtered_{year} s
+                        INNER JOIN temp_marker_{year} m
+                            ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
+                        WHERE s.field_id = m.field_id
+                          AND s.cvr_number = m.cvr_number
+                    """)
+
+                    matches_updated = self.conn.execute(f"""
+                        UPDATE temp_subsidy_{year} SET
+                            field_uuid = fm.field_uuid
+                        FROM temp_spatial_matches_{year} fm
+                        WHERE temp_subsidy_{year}.rowid = fm.subsidy_rowid
+                    """).fetchone()[0]
+
+                    self.conn.execute(f"DROP TABLE IF EXISTS temp_spatial_matches_{year}")
+                    total_enriched += matches_updated
+
+                    self.log.info(
+                        f"Enriched {matches_updated:,} {layer_type} records "
+                        f"with field_uuid for {year}"
+                    )
+
+                    # Save the enriched subsidy data back to cloud storage
+                    enriched_subsidy_table = f"enriched_{dataset_name}_{year}"
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {enriched_subsidy_table} AS
+                        SELECT * FROM temp_subsidy_{year}
+                    """)
+
+                    # Save using the standard pattern (overwrite the original)
+                    self._save_data(
+                        enriched_subsidy_table,
+                        subsidy_table,  # Keep the same dataset name to overwrite
+                        self.config.bucket,
+                        "silver",
+                        conn=self.conn,
+                        crs="EPSG:25832" if USE_UTM_PROCESSING else None,
+                    )
+
+                    # Clean up temporary tables
+                    self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
+                    self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
+                    self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_filtered_{year}")
+                    self.conn.execute(f"DROP TABLE IF EXISTS {enriched_subsidy_table}")
+
+                except Exception as e:
+                    # Record the failure so the loop can continue with other years,
+                    # but raise at the end so CI surfaces the error instead of
+                    # silently exiting 0 (the previous behavior masked broken joins
+                    # for years).
+                    self.log.exception(f"Error enriching {layer_type} data for year {year}: {e}")
+                    per_year_failures.append((layer_type, year, str(e)))
+                    continue
+
+        self.log.info(
+            f"Subsidy field UUID enrichment completed - "
+            f"enriched {total_enriched:,} total subsidy records"
+        )
+
+        if per_year_failures:
+            failure_summary = ", ".join(
+                f"{layer}/{year}: {msg}" for layer, year, msg in per_year_failures
+            )
+            raise RuntimeError(
+                f"Subsidy field UUID enrichment had {len(per_year_failures)} "
+                f"per-year failure(s): {failure_summary}"
+            )
 
     async def _extract_and_save_cvr_numbers(self) -> None:
         """
