@@ -2,6 +2,14 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Pesticidkort', () => {
   test.beforeEach(async ({ page }) => {
+    // Pre-accept the first-visit disclaimer modal so tests can interact with
+    // the landing page directly. The modal is gated on this localStorage key.
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'pesticidkort-disclaimer-v1',
+        new Date().toISOString()
+      );
+    });
     await page.goto('/pesticidkort');
   });
 

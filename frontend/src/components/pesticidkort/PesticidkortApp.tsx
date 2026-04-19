@@ -6,6 +6,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { LandingHero } from '@/components/pesticidkort/LandingHero';
 import { ReportMapView } from '@/components/pesticidkort/ReportMapView';
 import { ExploreMapView } from '@/components/pesticidkort/ExploreMapView';
+import { DisclaimerFooter } from '@/components/pesticidkort/DisclaimerFooter';
+import { DisclaimerModal } from '@/components/pesticidkort/DisclaimerModal';
 import type { AddressResult } from '@/components/pesticidkort/types';
 
 interface SearchState {
@@ -68,58 +70,62 @@ export function PesticidkortApp() {
   }, []);
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      {mode === 'landing' && (
-        <motion.div
-          key="landing"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.25 }}
-        >
-          <LandingHero
-            onAddressSelect={handleAddressSelect}
-            onExploreMap={handleExploreMap}
-          />
-        </motion.div>
-      )}
+    <>
+      <DisclaimerModal />
+      <AnimatePresence mode="wait" initial={false}>
+        {mode === 'landing' && (
+          <motion.div
+            key="landing"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <LandingHero
+              onAddressSelect={handleAddressSelect}
+              onExploreMap={handleExploreMap}
+            />
+          </motion.div>
+        )}
 
-      {mode === 'report' && search && (
-        <motion.div
-          key="report"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <ReportMapView
-            address={search.address}
-            lat={search.lat}
-            lng={search.lng}
-            radiusM={1000}
-            year={year}
-            onYearChange={setYear}
-            onBack={handleBack}
-          />
-        </motion.div>
-      )}
+        {mode === 'report' && search && (
+          <motion.div
+            key="report"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ReportMapView
+              address={search.address}
+              lat={search.lat}
+              lng={search.lng}
+              radiusM={1000}
+              year={year}
+              onYearChange={setYear}
+              onBack={handleBack}
+            />
+          </motion.div>
+        )}
 
-      {!(mode === 'report' && search) && mode !== 'landing' && (
-        <motion.div
-          key="map"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <ExploreMapView
-            year={year}
-            onYearChange={setYear}
-            onAddressSelect={handleAddressSelect}
-            onBack={handleBack}
-          />
-        </motion.div>
-      )}
-    </AnimatePresence>
+        {!(mode === 'report' && search) && mode !== 'landing' && (
+          <motion.div
+            key="map"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ExploreMapView
+              year={year}
+              onYearChange={setYear}
+              onAddressSelect={handleAddressSelect}
+              onBack={handleBack}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <DisclaimerFooter />
+    </>
   );
 }

@@ -1,14 +1,14 @@
 # Privatlivspolitik for Landbruget.dk
 
-_Sidst opdateret: 29. maj 2025_
+_Sidst opdateret: 19. april 2026_
 
 ---
 
-Denne privatlivspolitik forklarer, hvordan Landbruget.dk (drevet af Klimabevægelsen, en almennyttig forening) indsamler og behandler personoplysninger.
+Denne privatlivspolitik forklarer, hvordan Landbruget.dk og underplatformen pesticidkortet.dk (begge drevet af Klimabevægelsen, en almennyttig forening) indsamler og behandler personoplysninger.
 
 ## 1. Dataansvarlig
 
-Den dataansvarlige for behandlingen af personoplysninger på Landbruget.dk er:
+Den dataansvarlige for behandlingen af personoplysninger på Landbruget.dk og pesticidkortet.dk er:
 
 **Klimabevægelsen i Danmark**  
 Bragesgade 8 B, 2200 København N  
@@ -128,7 +128,9 @@ Du har ret til at indgive en klage til Datatilsynet, hvis du er utilfreds med de
 
 Landbruget.dk indsamler, systematiserer og formidler offentligt tilgængelige data, herunder personoplysninger som beskrevet i denne privatlivspolitik. Vi tilstræber høj datakvalitet og en korrekt gengivelse af oplysninger fra vores kilder. Dine rettigheder i forhold til dine personoplysninger, herunder retten til berigtigelse, er også beskrevet i denne privatlivspolitik.
 
-Det er dog vigtigt at understrege, at al information og alle data på Landbruget.dk leveres "som de er og forefindes". Klimabevægelsen kan ikke garantere for dataenes fuldstændighed, konstante ajourføring eller absolutte nøjagtighed, da disse ofte stammer fra eksterne, offentlige registre, hvis indhold vi ikke kontrollerer. Anvendelse af information fra platformen, herunder de personoplysninger der formidles, sker på brugerens eget ansvar.
+Det er dog vigtigt at understrege, at al information og alle data på Landbruget.dk og pesticidkortet.dk leveres "som de er og forefindes". Klimabevægelsen kan ikke garantere for dataenes fuldstændighed, konstante ajourføring eller absolutte nøjagtighed, da disse ofte stammer fra eksterne, offentlige registre, hvis indhold vi ikke kontrollerer. Anvendelse af information fra platformen, herunder de personoplysninger der formidles, sker på brugerens eget ansvar.
+
+På pesticidkortet.dk er mange af de viste tal desuden **modellerede estimater** (bl.a. fordeling af pesticidforbrug fra virksomhed til mark samt drift- og nærhedsberegninger). Faktisk sprøjtning på en konkret mark kan afvige fra det viste. Se den udførlige beskrivelse i Brugsvilkårenes afsnit 4 ("Særligt om pesticidkortet.dk") og afsnit 6 (Ansvarsfraskrivelse).
 
 For en udtømmende beskrivelse af ansvarsforhold og -begrænsninger vedrørende brugen af platformen og dens data henvises til Ansvarsfraskrivelsen i platformens Brugsvilkår.
 
