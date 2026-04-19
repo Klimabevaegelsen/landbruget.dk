@@ -8,6 +8,7 @@ import {
   getGradeBgColor,
   GRADE_ORDER,
 } from '@/lib/pesticide-score';
+import { EstimatedBadge } from '@/components/pesticidkort/EstimatedBadge';
 
 interface PesticideProximityScoreProps {
   grade: PesticideGrade;
@@ -29,9 +30,12 @@ export function PesticideProximityScore({
       aria-live="polite"
       className="pt-6 pb-8"
     >
-      <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-widest uppercase">
-        Pesticideksponering
-      </p>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase">
+          Pesticideksponering
+        </p>
+        <EstimatedBadge variant="modelleret" />
+      </div>
       <motion.div
         initial={reducedMotion ? false : { opacity: 0, y: 8 }}
         animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}

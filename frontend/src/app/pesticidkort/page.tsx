@@ -20,10 +20,10 @@ export async function generateMetadata({
     const ogImage = `/api/og/pesticidkort?${ogParams.toString()}`;
     return {
       title,
-      description: `Se pesticidbelastningen nær ${addr}. Baseret på offentlige data fra 92% af alle danske marker.`,
+      description: `Se et estimat af pesticidbelastningen nær ${addr}. Modellerede tal baseret på offentlige data fra ca. 92 % af danske landbrugsmarker.`,
       openGraph: {
         title,
-        description: `Se pesticidbelastningen nær ${addr}.`,
+        description: `Se et estimat af pesticidbelastningen nær ${addr}. Modellerede tal – kan afvige fra faktisk sprøjtning.`,
         type: 'website',
         siteName: 'Pesticidkortet',
         images: [{ url: ogImage, width: 1200, height: 630 }],
@@ -32,12 +32,13 @@ export async function generateMetadata({
   }
 
   return {
-    title: 'Pesticidkortet — Hvad sprøjtes i dit nærområde?',
+    title: 'Pesticidkortet — Hvad kan være sprøjtet i dit nærområde?',
     description:
-      'Se hvilke pesticider der bruges tæt på din adresse. Baseret på offentlige data fra 92% af alle danske landbrugsmarker.',
+      'Se et estimat af, hvilke pesticider der er rapporteret brugt nær din adresse. Modellerede tal baseret på offentlige data fra ca. 92 % af danske landbrugsmarker.',
     openGraph: {
-      title: 'Pesticidkortet — Hvad sprøjtes i dit nærområde?',
-      description: 'Se hvilke pesticider der bruges tæt på din adresse.',
+      title: 'Pesticidkortet — Hvad kan være sprøjtet i dit nærområde?',
+      description:
+        'Se et estimat af, hvilke pesticider der er rapporteret brugt nær din adresse. Modellerede tal – kan afvige fra faktisk sprøjtning.',
       type: 'website',
       siteName: 'Pesticidkortet',
     },

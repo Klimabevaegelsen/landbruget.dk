@@ -1,6 +1,7 @@
 'use client';
 
 import type { ExposureSummary } from '@/components/pesticidkort/types';
+import { EstimatedBadge } from '@/components/pesticidkort/EstimatedBadge';
 
 interface AddressExposureProps {
   exposure100m: ExposureSummary;
@@ -55,9 +56,12 @@ export function AddressExposure({
       data-testid="address-exposure"
       className="bg-card rounded-xl px-5 py-4"
     >
-      <p className="text-muted-foreground mb-3 text-xs font-semibold tracking-widest uppercase">
-        Din adresses eksponering
-      </p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-muted-foreground text-xs font-semibold tracking-widest uppercase">
+          Din adresses eksponering
+        </p>
+        <EstimatedBadge variant="estimeret" />
+      </div>
       <div className="space-y-4">
         <ExposureRow summary={exposure100m} />
         <div className="border-border border-t" />

@@ -47,14 +47,15 @@ export function LandingHero({
           variants={fadeSlideUp}
           className="text-muted-foreground mb-4 text-sm font-medium tracking-[0.14em] uppercase"
         >
-          Baseret på offentlige data fra 92 % af alle danske marker
+          Estimater baseret på offentlige data fra ca. 92 % af danske
+          landbrugsmarker
         </motion.p>
 
         <motion.h1
           variants={fadeSlideUp}
           className="font-display text-foreground text-4xl leading-[1.05] font-semibold tracking-tight sm:text-5xl lg:text-[3.75rem]"
         >
-          Hvad sprøjtes
+          Hvad kan være sprøjtet
           <br />
           <span className="text-primary">tæt på dit hjem?</span>
         </motion.h1>
@@ -63,8 +64,9 @@ export function LandingHero({
           variants={fadeSlideUp}
           className="text-muted-foreground mt-3 max-w-md text-lg leading-relaxed"
         >
-          Over 4 millioner danskere bor inden for 1 km af landbrugsmarker. Se
-          hvad der sprøjtes tæt på din adresse.
+          Over 4 millioner danskere bor inden for 1 km af en landbrugsmark. Se
+          et estimat af, hvilke pesticider der er rapporteret brugt nær din
+          adresse. Tallene er modellerede og kan afvige fra faktisk sprøjtning.
         </motion.p>
 
         <motion.div variants={fadeSlideUp} className="mt-8 max-w-lg">

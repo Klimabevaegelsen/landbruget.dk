@@ -1,18 +1,20 @@
 # Brugsvilkår for Landbruget.dk
 
-_Sidst opdateret: 29. maj 2025_
+_Sidst opdateret: 19. april 2026_
 
 ---
 
 ## 1. Indledning
 
-Velkommen til Landbruget.dk ("Platformen"). Platformen drives af Klimabevægelsen i Danmark ("os", "vi", "vores"), en almennyttig forening. Disse brugsvilkår ("Vilkårene") regulerer din ("Brugeren", "du", "din") adgang til og brug af Platformen, herunder alt indhold, data, software og funktionalitet, der stilles til rådighed.
+Velkommen til Landbruget.dk ("Platformen"). "Platformen" omfatter både landbruget.dk og underplatformen pesticidkortet.dk. Begge drives af Klimabevægelsen i Danmark ("os", "vi", "vores"), en almennyttig forening. Disse brugsvilkår ("Vilkårene") regulerer din ("Brugeren", "du", "din") adgang til og brug af Platformen, herunder alt indhold, data, software og funktionalitet, der stilles til rådighed.
 
 Ved at tilgå eller bruge Platformen accepterer du at være bundet af disse Vilkår samt vores Privatlivspolitik, som er tilgængelig på Platformen og udgør en integreret del af disse Vilkår. Hvis du ikke accepterer disse Vilkår, bedes du undlade at bruge Platformen.
 
 ## 2. Platformens Formål og Beskrivelse af Tjenesten
 
 Landbruget.dk er et almennyttigt, [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) og non-profit initiativ. Vores mission er at indsamle, systematisere og formidle offentligt tilgængelige data om den danske landbrugssektor. Formålet er at fremme offentlig oplysning, transparens og en informeret demokratisk debat om den danske landbrugssektors miljø-, sundheds- og klimapåvirkning, samt at understøtte sektorens grønne omstilling. Platformen sigter mod at gøre komplekse data tilgængelige og brugbare for borgere, journalister, forskere, landmænd og embedsmænd.
+
+Pesticidkortet.dk er en del af Platformen og har særligt fokus på at visualisere, hvilke pesticider der er rapporteret brugt på danske landbrugsmarker, samt at estimere eksponering nær konkrete adresser. Værdierne på pesticidkortet.dk er modellerede og bygger på offentlige data kombineret med anerkendte beregningsmetoder — se afsnit 4 for detaljer om datakvalitet og forbehold.
 
 ## 3. Adgang til og Brug af Platformen
 
@@ -65,6 +67,17 @@ Selvom vi bestræber os på at sikre, at informationen på Platformen er så kor
 ### Berigtigelse
 
 Hvis du mener, at data på Platformen er ukorrekte, opfordrer vi dig til at kontakte os som beskrevet i Privatlivspolitikkens. For data, der stammer fra offentlige registre, vil berigtigelse ofte skulle ske ved henvendelse til den relevante myndighed.
+
+### Særligt om pesticidkortet.dk
+
+Data, som vises på pesticidkortet.dk, er i væsentligt omfang **modelleret og beregnet** ud fra flere offentlige kilder. Det betyder bl.a.:
+
+- **Fordeling fra virksomhed til mark**: Salgs- og anvendelsestal for pesticider rapporteres typisk på virksomheds- eller bedriftsniveau. Vi fordeler (disaggregerer) disse tal ned til de enkelte marker ved hjælp af offentlige afgrødedata og anerkendte antagelser. Den faktiske anvendelse på en konkret mark kan derfor afvige fra det viste.
+- **Drift- og nærhedsberegninger**: Pesticidbelastning, drift-eksponering og nærhedsscore for en adresse beregnes ud fra afstande, afgrødetyper, modelantagelser om vindretning og afdrift samt offentligt tilgængelige forskningsmetoder. Der er tale om **estimater**, ikke målinger.
+- **Dækning og tidsforskydning**: Data dækker størstedelen af danske landbrugsmarker, men ikke alle. Data er som udgangspunkt historiske, og der kan være forsinkelse mellem faktisk sprøjtning og offentliggørelse.
+- **Ikke en dokumentation for enkeltpersoners eller enkeltmarkers faktiske sprøjtning**: Kortet er et værktøj til oplysning og offentlig debat. Det bør **ikke** bruges som dokumentation i juridiske, kommercielle eller ansættelsesmæssige sammenhænge, eller som grundlag for beslutninger om enkeltpersoner eller enkeltvirksomheder, uden at oplysningerne er verificeret hos de relevante myndigheder eller direkte hos landmanden.
+
+Alle viste tal på pesticidkortet.dk skal læses som et **modelleret estimat**, og faktisk sprøjtning kan afvige fra det viste. Vi opfordrer til at sammenholde oplysningerne med andre kilder og med de offentlige myndigheders egne registre (bl.a. Miljøstyrelsen og Landbrugsstyrelsen). Ansvarsfraskrivelsen i afsnit 6 gælder fuldt ud for alle data og beregninger på pesticidkortet.dk.
 
 ## 5. Intellektuelle Rettigheder
 

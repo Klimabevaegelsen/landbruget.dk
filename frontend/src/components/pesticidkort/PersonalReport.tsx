@@ -86,25 +86,16 @@ export function PersonalReport({
         onFieldSelect={onFieldSelect}
       />
 
-      {(report.pfas_fields_count > 0 || report.has_bnbo_overlap) && (
+      {report.has_bnbo_overlap && (
         <div className="space-y-3">
-          {report.has_bnbo_overlap && (
-            <AlertCallout
-              type="bnbo"
-              count={
-                report.fields.filter(
-                  (f) => f.bnbo_area_hectares && f.bnbo_area_hectares > 0
-                ).length
-              }
-            />
-          )}
-          {report.pfas_fields_count > 0 && (
-            <AlertCallout
-              type="pfas"
-              count={report.pfas_fields_count}
-              distanceM={report.radius_m}
-            />
-          )}
+          <AlertCallout
+            type="bnbo"
+            count={
+              report.fields.filter(
+                (f) => f.bnbo_area_hectares && f.bnbo_area_hectares > 0
+              ).length
+            }
+          />
         </div>
       )}
 

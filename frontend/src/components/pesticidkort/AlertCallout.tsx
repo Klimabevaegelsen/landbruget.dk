@@ -3,12 +3,11 @@
 import { cn } from '@/lib/utils';
 import { AlertTriangle } from 'lucide-react';
 
-type AlertType = 'pfas' | 'bnbo' | 'violation';
+type AlertType = 'bnbo' | 'violation';
 
 interface AlertCalloutProps {
   type: AlertType;
   count: number;
-  distanceM?: number;
 }
 
 const ALERT_CONFIG: Record<
@@ -17,18 +16,10 @@ const ALERT_CONFIG: Record<
     border: string;
     bg: string;
     icon: string;
-    title: (count: number, dist?: number) => string;
+    title: (count: number) => string;
     body: string;
   }
 > = {
-  pfas: {
-    border: 'border-l-warning',
-    bg: 'bg-warning/5',
-    icon: 'text-warning',
-    title: (n, d) =>
-      `${n} marker bruger PFAS-pesticider${d ? ` inden for ${d} m` : ''}`,
-    body: "PFAS er såkaldte 'evighedskemikalier' der ikke nedbrydes i naturen.",
-  },
   bnbo: {
     border: 'border-l-info',
     bg: 'bg-info/5',
@@ -45,7 +36,7 @@ const ALERT_CONFIG: Record<
   },
 };
 
-export function AlertCallout({ type, count, distanceM }: AlertCalloutProps) {
+export function AlertCallout({ type, count }: AlertCalloutProps) {
   if (count === 0) return null;
 
   const config = ALERT_CONFIG[type];
@@ -59,7 +50,7 @@ export function AlertCallout({ type, count, distanceM }: AlertCalloutProps) {
         <AlertTriangle className={cn('mt-0.5 h-4 w-4 shrink-0', config.icon)} />
         <div>
           <p className="text-foreground text-sm font-medium">
-            {config.title(count, distanceM)}
+            {config.title(count)}
           </p>
           <p className="text-muted-foreground mt-1 text-sm">{config.body}</p>
         </div>
