@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { PersonalReport } from '@/components/pesticidkort/PersonalReport';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import { useBurdenHistogram } from '@/components/pesticidkort/useBurdenHistogram';
+import { useDriftExposure } from '@/components/pesticidkort/useDriftExposure';
 import { useReportBuilder } from '@/components/pesticidkort/useReportBuilder';
 import { BottomSheet } from '@/components/pesticidkort/BottomSheet';
 import { DesktopSidebar } from '@/components/pesticidkort/DesktopSidebar';
@@ -13,6 +14,7 @@ import { YearTimeline } from '@/components/pesticidkort/YearTimeline';
 import { ChemicalFilterPills } from '@/components/pesticidkort/ChemicalFilterPills';
 import { MapLegend } from '@/components/pesticidkort/MapLegend';
 import { StoryMode } from '@/components/pesticidkort/StoryMode';
+import { ReportLoadingSkeleton } from '@/components/pesticidkort/ReportLoadingSkeleton';
 import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 
 const PesticidkortMap = dynamic(
@@ -62,12 +64,14 @@ export function ReportMapView({
   );
   const [chemFilter, setChemFilter] = useState<ChemicalFilter>('none');
   const histogram = useBurdenHistogram(year);
+  const { match: driftExposure } = useDriftExposure(lat, lng);
   const { report, handleFieldsLoaded } = useReportBuilder({
     address,
     lat,
     lng,
     radiusM,
     year,
+    driftExposure,
   });
 
   const handleMapFieldClick = useCallback(
@@ -89,17 +93,7 @@ export function ReportMapView({
       onOpenStory={() => setShowStory(true)}
     />
   ) : (
-    <div
-      aria-live="polite"
-      className="animate-fade-slide-up space-y-4 px-5 py-5 motion-reduce:animate-none"
-    >
-      <p className="text-muted-foreground text-sm">
-        Analyserer marker n&aelig;r din adresse...
-      </p>
-      {['h-20', 'h-12', 'h-24'].map((h) => (
-        <div key={h} className={`bg-muted ${h} animate-pulse rounded-xl`} />
-      ))}
-    </div>
+    <ReportLoadingSkeleton />
   );
 
   return (

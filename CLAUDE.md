@@ -43,6 +43,8 @@ cd frontend && npm test && npm run lint
 cd backend && python -m pytest
 ```
 
+**Fix pre-existing test failures, don't ignore them.** If `npm test` or `pytest` surfaces a failure that predates your branch (stale testids, renamed components, broken selectors), fix it in the same PR. Never dismiss it as "unrelated" or "upstream flakiness" — the cost of leaving broken tests compounds because future agents assume they're baseline noise. See `.claude/rules/testing.md` for details.
+
 ## Reference
 
 - **Rules**: `.claude/rules/` — architecture, data-quality, environment, git-workflow, pipelines, security, testing

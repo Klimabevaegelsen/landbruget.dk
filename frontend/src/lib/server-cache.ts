@@ -106,6 +106,38 @@ export const getCachedBurdenHistogram = unstable_cache(
     tags: ['burden-histogram'],
   }
 );
+
+export interface DriftExposureIndex {
+  pesticide_year: number | null;
+  national_avg_drift_dose_kg: number | null;
+  building_count: number;
+  unmatched_count: number;
+  kommunekoder: string[];
+}
+
+export interface DriftExposureBuilding {
+  uid: string;
+  lat: number;
+  lng: number;
+  pct: number;
+  dose: number;
+}
+
+export const getCachedDriftExposureIndex = unstable_cache(
+  async () =>
+    fetchR2Json<DriftExposureIndex>('/pesticides/drift-exposure/index.json'),
+  ['drift-exposure-index'],
+  { revalidate: 604800, tags: ['drift-exposure'] }
+);
+
+export const getCachedDriftExposureKommune = unstable_cache(
+  async (kommunekode: string) =>
+    fetchR2Json<DriftExposureBuilding[]>(
+      `/pesticides/drift-exposure/${encodeURIComponent(kommunekode)}.json`
+    ),
+  ['drift-exposure-kommune'],
+  { revalidate: 604800, tags: ['drift-exposure'] }
+);
 export const invalidateAllCaches = async () => {
   const { revalidateTag } = await import('next/cache');
   revalidateTag('homepage-stats', 'page');
@@ -114,6 +146,7 @@ export const invalidateAllCaches = async () => {
   revalidateTag('pesticide-analysis', 'page');
   revalidateTag('pesticide-company-details', 'page');
   revalidateTag('burden-histogram', 'page');
+  revalidateTag('drift-exposure', 'page');
 };
 
 export const invalidateHomepageCache = async () => {
