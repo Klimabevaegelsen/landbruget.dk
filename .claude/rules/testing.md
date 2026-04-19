@@ -24,6 +24,9 @@ cd frontend && npm run lint # Linting
 - New tests written for new functionality
 - No skipped tests without documented reason
 
+### Fix Pre-Existing Failures
+If `npm test` or `pytest` surfaces a failing test that predates your branch, **fix it as part of your work** — don't skip it, don't note it as "unrelated", don't leave it for later. Common examples: stale `data-testid` references, renamed components, removed routes. The cost of leaving a broken test is compounding (future agents assume it's baseline noise). If the fix is genuinely out of scope, open a follow-up PR in the same session and link it in the current PR description.
+
 ## Frontend Testing (Playwright)
 
 ### Selectors

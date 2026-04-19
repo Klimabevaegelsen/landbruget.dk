@@ -1,10 +1,15 @@
-import { useState, useCallback } from 'react';
-import { computePesticideScore } from '@/lib/pesticide-score';
+import { useState, useCallback, useEffect } from 'react';
+import {
+  computePesticideScore,
+  driftPercentileToGrade,
+} from '@/lib/pesticide-score';
 import type {
   PesticideReport,
   NearbyFieldSummary,
   ExposureSummary,
+  GradeInfo,
 } from '@/components/pesticidkort/types';
+import type { DriftExposureMatch } from '@/components/pesticidkort/useDriftExposure';
 
 function computeExposure(
   fields: NearbyFieldSummary[],
@@ -29,6 +34,7 @@ interface UseReportBuilderOptions {
   lng: number;
   radiusM: number;
   year: number;
+  driftExposure: DriftExposureMatch | null;
 }
 
 export function useReportBuilder({
@@ -37,12 +43,23 @@ export function useReportBuilder({
   lng,
   radiusM,
   year,
+  driftExposure,
 }: UseReportBuilderOptions) {
   const [report, setReport] = useState<PesticideReport | null>(null);
 
   const handleFieldsLoaded = useCallback(
     (fields: NearbyFieldSummary[]) => {
-      const { score, grade } = computePesticideScore(fields, radiusM);
+      const { score, grade: fallbackGrade } = computePesticideScore(
+        fields,
+        radiusM
+      );
+      const grade: GradeInfo = driftExposure
+        ? driftPercentileToGrade(
+            driftExposure.exposure_percentile,
+            driftExposure.drift_dose_kg,
+            driftExposure.national_avg_drift_dose_kg
+          )
+        : fallbackGrade;
       let pfasCount = 0;
       let totalBurden = 0;
       let hasBnbo = false;
@@ -73,8 +90,20 @@ export function useReportBuilder({
         exposure_1000m: computeExposure(fields, radiusM),
       });
     },
-    [address, lat, lng, radiusM, year]
+    [address, lat, lng, radiusM, year, driftExposure]
   );
+
+  // If drift exposure lands after fields, upgrade the grade in place.
+  useEffect(() => {
+    if (!report || !driftExposure) return;
+    const driftGrade = driftPercentileToGrade(
+      driftExposure.exposure_percentile,
+      driftExposure.drift_dose_kg,
+      driftExposure.national_avg_drift_dose_kg
+    );
+    if (driftGrade.grade === report.grade.grade) return;
+    setReport({ ...report, grade: driftGrade });
+  }, [driftExposure, report]);
 
   return { report, handleFieldsLoaded };
 }

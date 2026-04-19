@@ -1,26 +1,12 @@
 import type { NextRequest } from 'next/server';
+import {
+  GRADE_DEFINITIONS,
+  getGradeHexColor,
+  isPesticideGrade,
+} from '@/lib/pesticide-score';
+import type { PesticideGrade } from '@/components/pesticidkort/types';
 
-type PesticideGrade = 'A' | 'B' | 'C' | 'D' | 'E';
-
-const GRADE_COLORS: Record<PesticideGrade, string> = {
-  A: '#2d9a3e',
-  B: '#5a9e2f',
-  C: '#c5a832',
-  D: '#d4762c',
-  E: '#c43030',
-};
-
-const GRADE_LABELS: Record<PesticideGrade, string> = {
-  A: 'Laveste femtedel',
-  B: 'Under gennemsnit',
-  C: 'Omkring gennemsnit',
-  D: 'Over gennemsnit',
-  E: 'Højeste femtedel',
-};
-
-function isValidGrade(value: string): value is PesticideGrade {
-  return ['A', 'B', 'C', 'D', 'E'].includes(value);
-}
+const DEFAULT_GRADE: PesticideGrade = 'TOP_50';
 
 function escapeHtml(str: string): string {
   return str
@@ -35,15 +21,17 @@ export function GET(request: NextRequest) {
 
   const addr = escapeHtml(searchParams.get('addr') ?? 'Ukendt adresse');
   const year = escapeHtml(searchParams.get('y') ?? '2024');
-  const rawGrade = searchParams.get('grade') ?? 'C';
-  const grade: PesticideGrade = isValidGrade(rawGrade) ? rawGrade : 'C';
+  const rawGrade = searchParams.get('grade') ?? DEFAULT_GRADE;
+  const grade: PesticideGrade = isPesticideGrade(rawGrade)
+    ? rawGrade
+    : DEFAULT_GRADE;
   const score = escapeHtml(searchParams.get('score') ?? '0');
   const fields = escapeHtml(searchParams.get('fields') ?? '0');
   const pfas = escapeHtml(searchParams.get('pfas') ?? '0');
   const dist = escapeHtml(searchParams.get('dist') ?? '0');
 
-  const color = GRADE_COLORS[grade];
-  const label = GRADE_LABELS[grade];
+  const color = getGradeHexColor(grade);
+  const { label, description } = GRADE_DEFINITIONS[grade];
   const now = new Date().toLocaleDateString('da-DK', {
     year: 'numeric',
     month: 'long',
@@ -65,14 +53,12 @@ export function GET(request: NextRequest) {
     margin-bottom: 2rem; }
   h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.25rem; }
   .subtitle { color: #555; margin-bottom: 2rem; }
-  .grade-row { display: flex; align-items: center; gap: 1.25rem;
-    margin-bottom: 2rem; }
-  .grade-badge { width: 72px; height: 72px; border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 2rem; font-weight: 800; color: #fff;
-    background: ${color}; }
-  .grade-detail h2 { font-size: 1.15rem; font-weight: 600; }
-  .grade-detail p { color: #555; font-size: 0.95rem; }
+  .grade-block { border-left: 6px solid ${color}; padding: 0.75rem 1rem;
+    background: #f7f7f7; border-radius: 4px; margin-bottom: 2rem; }
+  .grade-block h2 { font-size: 1.4rem; font-weight: 700; color: ${color};
+    margin-bottom: 0.25rem; }
+  .grade-block p.desc { color: #444; font-size: 0.95rem; margin-bottom: 0.25rem; }
+  .grade-block p.score { color: #666; font-size: 0.85rem; }
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
     margin-bottom: 2.5rem; }
   .stat { background: #f7f7f7; border-radius: 8px; padding: 1rem;
@@ -84,7 +70,7 @@ export function GET(request: NextRequest) {
   footer p { margin-bottom: 0.25rem; }
   @media print {
     body { margin: 1cm auto; }
-    .grade-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .grade-block { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .stat { background: none; border: 1px solid #ccc; }
   }
 </style>
@@ -92,13 +78,11 @@ export function GET(request: NextRequest) {
 <body>
   <header>Pesticidkortet &mdash; Landbruget.dk</header>
   <h1>${addr}</h1>
-  <p class="subtitle">Pesticidbelastning for ${year}</p>
-  <div class="grade-row">
-    <div class="grade-badge">${grade}</div>
-    <div class="grade-detail">
-      <h2>${label}</h2>
-      <p>Samlet score: ${score} B/ha</p>
-    </div>
+  <p class="subtitle">Pesticideksponering for ${year}</p>
+  <div class="grade-block">
+    <h2>${escapeHtml(label)}</h2>
+    <p class="desc">${escapeHtml(description)}</p>
+    <p class="score">Lokal belastning: ${score} B/ha</p>
   </div>
   <div class="stats">
     <div class="stat">

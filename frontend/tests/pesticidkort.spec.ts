@@ -11,7 +11,7 @@ test.describe('Pesticidkort', () => {
     await expect(page.locator('h1')).toBeVisible();
 
     await expect(
-      page.locator('[data-testid="address-autocomplete-input"]')
+      page.locator('[data-testid="landing-address-input"]')
     ).toBeVisible();
 
     await expect(
@@ -33,7 +33,7 @@ test.describe('Pesticidkort', () => {
     // Navigate back to landing
     await backButton.click();
     await expect(
-      page.locator('[data-testid="address-autocomplete-input"]')
+      page.locator('[data-testid="landing-address-input"]')
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -44,14 +44,14 @@ test.describe('Pesticidkort', () => {
       '/pesticidkort?lat=55.6761&lng=12.5683&addr=K%C3%B8benhavn&y=2022'
     );
 
-    // Report container should be visible
-    await expect(page.locator('[data-testid="personal-report"]')).toBeVisible({
-      timeout: 15000,
-    });
-
-    // Share button should be available in report mode
+    // Report renders in both mobile bottom sheet and desktop sidebar — only
+    // one is visible at a given viewport; pick whichever is visible.
     await expect(
-      page.locator('[data-testid="share-report-button"]')
+      page.locator('[data-testid="personal-report"]:visible').first()
+    ).toBeVisible({ timeout: 15000 });
+
+    await expect(
+      page.locator('[data-testid="share-report-button"]:visible').first()
     ).toBeVisible();
   });
 
@@ -84,7 +84,7 @@ test.describe('Pesticidkort', () => {
     await expect(page.locator('h1')).toBeVisible();
 
     await expect(
-      page.locator('[data-testid="address-autocomplete-input"]')
+      page.locator('[data-testid="landing-address-input"]')
     ).toBeVisible();
 
     await expect(
@@ -98,7 +98,7 @@ test.describe('Pesticidkort', () => {
   });
 
   test('should have address input visible and focusable', async ({ page }) => {
-    const input = page.locator('[data-testid="address-autocomplete-input"]');
+    const input = page.locator('[data-testid="landing-address-input"]');
     await expect(input).toBeVisible();
     await input.focus();
     await expect(input).toBeFocused();
@@ -111,5 +111,15 @@ test.describe('Pesticidkort', () => {
   test('should have correct page title', async ({ page }) => {
     const title = await page.title();
     expect(title.toLowerCase()).toContain('pesticid');
+  });
+
+  test('PDF report renders the new percentile grade label', async ({
+    page,
+  }) => {
+    const response = await page.goto(
+      '/api/report-pdf?addr=Test&y=2022&grade=TOP_5&score=3.1&fields=5&pfas=1&dist=42'
+    );
+    expect(response?.status()).toBe(200);
+    await expect(page.getByText('Top 5% mest eksponeret')).toBeVisible();
   });
 });

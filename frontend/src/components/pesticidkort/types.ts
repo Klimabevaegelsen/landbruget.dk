@@ -1,4 +1,10 @@
-export type PesticideGrade = 'A' | 'B' | 'C' | 'D' | 'E';
+export type PesticideGrade =
+  | 'TOP_1'
+  | 'TOP_5'
+  | 'TOP_10'
+  | 'TOP_25'
+  | 'TOP_50'
+  | 'UNDER_AVG';
 
 export interface GradeInfo {
   grade: PesticideGrade;

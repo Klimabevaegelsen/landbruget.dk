@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from common.storage.filesystem import setup_duckdb_cloud_auth
 
 from exporters.company_profiles import CompanyProfilesExporter
+from exporters.drift_exposure import DriftExposureExporter
 from exporters.homepage import HomepageExporter
 from exporters.municipalities import MunicipalitiesExporter
 from exporters.pesticides import PesticidesExporter
@@ -46,6 +47,7 @@ EXPORTERS = {
     "search": SearchIndexExporter,
     "municipalities": MunicipalitiesExporter,
     "pesticides": PesticidesExporter,
+    "drift_exposure": DriftExposureExporter,
     "companies": CompanyProfilesExporter,
 }
 

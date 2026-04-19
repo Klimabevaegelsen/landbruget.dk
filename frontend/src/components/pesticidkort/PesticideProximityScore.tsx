@@ -3,9 +3,11 @@
 import { cn } from '@/lib/utils';
 import { motion, useReducedMotion } from 'motion/react';
 import type { PesticideGrade } from '@/components/pesticidkort/types';
-import { getGradeColor, getGradeBgColor } from '@/lib/pesticide-score';
-
-const ALL_GRADES: PesticideGrade[] = ['A', 'B', 'C', 'D', 'E'];
+import {
+  getGradeColor,
+  getGradeBgColor,
+  GRADE_ORDER,
+} from '@/lib/pesticide-score';
 
 interface PesticideProximityScoreProps {
   grade: PesticideGrade;
@@ -19,7 +21,7 @@ export function PesticideProximityScore({
   description,
 }: PesticideProximityScoreProps) {
   const reducedMotion = useReducedMotion();
-  const gradeIndex = ALL_GRADES.indexOf(grade);
+  const gradeIndex = GRADE_ORDER.indexOf(grade);
 
   return (
     <div
@@ -30,42 +32,34 @@ export function PesticideProximityScore({
       <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-widest uppercase">
         Pesticideksponering
       </p>
-      <div className="flex items-end gap-4">
-        <motion.span
-          aria-label={`Karakter ${grade}`}
-          initial={reducedMotion ? false : { opacity: 0, scale: 0.9, y: 8 }}
-          animate={reducedMotion ? undefined : { opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.25, 1, 0.5, 1], delay: 0.1 }}
+      <motion.div
+        initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+        animate={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.25, 1, 0.5, 1], delay: 0.1 }}
+        className="flex flex-col gap-1"
+      >
+        <p
           className={cn(
-            'font-display text-[7rem] leading-[0.85] font-semibold tracking-tighter sm:text-[8rem]',
+            'font-display text-3xl leading-tight font-semibold tracking-tight sm:text-4xl',
             getGradeColor(grade)
           )}
         >
-          {grade}
-        </motion.span>
-        <div className="mb-3">
-          <p className="text-foreground text-xl font-semibold sm:text-2xl">
-            {label}
-          </p>
-          <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-            {description}
-          </p>
-          <p className="text-muted-foreground mt-2 text-xs">
-            A = lavest eksponering, E = højest eksponering i dit område.
-          </p>
-        </div>
-      </div>
+          {label}
+        </p>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          {description}
+        </p>
+      </motion.div>
 
       <div
         role="meter"
-        aria-label="Pesticideksponering"
+        aria-label="Pesticideksponering i percentiler"
         aria-valuemin={0}
-        aria-valuemax={4}
-        aria-valuenow={ALL_GRADES.indexOf(grade)}
+        aria-valuemax={GRADE_ORDER.length - 1}
+        aria-valuenow={gradeIndex}
         className="mt-6 flex items-center gap-1.5"
       >
-        {ALL_GRADES.map((g) => {
-          const segmentIdx = ALL_GRADES.indexOf(g);
+        {GRADE_ORDER.map((g, segmentIdx) => {
           const isFilled = segmentIdx <= gradeIndex;
           return (
             <motion.div
@@ -79,7 +73,7 @@ export function PesticideProximityScore({
               }
               transition={{
                 duration: 0.35,
-                delay: reducedMotion ? 0 : 0.12 + segmentIdx * 0.07,
+                delay: reducedMotion ? 0 : 0.12 + segmentIdx * 0.06,
                 ease: [0.25, 1, 0.5, 1],
               }}
               className={cn(
@@ -91,8 +85,8 @@ export function PesticideProximityScore({
         })}
       </div>
       <div className="text-muted-foreground mt-1.5 flex justify-between text-[10px]">
-        <span>A (lavest)</span>
-        <span>E (højest)</span>
+        <span>Under gennemsnit</span>
+        <span>Top 1% mest eksponeret</span>
       </div>
     </div>
   );

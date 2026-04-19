@@ -4,68 +4,87 @@ import type {
   GradeInfo,
   NearbyFieldSummary,
 } from '@/components/pesticidkort/types';
+import { GRADE_DEFINITIONS, GRADE_ORDER } from '@/lib/pesticide-score-labels';
+
+export {
+  getGradeColor,
+  getGradeBgColor,
+  getGradeHexColor,
+} from '@/lib/pesticide-score-colors';
+export { GRADE_DEFINITIONS, GRADE_ORDER };
 
 /**
- * Grade thresholds in B/ha (belastning per hectare), anchored to
- * Miljøstyrelsen's official Pesticidbelastningsindikator (PBI).
- *
- * Source: Bekæmpelsesmiddelstatistik 2023 (Miljøstyrelsen, April 2025)
- *
- * Reference points (fladebelastning, 2023 sales data):
- *   Græs/kløver  0.03 B/ha  →  A
- *   Vårsæd       0.77 B/ha  →  B
- *   National avg  2.15 B/ha  →  C
- *   Grøntsager   4.44 B/ha  →  D
- *   Kartofler   10.20 B/ha  →  E
+ * Miljøstyrelsen's national average pesticide burden (PBI fladebelastning,
+ * 2023). Cutoff between TOP_50 and UNDER_AVG in the burden-based fallback.
  */
-const GRADE_THRESHOLDS: { max: number; grade: PesticideGrade }[] = [
-  { max: 0.5, grade: 'A' },
-  { max: 2.0, grade: 'B' },
-  { max: 4.0, grade: 'C' },
-  { max: 8.0, grade: 'D' },
+const NATIONAL_AVG_BURDEN_B_HA = 2.15;
+
+/**
+ * B/ha percentile approximations from the national field histogram. Anchors
+ * the fallback grade so it aligns with the drift-based grade: top 1% fields
+ * around 11 B/ha (potato-heavy), down to the national average near p50.
+ */
+const FALLBACK_BURDEN_BUCKETS: { min: number; grade: PesticideGrade }[] = [
+  { min: 10.0, grade: 'TOP_1' },
+  { min: 6.0, grade: 'TOP_5' },
+  { min: 4.0, grade: 'TOP_10' },
+  { min: 2.5, grade: 'TOP_25' },
+  { min: NATIONAL_AVG_BURDEN_B_HA, grade: 'TOP_50' },
 ];
 
-const GRADE_DEFINITIONS: Record<PesticideGrade, Omit<GradeInfo, 'grade'>> = {
-  A: {
-    label: 'Meget under landsgennemsnit',
-    description:
-      'Der sprøjtes markant mindre med pesticider nær din adresse end de fleste steder i Danmark',
-  },
-  B: {
-    label: 'Under landsgennemsnit',
-    description:
-      'Der sprøjtes mindre med pesticider nær din adresse end landsgennemsnittet',
-  },
-  C: {
-    label: 'Omkring landsgennemsnit',
-    description:
-      'Pesticidbrugen nær din adresse svarer til et typisk dansk landbrugsområde',
-  },
-  D: {
-    label: 'Over landsgennemsnit',
-    description:
-      'Der sprøjtes mere med pesticider nær din adresse end landsgennemsnittet',
-  },
-  E: {
-    label: 'Meget over landsgennemsnit',
-    description:
-      'Der sprøjtes markant mere med pesticider nær din adresse end de fleste steder i Danmark',
-  },
-};
+/**
+ * Map a drift-exposure percentile (0-100, higher = more exposed) to a grade.
+ * Below p50, compare absolute drift dose to the national average to decide
+ * between TOP_50 and UNDER_AVG.
+ */
+export function driftPercentileToGrade(
+  percentile: number,
+  driftDoseKg: number,
+  nationalAvgDriftDoseKg: number | null
+): GradeInfo {
+  let grade: PesticideGrade;
+  if (percentile >= 99) grade = 'TOP_1';
+  else if (percentile >= 95) grade = 'TOP_5';
+  else if (percentile >= 90) grade = 'TOP_10';
+  else if (percentile >= 75) grade = 'TOP_25';
+  else if (percentile >= 50) grade = 'TOP_50';
+  else if (
+    nationalAvgDriftDoseKg !== null &&
+    driftDoseKg < nationalAvgDriftDoseKg
+  )
+    grade = 'UNDER_AVG';
+  else grade = 'TOP_50';
+
+  return { grade, ...GRADE_DEFINITIONS[grade] };
+}
 
 /**
- * Compute a proximity-based pesticide score for a given address.
- *
- * Returns the distance-weighted average burden (B/ha) across nearby fields,
- * with multipliers for PFAS and BNBO overlap, mapped to an A–E grade
- * anchored to Miljøstyrelsen's official fladebelastning data.
+ * Fallback grade for addresses without a BBR drift-exposure match: maps the
+ * distance-weighted local field burden onto the same 6 buckets using
+ * approximate national percentile thresholds.
+ */
+function burdenToGrade(burden: number): GradeInfo {
+  let grade: PesticideGrade = 'UNDER_AVG';
+  for (const { min, grade: g } of FALLBACK_BURDEN_BUCKETS) {
+    if (burden >= min) {
+      grade = g;
+      break;
+    }
+  }
+  return { grade, ...GRADE_DEFINITIONS[grade] };
+}
+
+/**
+ * Distance-weighted average burden (B/ha) across nearby fields, mapped to a
+ * 6-bucket grade via the fallback path. Prefer {@link driftPercentileToGrade}
+ * when drift-exposure data is available.
  */
 export function computePesticideScore(
   fields: NearbyFieldSummary[],
   radius_m: number
 ): { score: number; grade: GradeInfo } {
   if (fields.length === 0) {
-    return { score: 0, grade: { grade: 'A', ...GRADE_DEFINITIONS.A } };
+    return { score: 0, grade: burdenToGrade(0) };
   }
 
   let totalWeightedBurden = 0;
@@ -74,46 +93,17 @@ export function computePesticideScore(
   for (const field of fields) {
     const distanceFraction = Math.max(0, 1 - field.distance_m / radius_m);
     const fieldBurden = field.total_pesticide_belastning * distanceFraction;
-
     totalWeightedBurden += fieldBurden;
     totalWeight += distanceFraction;
   }
 
-  // Weighted average burden in B/ha units
   const avgBurden = totalWeight > 0 ? totalWeightedBurden / totalWeight : 0;
-  const grade = burdenToGrade(avgBurden);
-
   return {
     score: Math.round(avgBurden * 100) / 100,
-    grade: { grade, ...GRADE_DEFINITIONS[grade] },
+    grade: burdenToGrade(avgBurden),
   };
 }
 
-function burdenToGrade(burden: number): PesticideGrade {
-  for (const { max, grade } of GRADE_THRESHOLDS) {
-    if (burden < max) return grade;
-  }
-  return 'E';
-}
-
-export function getGradeColor(grade: PesticideGrade): string {
-  const colors: Record<PesticideGrade, string> = {
-    A: 'text-[oklch(60%_0.18_145)]',
-    B: 'text-[oklch(65%_0.16_130)]',
-    C: 'text-[oklch(70%_0.14_85)]',
-    D: 'text-[oklch(65%_0.15_50)]',
-    E: 'text-destructive',
-  };
-  return colors[grade];
-}
-
-export function getGradeBgColor(grade: PesticideGrade): string {
-  const colors: Record<PesticideGrade, string> = {
-    A: 'bg-[oklch(60%_0.18_145)]',
-    B: 'bg-[oklch(65%_0.16_130)]',
-    C: 'bg-[oklch(70%_0.14_85)]',
-    D: 'bg-[oklch(65%_0.15_50)]',
-    E: 'bg-destructive',
-  };
-  return colors[grade];
+export function isPesticideGrade(value: string): value is PesticideGrade {
+  return (GRADE_ORDER as string[]).includes(value);
 }
