@@ -715,6 +715,57 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         display_name="PFAS Eksponeringsanalyse",
         display_description="Rumlig analyse af PFAS-forureningseksponering ved hjælp af H3-gridsystem",
     ),
+    # ========================================
+    # GEUS DATAVERSE PESTICIDES PIPELINE
+    # ========================================
+    "geus_dataverse_pesticides": DataSourceInfo(
+        source_authority="GEUS (De Nationale Geologiske Undersøgelser for Danmark og Grønland)",
+        source_url="https://dataverse.geus.dk/",
+        data_acquisition_method="HTTP API (Dataverse)",
+        data_description="Groundwater pesticide analyses from GEUS Dataverse (633 substances, 4.2M+ analyses, 1981-2025)",
+        update_frequency="Monthly",
+        pipeline_name="geus_dataverse_pesticides",
+        data_format="RDS/Parquet",
+        data_source_type=DataSourceType.API,
+        display_name="GEUS Grundvandspesticider",
+        display_description="Pesticidfund i grundvand fra GEUS Dataverse (633 stoffer, 4,2M+ analyser, 1981-2025)",
+    ),
+    "geus_dataverse_pfas": DataSourceInfo(
+        source_authority="GEUS (De Nationale Geologiske Undersøgelser for Danmark og Grønland)",
+        source_url="https://dataverse.geus.dk/",
+        data_acquisition_method="HTTP API (Dataverse)",
+        data_description="Groundwater PFAS analyses from GEUS Dataverse (26 substances, 2012-2025)",
+        update_frequency="Monthly",
+        pipeline_name="geus_dataverse_pesticides",
+        data_format="RDS/Parquet",
+        data_source_type=DataSourceType.API,
+        display_name="GEUS Grundvands-PFAS",
+        display_description="PFAS-fund i grundvand fra GEUS Dataverse (26 stoffer, 2012-2025)",
+    ),
+    "geus_clean_pesticides": DataSourceInfo(
+        source_authority="GEUS (De Nationale Geologiske Undersøgelser for Danmark og Grønland)",
+        source_url="https://dataverse.geus.dk/",
+        data_acquisition_method="HTTP API (Dataverse)",
+        data_description="Sample-level clean groundwater pesticide dataset from GEUS Dataverse (Deliverable 2, ~9.4M analyses)",
+        update_frequency="Monthly",
+        pipeline_name="geus_dataverse_pesticides",
+        data_format="RDS/Parquet",
+        data_source_type=DataSourceType.API,
+        display_name="GEUS Rene Grundvandspesticider",
+        display_description="Prøveniveau grundvandspesticiddata fra GEUS Dataverse (Leverance 2, ~9,4M analyser)",
+    ),
+    "geus_clean_all": DataSourceInfo(
+        source_authority="GEUS (De Nationale Geologiske Undersøgelser for Danmark og Grønland)",
+        source_url="https://dataverse.geus.dk/",
+        data_acquisition_method="HTTP API (Dataverse)",
+        data_description="Sample-level clean groundwater dataset from GEUS Dataverse (all parameter groups: pesticides, PFAS, nitrate, etc.)",
+        update_frequency="Monthly",
+        pipeline_name="geus_dataverse_pesticides",
+        data_format="RDS/Parquet",
+        data_source_type=DataSourceType.API,
+        display_name="GEUS Rent Grundvand (alle parametre)",
+        display_description="Prøveniveau grundvandsdata fra GEUS Dataverse (alle parametergrupper: pesticider, PFAS, nitrat m.fl.)",
+    ),
     # ADD MORE SOURCES HERE AS NEEDED
     # 🚨 MANUAL INPUT NEEDED: Review all entries above and fill in missing information
 }
