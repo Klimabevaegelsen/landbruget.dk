@@ -3,12 +3,14 @@
 import logging
 from pathlib import Path
 
+from common.logging_utils import get_pipeline_logger
+
 from .config import GOLD_BASE_DIR
 from .production_sites import process_production_sites
 from .transportation_analysis import process_transportation_analysis
 from .veterinary_timeline import process_veterinary_timeline
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def process_gold_data(

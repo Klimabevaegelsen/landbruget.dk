@@ -16,9 +16,10 @@ try:
     logger = get_logger()
 except ImportError:
     # Fallback for standalone usage
-    import logging
 
-    logger = logging.getLogger(__name__)
+    from common.logging_utils import get_pipeline_logger
+
+    logger = get_pipeline_logger(__name__)
 
     # Fallback connection for standalone usage
     def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:

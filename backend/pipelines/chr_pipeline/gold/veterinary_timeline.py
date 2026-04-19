@@ -1,9 +1,9 @@
 """CHR Veterinary Timeline processing for Gold layer."""
 
-import logging
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 from .config import GOLD_BASE_DIR
 
@@ -19,7 +19,7 @@ except ImportError:
     migrate_save_data_pattern = None
 
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:

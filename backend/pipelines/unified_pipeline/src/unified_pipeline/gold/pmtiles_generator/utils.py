@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import logging
 import os
 import shutil
 import subprocess
@@ -10,7 +9,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from common.logging_utils import get_pipeline_logger
+
+logger = get_pipeline_logger(__name__)
 
 
 class TippecanoeRunner:

@@ -1,9 +1,9 @@
 """CHR Transportation Analysis processing for Gold layer."""
 
-import logging
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 # Try to import cloud storage utilities
 try:
@@ -16,7 +16,7 @@ except ImportError:
     StorageAccess = None
     migrate_save_data_pattern = None
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def setup_database(conn: duckdb.DuckDBPyConnection) -> None:

@@ -1,9 +1,9 @@
 """Module for loading CHR stamdata (Species, Usage Types) - Bronze Layer."""
 
 import json
-import logging
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
 from zeep import Client
 from zeep.helpers import serialize_object
 
@@ -13,7 +13,7 @@ from .export import save_raw_data
 from .utils import create_base_request
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_stamdata")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.load_stamdata")
 
 # --- Generic SOAP Fetcher ---
 

@@ -24,8 +24,9 @@ if TYPE_CHECKING:
     from .farm_data import FarmData
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 # Species mapping: Danish to English

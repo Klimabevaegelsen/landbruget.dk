@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 
 # Import schema documentation
@@ -1767,7 +1768,7 @@ def process_chr_data(
                 connection=con,
                 pipeline_name="chr_pipeline",
                 pipeline_start_time=pipeline_start_time,
-                logger=logging.getLogger(__name__),
+                logger=get_pipeline_logger(__name__),
             )
 
             tables_query = "SHOW TABLES"

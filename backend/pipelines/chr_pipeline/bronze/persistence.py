@@ -1,9 +1,9 @@
 """Persistence layer for CHR pipeline - handles problematic herds tracking."""
 
-import logging
 import os
 from datetime import datetime
 
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 
 # Import cloud storage access for persistent storage
@@ -19,7 +19,7 @@ except ImportError:
 load_dotenv(find_dotenv(usecwd=True))
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.persistence")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.persistence")
 
 # Global set to track problematic herds that consistently fail
 _PROBLEMATIC_HERDS: set[int] = set()

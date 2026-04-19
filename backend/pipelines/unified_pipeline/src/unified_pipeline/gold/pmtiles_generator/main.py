@@ -6,6 +6,8 @@ import logging
 import os
 import sys
 
+from common.logging_utils import get_pipeline_logger
+
 from unified_pipeline.common.base import BaseSource
 
 from .buildings_generator import BuildingsProximityPMTilesGenerator
@@ -16,7 +18,7 @@ from .field_analysis_generator import FieldAnalysisPMTilesGenerator
 from .uploader import CloudflareR2Uploader
 from .year_detector import DataSourceYearDetector
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):

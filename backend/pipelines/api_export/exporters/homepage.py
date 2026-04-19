@@ -18,14 +18,15 @@ Actual R2 data sources:
 - gold/work_permits/*/work_permits.parquet — work permits (8.7k rows)
 """
 
-import logging
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from common.logging_utils import get_pipeline_logger
+
 from exporters.base import BaseExporter
 
-logger = logging.getLogger("api_export.homepage")
+logger = get_pipeline_logger("api_export.homepage")
 
 BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
 

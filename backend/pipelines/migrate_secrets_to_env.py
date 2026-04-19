@@ -10,6 +10,7 @@ Requires:
 import logging
 import os
 
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 from github import Github
 from github.Repository import Repository
@@ -17,7 +18,7 @@ from google.cloud import secretmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def get_google_secrets(project_id: str) -> dict[str, str]:

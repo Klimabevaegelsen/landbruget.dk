@@ -4,8 +4,10 @@ import logging
 import sys
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
+
 # Create a custom logger
-logger = logging.getLogger("drive_data_pipeline")
+logger = get_pipeline_logger("drive_data_pipeline")
 
 # Define ANSI color codes for different log levels and components
 COLORS = {

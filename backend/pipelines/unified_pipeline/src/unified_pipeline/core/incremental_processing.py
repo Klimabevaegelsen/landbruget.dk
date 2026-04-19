@@ -14,14 +14,15 @@ Author: CHR Incremental Processing Implementation
 Date: 2025-09-14
 """
 
-import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
+
 from .gcs_data_access import StorageAccess
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 @dataclass

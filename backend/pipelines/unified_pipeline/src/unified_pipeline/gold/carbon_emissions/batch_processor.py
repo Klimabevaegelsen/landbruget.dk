@@ -6,14 +6,14 @@ Processes a subset of CVRs and writes results to parquet files.
 """
 
 import json
-import logging
 from datetime import datetime
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 # Setup logging
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class BatchProcessor:

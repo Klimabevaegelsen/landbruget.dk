@@ -15,8 +15,10 @@ try:
 except ImportError:
     import logging
 
+    from common.logging_utils import get_pipeline_logger
+
     def get_logger() -> logging.Logger:
-        return logging.getLogger(__name__)
+        return get_pipeline_logger(__name__)
 
     from silver.duckdb_base import DuckDBProcessor
 from .base import BaseValidator, ValidationResult

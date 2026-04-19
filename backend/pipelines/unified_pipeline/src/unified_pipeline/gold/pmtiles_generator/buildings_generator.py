@@ -1,16 +1,16 @@
 """Buildings Proximity PMTiles Generator."""
 
 import asyncio
-import logging
 import os
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 from .config import PMTilesGeneratorConfig
 from .data_loader import PMTilesDataLoader
 from .utils import FileManager, GeoJSONWriter, TippecanoeRunner
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # CRS Strategy: All input data (BBR buildings, agricultural fields) is now in EPSG:25832 (Danish UTM).
 # Processing is done in EPSG:25832 (meters work directly for buffers/distances).

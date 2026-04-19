@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 from dotenv import load_dotenv
 
 # Add backend root to path for common imports
@@ -40,7 +41,7 @@ from exporters.search_index import SearchIndexExporter
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("api_export")
+logger = get_pipeline_logger("api_export")
 
 EXPORTERS = {
     "homepage": HomepageExporter,

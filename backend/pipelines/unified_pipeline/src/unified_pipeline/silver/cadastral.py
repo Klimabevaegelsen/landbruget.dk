@@ -1,4 +1,3 @@
-import logging
 import os
 from typing import Any
 
@@ -6,6 +5,7 @@ from common.geometry_validator import (
     validate_and_normalize_to_utm,
     validate_and_transform_geometries_duckdb,
 )
+from common.logging_utils import get_pipeline_logger
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import find_dotenv, load_dotenv
@@ -13,7 +13,7 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
 USE_UTM_PROCESSING = True

@@ -4,15 +4,15 @@ Transform raw BMD Excel data into cleaned, structured Parquet format.
 
 import contextlib
 import json
-import logging
 import os
 from datetime import datetime
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 # Configure module logger
-logger = logging.getLogger("bmd_pipeline.silver.transform")
+logger = get_pipeline_logger("bmd_pipeline.silver.transform")
 
 
 def _get_optimized_storage_access():

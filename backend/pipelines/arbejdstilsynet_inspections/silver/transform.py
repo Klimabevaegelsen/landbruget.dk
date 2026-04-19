@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 # Add CVR collection import
 try:
@@ -158,7 +159,7 @@ class SilverPipeline:
             level=getattr(logging, log_level),
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
-        self.logger = logging.getLogger("SilverPipeline")
+        self.logger = get_pipeline_logger("SilverPipeline")
 
         # Store parameters
         self.start_date = start_date
@@ -911,11 +912,11 @@ if __name__ == "__main__":
         # Logger might not be configured if __main__ is run and SilverPipeline init fails before logger setup
         # So, print to stderr as well
         logging.error(f"Silver Pipeline ERROR: {e}")
-        logging.getLogger(__name__).error(f"Silver Pipeline execution failed: {e}", exc_info=True)
+        get_pipeline_logger(__name__).error(f"Silver Pipeline execution failed: {e}", exc_info=True)
         exit(1)
     except Exception as e:
         logging.error(f"Silver Pipeline UNEXPECTED ERROR: {e}")
-        logging.getLogger(__name__).error(
+        get_pipeline_logger(__name__).error(
             f"Unexpected error in silver pipeline __main__: {e}", exc_info=True
         )
         exit(1)

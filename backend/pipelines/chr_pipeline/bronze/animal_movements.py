@@ -1,11 +1,11 @@
 """Main animal movement loading logic for CHR pipeline."""
 
-import logging
 import time
 from datetime import date, timedelta
 from typing import Any
 
 import requests
+from common.logging_utils import get_pipeline_logger
 from zeep.exceptions import Fault
 
 from .data_processing import aggregate_cattle_movements
@@ -14,7 +14,7 @@ from .utils import create_base_request
 from .volume_management import get_optimal_date_range
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.animal_movements")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.animal_movements")
 
 
 def load_animal_movements(

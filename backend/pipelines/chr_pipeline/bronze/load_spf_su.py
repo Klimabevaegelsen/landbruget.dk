@@ -12,10 +12,11 @@ import os
 from typing import Any
 
 import aiohttp
+from common.logging_utils import get_pipeline_logger
 
 from bronze.export import save_raw_data
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 async def load_spf_su_data(

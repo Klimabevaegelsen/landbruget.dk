@@ -10,13 +10,13 @@ Refactored to use vanilla DuckDB instead of pandas.
 """
 
 import contextlib
-import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 from ..models.schema import ColumnSchema, DataType, TableSchema
 from .base import BaseTransformer, TransformResult
@@ -36,7 +36,7 @@ except ImportError:
         return conn
 
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class FertiliserTransformer(BaseTransformer):

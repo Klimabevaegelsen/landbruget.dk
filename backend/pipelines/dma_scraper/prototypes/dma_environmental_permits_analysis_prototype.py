@@ -55,6 +55,7 @@ from datetime import datetime
 from pathlib import Path
 
 import vertexai
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 from vertexai.generative_models import GenerativeModel, Part
 
@@ -62,7 +63,7 @@ from vertexai.generative_models import GenerativeModel, Part
 load_dotenv(find_dotenv(usecwd=True))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # PDF processing
 try:

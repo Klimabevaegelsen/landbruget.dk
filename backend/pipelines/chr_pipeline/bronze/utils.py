@@ -1,8 +1,9 @@
 """Shared utilities for CHR pipeline bronze layer."""
 
-import logging
 from datetime import date, datetime
 from typing import Any
+
+from common.logging_utils import get_pipeline_logger
 
 # Import UUID utilities for deterministic TrackID generation
 try:
@@ -22,7 +23,7 @@ except ImportError:
         LandbrugsdataUUID = None
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.utils")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.utils")
 
 # Default Client ID for SOAP requests
 DEFAULT_CLIENT_ID = "LandbrugsData"

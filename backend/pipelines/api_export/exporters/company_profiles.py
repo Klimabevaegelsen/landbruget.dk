@@ -20,16 +20,17 @@ Data sources (R2):
 - silver/subsidies/20260322_074339/Landbrugsstoette_2023.parquet — 2023 subsidies
 """
 
-import logging
 import os
 import subprocess
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+from common.logging_utils import get_pipeline_logger
+
 from exporters.base import BaseExporter
 
-logger = logging.getLogger("api_export.company_profiles")
+logger = get_pipeline_logger("api_export.company_profiles")
 
 BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
 

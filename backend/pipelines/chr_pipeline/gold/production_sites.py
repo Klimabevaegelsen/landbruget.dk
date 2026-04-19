@@ -8,10 +8,10 @@ Output columns match the Supabase production_sites table:
   location_geom, capacity, main_species_code
 """
 
-import logging
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 from .export import export_gold_table
 
@@ -23,7 +23,7 @@ except ImportError:
     STORAGE_AVAILABLE = False
     StorageAccess = None
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # Cloud storage glob patterns for silver CHR data
 DATA_PATTERNS = {

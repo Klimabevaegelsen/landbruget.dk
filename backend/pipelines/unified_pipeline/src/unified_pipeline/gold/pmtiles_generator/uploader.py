@@ -2,13 +2,14 @@
 
 import asyncio
 import json
-import logging
 import os
 import subprocess
 
+from common.logging_utils import get_pipeline_logger
+
 from .config import PMTilesGeneratorConfig
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class CloudflareR2Uploader:

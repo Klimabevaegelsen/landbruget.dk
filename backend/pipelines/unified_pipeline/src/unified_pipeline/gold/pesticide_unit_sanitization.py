@@ -50,13 +50,12 @@ CRITICAL: This implementation uses the exact statistical thresholds from our
 analysis that identified unit errors vs. legitimate formulation differences.
 """
 
-import logging
-
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 from unified_pipeline.util.log_util import Logger
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class PesticideUnitSanitizer:

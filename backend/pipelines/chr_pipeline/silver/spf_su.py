@@ -15,10 +15,11 @@ import logging
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 from . import export
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def create_spf_su_herds_table(

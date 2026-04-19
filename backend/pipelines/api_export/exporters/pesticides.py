@@ -12,14 +12,15 @@ Data source: gold/pesticide_disaggregation_{year}_{year+1}/*/pesticide_disaggreg
 Columns: cvr_number, PesticideName, DosageQuantity, DosageUnit, AllocatedArea, municipality
 """
 
-import logging
 import os
 import re
 from datetime import UTC, datetime
 
+from common.logging_utils import get_pipeline_logger
+
 from exporters.base import BaseExporter
 
-logger = logging.getLogger("api_export.pesticides")
+logger = get_pipeline_logger("api_export.pesticides")
 
 BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
 

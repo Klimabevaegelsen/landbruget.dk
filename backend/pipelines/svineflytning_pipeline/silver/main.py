@@ -11,9 +11,11 @@ import os
 from datetime import datetime
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
+
 from .transform import process_svineflytning_silver
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def get_latest_bronze_data_path() -> str | None:

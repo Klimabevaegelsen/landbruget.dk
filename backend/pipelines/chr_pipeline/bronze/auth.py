@@ -1,12 +1,12 @@
 """Authentication and SOAP client creation for CHR pipeline."""
 
 import base64
-import logging
 import os
 from typing import Any
 
 import certifi
 import requests
+from common.logging_utils import get_pipeline_logger
 from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
 from dotenv import find_dotenv, load_dotenv
 from requests import Session
@@ -22,7 +22,7 @@ from common.secrets import init_secrets  # noqa: E402
 init_secrets()
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.auth")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.auth")
 
 # API Endpoints (WSDL URLs)
 ENDPOINTS = {

@@ -9,6 +9,8 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+from common.logging_utils import get_pipeline_logger
+
 # Add the backend directory to the path
 backend_path = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, backend_path)
@@ -17,7 +19,7 @@ sys.path.insert(0, backend_path)
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def load_env_credentials():

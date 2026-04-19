@@ -1,7 +1,6 @@
 """Module for exporting raw Bronze data (JSON/XML)."""
 
 import json
-import logging
 import os
 import shutil
 import sys
@@ -10,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 from zeep.helpers import serialize_object
 
@@ -38,7 +38,7 @@ except ImportError:
 load_dotenv(find_dotenv(usecwd=True))
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # Initialize storage paths and clients
 GCS_BUCKET = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")

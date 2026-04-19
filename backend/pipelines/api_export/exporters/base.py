@@ -1,14 +1,14 @@
 """Base class for API exporters that generate JSON files for R2."""
 
 import json
-import logging
 import os
 from pathlib import Path
 
 import duckdb
 import s3fs
+from common.logging_utils import get_pipeline_logger
 
-logger = logging.getLogger("api_export")
+logger = get_pipeline_logger("api_export")
 
 
 class BaseExporter:

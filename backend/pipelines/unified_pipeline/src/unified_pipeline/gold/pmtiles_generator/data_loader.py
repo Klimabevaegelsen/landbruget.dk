@@ -1,14 +1,14 @@
 """Data loading utilities for PMTiles generation."""
 
 import asyncio
-import logging
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 from common.storage import StorageAccess
 
 from .config import PMTilesGeneratorConfig
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class PMTilesDataLoader:

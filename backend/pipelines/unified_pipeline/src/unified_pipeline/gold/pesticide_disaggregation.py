@@ -47,19 +47,19 @@ without any "enhancements" that could break the proven 92% coverage approach.
 """
 
 import contextlib
-import logging
 import os
 import re
 from typing import Any
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 from pydantic import ConfigDict, Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class PesticideDisaggregationGoldConfig(BaseJobConfig):
