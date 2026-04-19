@@ -116,8 +116,8 @@ export function ReportMapView({
 
       {/* Floating map controls: year + chemical pills */}
       <div className="pointer-events-none absolute inset-x-0 bottom-[55%] z-40 flex flex-col items-center gap-2 px-4 md:right-[420px] md:bottom-6">
-        <div className="bg-background/90 pointer-events-auto max-w-xs min-w-[200px] self-stretch rounded-full px-5 py-1 backdrop-blur-sm md:min-w-[280px] md:self-auto">
-          <YearTimeline year={year} onChange={onYearChange} compact />
+        <div className="bg-background/90 pointer-events-auto max-w-xs min-w-[200px] self-stretch rounded-full px-2 py-1 backdrop-blur-sm md:max-w-md md:min-w-[480px] md:self-auto md:px-3">
+          <YearTimeline year={year} onChange={onYearChange} />
         </div>
         <ChemicalFilterPills
           active={chemFilter}

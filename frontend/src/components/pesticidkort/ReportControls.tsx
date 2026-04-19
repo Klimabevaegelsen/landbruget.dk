@@ -19,7 +19,7 @@ export function ReportControls({
   return (
     <div className="bg-background/95 border-border border-t px-5 py-3 backdrop-blur-sm">
       <ModeToggle mode={mode} onChange={onModeChange} />
-      <YearTimeline year={year} onChange={onYearChange} compact />
+      <YearTimeline year={year} onChange={onYearChange} />
     </div>
   );
 }
