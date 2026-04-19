@@ -64,7 +64,10 @@ export function ReportMapView({
   );
   const [chemFilter, setChemFilter] = useState<ChemicalFilter>('none');
   const histogram = useBurdenHistogram(year);
-  const { match: driftExposure } = useDriftExposure(lat, lng);
+  const { match: driftExposure, status: driftStatus } = useDriftExposure(
+    lat,
+    lng
+  );
   const { report, handleFieldsLoaded } = useReportBuilder({
     address,
     lat,
@@ -72,6 +75,7 @@ export function ReportMapView({
     radiusM,
     year,
     driftExposure,
+    driftStatus,
   });
 
   const handleMapFieldClick = useCallback(

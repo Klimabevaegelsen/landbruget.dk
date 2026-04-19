@@ -28,6 +28,8 @@ function computeExposure(
   };
 }
 
+type DriftStatus = 'idle' | 'loading' | 'ready' | 'no_match';
+
 interface UseReportBuilderOptions {
   address: string;
   lat: number;
@@ -35,6 +37,7 @@ interface UseReportBuilderOptions {
   radiusM: number;
   year: number;
   driftExposure: DriftExposureMatch | null;
+  driftStatus: DriftStatus;
 }
 
 export function useReportBuilder({
@@ -44,6 +47,7 @@ export function useReportBuilder({
   radiusM,
   year,
   driftExposure,
+  driftStatus,
 }: UseReportBuilderOptions) {
   const [report, setReport] = useState<PesticideReport | null>(null);
 
@@ -53,13 +57,20 @@ export function useReportBuilder({
         fields,
         radiusM
       );
-      const grade: GradeInfo = driftExposure
-        ? driftPercentileToGrade(
-            driftExposure.exposure_percentile,
-            driftExposure.drift_dose_kg,
-            driftExposure.national_avg_drift_dose_kg
-          )
-        : fallbackGrade;
+      // When drift-exposure has no BBR match AND we found no nearby sprayed
+      // fields, we genuinely have no signal — don't default to UNDER_AVG (the
+      // burden fallback returns that for fields.length === 0 and that misled
+      // users into thinking every address was below average).
+      const hasNoData = driftStatus === 'no_match' && fields.length === 0;
+      const grade: GradeInfo | null = hasNoData
+        ? null
+        : driftExposure
+          ? driftPercentileToGrade(
+              driftExposure.exposure_percentile,
+              driftExposure.drift_dose_kg,
+              driftExposure.national_avg_drift_dose_kg
+            )
+          : fallbackGrade;
       let pfasCount = 0;
       let totalBurden = 0;
       let hasBnbo = false;
@@ -90,7 +101,7 @@ export function useReportBuilder({
         exposure_1000m: computeExposure(fields, radiusM),
       });
     },
-    [address, lat, lng, radiusM, year, driftExposure]
+    [address, lat, lng, radiusM, year, driftExposure, driftStatus]
   );
 
   // If drift exposure lands after fields, upgrade the grade in place.
@@ -101,7 +112,7 @@ export function useReportBuilder({
       driftExposure.drift_dose_kg,
       driftExposure.national_avg_drift_dose_kg
     );
-    if (driftGrade.grade === report.grade.grade) return;
+    if (report.grade && driftGrade.grade === report.grade.grade) return;
     setReport({ ...report, grade: driftGrade });
   }, [driftExposure, report]);
 

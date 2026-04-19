@@ -31,7 +31,7 @@ export function StoryMode({ report, onClose }: StoryModeProps) {
     fields_count: report.fields_count,
     pfas_count: report.pfas_fields_count,
     distance: Math.round(report.nearest_field_m),
-    grade: report.grade.grade,
+    grade: report.grade?.grade ?? 'UNKNOWN',
     total_burden: report.fields
       .reduce((sum, f) => sum + f.total_pesticide_belastning, 0)
       .toFixed(1),

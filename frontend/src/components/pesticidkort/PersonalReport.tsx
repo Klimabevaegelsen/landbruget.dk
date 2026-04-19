@@ -38,11 +38,31 @@ export function PersonalReport({
       className="animate-fade-slide-up space-y-6 px-5 py-4 motion-reduce:animate-none"
     >
       <div className="bg-card rounded-xl p-5">
-        <PesticideProximityScore
-          grade={report.grade.grade}
-          label={report.grade.label}
-          description={report.grade.description}
-        />
+        {report.grade ? (
+          <PesticideProximityScore
+            grade={report.grade.grade}
+            label={report.grade.label}
+            description={report.grade.description}
+          />
+        ) : (
+          <div
+            data-testid="pesticide-proximity-score-empty"
+            aria-live="polite"
+            className="pt-6 pb-8"
+          >
+            <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-widest uppercase">
+              Pesticideksponering
+            </p>
+            <p className="font-display text-foreground text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+              Ingen data for denne adresse
+            </p>
+            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+              Vi fandt ingen bygning i BBR inden for 60 m af adressen og ingen
+              sprøjtede marker inden for {report.radius_m} m. Prøv en
+              nærliggende adresse for at se eksponering.
+            </p>
+          </div>
+        )}
         <div className="mt-4 flex items-center gap-3">
           <button
             onClick={() => handleShare(report)}
