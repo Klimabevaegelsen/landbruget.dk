@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 
 # Import DateTimeEncoder for JSON serialization
@@ -23,7 +24,7 @@ from dotenv import find_dotenv, load_dotenv
 load_dotenv(find_dotenv(usecwd=True))
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # Initialize storage configuration
 GCS_BUCKET = os.getenv("R2_BUCKET", "landbruget-data")

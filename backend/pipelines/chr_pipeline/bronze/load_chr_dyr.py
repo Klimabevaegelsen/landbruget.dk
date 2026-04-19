@@ -4,10 +4,10 @@ This module provides the main interface for loading animal movement data from CH
 The functionality has been separated into focused modules for better maintainability.
 """
 
-import logging
 from datetime import date, timedelta
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 
 from .animal_movements import load_animal_movements, load_cattle_movement_summaries
@@ -26,7 +26,7 @@ except ImportError:
 load_dotenv(find_dotenv(usecwd=True))
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_chr_dyr")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.load_chr_dyr")
 
 
 def load_animal_movements_task(

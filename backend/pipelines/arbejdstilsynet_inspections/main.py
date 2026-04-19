@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 from common.cli import PipelineRun, common_options, resolve_bucket, stage_options
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 
 import bronze.export
@@ -40,7 +41,7 @@ def main(stage, start_date, end_date, storage_bucket, log_level):
         level=getattr(logging, log_level),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    logger = logging.getLogger(__name__)
+    logger = get_pipeline_logger(__name__)
     logger.info(f"Starting pipeline (stage={stage}, start_date={start_date}, end_date={end_date})")
 
     # Initialize pipeline metadata tracking

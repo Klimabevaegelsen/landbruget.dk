@@ -1,8 +1,8 @@
 """Module for loading CHR Ejendom data (Properties) - Bronze Layer."""
 
-import logging
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
 from zeep import Client
 
 # Import the exporter and auth
@@ -11,7 +11,7 @@ from .export import save_raw_data
 from .utils import create_base_request
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_ejendom")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.load_ejendom")
 
 # --- Generic SOAP Fetcher ---
 

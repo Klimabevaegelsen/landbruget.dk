@@ -28,6 +28,8 @@ from pathlib import Path
 # Add the pipeline to the path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from common.logging_utils import get_pipeline_logger
+
 from gold.chr_gold_processing import process_gold_data
 
 
@@ -79,7 +81,7 @@ Examples:
 
     # Setup logging
     setup_logging(args.log_level)
-    logger = logging.getLogger(__name__)
+    logger = get_pipeline_logger(__name__)
 
     logger.info("🥇 CHR Gold Processing - Standalone Mode")
     logger.info("=" * 50)

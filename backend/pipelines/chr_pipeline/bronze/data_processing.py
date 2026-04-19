@@ -1,13 +1,14 @@
 """Data processing and aggregation for CHR pipeline."""
 
-import logging
 from collections import defaultdict
 from typing import Any
+
+from common.logging_utils import get_pipeline_logger
 
 from .utils import parse_date
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.data_processing")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.data_processing")
 
 
 def aggregate_cattle_movements(response: Any, reporting_herd: int) -> dict:

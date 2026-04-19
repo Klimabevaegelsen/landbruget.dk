@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import certifi
+from common.logging_utils import get_pipeline_logger
 from requests import Session
 from tenacity import (
     before_log,
@@ -28,7 +29,7 @@ from zeep.wsse.username import UsernameToken
 
 from .export import DateTimeEncoder, export_movements_optimized
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # Constants
 ENDPOINTS = {

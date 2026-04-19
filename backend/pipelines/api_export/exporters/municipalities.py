@@ -14,14 +14,15 @@ Data sources (R2):
 - gold/pesticide_disaggregation_2023_2024/*/pesticide_disaggregation_2023_2024.parquet (columns: cvr_number, municipality, AllocatedArea)
 """
 
-import logging
 import os
 from datetime import UTC, datetime
 from urllib.parse import quote
 
+from common.logging_utils import get_pipeline_logger
+
 from exporters.base import BaseExporter
 
-logger = logging.getLogger("api_export.municipalities")
+logger = get_pipeline_logger("api_export.municipalities")
 
 BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
 

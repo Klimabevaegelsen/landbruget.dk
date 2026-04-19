@@ -12,11 +12,12 @@ import logging
 from pathlib import Path
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 # Import export module
 from . import export
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def create_chr_dyr_movement_summaries_table(

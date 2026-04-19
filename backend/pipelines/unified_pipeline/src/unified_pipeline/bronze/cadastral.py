@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 import time
 import xml.etree.ElementTree as ET
@@ -9,13 +8,14 @@ from datetime import datetime
 from typing import ClassVar
 
 import aiohttp
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 from pydantic import ConfigDict
 
 # ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def clean_value(value):

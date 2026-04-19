@@ -1,7 +1,6 @@
 """Module for exporting pig movement data."""
 
 import json
-import logging
 import os
 from collections.abc import Iterator
 from datetime import date, datetime
@@ -9,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import ijson  # Add this import for streaming JSON parsing
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 
 # Import the unified cloud storage access layer
@@ -38,7 +38,7 @@ class DateTimeEncoder(json.JSONEncoder):
 load_dotenv(find_dotenv(usecwd=True))
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # Initialize storage paths and clients
 GCS_BUCKET = os.getenv("STORAGE_BUCKET") or os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET")

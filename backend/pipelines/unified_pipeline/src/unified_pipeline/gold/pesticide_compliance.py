@@ -49,13 +49,13 @@ CRITICAL: This implementation uses the exact logic from the proven analysis
 that detected 668 clear violations, ensuring regulatory accuracy.
 """
 
-import logging
 import os
 from datetime import datetime
 from typing import Any
 
 import duckdb
 import requests
+from common.logging_utils import get_pipeline_logger
 from common.storage import StorageAccess
 from pydantic import ConfigDict, Field
 from requests.auth import HTTPBasicAuth
@@ -65,7 +65,7 @@ from unified_pipeline.gold.pesticide_unit_sanitization import PesticideUnitSanit
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class PlanteITAPI:

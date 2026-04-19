@@ -11,9 +11,11 @@ import os
 import sys
 from pathlib import Path
 
+from common.logging_utils import get_pipeline_logger
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def cleanup_temp_files():

@@ -15,13 +15,14 @@ from pathlib import Path
 
 import duckdb
 import requests
+from common.logging_utils import get_pipeline_logger
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 from urllib3.util.retry import Retry
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class BulkGeoDanmarkFetcher:

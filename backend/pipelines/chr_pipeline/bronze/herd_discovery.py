@@ -1,9 +1,10 @@
 """Herd volume discovery system for intelligent processing strategy."""
 
 import json
-import logging
 from datetime import date, timedelta
 from typing import Any
+
+from common.logging_utils import get_pipeline_logger
 
 # Import cloud storage access for persistent storage
 try:
@@ -17,7 +18,7 @@ except ImportError:
 from .utils import create_base_request
 from .volume_management import is_high_volume_herd
 
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.herd_discovery")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.herd_discovery")
 
 
 def discover_herd_volumes_for_year(

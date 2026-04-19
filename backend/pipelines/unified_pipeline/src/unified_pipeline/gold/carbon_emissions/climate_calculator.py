@@ -14,6 +14,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
+
 # Import data structures from transformer
 from .data_transformer import (
     FertilizerSummary,
@@ -45,7 +47,7 @@ from .formulas.svin.ammoniak import calculate_nh3_emissions_svin
 # Import standardfaktorer module for feed intake lookups
 from .standardfaktorer import lookup_cattle_ts, lookup_pig_fe
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 @dataclass

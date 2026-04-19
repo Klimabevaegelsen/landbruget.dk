@@ -8,12 +8,13 @@ Frontend loads this once into memory and filters client-side with Fuse.js,
 which is faster than the current 300ms debounce + server round-trip.
 """
 
-import logging
 import os
+
+from common.logging_utils import get_pipeline_logger
 
 from exporters.base import BaseExporter
 
-logger = logging.getLogger("api_export.search")
+logger = get_pipeline_logger("api_export.search")
 
 BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
 

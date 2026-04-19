@@ -1,14 +1,14 @@
 """Dynamic year detection for PMTiles data sources."""
 
 import asyncio
-import logging
 import re
 
+from common.logging_utils import get_pipeline_logger
 from common.storage import StorageAccess
 
 from .config import PMTilesGeneratorConfig
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 def _normalize_path(path: str) -> str:

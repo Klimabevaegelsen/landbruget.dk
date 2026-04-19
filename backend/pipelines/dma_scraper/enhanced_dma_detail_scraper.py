@@ -11,6 +11,7 @@ from pathlib import Path
 
 import aiohttp
 from bs4 import BeautifulSoup
+from common.logging_utils import get_pipeline_logger
 from tqdm.asyncio import tqdm
 
 # Configure logging
@@ -19,7 +20,7 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 async def fetch(session, url):

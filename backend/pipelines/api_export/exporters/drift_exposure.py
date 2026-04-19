@@ -20,13 +20,14 @@ Data sources (R2):
 - silver/dagi_kommuner/{ts}/data.parquet  (for kommunekode spatial join)
 """
 
-import logging
 import os
 import re
 
+from common.logging_utils import get_pipeline_logger
+
 from exporters.base import BaseExporter
 
-logger = logging.getLogger("api_export.drift_exposure")
+logger = get_pipeline_logger("api_export.drift_exposure")
 
 BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
 

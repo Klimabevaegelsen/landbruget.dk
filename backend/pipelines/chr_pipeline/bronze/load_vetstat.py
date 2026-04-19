@@ -2,7 +2,6 @@
 
 import base64
 import hashlib
-import logging
 import os
 import secrets
 import uuid
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from common.logging_utils import get_pipeline_logger
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import Encoding
@@ -39,7 +39,7 @@ except ImportError:
         LandbrugsdataUUID = None
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
 
 # Load environment variables (walks up to find root .env)
 load_dotenv(find_dotenv(usecwd=True))

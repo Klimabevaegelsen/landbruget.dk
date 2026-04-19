@@ -1,10 +1,10 @@
 """Volume management for CHR pipeline - handles high-volume herds and chunking."""
 
-import logging
 import os
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
 from dotenv import find_dotenv, load_dotenv
 from zeep import Client
 
@@ -21,7 +21,7 @@ except ImportError:
 load_dotenv(find_dotenv(usecwd=True))
 
 # Set up logging
-logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.volume_management")
+logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.volume_management")
 
 # Global dict to track herds that need special handling (smaller date ranges)
 _HIGH_VOLUME_HERDS: dict[str, dict] = {}

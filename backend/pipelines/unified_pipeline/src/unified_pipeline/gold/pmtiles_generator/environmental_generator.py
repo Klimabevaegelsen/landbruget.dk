@@ -1,16 +1,16 @@
 """Environmental Layers PMTiles Generator."""
 
-import logging
 import os
 from datetime import datetime
 
 import duckdb
+from common.logging_utils import get_pipeline_logger
 
 from .config import PMTilesGeneratorConfig
 from .data_loader import PMTilesDataLoader
 from .utils import FileManager, GeoJSONWriter, TippecanoeRunner
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # CRS Strategy: With silver/gold layers now in EPSG:25832, we need to transform to
 # EPSG:4326 (WGS84) for PMTiles/GeoJSON output (required for map display)

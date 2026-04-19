@@ -6,11 +6,11 @@ Refactored to use vanilla DuckDB instead of pandas for better performance
 and consistency with the unified pipeline architecture.
 """
 
-import logging
 import os
 from datetime import datetime
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
 from common.storage import StorageAccess
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
@@ -42,7 +42,7 @@ class ArbjdstilsynetInspectionsGold(
     def __init__(self, config: ArbjdstilsynetInspectionsGoldConfig):
         super().__init__(config)
         self.storage = StorageAccess()
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = get_pipeline_logger(self.__class__.__name__)
 
     async def run(self, silver_data: dict[str, Any] | None = None) -> bool:
         """

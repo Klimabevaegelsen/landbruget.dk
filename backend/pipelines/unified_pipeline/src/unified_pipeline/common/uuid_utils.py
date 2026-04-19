@@ -6,11 +6,12 @@ data integrity and proper relationships between entities.
 """
 
 import hashlib
-import logging
 import os
 import uuid
 
-logger = logging.getLogger(__name__)
+from common.logging_utils import get_pipeline_logger
+
+logger = get_pipeline_logger(__name__)
 
 
 class LandbrugsdataUUID:

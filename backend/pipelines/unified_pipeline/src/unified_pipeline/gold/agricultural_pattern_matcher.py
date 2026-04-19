@@ -14,13 +14,14 @@ Author: Analysis Team
 Date: January 2025
 """
 
-import logging
 import time
 from typing import Any
 
+from common.logging_utils import get_pipeline_logger
+
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 
 class AgriculturalPatternMatcherConfig(BaseJobConfig):

@@ -25,12 +25,13 @@ from pathlib import Path
 
 import duckdb
 import requests
+from common.logging_utils import get_pipeline_logger
 from requests.adapters import HTTPAdapter
 from tqdm import tqdm
 from urllib3.util.retry import Retry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = get_pipeline_logger(__name__)
 
 # Fields to fetch — covers all useful attributes from GEODKV_Bygning
 BUILDING_FIELDS = """
