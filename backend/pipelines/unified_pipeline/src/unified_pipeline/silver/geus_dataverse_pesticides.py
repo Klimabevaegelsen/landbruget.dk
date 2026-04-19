@@ -696,6 +696,7 @@ class GEUSDataversePesticidesSilver(
                 tmp_pest_path = self._download_rds_from_storage(pest_rds_path)
                 pest_df = self._convert_rds_to_dataframe(tmp_pest_path)
                 pest_table = self._transform_data(pest_df)
+                del pest_df
                 self._validate_geometries(pest_table)
 
                 # Get pesticide statistics
@@ -725,6 +726,7 @@ class GEUSDataversePesticidesSilver(
                     tmp_pfas_path = self._download_rds_from_storage(pfas_rds_path)
                     pfas_df = self._convert_rds_to_dataframe(tmp_pfas_path)
                     pfas_table = self._transform_pfas_data(pfas_df)
+                    del pfas_df
                     self._validate_geometries(pfas_table)
 
                     # Get PFAS statistics
@@ -757,6 +759,7 @@ class GEUSDataversePesticidesSilver(
                     tmp_clean_path = self._download_rds_from_storage(clean_rds_path)
                     clean_df = self._convert_rds_to_dataframe(tmp_clean_path)
                     clean_pest_table, clean_all_table = self._transform_clean_data(clean_df)
+                    del clean_df
                     self._validate_geometries(clean_pest_table)
                     self._validate_geometries(clean_all_table)
 
