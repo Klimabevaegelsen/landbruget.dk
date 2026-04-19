@@ -218,10 +218,11 @@ class StorageAccess:
     def _check_native_cloud_support(self) -> bool:
         """Check if native cloud storage access is available.
 
-        Also sets ``self._native_cloud_scheme`` to the URL scheme matching
-        the configured DuckDB secret (``r2://``, ``gs://``, or ``s3://``).
-        DuckDB's httpfs extension requires the scheme prefix; bare
-        ``bucket/key`` paths are interpreted as local globs and fail.
+        DuckDB's httpfs extension needs an ``r2://`` scheme prefix to read
+        from R2; bare ``bucket/key`` paths are interpreted as local globs
+        and fail.  ``self._native_cloud_scheme`` is already defaulted to
+        ``r2://`` in ``__init__`` — this method just confirms that an R2
+        secret or R2 credentials are actually configured.
         """
         try:
             # Check if httpfs extension is loaded
@@ -231,26 +232,16 @@ class StorageAccess:
             if not result:
                 return False
 
-            # Prefer env-var priority (same order `setup_duckdb_cloud_auth` uses):
-            # R2 first, then legacy GCS HMAC. This avoids mis-routing when an
-            # unrelated persisted secret (e.g. `~/.duckdb/stored_secrets/`) is
-            # auto-loaded into the connection.
             if os.getenv("R2_ACCESS_KEY_ID") and os.getenv("R2_SECRET_ACCESS_KEY"):
-                self._native_cloud_scheme = "r2://"
-                return True
-            if os.getenv("GCS_ACCESS_KEY_ID") and os.getenv("GCS_SECRET_ACCESS_KEY"):
-                self._native_cloud_scheme = "gs://"
                 return True
 
             # Fallback: inspect DuckDB secrets (env vars absent but a secret may
             # have been injected directly by the caller).
             try:
                 secrets = self.duckdb_conn.execute("SELECT name, type FROM duckdb_secrets()").fetchall()
-                scheme_by_priority = {"r2": "r2://", "gcs": "gs://", "s3": "s3://"}
-                seen_types = {(row[1] or "").lower() for row in secrets if len(row) > 1 and row[1]}
-                for stype in ("r2", "gcs", "s3"):
-                    if stype in seen_types:
-                        self._native_cloud_scheme = scheme_by_priority[stype]
+                for row in secrets:
+                    stype = (row[1] or "").lower() if len(row) > 1 and row[1] else ""
+                    if stype == "r2":
                         return True
             except Exception as e:
                 self.log.debug(f"duckdb_secrets() inspection failed: {e}")
@@ -262,7 +253,7 @@ class StorageAccess:
             return False
 
     def _native_url(self, storage_path: str) -> str:
-        """Return ``storage_path`` as a DuckDB-native cloud URL (scheme-prefixed)."""
+        """Return ``storage_path`` as a DuckDB-native R2 URL (scheme-prefixed)."""
         return f"{self._native_cloud_scheme}{_strip_protocol(storage_path)}"
 
     def check_file_size_limits(self, storage_path: str) -> bool:
