@@ -864,7 +864,10 @@ class H3PFASProcessorRefactored:
                     # Use StorageAccess to create table directly from cloud storage
                     storage_access.create_table_from_storage("silver_kommuner_raw", latest_file)
 
-                    # Create the kommune_boundaries table from silver data
+                    # Create the kommune_boundaries table from silver data.
+                    # silver/dagi_kommuner parquet has EPSG:25832 coordinates but no CRS
+                    # in GeoParquet metadata, so DuckDB tags it OGC:CRS84. Use ST_SetCRS
+                    # to relabel without transforming — the numeric coords are already UTM.
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE {kommune_table} AS
                         SELECT
@@ -872,9 +875,9 @@ class H3PFASProcessorRefactored:
                             name as kommune_name,
                             CAST(region_code AS INTEGER) as region_code,
                             'Unknown Region' as region_name,  -- Silver data might not have region name
-                            geometry,
+                            ST_SetCRS(geometry, 'EPSG:25832') as geometry,
                             area_m2 / 10000.0 as kommune_area_ha,
-                            ST_Centroid(geometry) as centroid
+                            ST_Centroid(ST_SetCRS(geometry, 'EPSG:25832')) as centroid
                         FROM silver_kommuner_raw
                         WHERE geometry IS NOT NULL
                     """)
