@@ -12,7 +12,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "s3fs",
     "pyarrow>=14.0.0",
-    "loguru>=0.7.0",
+    "loguru>=0.7.3",
     "playwright>=1.40.0",
     "fastapi>=0.100.0",
     "uvicorn>=0.20.0",
