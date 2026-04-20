@@ -15,7 +15,7 @@ dependencies = [
     "cryptography>=44.0.3",
     "s3fs",
     "loguru>=0.7.3",
-    "lxml>=5.2,<5.4",
+    "lxml>=6.1.0,<6.2",
     "psutil>=6.1.0",
     "pyarrow>=20.0.0",
     "pydantic-settings>=2.9.1",
