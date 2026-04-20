@@ -14,7 +14,7 @@ dependencies = [
     "pyarrow>=14.0.0",
     "loguru>=0.7.3",
     "playwright>=1.40.0",
-    "fastapi>=0.100.0",
+    "fastapi>=0.136.0",
     "uvicorn>=0.44.0",
     "pydantic",
     "numpy>=2.4.4",
