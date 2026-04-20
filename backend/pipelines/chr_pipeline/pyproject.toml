@@ -21,7 +21,7 @@ dependencies = [
     "duckdb",
     "loguru~=0.7.3",
     "simple-singleton~=2.0.0",
-    "aiohttp>=3.13.0,<3.14",
+    "aiohttp>=3.13.5,<3.14",
     "landbruget-common",
 ]
 
