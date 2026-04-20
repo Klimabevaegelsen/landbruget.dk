@@ -418,29 +418,40 @@ class CloudflareR2Uploader:
             files_to_delete = []
             current_r2_keys = set(current_files.keys())
 
+            # Year-versioned families represented in the current upload. Skipping
+            # retention for absent families prevents partial runs (e.g. env-only)
+            # from silently wiping years they didn't regenerate. Only applies to
+            # field_analysis* families — year-independent layers keep replacement
+            # semantics so true orphans still get cleaned up.
+            current_year_versioned_families = set()
+            for r2_key in current_r2_keys:
+                fname = r2_key.split("/")[-1].replace(".pmtiles", "")
+                if fname.startswith("field_analysis_"):
+                    parts = fname.split("_")
+                    if len(parts) >= 3 and parts[-1].isdigit():
+                        current_year_versioned_families.add("_".join(parts[:-1]))
+
             for layer_type, files in layer_files.items():
                 if layer_type.startswith("field_analysis"):
+                    if layer_type not in current_year_versioned_families:
+                        logger.info(
+                            f"Skipping cleanup for '{layer_type}' — not part of this upload"
+                        )
+                        continue
                     # Year-versioned families (field_analysis, field_analysis_overview).
-                    # Keep retention per family — runs that don't upload them (e.g.
-                    # --environmental-only) must NOT delete the existing versions.
-                    files.sort(key=lambda x: x[0], reverse=True)  # Sort by year, newest first
-
-                    # Skip files that are being uploaded in this run
+                    files.sort(key=lambda x: x[0], reverse=True)  # newest first
                     files_not_current = [
                         (year, path) for year, path in files if path not in current_r2_keys
                     ]
-
-                    # Delete old versions beyond keep_versions
                     if len(files_not_current) > keep_versions:
                         files_to_delete.extend(
                             [path for _, path in files_not_current[keep_versions:]]
                         )
                 else:
-                    # For year-independent files, keep only current version
-                    # Delete old versions if not being uploaded in this run
+                    # Year-independent layer (bnbo_areas, wetlands_all, ...).
+                    # Replace any existing versions not in this upload.
                     for _, file_path in files:
                         if file_path not in current_r2_keys:
-                            # This is an old version, mark for deletion
                             files_to_delete.append(file_path)
 
             # Delete old files
