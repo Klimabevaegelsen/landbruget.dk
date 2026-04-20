@@ -46,7 +46,7 @@ dev = [
     "ruff",
     "ty",
     "types-requests>=2.33.0.20260408",
-    "types-beautifulsoup4>=4.12.0",
+    "types-beautifulsoup4>=4.12.0.20250516",
 ]
 
 [tool.ruff]
