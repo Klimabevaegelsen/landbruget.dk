@@ -15,7 +15,7 @@ dependencies = [
     "loguru>=0.7.0",
     "playwright>=1.40.0",
     "fastapi>=0.100.0",
-    "uvicorn>=0.20.0",
+    "uvicorn>=0.44.0",
     "pydantic",
     "numpy>=2.4.4",
     "duckdb",
