@@ -369,20 +369,24 @@ class TestCloudflareR2Uploader:
             assert mock_delete.call_count >= 2
 
     @pytest.mark.asyncio
-    async def test_cleanup_preserves_overview_during_environmental_only(self, test_config):
-        """Environmental-only runs must not delete field_analysis_overview tiles.
+    async def test_cleanup_skips_families_not_in_current_upload(self, test_config):
+        """Partial runs (e.g. --environmental-only) must not delete files from
+        layer families they didn't upload.
 
-        Regression test: filenames like field_analysis_overview_2024.pmtiles were
-        being misclassified as year-independent layers, so any run that didn't
-        upload them (e.g. --environmental-only) wiped every year. That made the
-        overview layers serving the < zoom 12 view of pesticidkort disappear.
+        Regression: an env-only run on 2026-04-18 deleted every
+        field_analysis_overview_<year>.pmtiles (overview family misclassified)
+        AND pruned 15 of 18 field_analysis_<year>.pmtiles via keep_versions
+        retention. The < zoom 12 view of pesticidkort went blank, and 2008–2022
+        field tiles disappeared too.
+
+        Cleanup must skip a family entirely when zero current files belong to
+        it — retention only makes sense when a family is being refreshed.
         """
         uploader = CloudflareR2Uploader(test_config)
 
         existing_files = [
-            "pmtiles/field_analysis_overview_2023.pmtiles",
-            "pmtiles/field_analysis_overview_2024.pmtiles",
-            "pmtiles/field_analysis_overview_2025.pmtiles",
+            *(f"pmtiles/field_analysis_{y}.pmtiles" for y in range(2008, 2026)),
+            *(f"pmtiles/field_analysis_overview_{y}.pmtiles" for y in range(2008, 2026)),
             "pmtiles/bnbo_areas.pmtiles",
         ]
 
@@ -399,8 +403,8 @@ class TestCloudflareR2Uploader:
 
             deleted = {call.args[0] for call in mock_delete.call_args_list}
             for path in existing_files:
-                if "field_analysis_overview" in path:
-                    assert path not in deleted, f"Overview tile {path} was deleted"
+                if "field_analysis" in path:
+                    assert path not in deleted, f"{path} was deleted by an env-only cleanup"
 
     @pytest.mark.asyncio
     async def test_upload_with_cleanup(self, test_config):
