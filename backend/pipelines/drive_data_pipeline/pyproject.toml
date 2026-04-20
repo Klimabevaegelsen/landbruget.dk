@@ -49,7 +49,7 @@ drive-pipeline = "drive_data_pipeline.main:main"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "pytest-cov>=4.0.0",
     "ruff",
     "ty",
