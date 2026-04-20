@@ -419,8 +419,10 @@ class CloudflareR2Uploader:
             current_r2_keys = set(current_files.keys())
 
             for layer_type, files in layer_files.items():
-                if layer_type == "field_analysis":
-                    # For year-specific files, keep the most recent versions
+                if layer_type.startswith("field_analysis"):
+                    # Year-versioned families (field_analysis, field_analysis_overview).
+                    # Keep retention per family — runs that don't upload them (e.g.
+                    # --environmental-only) must NOT delete the existing versions.
                     files.sort(key=lambda x: x[0], reverse=True)  # Sort by year, newest first
 
                     # Skip files that are being uploaded in this run

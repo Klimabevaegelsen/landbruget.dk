@@ -369,6 +369,40 @@ class TestCloudflareR2Uploader:
             assert mock_delete.call_count >= 2
 
     @pytest.mark.asyncio
+    async def test_cleanup_preserves_overview_during_environmental_only(self, test_config):
+        """Environmental-only runs must not delete field_analysis_overview tiles.
+
+        Regression test: filenames like field_analysis_overview_2024.pmtiles were
+        being misclassified as year-independent layers, so any run that didn't
+        upload them (e.g. --environmental-only) wiped every year. That made the
+        overview layers serving the < zoom 12 view of pesticidkort disappear.
+        """
+        uploader = CloudflareR2Uploader(test_config)
+
+        existing_files = [
+            "pmtiles/field_analysis_overview_2023.pmtiles",
+            "pmtiles/field_analysis_overview_2024.pmtiles",
+            "pmtiles/field_analysis_overview_2025.pmtiles",
+            "pmtiles/bnbo_areas.pmtiles",
+        ]
+
+        # Simulate an --environmental-only upload: only env layers in current_files.
+        current_files = {
+            "pmtiles/bnbo_areas.pmtiles": "/tmp/bnbo_areas.pmtiles",
+        }
+
+        with (
+            patch.object(uploader, "list_existing_pmtiles", return_value=existing_files),
+            patch.object(uploader, "delete_pmtiles", return_value=True) as mock_delete,
+        ):
+            await uploader.cleanup_old_pmtiles(current_files, keep_versions=3)
+
+            deleted = {call.args[0] for call in mock_delete.call_args_list}
+            for path in existing_files:
+                if "field_analysis_overview" in path:
+                    assert path not in deleted, f"Overview tile {path} was deleted"
+
+    @pytest.mark.asyncio
     async def test_upload_with_cleanup(self, test_config):
         """Test upload with automatic cleanup."""
         uploader = CloudflareR2Uploader(test_config)

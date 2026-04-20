@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { FieldCard } from '@/components/pesticidkort/FieldCard';
@@ -26,6 +26,7 @@ export function FieldList({
 }: FieldListProps) {
   const reducedMotion = useReducedMotion();
   const [showAll, setShowAll] = useState(false);
+  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
   const sortedFields = useMemo(
     () => [...fields].sort((a, b) => a.distance_m - b.distance_m),
@@ -51,16 +52,16 @@ export function FieldList({
       setShowAll(true);
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          document
-            .getElementById(selectedFieldUuid)
+          cardRefs.current
+            .get(selectedFieldUuid)
             ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
       });
       return;
     }
     requestAnimationFrame(() => {
-      document
-        .getElementById(selectedFieldUuid)
+      cardRefs.current
+        .get(selectedFieldUuid)
         ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   }, [selectedFieldUuid, sortedFields, showAll]);
@@ -83,6 +84,9 @@ export function FieldList({
             }}
           >
             <FieldCard
+              ref={(el) => {
+                cardRefs.current.set(field.field_uuid, el);
+              }}
               field={field}
               histogram={histogram}
               isSelected={field.field_uuid === selectedFieldUuid}
@@ -110,6 +114,9 @@ export function FieldList({
             Uden for dit nærområde — indgår ikke i din score
           </p>
           <FieldCard
+            ref={(el) => {
+              cardRefs.current.set(clickedField.field_uuid, el);
+            }}
             field={clickedField}
             histogram={histogram}
             isSelected
