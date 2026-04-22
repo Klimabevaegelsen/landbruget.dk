@@ -23,7 +23,7 @@ export function ExploreFieldPanel({ field, onClose }: ExploreFieldPanelProps) {
   return (
     <div
       data-testid="explore-field-panel"
-      className="bg-background/95 absolute inset-x-0 bottom-0 z-30 max-h-[60vh] overflow-y-auto rounded-t-2xl px-4 pt-4 pb-6 shadow-lg backdrop-blur-sm md:inset-x-auto md:top-48 md:right-4 md:bottom-auto md:max-h-[calc(100vh-13rem)] md:w-80 md:rounded-xl"
+      className="bg-background/95 absolute inset-x-0 bottom-[var(--pesticidkort-footer-height)] z-30 max-h-[60vh] overflow-y-auto rounded-t-2xl px-4 pt-4 pb-6 shadow-lg backdrop-blur-sm md:inset-x-auto md:top-48 md:right-4 md:bottom-auto md:max-h-[calc(100vh-13rem)] md:w-80 md:rounded-xl"
     >
       <div className="mb-3 flex items-start justify-between">
         <div>

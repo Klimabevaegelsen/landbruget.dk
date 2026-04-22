@@ -14,7 +14,7 @@ const FILTER_PROPERTY: Record<Exclude<ChemicalFilter, 'none'>, string> = {
   diquat: 'diquat_applications',
 };
 
-/** A-E stepped gradient based on total_pesticide_belastning (B/ha). */
+/** Stepped burden gradient based on total_pesticide_belastning (B/ha). */
 export const GRADE_FILL_COLOR = [
   'case',
   ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],

@@ -36,7 +36,7 @@ Automate pull request creation with comprehensive description and proper linking
 ```bash
 # 1. Verify tests pass
 cd frontend && npm test
-cd ../backend && python -m pytest
+cd .. && uv run --all-packages --group dev pytest
 
 # 2. Verify lint passes
 cd frontend && npm run lint

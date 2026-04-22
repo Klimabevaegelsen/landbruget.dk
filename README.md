@@ -64,12 +64,10 @@ npm run dev                       # http://localhost:3000
 ### Backend Pipelines
 
 ```bash
-cd backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+uv sync --all-packages --group dev
 
 # Run a specific pipeline
-cd pipelines/unified_pipeline
+cd backend/pipelines/unified_pipeline
 python -m unified_pipeline bronze --source cadastral
 ```
 
@@ -139,9 +137,9 @@ cd frontend && npm test         # Playwright E2E
 cd frontend && npm run lint     # oxlint
 
 # Backend
-cd backend && source venv/bin/activate
-python -m pytest                # pytest
-ruff check . && ruff format .   # Lint + format
+uv run --all-packages --group dev pytest   # pytest
+uv run --all-packages --group dev ruff check backend
+uv run --all-packages --group dev ruff format backend
 ```
 
 ### Branch Naming
@@ -162,8 +160,8 @@ Examples: `feat(frontend): add interactive map view`, `fix(pipeline): correct CH
 
 1. Create a branch from `main` following the naming convention above
 2. Make your changes
-3. Run all tests (`npm test` + `pytest`)
-4. Run linters (`npm run lint` + `ruff check .`)
+3. Run all tests (`npm test` + `uv run --all-packages --group dev pytest`)
+4. Run linters (`npm run lint` + `uv run --all-packages --group dev ruff check backend`)
 5. Open a pull request — all PRs require review before merge
 
 ## License

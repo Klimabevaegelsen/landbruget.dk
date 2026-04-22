@@ -80,11 +80,9 @@ class PesticidesExporter(BaseExporter):
             stats["files_written"] += 1
 
         # Per-company
-        company_count = self._per_company(period)
-        stats["files_written"] += company_count
-        stats["company_files"] = company_count
-
-        # Burden histograms for all available years
+        # Burden histograms for all available years. Generate these before the
+        # expensive per-company export so report-mode dependencies are
+        # published even if long-tail company files take much longer.
         bmd_path = f"r2://{BUCKET}/silver/bmd/20260301_042330/pesticide_products.parquet"
         try:
             self.load_parquet_table(bmd_path, "bmd_products")
@@ -93,6 +91,11 @@ class PesticidesExporter(BaseExporter):
             stats["histogram_years"] = sorted(year_paths.keys())
         except Exception:
             logger.warning("Could not load BMD data for burden histogram")
+
+        # Per-company
+        company_count = self._per_company(period)
+        stats["files_written"] += company_count
+        stats["company_files"] = company_count
 
         return stats
 
@@ -272,46 +275,54 @@ class PesticidesExporter(BaseExporter):
         """Generate per-company pesticide detail files. Returns count of files written."""
         count = 0
         try:
-            # Get all companies with pesticide data
             companies = self.query_to_dicts("""
                 SELECT DISTINCT p.cvr_number, c.company_name, c.current_municipality_name AS municipality
                 FROM pesticides p
                 LEFT JOIN companies c ON p.cvr_number = c.cvr_number::VARCHAR
                 ORDER BY p.cvr_number
             """)
+            if not companies:
+                return 0
 
-            for comp in companies:
-                cvr = comp["cvr_number"]
-                details = self.query_to_dicts(f"""
+            summaries = {}
+            for row in self.query_to_dicts("""
                     SELECT
-                        PesticideName AS pesticide_name,
-                        DosageQuantity AS dosage_quantity,
-                        DosageUnit AS dosage_unit,
-                        AllocatedArea AS allocated_area_ha,
-                        AllocationMethod AS allocation_method,
-                        municipality
-                    FROM pesticides
-                    WHERE cvr_number = '{cvr}'
-                    ORDER BY PesticideName
-                """)
-
-                summary = self.query_to_dicts(f"""
-                    SELECT
+                        cvr_number,
                         COUNT(*) AS total_applications,
                         COUNT(DISTINCT PesticideName) AS unique_pesticides,
                         ROUND(SUM(AllocatedArea), 1) AS total_treated_area_ha,
                         ROUND(SUM(DosageQuantity), 2) AS total_dosage
                     FROM pesticides
-                    WHERE cvr_number = '{cvr}'
-                """)
+                    GROUP BY cvr_number
+                """):
+                cvr = str(row.pop("cvr_number"))
+                summaries[cvr] = row
+            details_by_cvr: dict[str, list[dict]] = {}
+            for row in self.query_to_dicts("""
+                SELECT
+                    cvr_number,
+                    PesticideName AS pesticide_name,
+                    DosageQuantity AS dosage_quantity,
+                    DosageUnit AS dosage_unit,
+                    AllocatedArea AS allocated_area_ha,
+                    AllocationMethod AS allocation_method,
+                    municipality
+                FROM pesticides
+                ORDER BY cvr_number, PesticideName
+            """):
+                cvr = row.pop("cvr_number")
+                details_by_cvr.setdefault(str(cvr), []).append(row)
+
+            for comp in companies:
+                cvr = str(comp["cvr_number"])
 
                 self.write_json(
                     {
                         "cvr_number": cvr,
                         "company_name": comp.get("company_name"),
                         "municipality": comp.get("municipality"),
-                        "summary": summary[0] if summary else {},
-                        "applications": details,
+                        "summary": summaries.get(cvr, {}),
+                        "applications": details_by_cvr.get(cvr, []),
                         "metadata": {
                             "generated_at": datetime.now(UTC).isoformat(),
                             "period": period,

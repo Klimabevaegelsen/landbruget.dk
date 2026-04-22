@@ -86,6 +86,116 @@ test.describe('Pesticidkort', () => {
     ).toBeVisible();
   });
 
+  test('should show burden ranges without A-E legend labels in explore mode', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    const exploreButton = page.locator('[data-testid="explore-map-button"]');
+    await exploreButton.click();
+
+    const legend = page.locator('[data-testid="map-legend"]');
+    await expect(legend).toBeVisible({ timeout: 10000 });
+    await expect(legend).toContainText('Under 0,5 B/ha');
+    await expect(legend).toContainText('0,5–2,0 B/ha');
+    await expect(legend).not.toContainText('A — Under 0,5 B/ha');
+    await expect(legend).not.toContainText('E — Over 8,0 B/ha');
+
+    const legendBox = await legend.boundingBox();
+    expect(legendBox).not.toBeNull();
+    expect(legendBox!.x + legendBox!.width).toBeLessThanOrEqual(375);
+
+    const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
+    expect(bodyWidth).toBeLessThanOrEqual(376);
+  });
+
+  test('should keep map zoom controls visible below the explore overlay on narrow mobile', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    const exploreButton = page.locator('[data-testid="explore-map-button"]');
+    await exploreButton.click();
+
+    const yearTimeline = page.locator('[data-testid="year-timeline"]');
+    const chemicalPills = page.locator('[data-testid="chemical-filter-pills"]');
+    const navControl = page.locator('.maplibregl-ctrl-top-left');
+
+    await expect(yearTimeline).toBeVisible({ timeout: 10000 });
+    await expect(chemicalPills).toBeVisible({ timeout: 10000 });
+    await expect(navControl).toBeVisible({ timeout: 10000 });
+
+    const yearBox = await yearTimeline.boundingBox();
+    const pillsBox = await chemicalPills.boundingBox();
+    const navBox = await navControl.boundingBox();
+
+    expect(yearBox).not.toBeNull();
+    expect(pillsBox).not.toBeNull();
+    expect(navBox).not.toBeNull();
+
+    expect(yearBox!.height).toBeLessThan(60);
+    expect(navBox!.y).toBeGreaterThan(pillsBox!.y + pillsBox!.height + 8);
+  });
+
+  test('should keep mobile footer expansion from covering the legend or report sheet', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    const footer = page.locator(
+      '[data-testid="pesticidkort-disclaimer-footer"]'
+    );
+    const footerToggle = page.locator(
+      '[data-testid="pesticidkort-disclaimer-toggle"]'
+    );
+
+    await page.locator('[data-testid="explore-map-button"]').click();
+    await expect(footerToggle).toBeVisible({ timeout: 10000 });
+    await footerToggle.click({ force: true });
+
+    const legend = page.locator('[data-testid="map-legend"]');
+    await expect(legend).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(100);
+
+    const footerTopInExplore = await footer.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().top)
+    );
+    const legendBottom = await legend.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().bottom)
+    );
+
+    expect(legendBottom).toBeLessThanOrEqual(footerTopInExplore - 4);
+
+    await page.goto(
+      '/pesticidkort?lat=55.6761&lng=12.5683&addr=K%C3%B8benhavn&y=2022'
+    );
+
+    await expect(
+      page.locator('[data-testid="share-report-button"]:visible').first()
+    ).toBeVisible({ timeout: 15000 });
+
+    const reportFooterToggle = page.locator(
+      '[data-testid="pesticidkort-disclaimer-toggle"]'
+    );
+    await expect(reportFooterToggle).toBeVisible({ timeout: 10000 });
+    await reportFooterToggle.click({ force: true });
+
+    const sheetHandle = page.locator('[data-testid="bottom-sheet-handle"]');
+    await expect(sheetHandle).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(100);
+
+    const footerTopInReport = await footer.evaluate((el) =>
+      Math.round(el.getBoundingClientRect().top)
+    );
+    const sheetBottom = await sheetHandle.evaluate((el) =>
+      Math.round(
+        (el.parentElement as HTMLElement).getBoundingClientRect().bottom
+      )
+    );
+
+    expect(sheetBottom).toBeLessThanOrEqual(footerTopInReport);
+  });
+
   test('should adapt landing page to mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
 
