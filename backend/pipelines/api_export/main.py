@@ -47,8 +47,8 @@ EXPORTERS = {
     "homepage": HomepageExporter,
     "search": SearchIndexExporter,
     "municipalities": MunicipalitiesExporter,
-    "pesticides": PesticidesExporter,
     "drift_exposure": DriftExposureExporter,
+    "pesticides": PesticidesExporter,
     "companies": CompanyProfilesExporter,
 }
 

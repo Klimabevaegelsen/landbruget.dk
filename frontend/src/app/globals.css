@@ -1,6 +1,10 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+:root {
+  --pesticidkort-footer-height: 0px;
+}
+
 @keyframes typing {
   from {
     width: 0;
@@ -462,6 +466,26 @@
       flex-wrap: wrap !important;
       gap: 0.5rem !important;
     }
+
+    [data-testid='year-timeline'],
+    [data-testid='year-timeline'] > div,
+    [data-testid='chemical-filter-pills'] {
+      flex-wrap: nowrap !important;
+    }
+
+    [data-testid='year-timeline'] {
+      overflow-x: visible !important;
+    }
+
+    [data-testid='year-timeline'] > div {
+      overflow-x: auto !important;
+    }
+
+    [data-testid='year-timeline'] button,
+    [data-testid^='chemical-filter-'] {
+      max-width: none !important;
+      white-space: nowrap !important;
+    }
   }
 
   /* Improve touch targets for mobile - WCAG 2.1 AA Compliance */
@@ -552,13 +576,20 @@
       border-color 0.3s ease;
   }
 
-  /* Pesticidkort explore map: sit the zoom/compass control below the
-     top overlay (back + search + year timeline + chemical filter pills)
-     so it stays fully visible across mobile and desktop, and clear of
-     the ExploreFieldPanel (right side on desktop, bottom sheet on mobile)
-     and MapLegend (bottom-left). Match the sibling PesticidkortMap's
-     top-left placement for consistency within the feature. */
-  [data-testid='explore-map'] .maplibregl-ctrl-top-left {
-    top: calc(env(safe-area-inset-top, 0px) + 10rem);
+  /* Pesticidkort map controls need to override the broad mobile layout
+     fallbacks above so the timeline/pills stay on one line and the
+     MapLibre zoom buttons sit clear of the page overlays. */
+  .pesticidkort-map-shell--explore .maplibregl-ctrl-top-left {
+    top: calc(env(safe-area-inset-top, 0px) + 10rem) !important;
+  }
+
+  .pesticidkort-map-shell--report .maplibregl-ctrl-top-left {
+    top: calc(env(safe-area-inset-top, 0px) + 4.5rem) !important;
+  }
+
+  @media (max-width: 768px) {
+    .pesticidkort-map-shell--explore .maplibregl-ctrl-top-left {
+      top: calc(env(safe-area-inset-top, 0px) + 12.5rem) !important;
+    }
   }
 }

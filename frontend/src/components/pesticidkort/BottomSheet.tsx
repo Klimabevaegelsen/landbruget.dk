@@ -80,7 +80,7 @@ export function BottomSheet({
       role="region"
       aria-label="Pesticidrapport"
       className={cn(
-        'bg-background fixed inset-x-0 bottom-0 z-30 rounded-t-2xl shadow-2xl',
+        'bg-background fixed inset-x-0 bottom-[var(--pesticidkort-footer-height)] z-30 rounded-t-2xl shadow-2xl',
         'h-[var(--sheet-height,140px)]',
         'transition-[height] duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]',
         dragStartRef.current && 'transition-none'

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { InfoIcon, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,9 +18,36 @@ const LINKS: { href: string; id: string; label: string }[] = [
 
 export function DisclaimerFooter() {
   const [expanded, setExpanded] = useState(false);
+  const footerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const footer = footerRef.current;
+    if (!footer) return;
+
+    const root = document.documentElement;
+    const syncFooterHeight = () => {
+      root.style.setProperty(
+        '--pesticidkort-footer-height',
+        `${footer.offsetHeight}px`
+      );
+    };
+
+    syncFooterHeight();
+
+    const observer = new ResizeObserver(syncFooterHeight);
+    observer.observe(footer);
+    window.addEventListener('resize', syncFooterHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', syncFooterHeight);
+      root.style.setProperty('--pesticidkort-footer-height', '0px');
+    };
+  }, []);
 
   return (
     <div
+      ref={footerRef}
       data-testid="pesticidkort-disclaimer-footer"
       className="bg-background/90 border-border/60 pointer-events-auto fixed right-0 bottom-0 left-0 z-40 border-t backdrop-blur-sm"
     >

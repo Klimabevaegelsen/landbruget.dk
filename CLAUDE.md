@@ -28,8 +28,7 @@ cd frontend && npm test              # Playwright E2E
 cd frontend && npm run lint          # oxlint
 
 # Backend
-cd backend && source venv/bin/activate
-python -m pytest                     # Run tests
+uv run --all-packages --group dev pytest  # Run backend tests
 cd pipelines/<name> && python main.py  # Run pipeline
 
 # Data Export (R2 CDN)
@@ -40,7 +39,7 @@ cd pipelines/api_export && python main.py  # Export all JSON to R2
 
 ```bash
 cd frontend && npm test && npm run lint
-cd backend && python -m pytest
+uv run --all-packages --group dev pytest
 ```
 
 **Fix pre-existing test failures, don't ignore them.** If `npm test` or `pytest` surfaces a failure that predates your branch (stale testids, renamed components, broken selectors), fix it in the same PR. Never dismiss it as "unrelated" or "upstream flakiness" — the cost of leaving broken tests compounds because future agents assume they're baseline noise. See `.claude/rules/testing.md` for details.

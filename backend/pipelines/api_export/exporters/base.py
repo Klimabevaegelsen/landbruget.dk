@@ -2,6 +2,7 @@
 
 import json
 import os
+from decimal import Decimal
 from pathlib import Path
 
 import duckdb
@@ -9,6 +10,16 @@ import s3fs
 from common.logging_utils import get_pipeline_logger
 
 logger = get_pipeline_logger("api_export")
+
+
+def _to_json_safe(value):
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {key: _to_json_safe(inner) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [_to_json_safe(item) for item in value]
+    return value
 
 
 class BaseExporter:
@@ -46,7 +57,7 @@ class BaseExporter:
             data: JSON-serializable data
             path: Relative path under api/v1/, e.g. "homepage/statistics.json"
         """
-        json_str = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        json_str = json.dumps(_to_json_safe(data), ensure_ascii=False, separators=(",", ":"))
 
         if self.output_dir:
             # Local mode for testing
