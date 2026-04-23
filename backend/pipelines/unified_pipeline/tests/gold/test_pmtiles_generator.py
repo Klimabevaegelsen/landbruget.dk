@@ -170,6 +170,60 @@ class TestPMTilesDataLoader:
             result = await loader.load_and_integrate_field_data(2021)
             assert result == "integrated_2021"
 
+    @pytest.mark.asyncio
+    async def test_load_bbr_buildings_normalizes_wgs84_geometry(
+        self, test_config, mock_storage_access, duckdb_conn, temp_dir
+    ):
+        """BBR geometries stored in EPSG:4326 should be transformed before joins."""
+        try:
+            duckdb_conn.execute("SELECT ST_AsText(ST_Point(12, 55))")
+        except Exception:
+            pytest.skip("DuckDB spatial extension not available")
+
+        storage_path = os.path.join(temp_dir, "20260423_120000")
+        os.makedirs(storage_path, exist_ok=True)
+        parquet_path = os.path.join(storage_path, "joined_buildings.parquet")
+        polygon_wkt = "POLYGON ((12.0 55.0, 12.01 55.0, 12.01 55.01, 12.0 55.01, 12.0 55.0))"
+
+        duckdb_conn.execute(
+            """
+            CREATE OR REPLACE TABLE temp_bbr_buildings AS
+            SELECT
+                1 AS building_id,
+                ? AS category_group,
+                ST_GeomFromText(?) AS geo_building_polygon,
+                ST_Centroid(ST_GeomFromText(?)) AS geo_building_centroid
+            """,
+            ["residential", polygon_wkt, polygon_wkt],
+        )
+        duckdb_conn.execute(f"COPY temp_bbr_buildings TO {parquet_path!r} (FORMAT PARQUET)")
+
+        loader = PMTilesDataLoader(test_config, mock_storage_access, duckdb_conn)
+        with patch.object(
+            loader,
+            "_find_timestamped_paths_ranked",
+            new=AsyncMock(return_value=[f"{storage_path}/"]),
+        ):
+            table_name = await loader._load_bbr_buildings()
+
+        assert table_name == "bbr_buildings"
+
+        min_x, min_y, max_x, max_y = duckdb_conn.execute(
+            """
+            SELECT
+                ST_XMin(ST_Extent(geometry)),
+                ST_YMin(ST_Extent(geometry)),
+                ST_XMax(ST_Extent(geometry)),
+                ST_YMax(ST_Extent(geometry))
+            FROM bbr_buildings
+            """
+        ).fetchone()
+
+        assert min_x > 200_000
+        assert max_x > min_x
+        assert min_y > 6_000_000
+        assert max_y > min_y
+
 
 class TestTimestampFallback:
     """Test timestamp fallback in data loader."""
@@ -342,10 +396,9 @@ class TestCloudflareR2Uploader:
 
     @pytest.mark.asyncio
     async def test_cleanup_old_pmtiles(self, test_config):
-        """Test cleanup of old PMTiles files."""
+        """Cleanup should only prune old versions from refreshed families."""
         uploader = CloudflareR2Uploader(test_config)
 
-        # Mock existing files in R2
         existing_files = [
             "pmtiles/field_analysis_2020.pmtiles",
             "pmtiles/field_analysis_2021.pmtiles",
@@ -355,7 +408,6 @@ class TestCloudflareR2Uploader:
             "pmtiles/old_bnbo_areas.pmtiles",
         ]
 
-        # Current files being uploaded
         current_files = {
             "pmtiles/field_analysis_2023.pmtiles": "/tmp/field_analysis_2023.pmtiles",
             "pmtiles/bnbo_areas.pmtiles": "/tmp/bnbo_areas.pmtiles",
@@ -367,14 +419,9 @@ class TestCloudflareR2Uploader:
         ):
             cleanup_results = await uploader.cleanup_old_pmtiles(current_files, keep_versions=2)
 
-            # Should delete old field analysis files (keeping 2 most recent: 2022, 2021)
-            # Should delete old environmental file
-            # Verify deletions would happen for old files
-            # (keeping 2 most recent field analysis files: 2022, 2021)
-            # (replacing environmental files completely)
-
-            assert len(cleanup_results) >= 2
-            assert mock_delete.call_count >= 2
+            deleted = [call.args[0] for call in mock_delete.call_args_list]
+            assert cleanup_results == {"pmtiles/field_analysis_2020.pmtiles": True}
+            assert deleted == ["pmtiles/field_analysis_2020.pmtiles"]
 
     @pytest.mark.asyncio
     async def test_cleanup_skips_families_not_in_current_upload(self, test_config):
@@ -413,6 +460,28 @@ class TestCloudflareR2Uploader:
             for path in existing_files:
                 if "field_analysis" in path:
                     assert path not in deleted, f"{path} was deleted by an env-only cleanup"
+
+    @pytest.mark.asyncio
+    async def test_cleanup_preserves_missing_year_independent_layers(self, test_config):
+        """A failed buildings upload must not delete the previous published PMTiles."""
+        uploader = CloudflareR2Uploader(test_config)
+
+        existing_files = [
+            "pmtiles/bnbo_areas.pmtiles",
+            "pmtiles/buildings_proximity.pmtiles",
+        ]
+        current_files = {
+            "pmtiles/bnbo_areas.pmtiles": "/tmp/bnbo_areas.pmtiles",
+        }
+
+        with (
+            patch.object(uploader, "list_existing_pmtiles", return_value=existing_files),
+            patch.object(uploader, "delete_pmtiles", return_value=True) as mock_delete,
+        ):
+            cleanup_results = await uploader.cleanup_old_pmtiles(current_files, keep_versions=3)
+
+            assert cleanup_results == {}
+            assert mock_delete.call_count == 0
 
     @pytest.mark.asyncio
     async def test_upload_with_cleanup(self, test_config):

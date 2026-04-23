@@ -418,26 +418,25 @@ class CloudflareR2Uploader:
             files_to_delete = []
             current_r2_keys = set(current_files.keys())
 
-            # Year-versioned families represented in the current upload. Skipping
-            # retention for absent families prevents partial runs (e.g. env-only)
-            # from silently wiping years they didn't regenerate. Only applies to
-            # field_analysis* families — year-independent layers keep replacement
-            # semantics so true orphans still get cleaned up.
-            current_year_versioned_families = set()
+            # Cleanup should only touch layer families that were actually refreshed
+            # in this upload. If a generation step failed, preserving the last
+            # known-good PMTiles is safer than treating absence as intent to delete.
+            current_layer_families = set()
             for r2_key in current_r2_keys:
                 fname = r2_key.split("/")[-1].replace(".pmtiles", "")
                 if fname.startswith("field_analysis_"):
                     parts = fname.split("_")
                     if len(parts) >= 3 and parts[-1].isdigit():
-                        current_year_versioned_families.add("_".join(parts[:-1]))
+                        current_layer_families.add("_".join(parts[:-1]))
+                        continue
+                current_layer_families.add(fname)
 
             for layer_type, files in layer_files.items():
+                if layer_type not in current_layer_families:
+                    logger.info(f"Skipping cleanup for '{layer_type}' - not part of this upload")
+                    continue
+
                 if layer_type.startswith("field_analysis"):
-                    if layer_type not in current_year_versioned_families:
-                        logger.info(
-                            f"Skipping cleanup for '{layer_type}' — not part of this upload"
-                        )
-                        continue
                     # Year-versioned families (field_analysis, field_analysis_overview).
                     files.sort(key=lambda x: x[0], reverse=True)  # newest first
                     files_not_current = [
@@ -449,7 +448,8 @@ class CloudflareR2Uploader:
                         )
                 else:
                     # Year-independent layer (bnbo_areas, wetlands_all, ...).
-                    # Replace any existing versions not in this upload.
+                    # Replace any existing versions not in this upload, but only
+                    # when that layer family was refreshed by this upload.
                     for _, file_path in files:
                         if file_path not in current_r2_keys:
                             files_to_delete.append(file_path)

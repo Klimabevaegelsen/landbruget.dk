@@ -53,7 +53,8 @@ export function IndividualRankingTable({
             <div className="flex items-center space-x-2">
               <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
               <Link
-                href={`/virksomhed/${item.company_id}`}
+                href={`/company/${item.company_id}`}
+                data-testid="company-link"
                 className="text-foreground hover:text-primary truncate text-sm font-medium transition-colors"
               >
                 {item.company_name}
@@ -169,12 +170,15 @@ export function IndividualRankingTable({
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader className="pb-3">
+    <Card className="w-full" data-testid="ranking-table">
+      <CardHeader className="card-header pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <CardTitle className="text-foreground text-lg font-semibold">
+              <CardTitle
+                className="text-foreground text-lg font-semibold"
+                data-testid="ranking-title"
+              >
                 {title}
               </CardTitle>
               {companyCount > 0 && (
@@ -191,10 +195,15 @@ export function IndividualRankingTable({
             </Badge>
           </div>
         </div>
-        <p className="text-muted-foreground text-sm">{description}</p>
+        <p
+          className="text-muted-foreground text-sm"
+          data-testid="ranking-description"
+        >
+          {description}
+        </p>
       </CardHeader>
 
-      <CardContent className="p-0">
+      <CardContent className="card-content p-0">
         {data.length > 0 ? (
           <div className="px-6 pb-6">
             <DynamicDataTable

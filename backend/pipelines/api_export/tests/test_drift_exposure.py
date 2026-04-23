@@ -1,20 +1,20 @@
 """Tests for DriftExposureExporter.
 
 Covers:
-- Spatial join attributes each building to the correct kommune polygon.
-- Per-kommune JSON contains the expected buildings, rounded.
-- index.json reports total_buildings, unmatched count, and
-  national_avg_drift_dose_kg.
+- Spatial tiling writes buildings into deterministic tile shards.
+- index.json reports total building count, tile count, and tile zoom.
+- Export tolerates drift geometries in normal WGS84, swapped WGS84, or UTM.
 """
 
 import contextlib
 import json
+import math
 from pathlib import Path
 
 import duckdb
 import pytest
 
-from exporters.drift_exposure import DriftExposureExporter
+from exporters.drift_exposure import DRIFT_TILE_ZOOM, DriftExposureExporter
 
 
 def _install_spatial(conn: duckdb.DuckDBPyConnection) -> None:
@@ -23,37 +23,33 @@ def _install_spatial(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute("LOAD spatial")
 
 
+def _slippy_tile(lat: float, lng: float, zoom: int = DRIFT_TILE_ZOOM) -> tuple[int, int]:
+    n = 2**zoom
+    x = math.floor(((lng + 180.0) / 360.0) * n)
+    lat_rad = math.radians(lat)
+    y = math.floor(
+        (1.0 - math.log(math.tan(lat_rad) + (1.0 / math.cos(lat_rad))) / math.pi) / 2.0 * n
+    )
+    return x, y
+
+
 @pytest.fixture
 def conn_with_fixtures() -> duckdb.DuckDBPyConnection:
-    """In-memory DuckDB seeded with two kommuner and four buildings.
-
-    Kommune 101 covers x in [0,1], y in [0,1]; kommune 102 covers x in [1,2], y in [0,1].
-    Four buildings total: 2 inside 101, 1 inside 102, 1 outside both (x=5).
-    """
+    """In-memory DuckDB seeded with four drift-exposure buildings."""
     conn = duckdb.connect(":memory:")
     _install_spatial(conn)
-
-    conn.execute("""
-        CREATE TABLE dagi_kommuner AS
-        SELECT * FROM (VALUES
-            ('101', 'Kommune A',
-             ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))')),
-            ('102', 'Kommune B',
-             ST_GeomFromText('POLYGON((1 0, 2 0, 2 1, 1 1, 1 0))'))
-        ) AS t(code, name, geometry)
-    """)
 
     conn.execute("""
         CREATE TABLE drift_exposure AS
         SELECT * FROM (VALUES
             ('b1', 'Addr 1', 'residential',    2024, 0.10, 3, 2, 50.0, 1.5, 10.0, FALSE,
-             ST_Point(0.25, 0.25)),
+             ST_Point(8.2500, 55.2500)),
             ('b2', 'Addr 2', 'residential',    2024, 0.40, 5, 3, 30.0, 2.5, 75.0, FALSE,
-             ST_Point(0.75, 0.75)),
+             ST_Point(8.2510, 55.2510)),
             ('b3', 'Addr 3', 'publicServices', 2024, 0.05, 1, 1, 80.0, 0.5, 25.0, FALSE,
-             ST_Point(1.50, 0.50)),
+             ST_Point(9.5000, 55.5000)),
             ('b4', 'Addr 4', 'residential',    2024, 0.20, 2, 2, 60.0, 1.0, 50.0, FALSE,
-             ST_Point(5.00, 5.00))
+             ST_Point(12.5683, 55.6761))
         ) AS t(building_uuid, address, category_group, pesticide_year,
                total_drift_dose_kg, contributing_fields, unique_pesticides,
                nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
@@ -68,11 +64,7 @@ class _StubbedExporter(DriftExposureExporter):
     def _latest_drift_parquet(self) -> str | None:
         return "inline://drift_exposure"
 
-    def _latest_dagi_kommuner_parquet(self) -> str | None:
-        return "inline://dagi_kommuner"
-
     def load_parquet_table(self, parquet_path: str, table_name: str) -> int:
-        # Tables are pre-seeded by the fixture; skip the real CREATE TABLE AS.
         return self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
 
@@ -94,47 +86,107 @@ def test_export_ensures_spatial_is_loaded(
     assert exporter.spatial_loaded is True
 
 
-def test_export_writes_per_kommune_and_index(
+def test_export_writes_per_tile_and_index(
     conn_with_fixtures: duckdb.DuckDBPyConnection, tmp_path: Path
 ) -> None:
     exporter = _StubbedExporter(conn=conn_with_fixtures, output_dir=str(tmp_path))
 
     stats = exporter.export()
 
-    # Two kommuner (101, 102) + one index = 3 files. Building b4 is unmatched.
-    assert stats["files_written"] == 3
+    # b1/b2 share a tile; b3 and b4 each land in their own.
+    assert stats["files_written"] == 4
     assert stats["building_count"] == 4
-    assert stats["kommune_count"] == 2
+    assert stats["tile_count"] == 3
 
     drift_dir = tmp_path / "pesticides" / "drift-exposure"
-
     index = json.loads((drift_dir / "index.json").read_text())
     assert index["pesticide_year"] == 2024
     assert index["building_count"] == 4
-    assert index["unmatched_count"] == 1
-    assert index["kommunekoder"] == ["101", "102"]
-    # Avg of 0.10, 0.40, 0.05, 0.20 = 0.1875
+    assert index["tile_zoom"] == DRIFT_TILE_ZOOM
+    assert index["tile_count"] == 3
     assert index["national_avg_drift_dose_kg"] == pytest.approx(0.1875)
 
-    kommune_101 = json.loads((drift_dir / "101.json").read_text())
-    uids = sorted(b["uid"] for b in kommune_101)
-    assert uids == ["b1", "b2"]
-    b1 = next(b for b in kommune_101 if b["uid"] == "b1")
-    assert b1["lat"] == pytest.approx(0.25)
-    assert b1["lng"] == pytest.approx(0.25)
+    tile_x, tile_y = _slippy_tile(55.25, 8.25)
+    tile_payload = json.loads(
+        (drift_dir / "tiles" / str(DRIFT_TILE_ZOOM) / str(tile_x) / f"{tile_y}.json").read_text()
+    )
+    assert sorted(b["uid"] for b in tile_payload) == ["b1", "b2"]
+    b1 = next(b for b in tile_payload if b["uid"] == "b1")
+    assert b1["lat"] == pytest.approx(55.25)
+    assert b1["lng"] == pytest.approx(8.25)
     assert b1["pct"] == pytest.approx(10.0)
     assert b1["dose"] == pytest.approx(0.1)
 
-    kommune_102 = json.loads((drift_dir / "102.json").read_text())
-    assert [b["uid"] for b in kommune_102] == ["b3"]
 
-    # b4 fell outside any polygon → no file, only counted as unmatched.
-    assert not (drift_dir / "999.json").exists()
+def test_export_matches_swapped_wgs84_drift_geometry(tmp_path: Path) -> None:
+    conn = duckdb.connect(":memory:")
+    _install_spatial(conn)
+
+    conn.execute("""
+        CREATE TABLE drift_exposure AS
+        SELECT * FROM (VALUES
+            ('b1', 'Addr 1', 'residential', 2024, 0.10, 3, 2, 50.0, 1.5, 10.0, FALSE,
+             ST_FlipCoordinates(ST_Point(8.2500, 55.2500)))
+        ) AS t(building_uuid, address, category_group, pesticide_year,
+               total_drift_dose_kg, contributing_fields, unique_pesticides,
+               nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
+               wind_weighted, geometry)
+    """)
+
+    exporter = _StubbedExporter(conn=conn, output_dir=str(tmp_path))
+    stats = exporter.export()
+
+    assert stats["files_written"] == 2
+    tile_x, tile_y = _slippy_tile(55.25, 8.25)
+    tile_payload = json.loads(
+        (
+            tmp_path
+            / "pesticides"
+            / "drift-exposure"
+            / "tiles"
+            / str(DRIFT_TILE_ZOOM)
+            / str(tile_x)
+            / f"{tile_y}.json"
+        ).read_text()
+    )
+    assert [b["uid"] for b in tile_payload] == ["b1"]
 
 
-def test_export_noop_when_drift_parquet_missing(
-    tmp_path: Path,
-) -> None:
+def test_export_matches_utm_drift_geometry_without_crs_metadata(tmp_path: Path) -> None:
+    conn = duckdb.connect(":memory:")
+    _install_spatial(conn)
+
+    conn.execute("""
+        CREATE TABLE drift_exposure AS
+        SELECT * FROM (VALUES
+            ('b1', 'Addr 1', 'residential', 2024, 0.10, 3, 2, 50.0, 1.5, 10.0, FALSE,
+             ST_Transform(ST_Point(8.5000, 55.5000), 'EPSG:4326', 'EPSG:25832', always_xy := true))
+        ) AS t(building_uuid, address, category_group, pesticide_year,
+               total_drift_dose_kg, contributing_fields, unique_pesticides,
+               nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
+               wind_weighted, geometry)
+    """)
+
+    exporter = _StubbedExporter(conn=conn, output_dir=str(tmp_path))
+    stats = exporter.export()
+
+    assert stats["files_written"] == 2
+    tile_x, tile_y = _slippy_tile(55.5, 8.5)
+    tile_payload = json.loads(
+        (
+            tmp_path
+            / "pesticides"
+            / "drift-exposure"
+            / "tiles"
+            / str(DRIFT_TILE_ZOOM)
+            / str(tile_x)
+            / f"{tile_y}.json"
+        ).read_text()
+    )
+    assert [b["uid"] for b in tile_payload] == ["b1"]
+
+
+def test_export_noop_when_drift_parquet_missing(tmp_path: Path) -> None:
     conn = duckdb.connect(":memory:")
     _install_spatial(conn)
 

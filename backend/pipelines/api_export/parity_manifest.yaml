@@ -138,7 +138,7 @@
       "consumer": "frontend",
       "public_path_or_table": "/api/drift-exposure",
       "old_supabase_source": "drift exposure Supabase-backed service",
-      "current_r2_or_service_source": "api/v1/pesticides/drift-exposure/*.json",
+      "current_r2_or_service_source": "api/v1/pesticides/drift-exposure/index.json + api/v1/pesticides/drift-exposure/tiles/{z}/{x}/{y}.json",
       "status": "covered",
       "replacement_strategy": "already served from DriftExposureExporter",
       "owner_exporter": "drift_exposure",

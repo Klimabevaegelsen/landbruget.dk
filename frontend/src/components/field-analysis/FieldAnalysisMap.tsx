@@ -45,7 +45,7 @@ interface FieldAnalysisMapProps {
     bnbo: string;
     wetlands: string;
     water_projects: string;
-    buildings: string;
+    buildings: string | null;
   };
   layerVisibility: LayerVisibility;
   filterState: FilterState;
@@ -930,7 +930,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
   return (
     <div
-      className="relative h-full w-full"
+      className="map-container relative h-full w-full"
       style={{
         touchAction: 'pan-x pan-y',
         cursor: 'grab',

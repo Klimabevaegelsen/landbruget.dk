@@ -68,13 +68,13 @@ export function FieldAnalysisVisualization() {
     bnbo: string;
     wetlands: string;
     water_projects: string;
-    buildings: string;
+    buildings: string | null;
   }>({
     fields: '',
     bnbo: '',
     wetlands: '',
     water_projects: '',
-    buildings: '',
+    buildings: null,
   });
 
   useEffect(() => {

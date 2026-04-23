@@ -1,6 +1,4 @@
-import { CompanyProgressive } from '@/components/company/company-progressive';
-import { getBasicCompanyById } from '@/services/data/company-basic';
-import { notFound } from 'next/navigation';
+import { CompanyPage as CompanyPageContent } from '@/components/company/company-page';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -15,12 +13,5 @@ export async function generateStaticParams() {
 export default async function CompanyPage({ params }: Props) {
   const { id } = await params;
 
-  try {
-    // Only verify the company exists with basic info
-    await getBasicCompanyById(id);
-  } catch {
-    return notFound();
-  }
-
-  return <CompanyProgressive companyId={id} />;
+  return <CompanyPageContent companyId={id} />;
 }

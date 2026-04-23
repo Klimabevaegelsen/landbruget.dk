@@ -25,7 +25,7 @@ export function useCompanyNavigation() {
           : 'Henter virksomhedsdata...',
       });
 
-      router.push(`/virksomhed/${companyId}`);
+      router.push(`/company/${companyId}`);
 
       return toastId;
     },

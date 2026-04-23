@@ -1329,14 +1329,104 @@ class PMTilesDataLoader:
         for i, storage_path in enumerate(storage_paths):
             try:
                 logger.info(f"Loading BBR buildings data from {storage_path}")
-                query = f"""
-                CREATE OR REPLACE TABLE {table_name} AS
-                SELECT *
-                FROM read_parquet('{storage_path}joined_buildings.parquet')
-                WHERE category_group IN ('residential', 'publicServices', 'agricultural')
-                    AND geo_building_centroid IS NOT NULL
+                raw_table_name = f"{table_name}_raw"
+                parquet_path = f"{storage_path}joined_buildings.parquet"
+                schema_query = f"""
+                DESCRIBE SELECT *
+                FROM read_parquet({parquet_path!r})
                 """
-                await asyncio.to_thread(self.conn.execute, query)
+                schema_result = await asyncio.to_thread(self.conn.execute, schema_query)
+                existing_columns = {row[0] for row in schema_result.fetchall()}
+
+                geometry_candidates = [
+                    column
+                    for column in ("geo_building_polygon", "geometry")
+                    if column in existing_columns
+                ]
+                if not geometry_candidates:
+                    logger.warning(f"No usable geometry column found in {parquet_path}")
+                    continue
+
+                geometry_filter = (
+                    "COALESCE(" + ",".join(geometry_candidates) + ")"
+                    if len(geometry_candidates) > 1
+                    else geometry_candidates[0]
+                )
+
+                query = f"""
+                CREATE OR REPLACE TABLE {raw_table_name} AS
+                SELECT *
+                FROM read_parquet({parquet_path!r})
+                WHERE category_group IN (?, ?, ?)
+                    AND {geometry_filter} IS NOT NULL
+                """
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    query,
+                    ["residential", "publicServices", "agricultural"],
+                )
+
+                geometry_column = (
+                    "geo_building_polygon"
+                    if "geo_building_polygon" in existing_columns
+                    else "geometry"
+                )
+
+                bounds_result = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"""
+                    SELECT
+                        ST_XMin(ST_Extent({geometry_column})),
+                        ST_YMin(ST_Extent({geometry_column})),
+                        ST_XMax(ST_Extent({geometry_column})),
+                        ST_YMax(ST_Extent({geometry_column}))
+                    FROM {raw_table_name}
+                    WHERE {geometry_column} IS NOT NULL
+                    """,
+                )
+                min_x, min_y, max_x, max_y = bounds_result.fetchone()
+
+                looks_like_wgs84 = (
+                    min_x is not None
+                    and min_y is not None
+                    and max_x is not None
+                    and max_y is not None
+                    and -180 <= min_x <= 180
+                    and -180 <= max_x <= 180
+                    and -90 <= min_y <= 90
+                    and -90 <= max_y <= 90
+                )
+
+                if looks_like_wgs84:
+                    logger.info(
+                        "BBR buildings geometry appears to be EPSG:4326; transforming to EPSG:25832 for proximity joins"
+                    )
+                    normalized_geometry = f"ST_Transform({geometry_column}, 'EPSG:4326', 'EPSG:25832', always_xy := true)"
+                else:
+                    logger.info("BBR buildings geometry already appears to be projected")
+                    normalized_geometry = geometry_column
+
+                excluded_columns = []
+                if "geometry" in existing_columns:
+                    excluded_columns.append("geometry")
+                if "geo_building_centroid" in existing_columns:
+                    excluded_columns.append("geo_building_centroid")
+
+                select_prefix = "*"
+                if excluded_columns:
+                    excluded = ", ".join(excluded_columns)
+                    select_prefix = f"* EXCLUDE ({excluded})"
+
+                normalized_query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT
+                    {select_prefix},
+                    {normalized_geometry} AS geometry,
+                    ST_Centroid({normalized_geometry}) AS geo_building_centroid
+                FROM {raw_table_name}
+                WHERE {geometry_column} IS NOT NULL
+                """
+                await asyncio.to_thread(self.conn.execute, normalized_query)
 
                 count_result = await asyncio.to_thread(
                     self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
