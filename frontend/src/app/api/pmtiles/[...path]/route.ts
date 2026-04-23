@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PMTILES_BASE_URL = 'https://api.landbruget.dk';
+const PMTILES_BASE_URL = (
+  process.env.PMTILES_BASE_URL ||
+  process.env.NEXT_PUBLIC_PMTILES_BASE_URL ||
+  'https://api.landbruget.dk'
+).replace(/\/$/, '');
 const CACHE_DURATION = 7 * 24 * 60 * 60; // 1 week in seconds
 
 export async function GET(

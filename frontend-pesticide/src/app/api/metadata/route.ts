@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 
+const PMTILES_BASE_URL = (
+  process.env.PMTILES_BASE_URL ||
+  process.env.NEXT_PUBLIC_PMTILES_BASE_URL ||
+  'https://api.landbruget.dk'
+).replace(/\/$/, '');
+
 interface PMTilesFile {
   year: number;
   resolution: number;
@@ -79,7 +85,7 @@ export async function GET() {
       {
         filename: 'bnbo_areas.pmtiles',
         size: 4685085, // 4.47 MB
-        url: 'https://api.landbruget.dk/pmtiles/bnbo_areas.pmtiles',
+        url: `${PMTILES_BASE_URL}/pmtiles/bnbo_areas.pmtiles`,
         lastModified: new Date().toISOString(),
         type: 'bnbo_areas',
       },

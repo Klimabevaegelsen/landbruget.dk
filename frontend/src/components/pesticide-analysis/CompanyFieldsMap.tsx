@@ -19,7 +19,6 @@ import {
   LayerVisibility,
   FilterState,
 } from '@/components/field-analysis/types';
-import { PMTILES_BASE_URL } from '@/lib/env';
 
 // Dynamically import the map to avoid SSR issues
 const FieldAnalysisMap = dynamic(
@@ -42,6 +41,8 @@ interface CompanyFieldsMapProps {
   selectedYear?: number;
   className?: string;
 }
+
+const PMTILES_PROXY_PREFIX = '/api/pmtiles/pmtiles';
 
 export function CompanyFieldsMap({
   company,
@@ -72,11 +73,11 @@ export function CompanyFieldsMap({
 
   // Generate PMTiles URLs for the selected year
   const pmtilesUrls = {
-    fields: `${PMTILES_BASE_URL}/pmtiles/field_analysis_${selectedYear}.pmtiles`,
-    bnbo: `${PMTILES_BASE_URL}/pmtiles/bnbo_areas.pmtiles`,
-    wetlands: `${PMTILES_BASE_URL}/pmtiles/wetlands_all_2024.pmtiles`,
-    water_projects: `${PMTILES_BASE_URL}/pmtiles/water_projects_2024.pmtiles`,
-    buildings: `${PMTILES_BASE_URL}/pmtiles/buildings_proximity.pmtiles`,
+    fields: `${PMTILES_PROXY_PREFIX}/field_analysis_${selectedYear}.pmtiles`,
+    bnbo: `${PMTILES_PROXY_PREFIX}/bnbo_areas.pmtiles`,
+    wetlands: `${PMTILES_PROXY_PREFIX}/wetlands_all.pmtiles`,
+    water_projects: `${PMTILES_PROXY_PREFIX}/water_projects.pmtiles`,
+    buildings: `${PMTILES_PROXY_PREFIX}/buildings_proximity.pmtiles`,
   };
 
   // Ensure client-side only rendering
