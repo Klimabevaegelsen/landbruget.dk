@@ -11,11 +11,11 @@ authors = [
 dependencies = [
     "zeep~=4.3.1",
     "certifi~=2026.2.25",
-    "lxml>=5.2,<5.4",
+    "lxml>=6.0.4,<6.1",
     "xmlsec==1.3.17",
     "s3fs",
     "python-dotenv~=1.1.1",
-    "cryptography>=44.0.0",
+    "cryptography>=46.0.7",
     "tqdm~=4.67.1",
     "pyarrow~=20.0.0",
     "duckdb",
@@ -38,16 +38,13 @@ only-packages = true
 artifacts = ["*.py"]
 
 [tool.uv]
-# xmlsec 1.3.14 binary wheels are only compatible with lxml <5.4
-# lxml 5.4+ and 6.x bundle a different libxml2 causing runtime mismatch
-# See: https://github.com/xmlsec/python-xmlsec/issues/316
 
 [tool.uv.sources]
 landbruget-common = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "pytest-cov>=4.0.0",
     "ruff",
     "ty",
