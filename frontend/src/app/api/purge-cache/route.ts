@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PMTILES_BASE_URL } from '@/lib/env';
 
 interface PurgeRequest {
   files: string[];
