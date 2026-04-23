@@ -1,9 +1,16 @@
 """Tests for StoragePath helper in storage_interface."""
 
 
+def _clear_bucket_env(monkeypatch):
+    monkeypatch.delenv("STORAGE_BUCKET", raising=False)
+    monkeypatch.delenv("R2_BUCKET", raising=False)
+    monkeypatch.delenv("GCS_BUCKET", raising=False)
+
+
 def test_storage_path_prefers_r2_bucket(monkeypatch):
     from common.storage_interface import StoragePath
 
+    _clear_bucket_env(monkeypatch)
     monkeypatch.setenv("R2_BUCKET", "r2-bucket")
     monkeypatch.setenv("GCS_BUCKET", "gcs-bucket")
 
@@ -14,6 +21,7 @@ def test_storage_path_prefers_r2_bucket(monkeypatch):
 def test_storage_path_falls_back_to_legacy_bucket_env(monkeypatch):
     from common.storage_interface import StoragePath
 
+    _clear_bucket_env(monkeypatch)
     monkeypatch.delenv("R2_BUCKET", raising=False)
     monkeypatch.setenv("GCS_BUCKET", "legacy-gcs-bucket")
 
@@ -26,6 +34,7 @@ def test_storage_path_falls_back_to_legacy_bucket_env(monkeypatch):
 def test_storage_path_uses_default_bucket_when_env_missing(monkeypatch):
     from common.storage_interface import DEFAULT_BUCKET, StoragePath
 
+    _clear_bucket_env(monkeypatch)
     monkeypatch.delenv("R2_BUCKET", raising=False)
     monkeypatch.delenv("GCS_BUCKET", raising=False)
 

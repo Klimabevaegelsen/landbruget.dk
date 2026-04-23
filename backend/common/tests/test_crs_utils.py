@@ -282,12 +282,12 @@ class TestSQLTransformToUTM:
     def test_default_source_wgs84(self):
         """Should generate SQL with default WGS84 source."""
         result = sql_transform_to_utm("geometry")
-        assert result == f"ST_Transform(geometry, '{WGS84}', '{DANISH_UTM}')"
+        assert result == f"ST_Transform(geometry, '{WGS84}', '{DANISH_UTM}', always_xy := true)"
 
     def test_custom_source_crs(self):
         """Should generate SQL with custom source CRS."""
         result = sql_transform_to_utm("geom", WEB_MERCATOR)
-        assert result == f"ST_Transform(geom, '{WEB_MERCATOR}', '{DANISH_UTM}')"
+        assert result == (f"ST_Transform(geom, '{WEB_MERCATOR}', '{DANISH_UTM}', always_xy := true)")
 
     def test_complex_expression(self):
         """Should handle complex geometry expressions."""
@@ -301,12 +301,12 @@ class TestSQLTransformToWGS84:
     def test_default_source_utm(self):
         """Should generate SQL with default UTM source."""
         result = sql_transform_to_wgs84("geometry")
-        assert result == f"ST_Transform(geometry, '{DANISH_UTM}', '{WGS84}')"
+        assert result == f"ST_Transform(geometry, '{DANISH_UTM}', '{WGS84}', always_xy := true)"
 
     def test_custom_source_crs(self):
         """Should generate SQL with custom source CRS."""
         result = sql_transform_to_wgs84("geom", WEB_MERCATOR)
-        assert result == f"ST_Transform(geom, '{WEB_MERCATOR}', '{WGS84}')"
+        assert result == f"ST_Transform(geom, '{WEB_MERCATOR}', '{WGS84}', always_xy := true)"
 
 
 class TestSQLBufferMeters:
@@ -609,7 +609,7 @@ class TestNewCRSStrategyFunctions:
         from common.crs_utils import sql_transform_for_supabase
 
         result = sql_transform_for_supabase("geometry")
-        assert result == "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')"
+        assert result == "ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true)"
 
     def test_sql_transform_for_supabase_already_wgs84(self):
         """Should return expression unchanged if already in WGS84."""
@@ -631,7 +631,7 @@ class TestNewCRSStrategyFunctions:
         from common.crs_utils import WGS84, sql_transform_to_processing_crs
 
         result = sql_transform_to_processing_crs("geometry", source_crs=WGS84)
-        assert result == "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')"
+        assert result == "ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true)"
 
     def test_sql_transform_to_processing_crs_already_utm(self):
         """Should return expression unchanged if already in UTM."""

@@ -375,29 +375,22 @@ class SilverProcessor:
         """
         bronze_files = []
 
-        # FIXED: Use storage manager to list files instead of Path.glob() for cloud storage compatibility
         try:
-            # List all files in the bronze run directory using storage manager
-            all_files = self.storage_manager.list_files(bronze_run_path, pattern="*.metadata.json")
-
-            # Also check subdirectories for metadata files
-            # For R2, we need to list files recursively
             if self.storage_manager.storage_type.lower() == "r2":
-                # R2 storage - listing is handled via s3fs in the storage manager
-                pass
+                # R2 listing is handled via the storage manager.
+                all_files = self.storage_manager.list_files(
+                    bronze_run_path, pattern="*.metadata.json"
+                )
             else:
-                # Local storage - use recursive glob through storage manager
-                import os
-
-                for root, _dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
-                    for file in files:
-                        if file.endswith(".metadata.json"):
-                            file_path = Path(root) / file
-                            # Convert to relative path from storage base
-                            relative_path = file_path.relative_to(
-                                Path(self.storage_manager.base_dir)
-                            )
-                            all_files.append(relative_path)
+                # Local runs may be passed as absolute paths (e.g. tests / silver-only mode),
+                # so recurse from the resolved run directory directly instead of mixing
+                # storage-relative and absolute paths.
+                bronze_root = (
+                    bronze_run_path
+                    if bronze_run_path.is_absolute()
+                    else self.storage_manager.base_dir / bronze_run_path
+                )
+                all_files = sorted(bronze_root.rglob("*.metadata.json"))
 
         except Exception as e:
             logger.error(f"Failed to list files in Bronze directory {bronze_run_path}: {e!s}")

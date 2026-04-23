@@ -513,14 +513,14 @@ def test_validate_crs_before_transform_mismatch(
 def test_sql_transform_to_wgs84_generation() -> None:
     """Test SQL generation for transformation to WGS84."""
     sql = sql_transform_to_wgs84("my_geom", DANISH_UTM)
-    expected = f"ST_Transform(my_geom, '{DANISH_UTM}', '{WGS84}')"
+    expected = f"ST_Transform(my_geom, '{DANISH_UTM}', '{WGS84}', always_xy := true)"
     assert sql == expected, f"Expected {expected}, got {sql}"
 
 
 def test_sql_transform_to_utm_generation() -> None:
     """Test SQL generation for transformation to UTM."""
     sql = sql_transform_to_utm("my_geom", WGS84)
-    expected = f"ST_Transform(my_geom, '{WGS84}', '{DANISH_UTM}')"
+    expected = f"ST_Transform(my_geom, '{WGS84}', '{DANISH_UTM}', always_xy := true)"
     assert sql == expected, f"Expected {expected}, got {sql}"
 
 

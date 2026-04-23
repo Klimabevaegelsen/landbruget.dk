@@ -98,3 +98,6 @@ python_files = "test_*.py"
 python_functions = "test_*"
 python_classes = "Test*"
 addopts = "-v"
+markers = [
+    "integration: integration-style coverage for drive_data_pipeline",
+]

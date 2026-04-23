@@ -20,6 +20,12 @@ from common.cli import (
 class TestResolveBucket:
     """Test resolve_bucket() env var resolution."""
 
+    @pytest.fixture(autouse=True)
+    def clear_bucket_env(self, monkeypatch):
+        monkeypatch.delenv("STORAGE_BUCKET", raising=False)
+        monkeypatch.delenv("R2_BUCKET", raising=False)
+        monkeypatch.delenv("GCS_BUCKET", raising=False)
+
     def test_returns_override_when_provided(self, monkeypatch):
         monkeypatch.setenv("R2_BUCKET", "r2-bucket")
         monkeypatch.setenv("GCS_BUCKET", "gcs-bucket")

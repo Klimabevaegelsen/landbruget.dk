@@ -5,12 +5,11 @@ Python 3.11+ (<3.13), DuckDB >=1.5.0, Pydantic, s3fs/gcsfs. Package manager: **u
 ## Commands
 
 ```bash
-source venv/bin/activate                      # Always activate first
-python -m pytest                              # Run all tests
-python -m pytest -v -k test_name              # Run specific test
-ruff check . && ruff format .                 # Lint and format
-python -m unified_pipeline bronze --source X  # Run unified pipeline (Click CLI)
-cd pipelines/chr_pipeline && python main.py   # Run CHR pipeline
+uv run pytest                                 # Run all tests
+uv run pytest -v -k test_name                 # Run specific test
+uv run ruff check . && uv run ruff format .   # Lint and format
+uv run python -m unified_pipeline bronze --source X  # Run unified pipeline (Click CLI)
+cd pipelines/chr_pipeline && uv run python main.py   # Run CHR pipeline
 ```
 
 ## Processing Engine
@@ -79,7 +78,6 @@ Storage path resolution: `STORAGE_BUCKET` → `R2_BUCKET` → `GCS_BUCKET` → `
 - Using Pandas for large files — use DuckDB SQL instead
 - Using `DELIMITER` in DuckDB — use `delim` (1.5+ breaking change)
 - Bare geometry operations in DuckDB — wrap with `TRY()` for 1.5 compatibility
-- Forgetting `source venv/bin/activate` before running anything
 - Assuming global env loading — each pipeline manages its own `.env`
 - Using WGS84 for buffer/distance — always process in EPSG:25832
 - Referencing `common/gcs_utils.py` — actual path is `common/storage/core.py` (`StorageAccess` class)

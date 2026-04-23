@@ -34,20 +34,22 @@ cd frontend && npm test              # Playwright E2E
 cd frontend && npm run lint          # oxlint
 
 # Backend
-cd backend && source venv/bin/activate
-python -m pytest                     # Run tests
-cd pipelines/<name> && python main.py  # Run pipeline
+uv run pytest                        # Run tests
+cd backend/pipelines/<name> && uv run python main.py  # Run pipeline
 
 # Database
 supabase migration new <name>        # New migration
 supabase db push                     # Push migrations
+
+# Worktree/bootstrap
+./scripts/setup-worktree.sh          # Install frontend deps, Playwright browsers, and uv packages
 ```
 
 ## Before ANY Commit
 
 ```bash
 cd frontend && npm test && npm run lint
-cd backend && python -m pytest
+uv run pytest
 ```
 
 ## Conventions
@@ -99,7 +101,7 @@ Before any commit, run:
 
 ```bash
 cd frontend && npm test && npm run lint   # Playwright E2E + oxlint
-cd backend && python -m pytest            # Python tests
+uv run pytest                             # Python tests
 ```
 
 Confirm:

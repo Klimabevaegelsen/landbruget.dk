@@ -10,6 +10,17 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 
+require_command() {
+    local command_name="$1"
+    local install_hint="$2"
+
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "❌ Required command not found: $command_name"
+        echo "   $install_hint"
+        exit 1
+    fi
+}
+
 # Find the main repository (where the original .env lives)
 GIT_COMMON_DIR="$(cd "$PROJECT_ROOT" && git rev-parse --git-common-dir 2>/dev/null || echo "")"
 if [ -n "$GIT_COMMON_DIR" ]; then
@@ -24,6 +35,10 @@ if [ -n "$MAIN_REPO_ROOT" ] && [ "$MAIN_REPO_ROOT" != "$PROJECT_ROOT" ]; then
     echo "📁 Main repo root: $MAIN_REPO_ROOT"
 fi
 echo ""
+
+require_command "node" "Install Node.js 22+ before running this script."
+require_command "npm" "Install npm with Node.js before running this script."
+require_command "uv" "Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
 
 # Step 1: Symlink root .env (single source of truth for all secrets)
 ROOT_ENV_FILE="$PROJECT_ROOT/.env"
@@ -74,21 +89,34 @@ fi
 echo "✅ Frontend dependencies installed"
 echo ""
 
-# Step 4: Set up Backend Python environment using uv (workspace-aware)
-echo "🐍 Setting up Backend Python environment..."
-cd "$PROJECT_ROOT"
-
-if command -v uv &> /dev/null; then
-    echo "📦 Installing Python dependencies with uv..."
-    uv sync --all-packages
-    echo "✅ Python dependencies installed via uv workspace"
-else
-    echo "⚠️  uv not found. Install it: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    echo "   Then re-run this setup script."
-fi
+# Step 4: Install Playwright browser binaries
+echo "🎭 Installing Playwright browsers..."
+cd "$FRONTEND_DIR"
+npm exec -- playwright install
+echo "✅ Playwright browsers ready"
 echo ""
 
-# Step 5: Verify .env is gitignored
+# Step 5: Set up Backend Python environment using uv (workspace-aware)
+echo "🐍 Setting up Backend Python environment..."
+cd "$PROJECT_ROOT"
+echo "📦 Installing Python dependencies with uv..."
+uv sync --python 3.11 --all-packages --group dev
+echo "✅ Python dependencies installed via uv workspace"
+echo ""
+
+# Step 6: Verify developer tools resolve locally
+echo "🧪 Verifying local toolchain..."
+cd "$FRONTEND_DIR"
+npm exec -- oxlint --version >/dev/null
+npm exec -- playwright --version >/dev/null
+echo "✅ Frontend verification commands are available"
+
+cd "$PROJECT_ROOT"
+uv run pytest --version >/dev/null
+echo "✅ Backend pytest is available through uv"
+echo ""
+
+# Step 7: Verify .env is gitignored
 GITIGNORE_FILE="$PROJECT_ROOT/.gitignore"
 if [ -f "$GITIGNORE_FILE" ]; then
     if grep -q "\.env" "$GITIGNORE_FILE"; then
@@ -104,6 +132,8 @@ echo "✨ Worktree setup complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Verify .env has your credentials (see .env.example)"
-echo "  2. cd frontend && npm run dev     # Start dev server"
-echo "  3. uv run pytest                  # Run backend tests"
+echo "  2. cd frontend && npm run dev        # Start dev server"
+echo "  3. cd frontend && npm run lint       # Run oxlint"
+echo "  4. cd frontend && npm test           # Run Playwright E2E"
+echo "  5. uv run pytest                     # Run backend tests"
 echo ""
