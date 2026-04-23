@@ -34,6 +34,7 @@ interface RankingTableEnhancedProps {
   items: RankingItem[];
   last_updated?: string;
   showTop?: number;
+  testId?: string;
 }
 
 type SortField = 'rank' | 'company_name' | 'value' | 'municipality';
@@ -45,6 +46,7 @@ export function RankingTableEnhanced({
   description,
   items,
   showTop = 20,
+  testId,
 }: RankingTableEnhancedProps) {
   const { navigateToCompany } = useCompanyNavigation();
   const { getCompanyForDisplay } = useCompanyCache();
@@ -119,7 +121,7 @@ export function RankingTableEnhanced({
   );
 
   return (
-    <Card className="w-full" data-testid="ranking-table">
+    <Card className="w-full" data-testid={testId}>
       <CardHeader className="card-header pb-4">
         <div className="flex items-start justify-between">
           <div className="space-y-2">

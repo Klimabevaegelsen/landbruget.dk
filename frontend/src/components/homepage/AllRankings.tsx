@@ -187,7 +187,6 @@ const RANKINGS = [
 export function AllRankings() {
   return (
     <div className="w-full space-y-8">
-      {/* Rankings Grid */}
       <div className="grid grid-cols-1 gap-6">
         {RANKINGS.map((ranking) => (
           <IndividualRankingTable
@@ -197,6 +196,7 @@ export function AllRankings() {
             category={ranking.category}
             description={ranking.description}
             initialLimit={20}
+            testId={ranking.id === RANKINGS[0].id ? 'ranking-table' : undefined}
           />
         ))}
       </div>
