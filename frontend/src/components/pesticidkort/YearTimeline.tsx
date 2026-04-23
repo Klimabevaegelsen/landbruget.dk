@@ -53,7 +53,7 @@ export function YearTimeline({ year, onChange }: YearTimelineProps) {
 
   return (
     <div
-      className="flex items-center gap-0.5 select-none"
+      className="flex w-full items-center gap-0.5 select-none"
       data-testid="year-timeline"
       role="slider"
       aria-label="Vælg sprøjteår"
@@ -70,7 +70,7 @@ export function YearTimeline({ year, onChange }: YearTimelineProps) {
         disabled={activeIdx <= 0}
         aria-label="Forrige år"
         data-testid="year-prev-button"
-        className="text-muted-foreground hover:text-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30"
+        className="text-muted-foreground hover:text-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 sm:h-9 sm:w-9"
       >
         <ChevronLeft className="h-4 w-4" />
       </button>
@@ -90,7 +90,7 @@ export function YearTimeline({ year, onChange }: YearTimelineProps) {
               aria-current={isActive ? 'true' : undefined}
               onClick={() => onChange(y)}
               className={cn(
-                'shrink-0 snap-center rounded-full px-2.5 py-1.5 text-xs font-medium tabular-nums transition-colors',
+                'shrink-0 snap-center rounded-full px-2 py-1 text-[11px] font-medium tabular-nums transition-colors sm:px-2.5 sm:py-1.5 sm:text-xs',
                 isActive
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -110,7 +110,7 @@ export function YearTimeline({ year, onChange }: YearTimelineProps) {
         disabled={activeIdx >= YEARS.length - 1}
         aria-label="Næste år"
         data-testid="year-next-button"
-        className="text-muted-foreground hover:text-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30"
+        className="text-muted-foreground hover:text-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 sm:h-9 sm:w-9"
       >
         <ChevronRight className="h-4 w-4" />
       </button>

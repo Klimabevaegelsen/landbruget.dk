@@ -75,11 +75,11 @@ export function DisclaimerFooter() {
           ))}
         </div>
 
-        <div className="flex items-center justify-between sm:hidden">
+        <div className="sm:hidden">
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-muted-foreground flex items-center gap-1"
+            className="text-muted-foreground flex min-h-[40px] w-full items-center gap-1"
             data-testid="pesticidkort-disclaimer-toggle"
             aria-expanded={expanded}
             aria-label={expanded ? 'Skjul forbehold' : 'Vis forbehold og links'}
@@ -92,17 +92,23 @@ export function DisclaimerFooter() {
             {expanded ? 'Skjul' : 'Forbehold & vilkår'}
           </button>
           {expanded && (
-            <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
-              {LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
-                  data-testid={`pesticidkort-disclaimer-mlink-${link.id}`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+            <div className="mt-2 space-y-3 pb-1">
+              <p className="text-muted-foreground leading-snug">
+                Beregnede data baseret på offentlige kilder. Værdier er
+                estimater og kan afvige fra faktisk sprøjtning.
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                {LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                    data-testid={`pesticidkort-disclaimer-mlink-${link.id}`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
             </div>
           )}
         </div>

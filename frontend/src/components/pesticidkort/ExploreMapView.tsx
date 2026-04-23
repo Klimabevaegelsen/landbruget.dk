@@ -82,7 +82,7 @@ export function ExploreMapView({
       <MapLegend activeFilter={chemFilter} />
       <MapOnboardingHint />
 
-      <div className="absolute top-0 right-0 left-0 z-20 px-4 pt-3">
+      <div className="absolute top-0 right-0 left-0 z-20 px-3 pt-3 sm:px-4">
         <div className="mx-auto flex max-w-lg items-center gap-2">
           <button
             onClick={onBack}
@@ -108,8 +108,8 @@ export function ExploreMapView({
           )}
         </div>
 
-        <div className="mx-auto mt-2 flex max-w-lg flex-col items-center gap-2">
-          <div className="bg-background/90 w-full max-w-xs min-w-[200px] rounded-full px-2 py-1 backdrop-blur-sm md:max-w-md md:min-w-[480px] md:px-3">
+        <div className="mx-auto mt-2 flex max-w-lg flex-col items-stretch gap-2">
+          <div className="bg-background/90 w-full max-w-full rounded-full px-2 py-1 backdrop-blur-sm md:max-w-md md:min-w-[480px] md:self-center md:px-3">
             <YearTimeline year={year} onChange={onYearChange} />
           </div>
           <ChemicalFilterPills
