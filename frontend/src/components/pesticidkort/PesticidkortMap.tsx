@@ -1,20 +1,24 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import Map, { NavigationControl, Marker, MapRef } from '@vis.gl/react-maplibre';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import Map, { NavigationControl, MapRef } from '@vis.gl/react-maplibre';
 import { useMapTheme } from '@/hooks/useMapTheme';
+import { AddressMarker } from '@/components/pesticidkort/AddressMarker';
 import { ProximityRings } from '@/components/pesticidkort/ProximityRings';
 import {
   addFieldLayers,
   addOverviewLayers,
   applyChemicalFilter,
+  syncFieldLayerTheme,
 } from '@/components/pesticidkort/map-layers';
 import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
-import { addBuildingLayers } from '@/components/pesticidkort/map-layers-buildings';
 import {
-  highlightField,
+  addBuildingLayers,
+  syncBuildingLayerTheme,
+} from '@/components/pesticidkort/map-layers-buildings';
+import {
   flyToField,
+  highlightField,
 } from '@/components/pesticidkort/map-highlight';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { usePesticidkortData } from '@/components/pesticidkort/usePesticidkortData';
@@ -23,6 +27,7 @@ import {
   updateSourceUrl,
 } from '@/components/pesticidkort/map-events';
 import { FieldHoverTooltip } from '@/components/pesticidkort/FieldHoverTooltip';
+import { MapLoadingState } from '@/components/pesticidkort/MapLoadingState';
 import { useFieldHover } from '@/components/pesticidkort/useFieldHover';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
@@ -48,7 +53,7 @@ export function PesticidkortMap({
   onFieldClick,
   activeFilter = 'none',
 }: PesticidkortMapProps) {
-  const { mapStyle } = useMapTheme();
+  const { mapStyle, mapStyleTheme } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [isReady, setIsReady] = useState(false);
   const { hoverData, attachHover } = useFieldHover();
@@ -115,15 +120,12 @@ export function PesticidkortMap({
   useEffect(() => {
     if (!isReady || !mapRef.current) return;
     const map = mapRef.current.getMap() as unknown as MapInstance;
+    syncFieldLayerTheme(map);
+    syncBuildingLayerTheme(map);
     applyChemicalFilter(map, activeFilter);
-  }, [activeFilter, isReady]);
+  }, [activeFilter, isReady, mapStyleTheme]);
 
-  if (!pmtilesUrl)
-    return (
-      <div className="bg-muted flex h-full items-center justify-center">
-        <p className="text-muted-foreground text-sm">Indlæser kort...</p>
-      </div>
-    );
+  if (!pmtilesUrl) return <MapLoadingState />;
 
   return (
     <>
@@ -138,9 +140,7 @@ export function PesticidkortMap({
         >
           <NavigationControl position="top-left" />
           {isReady && <ProximityRings lat={lat} lng={lng} radiusM={radiusM} />}
-          <Marker longitude={lng} latitude={lat} anchor="center">
-            <div className="bg-primary border-background h-4 w-4 rounded-full border-2 shadow-md" />
-          </Marker>
+          <AddressMarker lat={lat} lng={lng} />
         </Map>
       </div>
       {hoverData && <FieldHoverTooltip {...hoverData} />}

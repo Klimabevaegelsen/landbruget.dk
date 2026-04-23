@@ -1,4 +1,23 @@
 import type { MapInstance } from '@/components/field-analysis/map-constants';
+import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
+
+export function syncBuildingLayerTheme(map: MapInstance) {
+  if (map.getLayer('buildings-edu-fill')) {
+    map.setPaintProperty(
+      'buildings-edu-fill',
+      'fill-color',
+      resolvePesticidkortColor('schoolFill')
+    );
+  }
+
+  if (map.getLayer('buildings-edu-outline')) {
+    map.setPaintProperty(
+      'buildings-edu-outline',
+      'line-color',
+      resolvePesticidkortColor('schoolOutline')
+    );
+  }
+}
 
 /** School and institution building outlines for the pesticidkort map. */
 export function addBuildingLayers(map: MapInstance, pmtilesUrl: string) {
@@ -17,7 +36,7 @@ export function addBuildingLayers(map: MapInstance, pmtilesUrl: string) {
       type: 'fill',
       filter: ['==', ['get', 'building_usage_category'], 'publicServices'],
       paint: {
-        'fill-color': '#EC4899',
+        'fill-color': resolvePesticidkortColor('schoolFill'),
         'fill-opacity': 0.45,
       },
     });
@@ -29,10 +48,12 @@ export function addBuildingLayers(map: MapInstance, pmtilesUrl: string) {
       type: 'line',
       filter: ['==', ['get', 'building_usage_category'], 'publicServices'],
       paint: {
-        'line-color': '#BE185D',
+        'line-color': resolvePesticidkortColor('schoolOutline'),
         'line-width': 1.5,
         'line-opacity': 0.8,
       },
     });
   }
+
+  syncBuildingLayerTheme(map);
 }

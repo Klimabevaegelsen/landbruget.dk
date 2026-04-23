@@ -7,21 +7,45 @@ import { ChevronDown } from 'lucide-react';
 import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 
 const GRADE_ITEMS = [
-  { bg: 'bg-[#22c55e]', label: 'Under 0,5 B/ha' },
-  { bg: 'bg-[#84cc16]', label: '0,5\u20132,0 B/ha' },
-  { bg: 'bg-[#eab308]', label: '2,0\u20134,0 B/ha' },
-  { bg: 'bg-[#f97316]', label: '4,0\u20138,0 B/ha' },
-  { bg: 'bg-[#dc2626]', label: 'Over 8,0 B/ha' },
-  { bg: 'bg-[#d1d5db]', label: 'Brak / ingen pesticider' },
+  {
+    swatch: 'bg-[var(--pesticidkort-color-burden-low)]',
+    label: 'Under 0,5 B/ha',
+  },
+  {
+    swatch: 'bg-[var(--pesticidkort-color-burden-mid-low)]',
+    label: '0,5\u20132,0 B/ha',
+  },
+  {
+    swatch: 'bg-[var(--pesticidkort-color-burden-mid)]',
+    label: '2,0\u20134,0 B/ha',
+  },
+  {
+    swatch: 'bg-[var(--pesticidkort-color-burden-mid-high)]',
+    label: '4,0\u20138,0 B/ha',
+  },
+  {
+    swatch: 'bg-[var(--pesticidkort-color-burden-high)]',
+    label: 'Over 8,0 B/ha',
+  },
+  {
+    swatch: 'bg-[var(--pesticidkort-color-burden-none)]',
+    label: 'Brak / ingen pesticider',
+  },
 ] as const;
 
 const CHEMICAL_META: Record<
   Exclude<ChemicalFilter, 'none'>,
-  { label: string; bg: string }
+  { label: string; swatch: string }
 > = {
-  pfas: { label: 'PFAS-pesticider', bg: 'bg-[#9333ea]' },
-  glyphosate: { label: 'Glyphosat', bg: 'bg-[#0891b2]' },
-  diquat: { label: 'Diquat', bg: 'bg-[#db2777]' },
+  pfas: {
+    label: 'PFAS-pesticider',
+    swatch: 'bg-[var(--pesticidkort-color-pfas)]',
+  },
+  glyphosate: {
+    label: 'Glyphosat',
+    swatch: 'bg-[var(--pesticidkort-color-glyphosate)]',
+  },
+  diquat: { label: 'Diquat', swatch: 'bg-[var(--pesticidkort-color-diquat)]' },
 };
 
 interface MapLegendProps {
@@ -35,7 +59,7 @@ export function MapLegend({ activeFilter = 'none' }: MapLegendProps) {
   return (
     <div
       data-testid="map-legend"
-      className="bg-background/90 absolute bottom-[calc(var(--pesticidkort-footer-height)+1rem)] left-4 z-20 max-w-[calc(100vw-2rem)] rounded-lg px-3 py-2 shadow-md backdrop-blur-sm"
+      className="bg-background/90 border-border/70 absolute bottom-[calc(var(--pesticidkort-footer-height)+1rem)] left-4 z-20 max-w-[calc(100vw-2rem)] rounded-lg border px-3 py-2 shadow-md backdrop-blur-sm"
     >
       <button
         onClick={() => setCollapsed(!collapsed)}
@@ -79,7 +103,7 @@ function GradeLegendItems() {
     <>
       {GRADE_ITEMS.map((item) => (
         <div key={item.label} className="flex items-center gap-2">
-          <div className={cn('h-3 w-3 shrink-0 rounded-sm', item.bg)} />
+          <div className={cn('h-3 w-3 shrink-0 rounded-sm', item.swatch)} />
           <span className="text-muted-foreground min-w-0 text-[11px] leading-tight">
             {item.label}
           </span>
@@ -98,13 +122,13 @@ function ChemicalLegendItems({
   return (
     <>
       <div className="flex items-center gap-2">
-        <div className={cn('h-3 w-3 shrink-0 rounded-sm', meta.bg)} />
+        <div className={cn('h-3 w-3 shrink-0 rounded-sm', meta.swatch)} />
         <span className="text-muted-foreground min-w-0 text-[11px] leading-tight">
           Marker med {meta.label}
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <div className="h-3 w-3 shrink-0 rounded-sm bg-[#d1d5db] opacity-20" />
+        <div className="h-3 w-3 shrink-0 rounded-sm bg-[var(--pesticidkort-color-burden-none)] opacity-45" />
         <span className="text-muted-foreground min-w-0 text-[11px] leading-tight">
           Andre marker
         </span>

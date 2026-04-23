@@ -2,13 +2,13 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Map, { NavigationControl, MapRef } from '@vis.gl/react-maplibre';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
 import {
   addFieldLayers,
   addOverviewLayers,
   applyChemicalFilter,
+  syncFieldLayerTheme,
 } from '@/components/pesticidkort/map-layers';
 import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
@@ -37,7 +37,7 @@ export function ExploreMapInner({
   onFieldClick,
   selectedFieldUuid,
 }: ExploreMapInnerProps) {
-  const { mapStyle } = useMapTheme();
+  const { mapStyle, mapStyleTheme } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
   const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
@@ -87,8 +87,9 @@ export function ExploreMapInner({
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
     const map = mapRef.current.getMap() as unknown as MapInstance;
+    syncFieldLayerTheme(map);
     applyChemicalFilter(map, activeFilter);
-  }, [activeFilter, mapReady]);
+  }, [activeFilter, mapReady, mapStyleTheme]);
 
   useEffect(() => {
     if (!mapReady) return;

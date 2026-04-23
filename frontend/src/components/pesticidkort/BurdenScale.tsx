@@ -34,7 +34,7 @@ export function BurdenScale({ burden, histogram }: BurdenScaleProps) {
   }, [histogram]);
 
   return (
-    <div className="relative h-5 flex-1" data-testid="burden-scale">
+    <div className="relative h-6 flex-1" data-testid="burden-scale">
       {bars.map((bar, i) => {
         const barStyle = {
           left: `${bar.left}%`,
@@ -44,19 +44,19 @@ export function BurdenScale({ burden, histogram }: BurdenScaleProps) {
         return (
           <div
             key={i}
-            className="bg-muted-foreground/8 absolute bottom-0"
+            className="bg-foreground/18 dark:bg-foreground/24 absolute bottom-0 rounded-[1px]"
             style={barStyle}
           />
         );
       })}
-      <div className="bg-muted absolute bottom-[3px] h-[2px] w-full rounded-full" />
+      <div className="bg-foreground/20 dark:bg-foreground/30 absolute bottom-[3px] h-[2px] w-full rounded-full" />
       <div
-        className="bg-muted-foreground/25 absolute bottom-0 h-full w-px"
+        className="bg-primary/70 dark:bg-primary/80 absolute bottom-0 h-full w-px"
         style={avgStyle}
         title="Landsgennemsnit (2,15 B/ha)"
       />
       <div
-        className="bg-foreground absolute bottom-[1px] h-[6px] w-[6px] -translate-x-1/2 rounded-full"
+        className="bg-primary ring-background absolute bottom-0 h-[7px] w-[7px] -translate-x-1/2 rounded-full ring-1"
         style={dotStyle}
       />
     </div>

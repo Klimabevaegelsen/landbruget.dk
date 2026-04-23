@@ -1,5 +1,6 @@
 import { Source, Layer } from '@vis.gl/react-maplibre';
 import { useMemo, useEffect, useState } from 'react';
+import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
 
 interface ProximityRingsProps {
   lat: number;
@@ -30,6 +31,7 @@ function createCircleGeoJSON(
 
 export function ProximityRings({ lat, lng, radiusM }: ProximityRingsProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const ringColor = resolvePesticidkortColor('ring');
   const geojson = useMemo(
     () => ({
       type: 'FeatureCollection' as const,
@@ -53,7 +55,7 @@ export function ProximityRings({ lat, lng, radiusM }: ProximityRingsProps) {
         id="proximity-rings-fill"
         type="fill"
         paint={{
-          'fill-color': '#3f6ab3',
+          'fill-color': ringColor,
           'fill-opacity': isVisible ? 0.04 : 0,
           'fill-opacity-transition': { duration: 650, delay: 50 },
         }}
@@ -62,7 +64,7 @@ export function ProximityRings({ lat, lng, radiusM }: ProximityRingsProps) {
         id="proximity-rings-line"
         type="line"
         paint={{
-          'line-color': '#3f6ab3',
+          'line-color': ringColor,
           'line-width': 1.5,
           'line-dasharray': [4, 3],
           'line-opacity': isVisible ? 0.5 : 0,

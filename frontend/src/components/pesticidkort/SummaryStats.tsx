@@ -67,9 +67,9 @@ export function SummaryStats({
             className={cn(
               'mt-0.5 text-xs',
               avgBurden >= 8
-                ? 'text-destructive/80 font-medium'
+                ? 'text-destructive font-semibold'
                 : avgBurden >= 4
-                  ? 'text-warning/80 font-medium'
+                  ? 'text-warning font-semibold'
                   : 'text-muted-foreground'
             )}
           >

@@ -38,12 +38,29 @@ export function PersonalReport({
       className="animate-fade-slide-up space-y-6 px-5 py-4 motion-reduce:animate-none"
     >
       <div className="bg-card rounded-xl p-5">
-        {report.grade ? (
+        {report.grade_status === 'ready' && report.grade ? (
           <PesticideProximityScore
             grade={report.grade.grade}
             label={report.grade.label}
             description={report.grade.description}
           />
+        ) : report.grade_status === 'loading' ? (
+          <div
+            data-testid="pesticide-proximity-score-loading"
+            aria-live="polite"
+            className="pt-6 pb-8"
+          >
+            <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-widest uppercase">
+              Pesticideksponering
+            </p>
+            <p className="font-display text-foreground text-3xl leading-tight font-semibold tracking-tight sm:text-4xl">
+              Beregner drift-eksponering...
+            </p>
+            <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+              Vi matcher adressen med den nærmeste BBR-bygning for at vise din
+              endelige placering.
+            </p>
+          </div>
         ) : (
           <div
             data-testid="pesticide-proximity-score-empty"
@@ -91,13 +108,11 @@ export function PersonalReport({
         exposure100m={report.exposure_100m}
         exposure1000m={report.exposure_1000m}
       />
-
       <SummaryStats
         fieldsCount={report.fields_count}
         avgBurden={report.avg_burden}
         nearestFieldM={report.nearest_field_m}
       />
-
       <FieldList
         fields={report.fields}
         histogram={histogram}
@@ -105,7 +120,6 @@ export function PersonalReport({
         clickedField={clickedField}
         onFieldSelect={onFieldSelect}
       />
-
       {report.has_bnbo_overlap && (
         <div className="space-y-3">
           <AlertCallout
@@ -118,7 +132,6 @@ export function PersonalReport({
           />
         </div>
       )}
-
       <footer className="text-muted-foreground pt-4 pb-4">
         <p className="text-xs leading-relaxed">
           Data fra Miljøstyrelsen, Landbrugsstyrelsen, Geodatastyrelsen og 18+

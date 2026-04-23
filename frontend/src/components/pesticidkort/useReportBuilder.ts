@@ -8,6 +8,7 @@ import type {
   NearbyFieldSummary,
   ExposureSummary,
   GradeInfo,
+  PesticideGradeStatus,
 } from '@/components/pesticidkort/types';
 import type { DriftExposureMatch } from '@/components/pesticidkort/useDriftExposure';
 
@@ -49,72 +50,75 @@ export function useReportBuilder({
   driftExposure,
   driftStatus,
 }: UseReportBuilderOptions) {
+  const [fields, setFields] = useState<NearbyFieldSummary[] | null>(null);
   const [report, setReport] = useState<PesticideReport | null>(null);
 
-  const handleFieldsLoaded = useCallback(
-    (fields: NearbyFieldSummary[]) => {
-      const { score, grade: fallbackGrade } = computePesticideScore(
-        fields,
-        radiusM
-      );
-      // When drift-exposure has no BBR match AND we found no nearby sprayed
-      // fields, we genuinely have no signal — don't default to UNDER_AVG (the
-      // burden fallback returns that for fields.length === 0 and that misled
-      // users into thinking every address was below average).
-      const hasNoData = driftStatus === 'no_match' && fields.length === 0;
-      const grade: GradeInfo | null = hasNoData
-        ? null
-        : driftExposure
-          ? driftPercentileToGrade(
-              driftExposure.exposure_percentile,
-              driftExposure.drift_dose_kg,
-              driftExposure.national_avg_drift_dose_kg
-            )
-          : fallbackGrade;
-      let pfasCount = 0;
-      let totalBurden = 0;
-      let hasBnbo = false;
-      for (const f of fields) {
-        if (f.pfas_applications > 0) pfasCount++;
-        totalBurden += f.total_pesticide_belastning;
-        if (f.bnbo_area_hectares && f.bnbo_area_hectares > 0) hasBnbo = true;
-      }
-      setReport({
-        address,
-        lat,
-        lng,
-        radius_m: radiusM,
-        year,
-        grade,
-        score,
-        fields_count: fields.length,
-        pfas_fields_count: pfasCount,
-        avg_burden:
-          fields.length > 0
-            ? Math.round((totalBurden / fields.length) * 100) / 100
-            : 0,
-        nearest_field_m: fields[0]?.distance_m ?? 0,
-        fields,
-        has_bnbo_overlap: hasBnbo,
-        has_violations: false,
-        exposure_100m: computeExposure(fields, 100),
-        exposure_1000m: computeExposure(fields, radiusM),
-      });
-    },
-    [address, lat, lng, radiusM, year, driftExposure, driftStatus]
-  );
+  const handleFieldsLoaded = useCallback((fields: NearbyFieldSummary[]) => {
+    setFields(fields);
+  }, []);
 
-  // If drift exposure lands after fields, upgrade the grade in place.
   useEffect(() => {
-    if (!report || !driftExposure) return;
-    const driftGrade = driftPercentileToGrade(
-      driftExposure.exposure_percentile,
-      driftExposure.drift_dose_kg,
-      driftExposure.national_avg_drift_dose_kg
+    if (!fields) {
+      setReport(null);
+      return;
+    }
+
+    const { score, grade: fallbackGrade } = computePesticideScore(
+      fields,
+      radiusM
     );
-    if (report.grade && driftGrade.grade === report.grade.grade) return;
-    setReport({ ...report, grade: driftGrade });
-  }, [driftExposure, report]);
+
+    let grade: GradeInfo | null = null;
+    let gradeStatus: PesticideGradeStatus = 'loading';
+
+    if (driftExposure) {
+      grade = driftPercentileToGrade(
+        driftExposure.exposure_percentile,
+        driftExposure.drift_dose_kg,
+        driftExposure.national_avg_drift_dose_kg
+      );
+      gradeStatus = 'ready';
+    } else if (driftStatus === 'no_match') {
+      if (fields.length === 0) {
+        gradeStatus = 'no_data';
+      } else {
+        grade = fallbackGrade;
+        gradeStatus = 'ready';
+      }
+    }
+
+    let pfasCount = 0;
+    let totalBurden = 0;
+    let hasBnbo = false;
+    for (const f of fields) {
+      if (f.pfas_applications > 0) pfasCount++;
+      totalBurden += f.total_pesticide_belastning;
+      if (f.bnbo_area_hectares && f.bnbo_area_hectares > 0) hasBnbo = true;
+    }
+
+    setReport({
+      address,
+      lat,
+      lng,
+      radius_m: radiusM,
+      year,
+      grade,
+      grade_status: gradeStatus,
+      score,
+      fields_count: fields.length,
+      pfas_fields_count: pfasCount,
+      avg_burden:
+        fields.length > 0
+          ? Math.round((totalBurden / fields.length) * 100) / 100
+          : 0,
+      nearest_field_m: fields[0]?.distance_m ?? 0,
+      fields,
+      has_bnbo_overlap: hasBnbo,
+      has_violations: false,
+      exposure_100m: computeExposure(fields, 100),
+      exposure_1000m: computeExposure(fields, radiusM),
+    });
+  }, [address, driftExposure, driftStatus, fields, lat, lng, radiusM, year]);
 
   return { report, handleFieldsLoaded };
 }

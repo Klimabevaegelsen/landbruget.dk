@@ -2,15 +2,16 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Map, { Marker, MapRef } from '@vis.gl/react-maplibre';
-import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { pmtilesCacheService } from '@/lib/pmtiles-cache-service';
 import {
   addFieldLayers,
   addOverviewLayers,
+  syncFieldLayerTheme,
 } from '@/components/pesticidkort/map-layers';
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { ProximityRings } from '@/components/pesticidkort/ProximityRings';
+import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
 import type { StoryChapter } from '@/components/pesticidkort/story-chapters';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
@@ -29,7 +30,7 @@ export function StoryMapInner({
   year,
   chapter,
 }: StoryMapInnerProps) {
-  const { mapStyle } = useMapTheme();
+  const { mapStyle, mapStyleTheme } = useMapTheme();
   const mapRef = useRef<MapRef>(null);
   const [pmtilesUrl, setPmtilesUrl] = useState<string | null>(null);
   const [overviewUrl, setOverviewUrl] = useState<string | null>(null);
@@ -57,9 +58,10 @@ export function StoryMapInner({
   useEffect(() => {
     if (!mapRef.current || !ready) return;
     const map = mapRef.current.getMap();
+    syncFieldLayerTheme(map as unknown as MapInstance);
     map.flyTo({ center: [lng, lat], zoom: chapter.mapZoom, duration: 1200 });
     applyPaintMode(map, chapter.paintMode);
-  }, [chapter, lat, lng, ready]);
+  }, [chapter, lat, lng, mapStyleTheme, ready]);
 
   const showRings = chapter.showLayers.includes('proximity-rings');
   if (!pmtilesUrl) return null;
@@ -99,8 +101,8 @@ function applyPaintMode(
     color = [
       'case',
       ['>', ['coalesce', ['get', 'pfas_applications'], 0], 0],
-      '#d06a3a',
-      '#dfe6f2',
+      resolvePesticidkortColor('pfas'),
+      resolvePesticidkortColor('storyMuted'),
     ];
     opacity = 0.8;
   } else if (mode === 'burden') {
@@ -109,17 +111,17 @@ function applyPaintMode(
       ['linear'],
       ['coalesce', ['get', 'total_pesticide_belastning'], 0],
       0,
-      '#6abf69',
+      resolvePesticidkortColor('burdenLow'),
       2,
-      '#d4c54a',
+      resolvePesticidkortColor('burdenMid'),
       5,
-      '#d89135',
+      resolvePesticidkortColor('burdenMidHigh'),
       10,
-      '#c4512c',
+      resolvePesticidkortColor('burdenHigh'),
     ];
     opacity = 0.7;
   } else {
-    color = '#3a9d5d';
+    color = resolvePesticidkortColor('highlight');
     opacity = 0.5;
   }
   for (const id of layers) {

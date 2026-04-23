@@ -41,11 +41,11 @@ export function EstimatedBadge({
           <Badge
             variant="outline"
             className={cn(
-              'gap-1 border-warning/40 bg-warning/10 text-warning-foreground',
+              'gap-1.5 border-warning/80 bg-warning text-warning-foreground rounded-full px-3 py-1 text-[11px] font-bold tracking-[0.08em] uppercase shadow-sm',
               className
             )}
           >
-            <InfoIcon className="size-3" />
+            <InfoIcon className="size-3.5 shrink-0" />
             {LABELS[variant]}
           </Badge>
         </button>
