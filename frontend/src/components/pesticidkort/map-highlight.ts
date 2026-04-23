@@ -1,4 +1,5 @@
 import type { MapRef } from '@vis.gl/react-maplibre';
+import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
 
 const HIGHLIGHT_LAYER = 'fields-highlight';
 const HIGHLIGHT_SOURCE = 'fields';
@@ -22,12 +23,18 @@ export function highlightField(
       'source-layer': SOURCE_LAYER,
       type: 'line',
       paint: {
-        'line-color': '#3a9d5d',
+        'line-color': resolvePesticidkortColor('highlight'),
         'line-width': 3,
         'line-opacity': 1,
       },
       filter: ['==', 'field_uuid', ''],
     });
+  } else {
+    map.setPaintProperty(
+      HIGHLIGHT_LAYER,
+      'line-color',
+      resolvePesticidkortColor('highlight')
+    );
   }
 
   map.setFilter(

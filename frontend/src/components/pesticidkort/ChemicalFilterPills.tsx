@@ -3,11 +3,27 @@
 import { cn } from '@/lib/utils';
 import type { ChemicalFilter } from '@/components/pesticidkort/map-layers';
 
-const PILLS: { id: ChemicalFilter; label: string; dot: string }[] = [
-  { id: 'none', label: 'Belastning', dot: 'bg-[#22c55e]' },
-  { id: 'pfas', label: 'PFAS', dot: 'bg-[#9333ea]' },
-  { id: 'glyphosate', label: 'Glyphosat', dot: 'bg-[#0891b2]' },
-  { id: 'diquat', label: 'Diquat', dot: 'bg-[#db2777]' },
+const PILLS: { id: ChemicalFilter; label: string; dotClass: string }[] = [
+  {
+    id: 'none',
+    label: 'Belastning',
+    dotClass: 'bg-[var(--pesticidkort-color-burden-low)]',
+  },
+  {
+    id: 'pfas',
+    label: 'PFAS',
+    dotClass: 'bg-[var(--pesticidkort-color-pfas)]',
+  },
+  {
+    id: 'glyphosate',
+    label: 'Glyphosat',
+    dotClass: 'bg-[var(--pesticidkort-color-glyphosate)]',
+  },
+  {
+    id: 'diquat',
+    label: 'Diquat',
+    dotClass: 'bg-[var(--pesticidkort-color-diquat)]',
+  },
 ];
 
 interface ChemicalFilterPillsProps {
@@ -31,7 +47,7 @@ export function ChemicalFilterPills({
         role="radiogroup"
         aria-label="Filtrer kort-visning"
       >
-        {PILLS.map(({ id, label, dot }) => {
+        {PILLS.map(({ id, label, dotClass }) => {
           const isActive = active === id;
           const needsZoom = id !== 'none' && id !== 'pfas' && zoomLevel < 12;
 
@@ -56,7 +72,7 @@ export function ChemicalFilterPills({
                 className={cn(
                   'inline-block h-2 w-2 shrink-0 rounded-full',
                   isActive ? 'ring-background/50 ring-1' : '',
-                  dot
+                  dotClass
                 )}
               />
               {label}

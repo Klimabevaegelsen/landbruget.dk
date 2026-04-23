@@ -1,14 +1,32 @@
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 import {
-  GRADE_FILL_COLOR,
-  GRADE_FILL_OPACITY,
+  getGradeFillColor,
+  getGradeFillOpacity,
 } from '@/components/pesticidkort/map-chemical-filter';
+import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
 
 export type { ChemicalFilter } from '@/components/pesticidkort/map-chemical-filter';
 export {
   CHEMICAL_COLORS,
   applyChemicalFilter,
 } from '@/components/pesticidkort/map-chemical-filter';
+
+export function syncFieldLayerTheme(map: MapInstance) {
+  const fillColor = getGradeFillColor();
+  const fillOpacity = getGradeFillOpacity();
+  const outlineColor = resolvePesticidkortColor('fieldOutline');
+
+  for (const layerId of ['fields-fill', 'fields-overview-fill']) {
+    if (!map.getLayer(layerId)) continue;
+    map.setPaintProperty(layerId, 'fill-color', fillColor);
+    map.setPaintProperty(layerId, 'fill-opacity', fillOpacity);
+  }
+
+  for (const layerId of ['fields-outline', 'fields-overview-outline']) {
+    if (!map.getLayer(layerId)) continue;
+    map.setPaintProperty(layerId, 'line-color', outlineColor);
+  }
+}
 
 /** Detail layers — full property data, used for queries at high zoom. */
 export function addFieldLayers(map: MapInstance, pmtilesUrl: string) {
@@ -27,8 +45,8 @@ export function addFieldLayers(map: MapInstance, pmtilesUrl: string) {
       type: 'fill',
       minzoom: 12,
       paint: {
-        'fill-color': GRADE_FILL_COLOR as unknown as string,
-        'fill-opacity': GRADE_FILL_OPACITY as unknown as number,
+        'fill-color': getGradeFillColor() as unknown as string,
+        'fill-opacity': getGradeFillOpacity() as unknown as number,
       },
     });
     map.addLayer({
@@ -38,12 +56,14 @@ export function addFieldLayers(map: MapInstance, pmtilesUrl: string) {
       type: 'line',
       minzoom: 12,
       paint: {
-        'line-color': '#5f6b80',
+        'line-color': resolvePesticidkortColor('fieldOutline'),
         'line-width': 0.5,
         'line-opacity': 0.4,
       },
     });
   }
+
+  syncFieldLayerTheme(map);
 }
 
 /** Overview layers — 3 properties only, all features at every zoom. */
@@ -63,8 +83,8 @@ export function addOverviewLayers(map: MapInstance, overviewUrl: string) {
       type: 'fill',
       maxzoom: 12,
       paint: {
-        'fill-color': GRADE_FILL_COLOR as unknown as string,
-        'fill-opacity': GRADE_FILL_OPACITY as unknown as number,
+        'fill-color': getGradeFillColor() as unknown as string,
+        'fill-opacity': getGradeFillOpacity() as unknown as number,
       },
     });
     map.addLayer({
@@ -74,10 +94,12 @@ export function addOverviewLayers(map: MapInstance, overviewUrl: string) {
       type: 'line',
       maxzoom: 12,
       paint: {
-        'line-color': '#5f6b80',
+        'line-color': resolvePesticidkortColor('fieldOutline'),
         'line-width': 0.5,
         'line-opacity': 0.3,
       },
     });
   }
+
+  syncFieldLayerTheme(map);
 }

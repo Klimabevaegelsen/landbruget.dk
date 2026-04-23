@@ -12,6 +12,8 @@ export interface GradeInfo {
   description: string;
 }
 
+export type PesticideGradeStatus = 'loading' | 'ready' | 'no_data';
+
 export interface NearbyFieldSummary {
   field_uuid: string;
   crop_name: string;
@@ -51,6 +53,7 @@ export interface PesticideReport {
   radius_m: number;
   year: number;
   grade: GradeInfo | null;
+  grade_status: PesticideGradeStatus;
   score: number;
   fields_count: number;
   pfas_fields_count: number;

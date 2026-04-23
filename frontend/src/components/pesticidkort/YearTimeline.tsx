@@ -18,6 +18,8 @@ interface YearTimelineProps {
 export function YearTimeline({ year, onChange }: YearTimelineProps) {
   const stripRef = useRef<HTMLDivElement>(null);
   const activeIdx = YEARS.indexOf(year as (typeof YEARS)[number]);
+  const hasPrevYear = activeIdx > 0;
+  const hasNextYear = activeIdx >= 0 && activeIdx < YEARS.length - 1;
 
   useEffect(() => {
     const strip = stripRef.current;
@@ -64,20 +66,25 @@ export function YearTimeline({ year, onChange }: YearTimelineProps) {
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
-      <button
-        type="button"
-        onClick={() => activeIdx > 0 && onChange(YEARS[activeIdx - 1])}
-        disabled={activeIdx <= 0}
-        aria-label="Forrige år"
-        data-testid="year-prev-button"
-        className="text-muted-foreground hover:text-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 sm:h-9 sm:w-9"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </button>
+      {hasPrevYear && (
+        <button
+          type="button"
+          onClick={() => onChange(YEARS[activeIdx - 1])}
+          aria-label="Forrige år"
+          data-testid="year-prev-button"
+          className="text-muted-foreground hover:text-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors sm:h-9 sm:w-9"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      )}
 
       <div
         ref={stripRef}
-        className="flex min-w-0 flex-1 snap-x snap-mandatory gap-0.5 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          'flex min-w-0 flex-1 snap-x snap-mandatory gap-0.5 overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          hasPrevYear ? '' : 'pl-1',
+          hasNextYear ? '' : 'pr-1'
+        )}
       >
         {YEARS.map((y) => {
           const isActive = y === year;
@@ -102,18 +109,17 @@ export function YearTimeline({ year, onChange }: YearTimelineProps) {
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={() =>
-          activeIdx < YEARS.length - 1 && onChange(YEARS[activeIdx + 1])
-        }
-        disabled={activeIdx >= YEARS.length - 1}
-        aria-label="Næste år"
-        data-testid="year-next-button"
-        className="text-muted-foreground hover:text-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-30 sm:h-9 sm:w-9"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </button>
+      {hasNextYear && (
+        <button
+          type="button"
+          onClick={() => onChange(YEARS[activeIdx + 1])}
+          aria-label="Næste år"
+          data-testid="year-next-button"
+          className="text-muted-foreground hover:text-foreground flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors sm:h-9 sm:w-9"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }

@@ -88,12 +88,12 @@ export function ExploreMapView({
             onClick={onBack}
             data-testid="explore-back-button"
             aria-label="Tilbage"
-            className="bg-background/90 text-muted-foreground flex h-12 w-12 shrink-0 items-center justify-center rounded-full backdrop-blur-sm"
+            className="bg-background/90 text-muted-foreground border-border/70 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border backdrop-blur-sm"
           >
             &larr;
           </button>
           {searchOpen && (
-            <div className="bg-background/90 flex-1 rounded-full backdrop-blur-sm">
+            <div className="bg-background/90 border-border/70 flex-1 rounded-full border backdrop-blur-sm">
               <AddressAutocomplete onSelect={handleSelect} />
             </div>
           )}
@@ -101,7 +101,7 @@ export function ExploreMapView({
             <button
               onClick={() => setSearchOpen(true)}
               data-testid="explore-search-open-button"
-              className="bg-background/90 text-muted-foreground h-12 rounded-full px-5 text-sm backdrop-blur-sm"
+              className="bg-background/90 text-muted-foreground border-border/70 h-12 rounded-full border px-5 text-sm backdrop-blur-sm"
             >
               S&oslash;g adresse...
             </button>
@@ -109,7 +109,7 @@ export function ExploreMapView({
         </div>
 
         <div className="mx-auto mt-2 flex max-w-lg flex-col items-stretch gap-2">
-          <div className="bg-background/90 w-full max-w-full rounded-full px-2 py-1 backdrop-blur-sm md:max-w-md md:min-w-[480px] md:self-center md:px-3">
+          <div className="bg-background/90 border-border/70 w-full max-w-full rounded-full border px-2 py-1 backdrop-blur-sm md:max-w-md md:min-w-[480px] md:self-center md:px-3">
             <YearTimeline year={year} onChange={onYearChange} />
           </div>
           <ChemicalFilterPills

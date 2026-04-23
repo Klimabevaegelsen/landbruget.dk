@@ -137,6 +137,67 @@ test.describe('Pesticidkort', () => {
     expect(navBox!.y).toBeGreaterThan(pillsBox!.y + pillsBox!.height + 8);
   });
 
+  test('should render pesticidkort overlays with dark-safe contrast in dark mode', async ({
+    page,
+  }) => {
+    await page.evaluate(() => {
+      window.localStorage.setItem('landbruget-theme', 'dark');
+    });
+
+    await page.reload();
+    await page.locator('[data-testid="explore-map-button"]').click();
+
+    await expect(page.locator('[data-testid="map-legend"]')).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator('.maplibregl-ctrl-group').first()).toBeVisible();
+    await expect(
+      page.locator('[data-testid="chemical-filter-pfas"]')
+    ).toBeVisible();
+
+    const styles = await page.evaluate(() => {
+      const readLuma = (value: string) => {
+        const matches = value.match(/\d+(\.\d+)?/g);
+        if (!matches || matches.length < 3) return null;
+        const [r, g, b] = matches.slice(0, 3).map(Number);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+
+      const legend = document.querySelector(
+        '[data-testid="map-legend"]'
+      ) as HTMLElement | null;
+      const ctrl = document.querySelector(
+        '.maplibregl-ctrl-group'
+      ) as HTMLElement | null;
+      const pillDot = document.querySelector(
+        '[data-testid="chemical-filter-pfas"] span'
+      ) as HTMLElement | null;
+
+      if (!legend || !ctrl || !pillDot) {
+        return null;
+      }
+
+      const legendStyle = getComputedStyle(legend);
+      const ctrlStyle = getComputedStyle(ctrl);
+      const pillDotStyle = getComputedStyle(pillDot);
+
+      return {
+        rootDark: document.documentElement.classList.contains('dark'),
+        legendLuma: readLuma(legendStyle.backgroundColor),
+        ctrlLuma: readLuma(ctrlStyle.backgroundColor),
+        pillDotBg: pillDotStyle.backgroundColor,
+      };
+    });
+
+    expect(styles).not.toBeNull();
+    expect(styles!.rootDark).toBe(true);
+    expect(styles!.legendLuma).not.toBeNull();
+    expect(styles!.ctrlLuma).not.toBeNull();
+    expect(styles!.pillDotBg).not.toBe('rgba(0, 0, 0, 0)');
+    expect(styles!.legendLuma!).toBeLessThan(80);
+    expect(styles!.ctrlLuma!).toBeLessThan(80);
+  });
+
   test('should keep mobile footer expansion from covering the legend or report sheet', async ({
     page,
   }) => {

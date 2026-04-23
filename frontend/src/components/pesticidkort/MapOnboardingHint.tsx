@@ -24,7 +24,7 @@ export function MapOnboardingHint() {
   return (
     <div
       data-testid="map-onboarding-hint"
-      className="bg-background/95 absolute top-1/2 left-1/2 z-30 w-72 -translate-x-1/2 -translate-y-1/2 rounded-xl p-5 text-center shadow-xl backdrop-blur-sm"
+      className="bg-background/95 border-border/70 absolute top-1/2 left-1/2 z-30 w-72 -translate-x-1/2 -translate-y-1/2 rounded-xl border p-5 text-center shadow-xl backdrop-blur-sm"
     >
       <button
         onClick={dismiss}
@@ -38,15 +38,15 @@ export function MapOnboardingHint() {
       </p>
       <div className="mt-3 flex items-center justify-center gap-3">
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-sm bg-[#6abf69]" />
+          <div className="h-3 w-3 rounded-sm bg-[var(--pesticidkort-color-burden-low)]" />
           <span className="text-muted-foreground text-[11px]">Lavest</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-sm bg-[#d4c54a]" />
+          <div className="h-3 w-3 rounded-sm bg-[var(--pesticidkort-color-burden-mid)]" />
           <span className="text-muted-foreground text-[11px]">Middel</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-sm bg-[#c4512c]" />
+          <div className="h-3 w-3 rounded-sm bg-[var(--pesticidkort-color-burden-high)]" />
           <span className="text-muted-foreground text-[11px]">Højest</span>
         </div>
       </div>

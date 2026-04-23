@@ -64,7 +64,7 @@ export const FieldCard = forwardRef<HTMLDivElement, FieldCardProps>(
               · {field.area_hectares.toFixed(1)} ha
             </span>
             {hasPfas && (
-              <span className="bg-warning/10 text-warning rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium">
+              <span className="bg-warning text-warning-foreground rounded-full px-1.5 py-0.5 text-[10px] leading-none font-semibold shadow-sm">
                 PFAS
               </span>
             )}

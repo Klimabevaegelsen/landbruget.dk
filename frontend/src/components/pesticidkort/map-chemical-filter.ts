@@ -1,4 +1,5 @@
 import type { MapInstance } from '@/components/field-analysis/map-constants';
+import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
 
 export type ChemicalFilter = 'none' | 'pfas' | 'glyphosate' | 'diquat';
 
@@ -14,52 +15,67 @@ const FILTER_PROPERTY: Record<Exclude<ChemicalFilter, 'none'>, string> = {
   diquat: 'diquat_applications',
 };
 
-/** Stepped burden gradient based on total_pesticide_belastning (B/ha). */
-export const GRADE_FILL_COLOR = [
-  'case',
-  ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],
-  '#d1d5db',
-  [
-    'step',
-    ['get', 'total_pesticide_belastning'],
-    '#22c55e',
-    0.5,
-    '#84cc16',
-    2.0,
-    '#eab308',
-    4.0,
-    '#f97316',
-    8.0,
-    '#dc2626',
-  ],
-];
+function getChemicalColors() {
+  return {
+    pfas: resolvePesticidkortColor('pfas'),
+    glyphosate: resolvePesticidkortColor('glyphosate'),
+    diquat: resolvePesticidkortColor('diquat'),
+  } as const;
+}
 
-export const GRADE_FILL_OPACITY = [
-  'case',
-  ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],
-  0.35,
-  0.7,
-];
+/** Stepped burden gradient based on total_pesticide_belastning (B/ha). */
+export function getGradeFillColor() {
+  return [
+    'case',
+    ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],
+    resolvePesticidkortColor('burdenNone'),
+    [
+      'step',
+      ['get', 'total_pesticide_belastning'],
+      resolvePesticidkortColor('burdenLow'),
+      0.5,
+      resolvePesticidkortColor('burdenMidLow'),
+      2.0,
+      resolvePesticidkortColor('burdenMid'),
+      4.0,
+      resolvePesticidkortColor('burdenMidHigh'),
+      8.0,
+      resolvePesticidkortColor('burdenHigh'),
+    ],
+  ];
+}
+
+export function getGradeFillOpacity() {
+  return [
+    'case',
+    ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],
+    0.42,
+    0.72,
+  ];
+}
 
 /** Apply or clear a chemical filter on both detail and overview fill layers. */
 export function applyChemicalFilter(map: MapInstance, filter: ChemicalFilter) {
+  const gradeFillColor = getGradeFillColor();
+  const gradeFillOpacity = getGradeFillOpacity();
+
   if (filter === 'none') {
-    setLayerPaint(map, 'fields-fill', GRADE_FILL_COLOR, GRADE_FILL_OPACITY);
+    setLayerPaint(map, 'fields-fill', gradeFillColor, gradeFillOpacity);
     setLayerPaint(
       map,
       'fields-overview-fill',
-      GRADE_FILL_COLOR,
-      GRADE_FILL_OPACITY
+      gradeFillColor,
+      gradeFillOpacity
     );
     return;
   }
 
   const prop = FILTER_PROPERTY[filter];
-  const color = CHEMICAL_COLORS[filter];
+  const color = getChemicalColors()[filter];
   const hasChemical = ['>', ['coalesce', ['get', prop], 0], 0];
 
-  const filteredColor = ['case', hasChemical, color, GRADE_FILL_COLOR];
-  const filteredOpacity = ['case', hasChemical, 0.75, 0.08];
+  const filteredColor = ['case', hasChemical, color, gradeFillColor];
+  const filteredOpacity = ['case', hasChemical, 0.78, 0.12];
 
   // Detail layers have all properties — apply any filter
   setLayerPaint(map, 'fields-fill', filteredColor, filteredOpacity);
@@ -69,9 +85,9 @@ export function applyChemicalFilter(map: MapInstance, filter: ChemicalFilter) {
     setLayerPaint(map, 'fields-overview-fill', filteredColor, filteredOpacity);
   } else {
     // Can't filter glyphosate/diquat on overview — dim everything slightly
-    setLayerPaint(map, 'fields-overview-fill', GRADE_FILL_COLOR, [
+    setLayerPaint(map, 'fields-overview-fill', gradeFillColor, [
       'literal',
-      0.08,
+      0.12,
     ]);
   }
 }

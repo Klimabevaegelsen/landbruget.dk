@@ -1,3 +1,5 @@
+import 'maplibre-gl/dist/maplibre-gl.css';
+
 interface PesticidkortLayoutProps {
   children: React.ReactNode;
 }
