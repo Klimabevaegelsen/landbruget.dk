@@ -49,7 +49,7 @@ drive-pipeline = "drive_data_pipeline.main:main"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "pytest-cov>=4.0.0",
     "ruff",
     "ty",
@@ -98,3 +98,6 @@ python_files = "test_*.py"
 python_functions = "test_*"
 python_classes = "Test*"
 addopts = "-v"
+markers = [
+    "integration: integration-style coverage for drive_data_pipeline",
+]

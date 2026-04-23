@@ -10,7 +10,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.python-version
 .venv
 
 # Data files
@@ -280,3 +279,4 @@ data_samples/
 backend/output/
 ESTAT_Census_2021_V2.parquet
 Eurostat_Census-GRID_2021_V2.2.zip
+.env*.local

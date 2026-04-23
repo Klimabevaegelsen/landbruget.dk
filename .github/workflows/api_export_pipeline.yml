@@ -18,9 +18,37 @@ on:
         type: string
 
 jobs:
-  export-json:
-    name: Export JSON to R2
+  resolve-exporters:
+    name: Resolve exporter matrix
     runs-on: ubuntu-latest
+    outputs:
+      exporters: ${{ steps.set-matrix.outputs.exporters }}
+
+    steps:
+      - name: Resolve exporter list
+        id: set-matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ONLY_INPUT="${{ inputs.only || '' }}"
+          if [ -n "$ONLY_INPUT" ]; then
+            EXPORTERS_JSON="$(printf '%s' "$ONLY_INPUT" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | sed '/^$/d' | jq -R . | jq -cs .)"
+          else
+            EXPORTERS_JSON='["homepage","search","municipalities","pesticides","drift_exposure","companies"]'
+          fi
+
+          echo "Resolved exporters: $EXPORTERS_JSON"
+          echo "exporters=$EXPORTERS_JSON" >> "$GITHUB_OUTPUT"
+
+  export-json:
+    name: Export JSON to R2 (${{ matrix.exporter }})
+    needs: resolve-exporters
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        exporter: ${{ fromJson(needs.resolve-exporters.outputs.exporters) }}
 
     env:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
@@ -53,17 +81,27 @@ jobs:
       - name: Run API Export Pipeline
         run: |
           cd backend/pipelines/api_export
-          ARGS=""
-          ONLY_INPUT="${{ inputs.only || '' }}"
-          if [ -n "$ONLY_INPUT" ]; then
-            ARGS="--only $ONLY_INPUT"
-          fi
-          python main.py $ARGS
+          python main.py --only "${{ matrix.exporter }}"
 
-      - name: Invalidate Next.js server cache
+      - name: Notify on success
         if: success()
-        env:
-          VERCEL_URL: ${{ vars.VERCEL_URL || 'https://landbruget.dk' }}
+        run: |
+          echo "API Export Pipeline for ${{ matrix.exporter }} completed successfully on $(date)"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "API Export Pipeline for ${{ matrix.exporter }} failed on $(date)"
+
+  invalidate-cache:
+    name: Invalidate Next.js server cache
+    if: ${{ success() }}
+    needs: export-json
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_URL: ${{ vars.VERCEL_URL || 'https://landbruget.dk' }}
+    steps:
+      - name: Revalidate cache
         run: |
           echo "Invalidating Next.js server-side caches..."
           HTTP=$(curl -s -w "%{http_code}" -o /tmp/revalidate.txt -X POST \
@@ -74,13 +112,3 @@ jobs:
           if [ "$HTTP" != "200" ]; then
             echo "⚠️ Cache invalidation returned $HTTP (non-fatal)"
           fi
-
-      - name: Notify on success
-        if: success()
-        run: |
-          echo "API Export Pipeline completed successfully on $(date)"
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "API Export Pipeline failed on $(date)"

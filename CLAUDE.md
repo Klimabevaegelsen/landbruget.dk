@@ -29,7 +29,7 @@ cd frontend && npm run lint          # oxlint
 
 # Backend
 uv run --all-packages --group dev pytest  # Run backend tests
-cd pipelines/<name> && python main.py  # Run pipeline
+cd backend/pipelines/<name> && uv run python main.py  # Run pipeline
 
 # Data Export (R2 CDN)
 cd pipelines/api_export && python main.py  # Export all JSON to R2

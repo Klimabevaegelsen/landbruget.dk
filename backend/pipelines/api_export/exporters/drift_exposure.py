@@ -23,6 +23,7 @@ Data sources (R2):
 import os
 import re
 
+import duckdb
 from common.logging_utils import get_pipeline_logger
 
 from exporters.base import BaseExporter
@@ -34,6 +35,14 @@ BUCKET = os.getenv("R2_BUCKET") or os.getenv("GCS_BUCKET") or "landbruget-data"
 
 class DriftExposureExporter(BaseExporter):
     """Export per-kommune drift exposure JSON for address lookups."""
+
+    def _ensure_spatial_loaded(self) -> None:
+        """Ensure DuckDB spatial functions are available for geometry joins."""
+        try:
+            self.conn.execute("LOAD spatial")
+        except duckdb.Error:
+            self.conn.execute("INSTALL spatial")
+            self.conn.execute("LOAD spatial")
 
     def export(self) -> dict:
         stats: dict = {"files_written": 0}
@@ -54,6 +63,8 @@ class DriftExposureExporter(BaseExporter):
         except Exception:
             logger.exception("Failed to load source parquets")
             return stats
+
+        self._ensure_spatial_loaded()
 
         # Spatial join: building centroid → kommune polygon → kommunekode.
         # Both sides are EPSG:4326 (see pesticide_drift_exposure._save_year_results

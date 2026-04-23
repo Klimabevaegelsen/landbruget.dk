@@ -68,7 +68,9 @@ def test_work_permits_pipeline(pdf_path: Path) -> bool | None:
             "original_filename": pdf_path.name,
             "original_subfolder": "work_permits_test",
             # File integrity
-            "checksum": "5299199867beb729afc17085ede99206f990c285e5716165f8db8ebec6313c50",
+            "checksum": (
+                "5299199867beb729afc17085ede99206f990c285e5716165f8db8ebec6313c50"  # pragma: allowlist secret
+            ),
             "checksum_algorithm": "sha256",
             # File details
             "mime_type": "application/pdf",
@@ -91,7 +93,7 @@ def test_work_permits_pipeline(pdf_path: Path) -> bool | None:
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        bronze_run_path = settings.bronze_path / timestamp
+        bronze_run_path = settings.get_bronze_path_for_run("work_permits_test", timestamp)
         bronze_run_path.mkdir(parents=True, exist_ok=True)
 
         # Copy PDF to bronze location

@@ -12,11 +12,11 @@ dependencies = [
     "aiohttp>=3.10.0",
     "certifi>=2024.0.0",
     "click>=8.1.8",
-    "cryptography>=44.0.3",
+    "cryptography>=46.0.7",
     "s3fs",
     "loguru>=0.7.3",
-    "lxml>=5.2,<5.4",
-    "psutil>=6.1.0",
+    "lxml>=6.0.4,<6.1",
+    "psutil>=7.2.2",
     "pyarrow>=20.0.0",
     "pydantic-settings>=2.9.1",
     "pydantic",
@@ -58,8 +58,9 @@ landbruget-common = { workspace = true }
 [dependency-groups]
 dev = [
     "coverage>=7.8.0",
+    "geopandas>=1.0.1",
     "mypy>=1.15.0",
-    "pytest>=8.3.5",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.26.0",
     "ruff",
 ]

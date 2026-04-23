@@ -2,6 +2,12 @@
 
 A modern, interactive web application for visualizing PFAS exposure data across Denmark using H3 hexagonal grids, built with Next.js 15, React 19, and cutting-edge web technologies.
 
+## Runtime Status
+
+The live app currently uses PMTiles for H3 and BNBO layers.
+The old browser Supabase path has been removed.
+`bbr_buildings` still lacks a dedicated frontend runtime contract and should be treated as an unresolved parity gap rather than reintroduced through direct Supabase reads.
+
 ## 🚀 Features
 
 - **Interactive H3 Heatmaps**: High-resolution hexagonal grid visualization of PFAS exposure and pesticide load data

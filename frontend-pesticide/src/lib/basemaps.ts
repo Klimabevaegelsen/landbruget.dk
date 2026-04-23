@@ -16,7 +16,7 @@ const DENMARK_BOUNDS = {
 
 // Denmark PMTiles URL on R2
 const DENMARK_PMTILES_URL =
-  'pmtiles://https://data.pesticidkortet.dk/pmtiles/protomaps_denmark.pmtiles';
+  'pmtiles://https://api.landbruget.dk/pmtiles/protomaps_denmark.pmtiles';
 
 // Create basemap styles using the actual Denmark PMTiles
 function createDenmarkBasemapStyle(flavor: 'light' | 'black') {

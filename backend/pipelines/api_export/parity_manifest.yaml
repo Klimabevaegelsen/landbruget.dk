@@ -1,0 +1,203 @@
+{
+  "version": "2026-04-22",
+  "contracts": [
+    {
+      "contract_id": "homepage-statistics",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/homepage-statistics",
+      "old_supabase_source": "homepage_statistics materialized view",
+      "current_r2_or_service_source": "api/v1/homepage/statistics.json",
+      "status": "covered",
+      "replacement_strategy": "served from HomepageExporter with audited 21-source legacy-style statistics and source metadata",
+      "owner_exporter": "homepage",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "homepage-rankings-all",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/homepage-rankings?category=all",
+      "old_supabase_source": "homepage-rankings edge function",
+      "current_r2_or_service_source": "api/v1/homepage/rankings/all.json",
+      "status": "covered",
+      "replacement_strategy": "served from HomepageExporter combined rankings output with all 26 frontend ranking IDs",
+      "owner_exporter": "homepage",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "homepage-rankings-financial",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/homepage-rankings?category=financial",
+      "old_supabase_source": "yearly_financials_with_company_details view",
+      "current_r2_or_service_source": "api/v1/homepage/rankings/financial.json",
+      "status": "covered",
+      "replacement_strategy": "served from HomepageExporter financial rankings",
+      "owner_exporter": "homepage",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "homepage-rankings-field",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/homepage-rankings?category=field",
+      "old_supabase_source": "land_use_summary materialized view",
+      "current_r2_or_service_source": "api/v1/homepage/rankings/field.json",
+      "status": "covered",
+      "replacement_strategy": "served from HomepageExporter field rankings",
+      "owner_exporter": "homepage",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "homepage-rankings-environment",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/homepage-rankings?category=environment",
+      "old_supabase_source": "environment_summary and pesticide aggregate views",
+      "current_r2_or_service_source": "api/v1/homepage/rankings/environment.json",
+      "status": "covered",
+      "replacement_strategy": "served from HomepageExporter using pesticide, BNBO, and wetland parquet exports",
+      "owner_exporter": "homepage",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "homepage-rankings-animal",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/homepage-rankings?category=animal",
+      "old_supabase_source": "animal_welfare_summary and site_yearly_summary materialized views",
+      "current_r2_or_service_source": "api/v1/homepage/rankings/animal.json",
+      "status": "covered",
+      "replacement_strategy": "served from HomepageExporter using production sites, herd sizes, antibiotic usage, and transport movement exports",
+      "owner_exporter": "homepage",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "homepage-rankings-worker",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/homepage-rankings?category=worker",
+      "old_supabase_source": "worker_yearly_summary materialized view",
+      "current_r2_or_service_source": "api/v1/homepage/rankings/worker.json",
+      "status": "covered",
+      "replacement_strategy": "served from HomepageExporter using employment, work permits, worker safety, and inspection exports",
+      "owner_exporter": "homepage",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "municipality-rankings",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/kommuner",
+      "old_supabase_source": "municipality-rankings edge function",
+      "current_r2_or_service_source": "api/v1/municipalities/rankings/*.json",
+      "status": "covered",
+      "replacement_strategy": "served from MunicipalitiesExporter across the full frontend municipality category set",
+      "owner_exporter": "municipalities",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "municipality-details",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/municipality-details",
+      "old_supabase_source": "municipality-details endpoint",
+      "current_r2_or_service_source": "api/v1/municipalities/details/*.json",
+      "status": "covered",
+      "replacement_strategy": "served from MunicipalitiesExporter per-category detail files with explicit metric values and company breakdowns",
+      "owner_exporter": "municipalities",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "pesticide-analysis",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/pesticide-analysis",
+      "old_supabase_source": "pesticide analysis edge function",
+      "current_r2_or_service_source": "api/v1/pesticides/analysis/*.json",
+      "status": "covered",
+      "replacement_strategy": "already served from PesticidesExporter",
+      "owner_exporter": "pesticides",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "pesticide-company-details",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/data/pesticide-company-details",
+      "old_supabase_source": "pesticide company analysis edge function",
+      "current_r2_or_service_source": "api/v1/pesticides/companies/*.json",
+      "status": "covered",
+      "replacement_strategy": "already served from PesticidesExporter",
+      "owner_exporter": "pesticides",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "burden-histogram",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/burden-histogram",
+      "old_supabase_source": "pesticide burden histogram edge function",
+      "current_r2_or_service_source": "api/v1/pesticides/burden-histogram-*.json",
+      "status": "covered",
+      "replacement_strategy": "already served from PesticidesExporter",
+      "owner_exporter": "pesticides",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "drift-exposure",
+      "consumer": "frontend",
+      "public_path_or_table": "/api/drift-exposure",
+      "old_supabase_source": "drift exposure Supabase-backed service",
+      "current_r2_or_service_source": "api/v1/pesticides/drift-exposure/*.json",
+      "status": "covered",
+      "replacement_strategy": "already served from DriftExposureExporter",
+      "owner_exporter": "drift_exposure",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "company-basic",
+      "consumer": "frontend",
+      "public_path_or_table": "/companies/{cvr}/basic.json",
+      "old_supabase_source": "company-basic edge function",
+      "current_r2_or_service_source": "api/v1/companies/{cvr}/basic.json",
+      "status": "covered",
+      "replacement_strategy": "already served from CompanyProfilesExporter",
+      "owner_exporter": "companies",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "company-profile",
+      "consumer": "frontend",
+      "public_path_or_table": "/companies/{cvr}.json",
+      "old_supabase_source": "api pageBuilder edge function",
+      "current_r2_or_service_source": "api/v1/companies/{cvr}.json",
+      "status": "covered",
+      "replacement_strategy": "served from CompanyProfilesExporter with pageBuilder sections for governance, finance, land use, environment, worker welfare, and animal welfare",
+      "owner_exporter": "companies",
+      "runtime_owner": "R2 static JSON"
+    },
+    {
+      "contract_id": "frontend-pesticide-h3-pfas-exposure",
+      "consumer": "frontend-pesticide",
+      "public_path_or_table": "h3_pfas_exposure",
+      "old_supabase_source": "h3_pfas_exposure table",
+      "current_r2_or_service_source": "PMTiles manifest + h3_pfas_{year}_res{resolution}.pmtiles",
+      "status": "covered",
+      "replacement_strategy": "serve from PMTiles discovery and remove stale browser Supabase path",
+      "owner_exporter": "pmtiles",
+      "runtime_owner": "PMTiles"
+    },
+    {
+      "contract_id": "frontend-pesticide-bnbo-status-areas",
+      "consumer": "frontend-pesticide",
+      "public_path_or_table": "bnbo_status_areas",
+      "old_supabase_source": "bnbo_status_areas table",
+      "current_r2_or_service_source": "PMTiles manifest + bnbo_areas.pmtiles",
+      "status": "covered",
+      "replacement_strategy": "serve from PMTiles discovery and remove stale browser Supabase path",
+      "owner_exporter": "pmtiles",
+      "runtime_owner": "PMTiles"
+    },
+    {
+      "contract_id": "frontend-pesticide-bbr-buildings",
+      "consumer": "frontend-pesticide",
+      "public_path_or_table": "bbr_buildings",
+      "old_supabase_source": "bbr_buildings table",
+      "current_r2_or_service_source": "No dedicated frontend runtime contract; only generic basemap buildings are rendered today",
+      "status": "partial",
+      "replacement_strategy": "do not serve via browser Supabase; formalize a dedicated PMTiles or static API contract before reintroducing BBR-specific UI",
+      "owner_exporter": "none",
+      "runtime_owner": "missing"
+    }
+  ]
+}

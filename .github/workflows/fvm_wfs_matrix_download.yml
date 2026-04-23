@@ -35,144 +35,146 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          # Define all layer configurations
-          if [ "${{ github.event.inputs.layer_types }}" = "all" ]; then
-            layer_types="markblokke,marker,smaabiotoper,organic_areas,organic_subsidies,grassland_subsidies,environmental_subsidies"
-          else
-            layer_types="${{ github.event.inputs.layer_types }}"
-          fi
+          INPUT_LAYER_TYPES="${{ github.event.inputs.layer_types || github.event.client_payload.layer_types || 'all' }}"
+          INPUT_YEARS="${{ github.event.inputs.years || github.event.client_payload.years || 'all' }}"
 
-          # Generate matrix based on layer types and years
-          matrix_items=()
-          enrichment_years_set=()
+          INPUT_LAYER_TYPES="$INPUT_LAYER_TYPES" INPUT_YEARS="$INPUT_YEARS" python - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.request
 
-          for layer_type in $(echo $layer_types | tr ',' ' '); do
-            case $layer_type in
-              "markblokke")
-                if [ "${{ github.event.inputs.years }}" = "all" ]; then
-                  years=$(seq 2005 2026)
-                else
-                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
-                fi
-                ;;
-              "marker")
-                if [ "${{ github.event.inputs.years }}" = "all" ]; then
-                  years=$(seq 2008 2025)
-                else
-                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
-                fi
-                ;;
-              "smaabiotoper")
-                if [ "${{ github.event.inputs.years }}" = "all" ]; then
-                  years="2023 2024 2025"
-                else
-                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
-                fi
-                ;;
-              "organic_areas")
-                if [ "${{ github.event.inputs.years }}" = "all" ]; then
-                  years=$(seq 2012 2024)
-                else
-                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
-                fi
-                ;;
-              "organic_subsidies")
-                if [ "${{ github.event.inputs.years }}" = "all" ]; then
-                  years=$(seq 2019 2024)
-                else
-                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
-                fi
-                ;;
-              "grassland_subsidies")
-                if [ "${{ github.event.inputs.years }}" = "all" ]; then
-                  years=$(seq 2019 2024)
-                else
-                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
-                fi
-                ;;
-              "environmental_subsidies")
-                if [ "${{ github.event.inputs.years }}" = "all" ]; then
-                  years=$(seq 2019 2023)
-                else
-                  years=$(echo "${{ github.event.inputs.years }}" | tr ',' ' ')
-                fi
-                ;;
-            esac
+          all_layers = [
+              "markblokke",
+              "marker",
+              "smaabiotoper",
+              "organic_areas",
+              "organic_subsidies",
+              "grassland_subsidies",
+              "environmental_subsidies",
+          ]
 
-            for year in $years; do
-              # Validate year ranges and collect enrichment years
-              case $layer_type in
-                "markblokke")
-                  if [ $year -ge 2005 ] && [ $year -le 2026 ]; then
-                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
-                    # Markblokke contributes to enrichment for years 2012-2024
-                    if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
-                      enrichment_years_set+=("$year")
-                    fi
-                  fi
-                  ;;
-                "marker")
-                  if [ $year -ge 2008 ] && [ $year -le 2025 ]; then
-                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
-                    # Marker contributes to enrichment for years 2012-2024
-                    if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
-                      enrichment_years_set+=("$year")
-                    fi
-                  fi
-                  ;;
-                "smaabiotoper")
-                  if [ $year -ge 2023 ] && [ $year -le 2025 ]; then
-                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
-                    # Smaabiotoper contributes to enrichment for years 2023-2024
-                    if [ $year -ge 2023 ] && [ $year -le 2024 ]; then
-                      enrichment_years_set+=("$year")
-                    fi
-                  fi
-                  ;;
-                "organic_areas")
-                  if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
-                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
-                    # Organic areas contributes to enrichment for all its years
-                    enrichment_years_set+=("$year")
-                  fi
-                  ;;
-                "organic_subsidies")
-                  if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
-                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
-                    # Organic subsidies contributes to enrichment for all its years
-                    enrichment_years_set+=("$year")
-                  fi
-                  ;;
-                "grassland_subsidies")
-                  if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
-                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
-                    # Grassland subsidies contributes to enrichment for all its years
-                    enrichment_years_set+=("$year")
-                  fi
-                  ;;
-                "environmental_subsidies")
-                  if [ $year -ge 2019 ] && [ $year -le 2023 ]; then
-                    matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
-                    # Environmental subsidies contributes to enrichment for all its years
-                    enrichment_years_set+=("$year")
-                  fi
-                  ;;
-              esac
-            done
-          done
+          input_layer_types = os.environ["INPUT_LAYER_TYPES"].strip()
+          input_years = os.environ["INPUT_YEARS"].strip()
 
-          # Join matrix items
-          matrix_json="[$(IFS=','; echo "${matrix_items[*]}")]"
-          echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
-          echo "Generated matrix with ${#matrix_items[@]} jobs:"
-          echo "$matrix_json" | jq '.'
+          if not input_layer_types or input_layer_types == "all":
+              layer_types = list(all_layers)
+          else:
+              layer_types = [layer.strip() for layer in input_layer_types.split(",") if layer.strip()]
 
-          # Generate unique enrichment years and output as JSON array
-          unique_years=($(printf '%s\n' "${enrichment_years_set[@]}" | sort -nu))
-          enrichment_json="[$(IFS=','; echo "${unique_years[*]}")]"
-          echo "enrichment_years=$enrichment_json" >> $GITHUB_OUTPUT
-          echo "Generated enrichment years: ${unique_years[*]}"
-          echo "Enrichment matrix will run for ${#unique_years[@]} years instead of all 13 years"
+          unknown_layers = sorted(set(layer_types) - set(all_layers))
+          if unknown_layers:
+              raise SystemExit(f"Unknown layer types: {', '.join(unknown_layers)}")
+
+          requested_years = None
+          if input_years and input_years != "all":
+              requested_years = []
+              for value in input_years.split(","):
+                  year_str = value.strip()
+                  if not year_str:
+                      continue
+                  if not year_str.isdigit():
+                      raise SystemExit(f"Invalid year value '{year_str}' in years input: {input_years}")
+                  requested_years.append(int(year_str))
+              requested_years = sorted(set(requested_years))
+              if not requested_years:
+                  raise SystemExit("No valid years found after parsing years input.")
+
+          wfs_url = "https://geodata.fvm.dk/geoserver/wfs"
+          capabilities_url = (
+              f"{wfs_url}?service=WFS&version=2.0.0&request=GetCapabilities"
+          )
+          try:
+              with urllib.request.urlopen(capabilities_url, timeout=30) as response:
+                  capabilities_xml = response.read().decode("utf-8", errors="ignore")
+          except Exception as exc:  # noqa: BLE001
+              raise SystemExit(f"Failed to fetch WFS capabilities from {wfs_url}: {exc}") from exc
+
+          dynamic_years = {
+              "markblokke": sorted(
+                  {int(year) for year in re.findall(r"\\bMarkblokke:Markblokke_(\\d{4})\\b", capabilities_xml)}
+              ),
+              "marker": sorted(
+                  {int(year) for year in re.findall(r"\\bMarker:Marker_(\\d{4})\\b", capabilities_xml)}
+              ),
+              "smaabiotoper": sorted(
+                  {int(year) for year in re.findall(r"\\bMarker:Smaabiotoper_(\\d{4})\\b", capabilities_xml)}
+              ),
+          }
+          for layer_name in ("markblokke", "marker", "smaabiotoper"):
+              if layer_name in layer_types and not dynamic_years[layer_name]:
+                  raise SystemExit(
+                      f"Live year discovery failed for required layer '{layer_name}' from {wfs_url}"
+                  )
+
+          print("Discovered dynamic year ranges:")
+          for layer_name, years in dynamic_years.items():
+              if years:
+                  print(f"  - {layer_name}: {years[0]}-{years[-1]} ({len(years)} years)")
+              else:
+                  print(f"  - {layer_name}: none")
+
+          allowed_years_by_layer = {
+              "markblokke": dynamic_years["markblokke"],
+              "marker": dynamic_years["marker"],
+              "smaabiotoper": dynamic_years["smaabiotoper"],
+              "organic_areas": list(range(2012, 2026)),
+              "organic_subsidies": list(range(2017, 2025)),
+              "grassland_subsidies": list(range(2017, 2025)),
+              "environmental_subsidies": list(range(2012, 2024)),
+          }
+
+          matrix_items = []
+          enrichment_years = set()
+
+          for layer_type in layer_types:
+              allowed_years = allowed_years_by_layer[layer_type]
+              if requested_years is None:
+                  years_for_layer = list(allowed_years)
+              else:
+                  years_for_layer = [year for year in requested_years if year in allowed_years]
+                  skipped_years = [year for year in requested_years if year not in allowed_years]
+                  if skipped_years:
+                      print(
+                          f"Skipping unavailable years for {layer_type}: "
+                          + ", ".join(str(year) for year in skipped_years)
+                      )
+
+              for year in years_for_layer:
+                  matrix_items.append({"layer_type": layer_type, "year": year})
+
+                  if layer_type == "markblokke" and 2012 <= year <= 2025:
+                      enrichment_years.add(year)
+                  elif layer_type == "marker" and 2012 <= year <= 2025:
+                      enrichment_years.add(year)
+                  elif layer_type == "smaabiotoper" and 2023 <= year <= 2025:
+                      enrichment_years.add(year)
+                  elif layer_type in {
+                      "organic_areas",
+                      "organic_subsidies",
+                      "grassland_subsidies",
+                      "environmental_subsidies",
+                  }:
+                      enrichment_years.add(year)
+
+          if not matrix_items:
+              raise SystemExit(
+                  "No valid matrix jobs generated after applying layer/year filters. "
+                  "Check requested years and live availability."
+              )
+
+          matrix_json = json.dumps(matrix_items)
+          enrichment_json = json.dumps(sorted(enrichment_years))
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
+              output_file.write(f"matrix={matrix_json}\n")
+              output_file.write(f"enrichment_years={enrichment_json}\n")
+
+          print(f"Generated matrix with {len(matrix_items)} jobs:")
+          print(matrix_json)
+          print(f"Generated enrichment years: {sorted(enrichment_years)}")
+          print(f"Enrichment matrix will run for {len(enrichment_years)} years.")
+          PY
 
   process:
     needs: generate-matrix

@@ -28,6 +28,7 @@ from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
+from unified_pipeline.util.fvm_wfs_year_discovery import discover_fvm_layer_years
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -59,15 +60,16 @@ class FVMWFSBronzeConfig(BaseJobConfig):
         frequency (str): How often the data is updated
         bucket (str): storage bucket name for raw data storage
         markblokke_years (List[int]): Years available for Markblokke data (2005-2026)
-        marker_years (List[int]): Years available for Marker data (2008-2025)
-        smaabiotoper_years (List[int]): Years available for Smaabiotoper data (2023-2025)
-        organic_areas_years (List[int]): Years available for Organic Areas data (2012-2024)
+        marker_years (List[int]): Baseline years for Marker data (updated dynamically at runtime)
+        smaabiotoper_years (List[int]): Baseline years for Smaabiotoper data
+            (updated dynamically at runtime)
+        organic_areas_years (List[int]): Years available for Organic Areas data (2012-2025)
         organic_subsidies_years (List[int]): Years available for Organic Subsidies data
-            (2019-2024)
+            (2017-2024)
         grassland_subsidies_years (List[int]): Years available for Grassland Subsidies data
-            (2019-2024)
+            (2017-2024)
         environmental_subsidies_years (List[int]): Years available for Environmental Subsidies data
-            (2019-2023)
+            (2012-2023)
         batch_size (int): Features per request (0 = unlimited, downloads full dataset)
         max_concurrent (int): Maximum concurrent requests
         timeout_config (aiohttp.ClientTimeout): Request timeout configuration
@@ -87,18 +89,19 @@ class FVMWFSBronzeConfig(BaseJobConfig):
     frequency: str = "yearly"
     bucket: str = "landbruget-data"
 
-    # Year ranges based on FVM WFS capabilities analysis
+    # Year ranges based on FVM WFS capabilities analysis.
+    # markblokke/marker/smaabiotoper are refreshed from live WFS capabilities in apply_cli_filters.
     markblokke_years: ClassVar[list[int]] = list(range(2005, 2027))  # 2005-2026 (22 years)
-    marker_years: ClassVar[list[int]] = list(range(2008, 2026))  # 2008-2025 (18 years)
-    smaabiotoper_years: ClassVar[list[int]] = [2023, 2024, 2025]  # Special biotope layers
+    marker_years: ClassVar[list[int]] = list(range(2008, 2027))  # 2008-2026 (19 years)
+    smaabiotoper_years: ClassVar[list[int]] = [2023, 2024, 2025, 2026]
     organic_areas_years: ClassVar[list[int]] = list(
-        range(2012, 2025)
-    )  # 2012-2024 (13 years of organic data)
-    organic_subsidies_years: ClassVar[list[int]] = list(range(2019, 2025))  # 2019-2024 (6 years)
-    grassland_subsidies_years: ClassVar[list[int]] = list(range(2019, 2025))  # 2019-2024 (6 years)
+        range(2012, 2026)
+    )  # 2012-2025 (14 years of organic data)
+    organic_subsidies_years: ClassVar[list[int]] = list(range(2017, 2025))  # 2017-2024 (8 years)
+    grassland_subsidies_years: ClassVar[list[int]] = list(range(2017, 2025))  # 2017-2024 (8 years)
     environmental_subsidies_years: ClassVar[list[int]] = list(
-        range(2019, 2024)
-    )  # 2019-2023 (5 years)
+        range(2012, 2024)
+    )  # 2012-2023 (12 years)
 
     # Request configuration - optimized for full dataset downloads
     # Testing showed full downloads are optimal (no chunking needed)
@@ -117,6 +120,38 @@ class FVMWFSBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+    def _apply_live_year_discovery(
+        self,
+        *,
+        require_markblokke: bool,
+        require_marker: bool,
+        require_smaabiotoper: bool,
+    ) -> None:
+        """
+        Discover live year ranges from WFS capabilities and apply required layers.
+        """
+        discovered_years = discover_fvm_layer_years(self.wfs_url)
+
+        required_layers = {
+            "markblokke": require_markblokke,
+            "marker": require_marker,
+            "smaabiotoper": require_smaabiotoper,
+        }
+        missing_layers = [
+            layer_name
+            for layer_name, required in required_layers.items()
+            if required and not discovered_years[layer_name]
+        ]
+        if missing_layers:
+            missing_layers_str = ", ".join(missing_layers)
+            raise ValueError(
+                f"Missing required live year discovery for {missing_layers_str} from {self.wfs_url}"
+            )
+
+        object.__setattr__(self, "markblokke_years", discovered_years["markblokke"])
+        object.__setattr__(self, "marker_years", discovered_years["marker"])
+        object.__setattr__(self, "smaabiotoper_years", discovered_years["smaabiotoper"])
+
     def apply_cli_filters(self, cli_config) -> None:
         """
         Apply CLI filtering for matrix job processing.
@@ -133,6 +168,24 @@ class FVMWFSBronzeConfig(BaseJobConfig):
         if cli_config.source.value != "fvm_wfs":
             return  # Only apply filters for FVM WFS source
 
+        layer_type = cli_config.fvm_layer_type
+        require_markblokke = layer_type is None or layer_type == FVMLayerType.markblokke
+        require_marker = layer_type is None or layer_type == FVMLayerType.marker
+        require_smaabiotoper = layer_type is None or layer_type == FVMLayerType.smaabiotoper
+        if require_markblokke or require_marker or require_smaabiotoper:
+            self._apply_live_year_discovery(
+                require_markblokke=require_markblokke,
+                require_marker=require_marker,
+                require_smaabiotoper=require_smaabiotoper,
+            )
+
+        if not cli_config.fvm_layer_type and not cli_config.fvm_year:
+            return
+
+        available_markblokke_years = list(self.markblokke_years)
+        available_marker_years = list(self.marker_years)
+        available_smaabiotoper_years = list(self.smaabiotoper_years)
+
         if cli_config.fvm_layer_type or cli_config.fvm_year:
             # Clear all years initially for filtered processing
             object.__setattr__(self, "markblokke_years", [])
@@ -148,20 +201,20 @@ class FVMWFSBronzeConfig(BaseJobConfig):
                 layer_type = cli_config.fvm_layer_type
 
                 if layer_type == FVMLayerType.markblokke:
-                    years = list(range(2005, 2027))  # 2005-2026
+                    years = available_markblokke_years
                 elif layer_type == FVMLayerType.marker:
-                    years = list(range(2008, 2026))  # 2008-2025
+                    years = available_marker_years
                 elif layer_type == FVMLayerType.smaabiotoper:
-                    years = [2023, 2024, 2025]
+                    years = available_smaabiotoper_years
                 elif layer_type == FVMLayerType.organic_areas:
-                    years = list(range(2012, 2025))  # 2012-2024
+                    years = list(range(2012, 2026))  # 2012-2025
                 elif (
                     layer_type == FVMLayerType.organic_subsidies
                     or layer_type == FVMLayerType.grassland_subsidies
                 ):
-                    years = list(range(2019, 2025))  # 2019-2024
+                    years = list(range(2017, 2025))  # 2017-2024
                 elif layer_type == FVMLayerType.environmental_subsidies:
-                    years = list(range(2019, 2024))  # 2019-2023
+                    years = list(range(2012, 2024))  # 2012-2023
                 else:
                     years = []
 
@@ -481,12 +534,12 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
 
         This method orchestrates the entire data retrieval process:
         1. Processes Markblokke data for years 2005-2026
-        2. Processes Marker data for years 2008-2025
-        3. Processes Smaabiotoper data for years 2023-2025
-        4. Processes OrganicAreas data for years 2012-2024
-        5. Processes OrganicSubsidies data for years 2019-2024
-        6. Processes GrasslandSubsidies data for years 2019-2024
-        7. Processes EnvironmentalSubsidies data for years 2019-2023
+        2. Processes Marker data for live years from WFS capabilities
+        3. Processes Smaabiotoper data for live years from WFS capabilities
+        4. Processes OrganicAreas data for years 2012-2025
+        5. Processes OrganicSubsidies data for years 2017-2024
+        6. Processes GrasslandSubsidies data for years 2017-2024
+        7. Processes EnvironmentalSubsidies data for years 2012-2023
         8. Tracks overall execution time for performance monitoring
         9. Returns all processed data for potential in-memory passing
 
@@ -527,14 +580,14 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             )
             all_data["markblokke"] = markblokke_data
 
-            # Process Marker data (field markers) 2008-2025
+            # Process Marker data (field markers) - live years from capabilities
             self.log.info("Processing Marker (field markers) data")
             marker_data = await self._process_layer_type(
                 session, "Marker", self.config.marker_years, self.config.dataset_marker
             )
             all_data["marker"] = marker_data
 
-            # Process Smaabiotoper data (small biotopes) 2023-2025
+            # Process Smaabiotoper data (small biotopes) - live years from capabilities
             self.log.info("Processing Smaabiotoper (small biotopes) data")
             smaabiotoper_data = await self._process_layer_type(
                 session,
@@ -544,7 +597,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             )
             all_data["smaabiotoper"] = smaabiotoper_data
 
-            # Process Organic Areas data (organic areas) 2012-2024
+            # Process Organic Areas data (organic areas) 2012-2025
             self.log.info("Processing Organic Areas (organic areas) data")
             organic_areas_data = await self._process_layer_type(
                 session,
@@ -554,7 +607,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             )
             all_data["organic_areas"] = organic_areas_data
 
-            # Process Organic Subsidies data (organic subsidies) 2019-2024
+            # Process Organic Subsidies data (organic subsidies) 2017-2024
             self.log.info("Processing Organic Subsidies (organic subsidies) data")
             organic_subsidies_data = await self._process_layer_type(
                 session,
@@ -564,7 +617,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             )
             all_data["organic_subsidies"] = organic_subsidies_data
 
-            # Process Grassland Subsidies data (grassland subsidies) 2019-2024
+            # Process Grassland Subsidies data (grassland subsidies) 2017-2024
             self.log.info("Processing Grassland Subsidies (grassland subsidies) data")
             grassland_subsidies_data = await self._process_layer_type(
                 session,
@@ -574,7 +627,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             )
             all_data["grassland_subsidies"] = grassland_subsidies_data
 
-            # Process Environmental Subsidies data (environmental subsidies) 2019-2023
+            # Process Environmental Subsidies data (environmental subsidies) 2012-2023
             self.log.info("Processing Environmental Subsidies (environmental subsidies) data")
             environmental_subsidies_data = await self._process_layer_type(
                 session,

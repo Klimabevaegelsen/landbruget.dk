@@ -23,19 +23,13 @@ export async function GET() {
   } catch (error) {
     console.error('API route error:', error);
 
-    // Return fallback data based on our database analysis
     return NextResponse.json(
       {
-        total_data_points: 29104178,
-        total_companies: 46126,
-        last_updated: new Date().toISOString(),
-        formatted: {
-          data_points: '29.104.178',
-          companies: '46.126',
-        },
-        fallback: true,
+        error: 'Failed to fetch homepage statistics',
+        message: error instanceof Error ? error.message : 'Unknown error',
       },
       {
+        status: 503,
         headers: CACHE_HEADERS,
       }
     );

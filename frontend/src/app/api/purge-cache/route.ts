@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PMTILES_BASE_URL } from '@/lib/env';
 
 interface PurgeRequest {
   files: string[];
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
   try {
     const body: PurgeRequest = await request.json();
     const filesToPurge = body.files.map(
-      (file) => `https://data.pesticidkortet.dk/pmtiles/${file}`
+      (file) => `${PMTILES_BASE_URL}/pmtiles/${file}`
     );
 
     const response = await fetch(

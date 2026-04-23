@@ -74,20 +74,18 @@ class Settings(BaseModel):
             raise ValueError("R2 bucket must be specified when using R2 storage")
 
         # Validate credentials file
-        if not self.use_public_access and self.google_application_credentials is not None:
-            # Check if it's an empty Path
-            if str(self.google_application_credentials) == "":
-                self.google_application_credentials = None
-            elif not self.google_application_credentials.exists():
-                raise ValueError(
-                    f"Credentials file not found: {self.google_application_credentials}"
-                )
+        if (
+            not self.use_public_access
+            and self.google_application_credentials is not None
+            and str(self.google_application_credentials) == ""
+        ):
+            self.google_application_credentials = None
 
         return self
 
-    def get_bronze_path_for_run(self, timestamp: str) -> Path:
-        """Get the Bronze layer path for a specific run."""
-        return self.bronze_path / timestamp
+    def get_bronze_path_for_run(self, dataset: str, timestamp: str) -> Path:
+        """Get the Bronze layer path for a specific dataset run."""
+        return self.bronze_path / dataset / timestamp
 
     def get_silver_path_for_run(self, timestamp: str) -> Path:
         """Get the Silver layer path for a specific run."""

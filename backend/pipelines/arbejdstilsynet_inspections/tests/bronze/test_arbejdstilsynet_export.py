@@ -9,7 +9,9 @@ This module tests:
 - Error handling for browser failures
 """
 
-# Import the bronze pipeline
+import asyncio
+import contextlib
+import importlib.util
 import sys
 import tempfile
 from pathlib import Path
@@ -17,12 +19,20 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-import contextlib
-
 pytest.importorskip("playwright", reason="playwright not installed")
 
-from bronze.export import BronzePipeline, CloudStorage
+PIPELINE_ROOT = Path(__file__).resolve().parents[2]
+EXPORT_MODULE_PATH = PIPELINE_ROOT / "bronze" / "export.py"
+EXPORT_SPEC = importlib.util.spec_from_file_location(
+    "arbejdstilsynet_inspections_bronze_export", EXPORT_MODULE_PATH
+)
+assert EXPORT_SPEC is not None and EXPORT_SPEC.loader is not None
+EXPORT_MODULE = importlib.util.module_from_spec(EXPORT_SPEC)
+sys.modules[EXPORT_SPEC.name] = EXPORT_MODULE
+EXPORT_SPEC.loader.exec_module(EXPORT_MODULE)
+
+BronzePipeline = EXPORT_MODULE.BronzePipeline
+CloudStorage = EXPORT_MODULE.CloudStorage
 
 
 @pytest.fixture
@@ -47,7 +57,7 @@ class TestPlaywrightAutomation:
     """Tests for Playwright browser automation."""
 
     @pytest.mark.asyncio
-    @patch("bronze.export.async_playwright")
+    @patch.object(EXPORT_MODULE, "async_playwright")
     async def test_browser_launch(self, mock_playwright, bronze_pipeline):
         """Test that Playwright browser launches successfully."""
         # Mock playwright components
@@ -84,7 +94,7 @@ class TestPlaywrightAutomation:
         mock_browser.new_context.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("bronze.export.async_playwright")
+    @patch.object(EXPORT_MODULE, "async_playwright")
     async def test_powerbi_selector_stability(self, mock_playwright, bronze_pipeline):
         """Test that PowerBI selector validation works."""
         # Mock playwright components
@@ -127,7 +137,7 @@ class TestPlaywrightAutomation:
         mock_page.wait_for_selector.assert_called()
 
     @pytest.mark.asyncio
-    @patch("bronze.export.async_playwright")
+    @patch.object(EXPORT_MODULE, "async_playwright")
     async def test_csv_download_trigger(self, mock_playwright, bronze_pipeline):
         """Test that CSV download button click works."""
         # Mock complete happy path through download
@@ -165,8 +175,10 @@ class TestPlaywrightAutomation:
         # Mock download
         mock_download = AsyncMock()
         mock_download.save_as = AsyncMock()
-        mock_download_info = AsyncMock()
-        mock_download_info.value = mock_download
+        mock_download_info = Mock()
+        mock_download_future = asyncio.Future()
+        mock_download_future.set_result(mock_download)
+        mock_download_info.value = mock_download_future
 
         # Create context manager for expect_download
         class MockDownloadContext:
@@ -202,7 +214,7 @@ class TestPlaywrightAutomation:
         assert len(result[0][1]) > 0
 
     @pytest.mark.asyncio
-    @patch("bronze.export.async_playwright")
+    @patch.object(EXPORT_MODULE, "async_playwright")
     async def test_csv_file_detection(self, mock_playwright, bronze_pipeline):
         """Test that downloaded CSV file is detected."""
         # Similar setup to download trigger test
@@ -249,8 +261,10 @@ class TestPlaywrightAutomation:
             shutil.copy(temp_path, path)
 
         mock_download.save_as = mock_save_as
-        mock_download_info = AsyncMock()
-        mock_download_info.value = mock_download
+        mock_download_info = Mock()
+        mock_download_future = asyncio.Future()
+        mock_download_future.set_result(mock_download)
+        mock_download_info.value = mock_download_future
 
         class MockDownloadContext:
             async def __aenter__(self):
@@ -276,7 +290,7 @@ class TestCloudStorageStreaming:
     def test_cloud_streaming_upload(self):
         """Test streaming upload to cloud storage."""
         # Mock cloud storage access
-        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
+        with patch.object(EXPORT_MODULE, "OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -303,7 +317,7 @@ class TestCloudStorageStreaming:
 
     def test_upload_integrity(self):
         """Test file integrity after upload."""
-        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
+        with patch.object(EXPORT_MODULE, "OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -339,7 +353,7 @@ class TestCloudStorageStreaming:
 
     def test_metadata_json_creation(self):
         """Test metadata structure validation."""
-        with patch("bronze.export.OptimizedStorageAccess") as mock_gcs_class:
+        with patch.object(EXPORT_MODULE, "OptimizedStorageAccess") as mock_gcs_class:
             mock_gcs = Mock()
             mock_fs = Mock()
             mock_gcs.fs = mock_fs
@@ -371,7 +385,7 @@ class TestCloudStorageStreaming:
             mock_fs.open = Mock(side_effect=mock_open_side_effect)
 
             # Patch METADATA_AVAILABLE to True
-            with patch("bronze.export.METADATA_AVAILABLE", True):
+            with patch.object(EXPORT_MODULE, "METADATA_AVAILABLE", True):
                 cloud_storage = CloudStorage(bucket_name="test-bucket")
                 cloud_storage.upload_file(temp_path)
 
@@ -392,7 +406,7 @@ class TestErrorHandling:
     """Tests for error handling."""
 
     @pytest.mark.asyncio
-    @patch("bronze.export.async_playwright")
+    @patch.object(EXPORT_MODULE, "async_playwright")
     async def test_browser_crash_recovery(self, mock_playwright, bronze_pipeline):
         """Test handling of browser crashes."""
         mock_browser = AsyncMock()
@@ -409,12 +423,13 @@ class TestErrorHandling:
         mock_chromium = AsyncMock()
         mock_chromium.launch.return_value = mock_browser
 
-        mock_playwright_instance = AsyncMock()
+        mock_playwright_instance = Mock()
         mock_playwright_instance.chromium = mock_chromium
-        mock_playwright_instance.__aenter__.return_value = mock_playwright_instance
-        mock_playwright_instance.__aexit__.return_value = None
+        mock_playwright_context = AsyncMock()
+        mock_playwright_context.__aenter__.return_value = mock_playwright_instance
+        mock_playwright_context.__aexit__.return_value = None
 
-        mock_playwright.return_value = mock_playwright_instance
+        mock_playwright.return_value = mock_playwright_context
 
         # Test should handle crash gracefully (function catches exceptions internally)
         try:
@@ -431,7 +446,7 @@ class TestErrorHandling:
         mock_browser.close.assert_called()
 
     @pytest.mark.asyncio
-    @patch("bronze.export.async_playwright")
+    @patch.object(EXPORT_MODULE, "async_playwright")
     async def test_timeout_handling(self, mock_playwright, bronze_pipeline):
         """Test network timeout scenarios."""
         mock_browser = AsyncMock()
@@ -448,12 +463,13 @@ class TestErrorHandling:
         mock_chromium = AsyncMock()
         mock_chromium.launch.return_value = mock_browser
 
-        mock_playwright_instance = AsyncMock()
+        mock_playwright_instance = Mock()
         mock_playwright_instance.chromium = mock_chromium
-        mock_playwright_instance.__aenter__.return_value = mock_playwright_instance
-        mock_playwright_instance.__aexit__.return_value = None
+        mock_playwright_context = AsyncMock()
+        mock_playwright_context.__aenter__.return_value = mock_playwright_instance
+        mock_playwright_context.__aexit__.return_value = None
 
-        mock_playwright.return_value = mock_playwright_instance
+        mock_playwright.return_value = mock_playwright_context
 
         try:
             result = await bronze_pipeline.fetch_data_with_playwright(
@@ -467,7 +483,7 @@ class TestErrorHandling:
         mock_browser.close.assert_called()
 
     @pytest.mark.asyncio
-    @patch("bronze.export.async_playwright")
+    @patch.object(EXPORT_MODULE, "async_playwright")
     async def test_missing_selector_error(self, mock_playwright, bronze_pipeline):
         """Test handling of DOM changes (missing selectors)."""
         mock_browser = AsyncMock()

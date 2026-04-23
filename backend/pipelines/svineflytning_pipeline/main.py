@@ -11,13 +11,6 @@ from common.cli import PipelineRun, common_options, stage_options
 from common.logging_utils import setup_pipeline_logger
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from bronze.load_svineflytning import (
-    ENDPOINTS,
-    create_client,
-    fetch_all_movements,
-    get_fvm_credentials,
-)
-
 logger = logging.getLogger(__name__)  # Replaced in setup_logging()
 
 # Constants for resource management
@@ -93,6 +86,13 @@ def run_bronze_stage(
     test: bool,
 ) -> dict[str, Any]:
     """Run the bronze stage of the pipeline."""
+    from bronze.load_svineflytning import (
+        ENDPOINTS,
+        create_client,
+        fetch_all_movements,
+        get_fvm_credentials,
+    )
+
     logger.warning("Starting bronze stage")
     if progress:
         logger.warning(f"Processing date range: {start_date} to {end_date}")

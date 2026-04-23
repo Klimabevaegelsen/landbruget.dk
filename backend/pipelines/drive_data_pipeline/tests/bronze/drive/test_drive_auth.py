@@ -84,10 +84,22 @@ def test_get_drive_service_with_valid_credentials(
     assert result is mock_build.return_value
 
 
-def test_get_drive_service_with_nonexistent_file() -> None:
-    """Test get_drive_service with a nonexistent credentials file."""
-    with pytest.raises(FileNotFoundError):
-        get_drive_service(Path("/nonexistent/path.json"))
+def test_get_drive_service_with_nonexistent_file_falls_back_to_adc() -> None:
+    """Test get_drive_service falls back to ADC for a missing credentials file."""
+    with (
+        mock.patch("drive_data_pipeline.bronze.drive.auth.default") as mock_default,
+        mock.patch("drive_data_pipeline.bronze.drive.auth.build") as mock_build,
+    ):
+        mock_credentials = mock.MagicMock()
+        mock_default.return_value = (mock_credentials, "test-project")
+
+        result = get_drive_service(Path("/nonexistent/path.json"))
+
+        mock_default.assert_called_once_with(
+            scopes=["https://www.googleapis.com/auth/drive.readonly"]
+        )
+        mock_build.assert_called_once_with("drive", "v3", credentials=mock_credentials)
+        assert result is mock_build.return_value
 
 
 def test_get_drive_service_with_invalid_credentials(

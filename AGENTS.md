@@ -35,11 +35,14 @@ cd frontend && npm run lint          # oxlint
 
 # Backend
 uv run --all-packages --group dev pytest  # Run backend tests
-cd pipelines/<name> && python main.py  # Run pipeline
+cd backend/pipelines/<name> && uv run python main.py  # Run pipeline
 
 # Database
 supabase migration new <name>        # New migration
 supabase db push                     # Push migrations
+
+# Worktree/bootstrap
+./scripts/setup-worktree.sh          # Install frontend deps, Playwright browsers, and uv packages
 ```
 
 ## Before ANY Commit

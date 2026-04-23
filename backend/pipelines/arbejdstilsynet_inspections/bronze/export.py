@@ -262,18 +262,18 @@ class BronzePipeline:
                 ]
             browser_options = {"args": browser_args, "headless": False}
             browser = await playwright.chromium.launch(**browser_options)
-            context = await browser.new_context(
-                accept_downloads=True, viewport={"width": 1920, "height": 1080}
-            )
-            page = await context.new_page()
-
-            page.on("crash", lambda: logging.error("Browser page crashed"))
-            page.on("pageerror", lambda error: logging.error(f"Page error: {error}"))
-
-            await page.goto(self.source_url, wait_until="networkidle", timeout=120000)
-            await page.wait_for_timeout(5000)
-
             try:
+                context = await browser.new_context(
+                    accept_downloads=True, viewport={"width": 1920, "height": 1080}
+                )
+                page = await context.new_page()
+
+                page.on("crash", lambda: logging.error("Browser page crashed"))
+                page.on("pageerror", lambda error: logging.error(f"Page error: {error}"))
+
+                await page.goto(self.source_url, wait_until="networkidle", timeout=120000)
+                await page.wait_for_timeout(5000)
+
                 await page.wait_for_selector(
                     'iframe[title="Power BI Report Viewer"]',
                     state="visible",

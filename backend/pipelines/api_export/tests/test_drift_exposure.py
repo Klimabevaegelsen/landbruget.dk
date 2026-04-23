@@ -76,6 +76,24 @@ class _StubbedExporter(DriftExposureExporter):
         return self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
 
 
+def test_export_ensures_spatial_is_loaded(
+    conn_with_fixtures: duckdb.DuckDBPyConnection, tmp_path: Path
+) -> None:
+    class _TrackingExporter(_StubbedExporter):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.spatial_loaded = False
+
+        def _ensure_spatial_loaded(self) -> None:
+            self.spatial_loaded = True
+
+    exporter = _TrackingExporter(conn=conn_with_fixtures, output_dir=str(tmp_path))
+
+    exporter.export()
+
+    assert exporter.spatial_loaded is True
+
+
 def test_export_writes_per_kommune_and_index(
     conn_with_fixtures: duckdb.DuckDBPyConnection, tmp_path: Path
 ) -> None:

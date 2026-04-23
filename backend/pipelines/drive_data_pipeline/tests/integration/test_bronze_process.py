@@ -12,76 +12,95 @@ import pytest
 
 pytest.importorskip("google.auth", reason="google-auth not installed")
 from drive_data_pipeline.bronze import BronzeProcessor
+from drive_data_pipeline.bronze.drive import DriveFile, DriveFolder
 from drive_data_pipeline.config import Settings
 from drive_data_pipeline.utils.storage import DriveStorageManager
 
 
 @pytest.fixture
-def mock_drive_files() -> list[dict[str, Any]]:
-    """Mock files returned from Google Drive API."""
-    # Sample file structure for testing
-    return [
-        {
-            "id": "file1",
-            "name": "test_file.xlsx",
-            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "parents": ["folder1"],
-            "modifiedTime": "2023-01-01T00:00:00Z",
-            "size": "1024",
-        },
-        {
-            "id": "file2",
-            "name": "test_file.pdf",
-            "mimeType": "application/pdf",
-            "parents": ["folder2"],
-            "modifiedTime": "2023-01-01T00:00:00Z",
-            "size": "2048",
-        },
-        {
-            "id": "file3",
-            "name": "nested_folder",
-            "mimeType": "application/vnd.google-apps.folder",
-            "parents": ["folder1"],
-        },
-        {
-            "id": "file4",
-            "name": "test_nested_file.xlsx",
-            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "parents": ["file3"],
-            "modifiedTime": "2023-01-01T00:00:00Z",
-            "size": "512",
-        },
-    ]
+def mock_drive_folder() -> DriveFolder:
+    """Mock DriveFolder tree returned from Google Drive API."""
+    nested_folder = DriveFolder(
+        id="file3",
+        name="nested_folder",
+        parent_ids=["folder1"],
+        path="root/folder1/nested_folder",
+        files=[
+            DriveFile(
+                id="file4",
+                name="test_nested_file.xlsx",
+                mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                parent_ids=["file3"],
+                modified_time="2023-01-01T00:00:00Z",
+                size=512,
+                path="root/folder1/nested_folder/test_nested_file.xlsx",
+            )
+        ],
+    )
+
+    folder1 = DriveFolder(
+        id="folder1",
+        name="folder1",
+        parent_ids=["root"],
+        path="root/folder1",
+        files=[
+            DriveFile(
+                id="file1",
+                name="test_file.xlsx",
+                mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                parent_ids=["folder1"],
+                modified_time="2023-01-01T00:00:00Z",
+                size=1024,
+                path="root/folder1/test_file.xlsx",
+            )
+        ],
+        subfolders=[nested_folder],
+    )
+
+    folder2 = DriveFolder(
+        id="folder2",
+        name="folder2",
+        parent_ids=["root"],
+        path="root/folder2",
+        files=[
+            DriveFile(
+                id="file2",
+                name="test_file.pdf",
+                mime_type="application/pdf",
+                parent_ids=["folder2"],
+                modified_time="2023-01-01T00:00:00Z",
+                size=2048,
+                path="root/folder2/test_file.pdf",
+            )
+        ],
+    )
+
+    return DriveFolder(
+        id="mock_folder_id",
+        name="root",
+        path="root",
+        files=[],
+        subfolders=[folder1, folder2],
+    )
 
 
 @pytest.fixture
-def mock_drive_fetcher(mock_drive_files: list[dict[str, Any]]) -> Generator[MagicMock, None, None]:
+def mock_drive_fetcher(mock_drive_folder: DriveFolder) -> Generator[MagicMock, None, None]:
     """Mock the GoogleDriveFetcher class."""
     with patch("drive_data_pipeline.bronze.drive.GoogleDriveFetcher") as mock_fetcher:
         fetcher_instance = MagicMock()
         mock_fetcher.return_value = fetcher_instance
 
-        # Mock list_folder_contents to return sample files
-        fetcher_instance.list_folder_contents.return_value = mock_drive_files
+        # Mock list_folder_contents to return the DriveFolder tree
+        fetcher_instance.list_folder_contents.return_value = mock_drive_folder
 
-        # Mock get_file_metadata to return sample metadata
-        def mock_get_metadata(file_id: str) -> dict[str, Any]:
-            for file in mock_drive_files:
-                if file["id"] == file_id:
-                    return file
-            return None
-
-        fetcher_instance.get_file_metadata.side_effect = mock_get_metadata
-
-        # Mock download_file to create a simple file
-        def mock_download(file_id: str, destination_path: Path) -> bool:
-            # Create a simple test file at the destination
-            with open(destination_path, "w") as f:
-                if destination_path.endswith(".xlsx"):
-                    f.write("mock excel content")
-                elif destination_path.endswith(".pdf"):
-                    f.write("mock pdf content")
-            return True
+        # Mock download_file to return in-memory content and metadata
+        def mock_download(file_id: str) -> tuple[bytes, dict[str, Any]]:
+            if file_id in {"file1", "file4"}:
+                return (b"mock excel content", {"file_id": file_id})
+            if file_id == "file2":
+                return (b"mock pdf content", {"file_id": file_id})
+            raise ValueError(f"Unknown file ID: {file_id}")
 
         fetcher_instance.download_file.side_effect = mock_download
 
@@ -131,26 +150,21 @@ def test_bronze_processor(test_settings: Settings, mock_drive_fetcher: MagicMock
     )
 
     # Check that bronze output was created
-    bronze_dirs = list(Path(test_settings.bronze_path).glob("*"))
-    assert len(bronze_dirs) == 1, "Bronze output directory not found"
-
-    bronze_run_dir = bronze_dirs[0]
+    bronze_root = Path(test_settings.bronze_path)
 
     # Check that files were downloaded
-    files = list(bronze_run_dir.glob("**/*.xlsx")) + list(bronze_run_dir.glob("**/*.pdf"))
+    files = list(bronze_root.rglob("*.xlsx")) + list(bronze_root.rglob("*.pdf"))
     assert len(files) == 3, "Not all files were downloaded"
 
-    # Check that metadata.json was created
-    metadata_file = bronze_run_dir / "metadata.json"
-    assert metadata_file.exists(), "Metadata file not created"
+    # Check that per-file metadata files were created
+    metadata_files = list(bronze_root.rglob("*.metadata.json"))
+    assert len(metadata_files) == 3, "Not all file metadata was created"
 
-    # Check metadata content
-    with open(metadata_file) as f:
+    with open(metadata_files[0]) as f:
         metadata = json.load(f)
 
-    assert "timestamp" in metadata, "Timestamp missing from metadata"
-    assert "files" in metadata, "Files list missing from metadata"
-    assert len(metadata["files"]) == 3, "Not all files recorded in metadata"
+    assert "file_id" in metadata, "File ID missing from metadata"
+    assert "original_filename" in metadata, "Original filename missing from metadata"
 
 
 @pytest.mark.integration
@@ -158,57 +172,6 @@ def test_bronze_specific_subfolders(test_settings: Settings, mock_drive_fetcher:
     """Test bronze processor with specific subfolders filter."""
     # Create storage manager
     storage_manager = DriveStorageManager("local")
-
-    # Configure mock_drive_fetcher to simulate folder structure
-    def mock_list_contents(folder_id: str, recursive: bool = False) -> list[dict[str, Any]]:
-        if folder_id == "mock_folder_id":
-            # Return only top-level folders if not recursive
-            if not recursive:
-                return [
-                    {
-                        "id": "folder1",
-                        "name": "folder1",
-                        "mimeType": "application/vnd.google-apps.folder",
-                    },
-                    {
-                        "id": "folder2",
-                        "name": "folder2",
-                        "mimeType": "application/vnd.google-apps.folder",
-                    },
-                ]
-            # Return all files if recursive
-            return mock_drive_fetcher.list_folder_contents.return_value
-        if folder_id == "folder1":
-            return [
-                {
-                    "id": "file1",
-                    "name": "test_file.xlsx",
-                    "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "parents": ["folder1"],
-                    "modifiedTime": "2023-01-01T00:00:00Z",
-                    "size": "1024",
-                },
-                {
-                    "id": "file3",
-                    "name": "nested_folder",
-                    "mimeType": "application/vnd.google-apps.folder",
-                    "parents": ["folder1"],
-                },
-            ]
-        if folder_id == "folder2":
-            return [
-                {
-                    "id": "file2",
-                    "name": "test_file.pdf",
-                    "mimeType": "application/pdf",
-                    "parents": ["folder2"],
-                    "modifiedTime": "2023-01-01T00:00:00Z",
-                    "size": "2048",
-                }
-            ]
-        return []
-
-    mock_drive_fetcher.list_folder_contents.side_effect = mock_list_contents
 
     # Initialize BronzeProcessor
     bronze_processor = BronzeProcessor(
@@ -223,14 +186,11 @@ def test_bronze_specific_subfolders(test_settings: Settings, mock_drive_fetcher:
     )
 
     # Check that bronze output was created
-    bronze_dirs = list(Path(test_settings.bronze_path).glob("*"))
-    assert len(bronze_dirs) == 1, "Bronze output directory not found"
-
-    bronze_run_dir = bronze_dirs[0]
+    bronze_root = Path(test_settings.bronze_path)
 
     # Check that only folder1 files were downloaded
-    folder1_files = list(bronze_run_dir.glob("folder1/**/*"))
-    folder2_files = list(bronze_run_dir.glob("folder2/**/*"))
+    folder1_files = list(bronze_root.rglob("folder1/**/*"))
+    folder2_files = list(bronze_root.rglob("folder2/**/*"))
 
     assert len(folder1_files) > 0, "folder1 files not downloaded"
     assert len(folder2_files) == 0, "folder2 files were downloaded despite filter"
@@ -255,14 +215,11 @@ def test_bronze_specific_file_types(test_settings: Settings, mock_drive_fetcher:
     )
 
     # Check that bronze output was created
-    bronze_dirs = list(Path(test_settings.bronze_path).glob("*"))
-    assert len(bronze_dirs) == 1, "Bronze output directory not found"
-
-    bronze_run_dir = bronze_dirs[0]
+    bronze_root = Path(test_settings.bronze_path)
 
     # Check that only Excel files were downloaded
-    excel_files = list(bronze_run_dir.glob("**/*.xlsx"))
-    pdf_files = list(bronze_run_dir.glob("**/*.pdf"))
+    excel_files = list(bronze_root.rglob("*.xlsx"))
+    pdf_files = list(bronze_root.rglob("*.pdf"))
 
     assert len(excel_files) > 0, "Excel files not downloaded"
     assert len(pdf_files) == 0, "PDF files were downloaded despite filter"
@@ -277,10 +234,10 @@ def test_bronze_error_handling(test_settings: Settings, mock_drive_fetcher: Magi
     # Make one file download fail
     original_download = mock_drive_fetcher.download_file.side_effect
 
-    def download_with_error(file_id: str, destination_path: Path) -> bool:
+    def download_with_error(file_id: str) -> tuple[bytes, dict[str, Any]]:
         if file_id == "file1":
             raise Exception("Simulated download error")
-        return original_download(file_id, destination_path)
+        return original_download(file_id)
 
     mock_drive_fetcher.download_file.side_effect = download_with_error
 
@@ -297,17 +254,14 @@ def test_bronze_error_handling(test_settings: Settings, mock_drive_fetcher: Magi
     )
 
     # Check that bronze output was created despite errors
-    bronze_dirs = list(Path(test_settings.bronze_path).glob("*"))
-    assert len(bronze_dirs) == 1, "Bronze output directory not found"
-
-    bronze_run_dir = bronze_dirs[0]
+    bronze_root = Path(test_settings.bronze_path)
 
     # Check that some files were downloaded (the ones that didn't error)
-    files = list(bronze_run_dir.glob("**/*.xlsx")) + list(bronze_run_dir.glob("**/*.pdf"))
+    files = list(bronze_root.rglob("*.xlsx")) + list(bronze_root.rglob("*.pdf"))
     assert len(files) > 0, "No files were downloaded"
 
     # The failed file shouldn't exist
-    failed_file = list(bronze_run_dir.glob("**/test_file.xlsx"))
+    failed_file = list(bronze_root.rglob("test_file.xlsx"))
     assert len(failed_file) == 0 or (
         len(failed_file) == 1 and os.path.getsize(failed_file[0]) == 0
     ), "Failed file exists and has content"

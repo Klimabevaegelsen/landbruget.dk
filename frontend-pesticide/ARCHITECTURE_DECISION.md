@@ -1,5 +1,8 @@
 # H3 PFAS Visualization Architecture Decision
 
+> Historical note: this decision record includes earlier options that used a browser Supabase path.
+> The current runtime owner for H3 and BNBO in `frontend-pesticide` is PMTiles.
+
 ## The Question
 
 **Should we use raw data via API or PMTiles for H3 PFAS visualization?**

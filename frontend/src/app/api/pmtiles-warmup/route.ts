@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PMTILES_BASE_URL = 'https://data.pesticidkortet.dk';
+const PMTILES_BASE_URL = 'https://api.landbruget.dk';
 
 // PMTiles files to proactively warm (in priority order)
 const WARMUP_FILES = [

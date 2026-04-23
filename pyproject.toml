@@ -101,7 +101,6 @@ dev = [
 testpaths = ["backend"]
 pythonpath = [
     "backend",
-    "backend/common",
     "backend/pipelines",
     "backend/pipelines/chr_pipeline",
     "backend/pipelines/unified_pipeline/src",

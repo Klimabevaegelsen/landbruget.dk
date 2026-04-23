@@ -79,7 +79,7 @@ export async function GET() {
       {
         filename: 'bnbo_areas.pmtiles',
         size: 4685085, // 4.47 MB
-        url: 'https://data.pesticidkortet.dk/pmtiles/bnbo_areas.pmtiles',
+        url: 'https://api.landbruget.dk/pmtiles/bnbo_areas.pmtiles',
         lastModified: new Date().toISOString(),
         type: 'bnbo_areas',
       },

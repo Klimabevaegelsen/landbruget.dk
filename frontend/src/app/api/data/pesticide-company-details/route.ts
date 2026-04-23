@@ -35,12 +35,19 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error in pesticide-company-details proxy:', error);
 
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const isMissingCompany = message.includes('(404)');
+
     return NextResponse.json(
       {
-        error: 'Failed to fetch pesticide company details',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        error: isMissingCompany
+          ? 'No pesticide company details found'
+          : 'Failed to fetch pesticide company details',
+        message: isMissingCompany
+          ? 'No pesticide details are available for this company in the current exported dataset.'
+          : message,
       },
-      { status: 500 }
+      { status: isMissingCompany ? 404 : 500 }
     );
   }
 }

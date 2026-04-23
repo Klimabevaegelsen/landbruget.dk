@@ -19,7 +19,6 @@ npm run format:check  # oxfmt --check
 
 - **MapLibre GL** (`^5.6.1`) + **PMTiles** (`^3.2.1`) for base map tiles
 - **Zustand v5** for state management (6 stores — much heavier than main frontend)
-- **Supabase JS client** (`^2.39.0`) for data fetching (NOT apiFetch wrapper)
 - **Framer Motion** (`^11.11.0`) for animations
 - **Chroma.js** (`^3.1.0`) for color scales
 - **Radix UI** for accessible primitives (popover, slider, switch, tooltip)
@@ -27,7 +26,6 @@ npm run format:check  # oxfmt --check
 
 ## Zustand Stores (`src/stores/`)
 
-- `data-store.ts` — H3 hexagon data, BNBO polygons, BBR buildings (cached in Maps)
 - `map-store.ts` — Viewport, data mode, layer visibility, tooltip/selection state
 - `pmtiles-store.ts` — PMTiles tile source management (24-hour cache)
 - `resolution-store.ts` — H3 resolution: `'kommune' | 8 | 10` (zoom-dependent)
@@ -44,13 +42,12 @@ npm run format:check  # oxfmt --check
 
 - `src/services/pmtiles-discovery.ts` — `PMTilesDiscoveryService` discovers tile URLs from manifest at `data.pesticidkortet.dk`
 - `src/lib/basemaps.ts` — Denmark PMTiles URL: `pmtiles://https://data.pesticidkortet.dk/pmtiles/protomaps_denmark.pmtiles`
-- `src/lib/supabase.ts` — Supabase client init, WKT transforms, bbox queries
 - `src/lib/shared-constants.ts` — Years (2020-2025), GCS paths, cache TTLs, visualization limits
 
 ## Key Differences from Main Frontend
 
 - Uses **oxlint + oxfmt** (same as main frontend)
-- Uses **Supabase JS client directly** (NOT apiFetch wrapper)
+- Uses **PMTiles manifest discovery directly** instead of the main frontend's API wrapper pattern
 - Heavy Zustand usage (6 stores vs 1 in main frontend)
 - TypeScript `strict: false` (vs strict in main frontend)
 - No Playwright tests configured
@@ -59,8 +56,7 @@ npm run format:check  # oxfmt --check
 ## Environment Variables
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL         # Required
-NEXT_PUBLIC_SUPABASE_ANON_KEY    # Required
+No required runtime env vars for data fetching.
 ```
 
 Optional: `NEXT_PUBLIC_DEFAULT_MAP_CENTER_LAT` (55.7), `NEXT_PUBLIC_DEFAULT_MAP_CENTER_LON` (12.0), `NEXT_PUBLIC_DEFAULT_MAP_ZOOM` (7), `NEXT_PUBLIC_MAX_H3_HEXAGONS` (10000), `NEXT_PUBLIC_MAX_BNBO_POLYGONS` (1000), `NEXT_PUBLIC_MAX_BBR_BUILDINGS` (5000)
@@ -72,3 +68,4 @@ Optional: `NEXT_PUBLIC_DEFAULT_MAP_CENTER_LAT` (55.7), `NEXT_PUBLIC_DEFAULT_MAP_
 - PMTiles cached with 24-hour TTL in pmtiles-store
 - Temporal playback animation can cause memory leaks — check cleanup in temporal-store
 - Webpack fallbacks disable `fs`, `net`, `tls`, `crypto`, `stream`, `url`, `zlib`, `http`, `https`, `assert`, `os`, `path`, `child_process` on client
+- H3 and BNBO are PMTiles-owned in the live runtime; BBR-specific frontend parity is still unresolved and should not be reintroduced via browser Supabase reads

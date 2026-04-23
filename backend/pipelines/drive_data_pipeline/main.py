@@ -609,14 +609,26 @@ def main() -> int:
                     # For local storage, use filesystem operations
                     bronze_base_path = Path(settings.bronze_path)
                     if bronze_base_path.exists():
-                        for dataset_dir in bronze_base_path.iterdir():
-                            if dataset_dir.is_dir():
-                                # Look for timestamp directories within each dataset
-                                bronze_runs.extend(
-                                    timestamp_dir
-                                    for timestamp_dir in dataset_dir.iterdir()
-                                    if timestamp_dir.is_dir()
-                                )
+
+                        def is_bronze_run_dir(path: Path) -> bool:
+                            return path.is_dir() and any(path.rglob("*.metadata.json"))
+
+                        for candidate_dir in bronze_base_path.iterdir():
+                            if not candidate_dir.is_dir():
+                                continue
+
+                            # Support both layouts:
+                            # - bronze/<timestamp>/
+                            # - bronze/<dataset>/<timestamp>/
+                            if is_bronze_run_dir(candidate_dir):
+                                bronze_runs.append(candidate_dir)
+                                continue
+
+                            bronze_runs.extend(
+                                timestamp_dir
+                                for timestamp_dir in candidate_dir.iterdir()
+                                if is_bronze_run_dir(timestamp_dir)
+                            )
 
                 # Sort by modification time and get the latest
                 bronze_runs = sorted(

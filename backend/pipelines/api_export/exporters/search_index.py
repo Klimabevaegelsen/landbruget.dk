@@ -23,7 +23,10 @@ class SearchIndexExporter(BaseExporter):
     """Generate search/index.json from company data."""
 
     def export(self) -> dict:
-        parquet_path = f"r2://{BUCKET}/gold/cvr_enrichment_companies/data.parquet"
+        parquet_path = self.latest_r2_parquet("gold/cvr_enrichment_companies")
+        if not parquet_path:
+            logger.error("Failed to resolve latest companies parquet on R2")
+            return {"files_written": 0, "companies": 0}
 
         try:
             self.load_parquet_table(parquet_path, "companies_search")

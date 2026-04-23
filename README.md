@@ -40,15 +40,24 @@ landbruget.dk/
 ### Prerequisites
 
 - Node.js 18+
-- Python 3.11+
+- Python 3.11
+- uv
 - Supabase CLI
+
+### Workspace Setup
+
+```bash
+./scripts/setup-worktree.sh
+```
+
+This installs frontend dependencies, Playwright browsers, and the shared Python workspace via `uv`, pinned to Python 3.11 via `.python-version`, then verifies `npm test`, `npm run lint`, and `uv run pytest` can resolve their local tooling.
 
 ### Frontend
 
 ```bash
 cd frontend
 cp .env.example .env.local    # Configure Supabase credentials
-npm install
+npm ci
 npm run dev                   # http://localhost:3000
 ```
 
@@ -64,11 +73,11 @@ npm run dev                       # http://localhost:3000
 ### Backend Pipelines
 
 ```bash
-uv sync --all-packages --group dev
+uv sync --python 3.11 --all-packages --group dev
 
 # Run a specific pipeline
 cd backend/pipelines/unified_pipeline
-python -m unified_pipeline bronze --source cadastral
+uv run python -m unified_pipeline bronze --source cadastral
 ```
 
 ## Data Architecture

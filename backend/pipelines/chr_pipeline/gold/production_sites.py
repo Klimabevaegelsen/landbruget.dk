@@ -10,7 +10,6 @@ Output columns match the Supabase production_sites table:
 
 from pathlib import Path
 
-import duckdb
 from common.logging_utils import get_pipeline_logger
 
 from .export import export_gold_table
@@ -50,11 +49,16 @@ def process_production_sites(
     try:
         logger.info("Building production_sites gold table...")
 
-        conn = duckdb.connect()
+        if not STORAGE_AVAILABLE:
+            logger.error("Storage utilities not available")
+            return False
+
+        storage = StorageAccess()
+        conn = storage.duckdb_conn
         conn.execute("SET memory_limit = '4GB'")
 
         # Load silver tables from GCS/R2
-        if not _load_silver_tables(conn):
+        if not _load_silver_tables(storage):
             logger.error("Failed to load silver tables")
             return False
 
@@ -130,30 +134,21 @@ def process_production_sites(
         return False
 
 
-def _load_silver_tables(conn: duckdb.DuckDBPyConnection) -> bool:
+def _load_silver_tables(storage: StorageAccess) -> bool:
     """Load CHR silver parquet from cloud storage into DuckDB tables."""
-    if not STORAGE_AVAILABLE:
-        logger.error("Storage utilities not available")
-        return False
-
     try:
-        storage = StorageAccess()
+        conn = storage.duckdb_conn
         bucket = "landbruget-data"
 
         for table_name, pattern in DATA_PATTERNS.items():
-            files = storage.list_files(bucket, pattern)
+            files = storage.list_files(f"{bucket}/{pattern}")
             if not files:
                 logger.warning(f"No files found for {table_name}: {pattern}")
                 continue
 
             # Use latest file (sorted by timestamp in path)
             latest = sorted(files)[-1]
-            path = f"{bucket}/{latest}" if not latest.startswith(bucket) else latest
-
-            conn.execute(f"""
-                CREATE OR REPLACE TABLE {table_name} AS
-                SELECT * FROM read_parquet('{path}')
-            """)
+            storage.query_parquet_native(latest, "SELECT *", table_name)
             rows = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             logger.info(f"Loaded {table_name}: {rows:,} rows from {latest}")
 

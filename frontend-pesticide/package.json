@@ -19,7 +19,6 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-switch": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.0",
-    "@supabase/supabase-js": "^2.39.0",
     "@tailwindcss/postcss": "^4.1.11",
     "@types/chroma-js": "^2.4.4",
     "chroma-js": "^3.1.0",
@@ -46,9 +45,9 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.1.6",
-    "postcss": "^8.4.47",
     "oxfmt": "^0.40.0",
-    "oxlint": "^1.55.0"
+    "oxlint": "^1.55.0",
+    "postcss": "^8.4.47"
   },
   "engines": {
     "node": ">=22.12.0",
