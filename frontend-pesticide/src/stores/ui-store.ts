@@ -14,10 +14,6 @@ interface UIState {
   isMobile: boolean;
   setIsMobile: (isMobile: boolean) => void;
 
-  // Panel states
-  showDataPanel: boolean;
-  setShowDataPanel: (show: boolean) => void;
-
   // Mobile bottom panel state
   showMobilePanel: boolean;
   setShowMobilePanel: (show: boolean) => void;
@@ -38,7 +34,6 @@ export const useUIStore = create<UIState>()(
       sidebarOpen: false,
       theme: 'system',
       isMobile: false,
-      showDataPanel: false,
       showMobilePanel: false,
       reduceMotion: false,
       performanceMode: false,
@@ -47,7 +42,6 @@ export const useUIStore = create<UIState>()(
       setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
       setTheme: (theme: 'light' | 'dark' | 'system') => set({ theme }),
       setIsMobile: (isMobile: boolean) => set({ isMobile }),
-      setShowDataPanel: (show: boolean) => set({ showDataPanel: show }),
       setShowMobilePanel: (show: boolean) => set({ showMobilePanel: show }),
       setReduceMotion: (reduce: boolean) => set({ reduceMotion: reduce }),
       setPerformanceMode: (enabled: boolean) =>
@@ -57,7 +51,6 @@ export const useUIStore = create<UIState>()(
       name: 'ui-store',
       partialize: (state) => ({
         theme: state.theme,
-        showDataPanel: state.showDataPanel,
         reduceMotion: state.reduceMotion,
         performanceMode: state.performanceMode,
       }),

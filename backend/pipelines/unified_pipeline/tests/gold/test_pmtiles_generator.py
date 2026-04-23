@@ -39,6 +39,14 @@ def test_config(temp_dir):
     return config
 
 
+def test_config_defaults_target_public_api_domain():
+    """Default publish target should be the shared public API bucket/domain."""
+    config = PMTilesGeneratorConfig()
+
+    assert config.cloudflare_r2_bucket == "landbruget-data"
+    assert config.r2_base_url == "https://api.landbruget.dk"
+
+
 @pytest.fixture
 def mock_storage_access():
     """Create mock cloud storage access."""

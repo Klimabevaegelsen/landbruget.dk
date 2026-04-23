@@ -18,6 +18,68 @@ except ImportError:
 
 logger = get_pipeline_logger(__name__)
 
+OPTIONAL_EMPTY_TABLE_SCHEMAS: dict[str, dict[str, str]] = {
+    "intl_pig_cl": {
+        "i_2_certificate_reference_number": "VARCHAR",
+    },
+    "intl_pig_nt": {
+        "i_2_imsoc_reference": "VARCHAR",
+    },
+    "intl_pig_2024_2025": {
+        "i_2_imsoc_reference": "VARCHAR",
+    },
+    "intl_cattle_traces_cl": {
+        "i_2_certificate_reference_number": "VARCHAR",
+        "i_15_date_and_time_of_departure": "VARCHAR",
+        "i_14_place_of_loading": "VARCHAR",
+        "i_14_place_of_loading_city": "VARCHAR",
+        "i_14_place_of_loading_country": "VARCHAR",
+        "i_13_place_of_destination": "VARCHAR",
+        "i_13_place_of_destination_city": "VARCHAR",
+        "i_13_place_of_destination_country": "VARCHAR",
+    },
+    "intl_cattle_traces_nt": {
+        "i_2_imsoc_reference": "VARCHAR",
+        "i_14_dato_og_klokkeslaet_for_afgang": "VARCHAR",
+        "i_11_afsendelsessted_adresse": "VARCHAR",
+        "i_11_afsendelsessted_by": "VARCHAR",
+        "i_11_afsendelsessted_land": "VARCHAR",
+        "i_12_bestemmelsessted_adresse": "VARCHAR",
+        "i_12_bestemmelsessted_by": "VARCHAR",
+        "i_12_bestemmelsessted_land": "VARCHAR",
+    },
+    "intl_combined_traces_2024_2025": {
+        "i_2_imsoc_reference": "VARCHAR",
+        "i_14_dato_og_klokkeslaet_for_afgang": "VARCHAR",
+        "i_11_afsendelsessted_adresse": "VARCHAR",
+        "i_11_afsendelsessted_by": "VARCHAR",
+        "i_11_afsendelsessted_land": "VARCHAR",
+        "i_12_bestemmelsessted_adresse": "VARCHAR",
+        "i_12_bestemmelsessted_by": "VARCHAR",
+        "i_12_bestemmelsessted_land": "VARCHAR",
+        "i_30_commodities": "VARCHAR",
+    },
+}
+
+
+def _create_empty_transport_table(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+) -> None:
+    """Create an empty table that preserves the columns downstream SQL expects."""
+    schema = OPTIONAL_EMPTY_TABLE_SCHEMAS.get(table_name)
+    if not schema:
+        conn.execute(
+            f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE"
+        )
+        return
+
+    select_list = ", ".join(
+        f"CAST(NULL AS {column_type}) AS {column_name}"
+        for column_name, column_type in schema.items()
+    )
+    conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT {select_list} WHERE FALSE")
+
 
 def setup_database(conn: duckdb.DuckDBPyConnection) -> None:
     """Set up DuckDB with necessary extensions and settings."""
@@ -111,9 +173,7 @@ def load_transportation_data_sources(storage_access) -> dict[str, bool]:
     # Create empty tables for failed loads to prevent SQL errors
     for table_name, loaded in loaded_tables.items():
         if not loaded:
-            storage_access.duckdb_conn.execute(
-                f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE"
-            )
+            _create_empty_transport_table(storage_access.duckdb_conn, table_name)
 
     return loaded_tables
 

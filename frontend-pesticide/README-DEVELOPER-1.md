@@ -1,5 +1,8 @@
 # Developer 1: Backend Infrastructure & Data Management
 
+> Historical note: this file documents an earlier Supabase-centric responsibility split.
+> The current live `frontend-pesticide` runtime is PMTiles-based for H3 and BNBO and no longer uses the browser Supabase client path.
+
 This document describes the backend infrastructure and data management components implemented for the H3 PFAS Visualization Frontend.
 
 ## 🏗️ **Architecture Overview**

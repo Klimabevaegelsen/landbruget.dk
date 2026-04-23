@@ -5,6 +5,7 @@ Tests for FVM WFS Silver layer.
 import duckdb
 import pytest
 
+from unified_pipeline.model.cli import CliConfig, Env, FVMLayerType, Source, Stage
 from unified_pipeline.silver.fvm_wfs import FVMWFSSilver, FVMWFSSilverConfig
 
 
@@ -30,12 +31,90 @@ def test_fvm_wfs_silver_config() -> None:
     assert config.dataset_marker == "fvm_marker"
     assert config.dataset_smaabiotoper == "fvm_smaabiotoper"
     assert config.dataset_organic_areas == "fvm_organic_areas"
-    assert len(config.organic_areas_years) == 13  # 2012-2024
+    assert len(config.organic_areas_years) == 14  # 2012-2025
 
     # Test new municipality assignment configuration
     assert config.kommune_boundaries_dataset == "dagi_kommuner"
     assert config.include_municipality_assignment is True
     assert config.municipality_assignment_method == "spatial_with_fallback"
+
+
+def test_apply_cli_filters_marker_uses_live_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Marker filtering should use live-discovered marker years."""
+    config = FVMWFSSilverConfig()
+
+    monkeypatch.setattr(
+        "unified_pipeline.silver.fvm_wfs.discover_fvm_layer_years",
+        lambda _wfs_url: {
+            "markblokke": [2005, 2026],
+            "marker": [2024, 2026],
+            "smaabiotoper": [2026],
+            "organic_areas": [2012, 2025],
+            "organic_subsidies": [2017, 2024],
+            "grassland_subsidies": [2017, 2024],
+            "environmental_subsidies": [2012, 2023],
+        },
+    )
+
+    cli_config = CliConfig(
+        env=Env.prod,
+        source=Source.fvm_wfs,
+        stage=Stage.silver,
+        fvm_layer_type=FVMLayerType.marker,
+    )
+    config.apply_cli_filters(cli_config)
+
+    assert config.marker_years == [2024, 2026]
+
+
+def test_apply_cli_filters_fail_fast_on_discovery_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Discovery failures should fail fast when marker discovery is required."""
+    config = FVMWFSSilverConfig()
+
+    def _raise(_wfs_url: str) -> dict[str, list[int]]:
+        raise RuntimeError("capabilities unavailable")
+
+    monkeypatch.setattr("unified_pipeline.silver.fvm_wfs.discover_fvm_layer_years", _raise)
+
+    cli_config = CliConfig(
+        env=Env.prod,
+        source=Source.fvm_wfs,
+        stage=Stage.silver,
+        fvm_layer_type=FVMLayerType.marker,
+    )
+
+    with pytest.raises(RuntimeError, match="capabilities unavailable"):
+        config.apply_cli_filters(cli_config)
+
+
+def test_enrichment_uses_live_years_for_membership(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Enrichment stage membership checks should use live-discovered years."""
+    config = FVMWFSSilverConfig()
+
+    monkeypatch.setattr(
+        "unified_pipeline.silver.fvm_wfs.discover_fvm_layer_years",
+        lambda _wfs_url: {
+            "markblokke": [2005, 2026],
+            "marker": [2024, 2026],
+            "smaabiotoper": [2023, 2026],
+            "organic_areas": [2012, 2025],
+            "organic_subsidies": [2017, 2024],
+            "grassland_subsidies": [2017, 2024],
+            "environmental_subsidies": [2012, 2023],
+        },
+    )
+
+    cli_config = CliConfig(
+        env=Env.prod,
+        source=Source.fvm_wfs,
+        stage=Stage.enrichment,
+        fvm_year=2026,
+    )
+    config.apply_cli_filters(cli_config)
+
+    assert config.markblokke_years == [2026]
+    assert config.marker_years == [2026]
+    assert config.smaabiotoper_years == [2026]
 
 
 def test_subsidy_field_uuid_join_avoids_cross_cvr_collisions() -> None:

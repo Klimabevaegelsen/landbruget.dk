@@ -4,11 +4,7 @@
 
 import { PageBuilderItem, IteratedSection } from '@/services/data/types';
 
-export type MissingDataType =
-  | 'nitrate'
-  | 'carbon'
-  | 'subsidies'
-  | 'worker_welfare';
+export type MissingDataType = 'nitrate' | 'carbon' | 'worker_welfare';
 
 /**
  * Determines if a chart should show a placeholder based on its _key
@@ -18,11 +14,6 @@ export function shouldShowPlaceholder(
   chartKey: string
 ): MissingDataType | null {
   // Specific chart keys that need placeholders for missing data
-
-  // Subsidies charts
-  if (chartKey === 'subsidies-history-stacked') {
-    return 'subsidies';
-  }
 
   // Nitrogen/Nitrate charts
   if (

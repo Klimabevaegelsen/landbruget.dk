@@ -136,12 +136,12 @@ class FVMLayerType(Enum):
 
     Attributes:
         markblokke: Field blocks data (2005-2026)
-        marker: Field markers data (2008-2025)
-        smaabiotoper: Small biotopes data (2023-2025)
-        organic_areas: Organic areas data (2012-2024)
-        organic_subsidies: Organic subsidies data (2019-2024)
-        grassland_subsidies: Grassland subsidies data (2019-2024)
-        environmental_subsidies: Environmental subsidies data (2019-2023)
+        marker: Field markers data (live years discovered from WFS capabilities)
+        smaabiotoper: Small biotopes data (live years discovered from WFS capabilities)
+        organic_areas: Organic areas data (2012-2025)
+        organic_subsidies: Organic subsidies data (2017-2024)
+        grassland_subsidies: Grassland subsidies data (2017-2024)
+        environmental_subsidies: Environmental subsidies data (2012-2023)
     """
 
     markblokke = "markblokke"

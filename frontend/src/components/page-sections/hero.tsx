@@ -50,7 +50,7 @@ export function Hero() {
       // Check cache first if not forcing refresh
       if (!forceRefresh) {
         const cachedData = getCachedData();
-        if (cachedData) {
+        if (cachedData && !cachedData.fallback) {
           setStats(cachedData);
           setUsingCache(true);
           setLoading(false);
@@ -95,13 +95,13 @@ export function Hero() {
     ? '...'
     : stats
       ? formatDanishNumber(stats.total_data_points)
-      : '29.100.000+'; // Fallback based on our query results
+      : '--';
 
   const displayCompanies = loading
     ? '...'
     : stats
       ? formatDanishNumber(stats.total_companies)
-      : '46.000+'; // Fallback based on our query results
+      : '--';
 
   return (
     <div className="hero-section relative isolate overflow-hidden px-6 pt-14 lg:px-8">

@@ -89,19 +89,19 @@ test.describe('PMTiles Cache Service', () => {
     expect(result.newValid).toBe(true);
   });
 
-  test('should use proxy URL by default', async ({ page }) => {
+  test('should use public API PMTiles URL by default', async ({ page }) => {
     await page.goto('/');
 
     const result = await page.evaluate(() => {
-      const USE_PROXY = true;
-      const PROXY_BASE_URL = 'https://www.landbruget.dk';
+      const USE_PROXY = false;
+      const PMTILES_BASE_URL = 'https://api.landbruget.dk';
       const filename = 'test.pmtiles';
 
       const url = USE_PROXY
-        ? `${PROXY_BASE_URL}/api/pmtiles/${filename}`
-        : `https://data.pesticidkortet.dk/pmtiles/${filename}`;
+        ? `https://www.landbruget.dk/api/pmtiles/${filename}`
+        : `${PMTILES_BASE_URL}/pmtiles/${filename}`;
 
-      return url.includes('www.landbruget.dk/api/pmtiles');
+      return url.includes('api.landbruget.dk/pmtiles');
     });
 
     expect(result).toBe(true);
@@ -112,14 +112,14 @@ test.describe('PMTiles Cache Service', () => {
 
     const result = await page.evaluate(() => {
       const year = 2024;
-      const PROXY_BASE_URL = 'https://www.landbruget.dk';
+      const PMTILES_BASE_URL = 'https://api.landbruget.dk';
 
       const urls = {
-        fields: `${PROXY_BASE_URL}/api/pmtiles/pmtiles/field_analysis_${year}.pmtiles`,
-        bnbo: `${PROXY_BASE_URL}/api/pmtiles/pmtiles/bnbo_areas.pmtiles`,
-        wetlands: `${PROXY_BASE_URL}/api/pmtiles/pmtiles/wetlands_all.pmtiles`,
-        water_projects: `${PROXY_BASE_URL}/api/pmtiles/pmtiles/water_projects.pmtiles`,
-        buildings: `${PROXY_BASE_URL}/api/pmtiles/pmtiles/buildings_proximity.pmtiles`,
+        fields: `${PMTILES_BASE_URL}/pmtiles/field_analysis_${year}.pmtiles`,
+        bnbo: `${PMTILES_BASE_URL}/pmtiles/bnbo_areas.pmtiles`,
+        wetlands: `${PMTILES_BASE_URL}/pmtiles/wetlands_all.pmtiles`,
+        water_projects: `${PMTILES_BASE_URL}/pmtiles/water_projects.pmtiles`,
+        buildings: `${PMTILES_BASE_URL}/pmtiles/buildings_proximity.pmtiles`,
       };
 
       return {

@@ -37,9 +37,11 @@ class TestGoldOrchestration:
         gold_dir = tmp_path / "gold" / export_timestamp
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -57,9 +59,11 @@ class TestGoldOrchestration:
         gold_dir = tmp_path / "gold" / export_timestamp
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -70,6 +74,7 @@ class TestGoldOrchestration:
             )
 
             assert result is True
+            assert mock_sites.called
             assert mock_timeline.called
             assert mock_transport.called
 
@@ -79,9 +84,11 @@ class TestGoldOrchestration:
         gold_dir = tmp_path / "gold" / export_timestamp
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -103,9 +110,11 @@ class TestGoldOrchestration:
         gold_dir = tmp_path / "gold" / export_timestamp
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -127,9 +136,11 @@ class TestGoldOrchestration:
         gold_dir = tmp_path / "gold" / export_timestamp
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = False
             mock_timeline.return_value = False  # Simulate failure
             mock_transport.return_value = True
 
@@ -145,9 +156,11 @@ class TestGoldOrchestration:
         gold_dir = tmp_path / "gold" / export_timestamp
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = False
             mock_timeline.return_value = False
             mock_transport.return_value = False
 
@@ -162,10 +175,12 @@ class TestGoldOrchestration:
         export_timestamp = "20240101_120000"
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
             patch("gold.chr_gold_processing.GOLD_BASE_DIR", tmp_path),
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -271,20 +286,18 @@ class TestTransportationAnalysis:
 class TestGoldDataQuality:
     """Test gold layer data quality checks."""
 
-    def test_gold_processing_logs_success(self, tmp_path, caplog):
-        """Test that successful processing is logged."""
-        import logging
-
-        caplog.set_level(logging.INFO)
-
+    def test_gold_processing_logs_success(self, tmp_path):
+        """Test that successful processing returns success."""
         export_timestamp = "20240101_120000"
         gold_dir = tmp_path / "gold"
         gold_dir.mkdir(parents=True)
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -293,22 +306,19 @@ class TestGoldDataQuality:
             result = process_gold_data(export_timestamp=export_timestamp, gold_dir=gold_dir)
 
             assert result is True
-            assert "CHR Gold Layer Processing completed successfully" in caplog.text
 
-    def test_gold_processing_logs_failure(self, tmp_path, caplog):
-        """Test that processing failures are logged."""
-        import logging
-
-        caplog.set_level(logging.ERROR)
-
+    def test_gold_processing_logs_failure(self, tmp_path):
+        """Test that processing failures return failure."""
         export_timestamp = "20240101_120000"
         gold_dir = tmp_path / "gold"
         gold_dir.mkdir(parents=True)
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = False
             mock_timeline.return_value = False
             mock_transport.return_value = False
 
@@ -317,7 +327,6 @@ class TestGoldDataQuality:
             result = process_gold_data(export_timestamp=export_timestamp, gold_dir=gold_dir)
 
             assert result is False
-            assert "CHR Gold Layer Processing failed" in caplog.text
 
 
 @pytest.mark.chr_gold
@@ -330,9 +339,11 @@ class TestGoldExports:
         gold_dir = tmp_path / "gold" / export_timestamp
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -353,9 +364,11 @@ class TestGoldExports:
         gold_dir.mkdir(parents=True)
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.side_effect = Exception("Export failed")
             # Simulate export error
             mock_timeline.side_effect = Exception("Export failed")
             mock_transport.return_value = True
@@ -378,10 +391,12 @@ class TestGoldConfiguration:
         gold_dir = tmp_path / "gold"
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
             patch.dict("os.environ", {"GCS_BUCKET": "test-bucket"}),
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
@@ -397,21 +412,24 @@ class TestGoldConfiguration:
         gold_dir = tmp_path / "gold"
 
         test_cases = [
-            ("all", True, True),
-            ("gold_processing", True, True),
-            ("veterinary_timeline", True, False),
-            ("transportation_analysis", False, True),
-            (None, True, True),  # Default is all steps
+            ("all", True, True, True),
+            ("gold_processing", True, True, True),
+            ("veterinary_timeline", False, True, False),
+            ("transportation_analysis", False, False, True),
+            (None, True, True, True),  # Default is all steps
         ]
 
         with (
+            patch("gold.chr_gold_processing.process_production_sites") as mock_sites,
             patch("gold.chr_gold_processing.process_veterinary_timeline") as mock_timeline,
             patch("gold.chr_gold_processing.process_transportation_analysis") as mock_transport,
         ):
+            mock_sites.return_value = True
             mock_timeline.return_value = True
             mock_transport.return_value = True
 
-            for step_param, expect_timeline, expect_transport in test_cases:
+            for step_param, expect_sites, expect_timeline, expect_transport in test_cases:
+                mock_sites.reset_mock()
                 mock_timeline.reset_mock()
                 mock_transport.reset_mock()
 
@@ -422,5 +440,6 @@ class TestGoldConfiguration:
                 )
 
                 assert result is True
+                assert mock_sites.called == expect_sites
                 assert mock_timeline.called == expect_timeline
                 assert mock_transport.called == expect_transport

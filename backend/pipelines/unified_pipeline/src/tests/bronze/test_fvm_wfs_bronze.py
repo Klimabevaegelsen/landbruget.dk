@@ -9,6 +9,7 @@ import pytest
 from tenacity import RetryError
 
 from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
+from unified_pipeline.model.cli import CliConfig, Env, FVMLayerType, Source, Stage
 
 
 @pytest.fixture
@@ -55,9 +56,85 @@ def test_fvm_wfs_bronze_config() -> None:
     assert config.dataset_marker == "fvm_marker"
     assert config.dataset_organic_areas == "fvm_organic_areas"
     assert len(config.markblokke_years) == 22  # 2005-2026
-    assert len(config.marker_years) == 18  # 2008-2025
-    assert len(config.smaabiotoper_years) == 3  # 2023-2025
-    assert len(config.organic_areas_years) == 13  # 2012-2024
+    assert len(config.marker_years) == 19  # 2008-2026
+    assert len(config.smaabiotoper_years) == 4  # 2023-2026
+    assert len(config.organic_areas_years) == 14  # 2012-2025
+
+
+def test_apply_cli_filters_marker_uses_live_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Marker filtering should use live-discovered marker years."""
+    config = FVMWFSBronzeConfig()
+
+    monkeypatch.setattr(
+        "unified_pipeline.bronze.fvm_wfs.discover_fvm_layer_years",
+        lambda _wfs_url: {
+            "markblokke": [2005, 2026],
+            "marker": [2024, 2026],
+            "smaabiotoper": [2026],
+            "organic_areas": [2012, 2025],
+            "organic_subsidies": [2017, 2024],
+            "grassland_subsidies": [2017, 2024],
+            "environmental_subsidies": [2012, 2023],
+        },
+    )
+
+    cli_config = CliConfig(
+        env=Env.prod,
+        source=Source.fvm_wfs,
+        stage=Stage.bronze,
+        fvm_layer_type=FVMLayerType.marker,
+    )
+    config.apply_cli_filters(cli_config)
+
+    assert config.marker_years == [2024, 2026]
+
+
+def test_apply_cli_filters_fail_fast_on_discovery_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Discovery failures should fail fast when marker discovery is required."""
+    config = FVMWFSBronzeConfig()
+
+    def _raise(_wfs_url: str) -> dict[str, list[int]]:
+        raise RuntimeError("capabilities unavailable")
+
+    monkeypatch.setattr("unified_pipeline.bronze.fvm_wfs.discover_fvm_layer_years", _raise)
+
+    cli_config = CliConfig(
+        env=Env.prod,
+        source=Source.fvm_wfs,
+        stage=Stage.bronze,
+        fvm_layer_type=FVMLayerType.marker,
+    )
+
+    with pytest.raises(RuntimeError, match="capabilities unavailable"):
+        config.apply_cli_filters(cli_config)
+
+
+def test_apply_cli_filters_markblokke_uses_live_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Markblokke filtering should also use live-discovered years."""
+    config = FVMWFSBronzeConfig()
+
+    monkeypatch.setattr(
+        "unified_pipeline.bronze.fvm_wfs.discover_fvm_layer_years",
+        lambda _wfs_url: {
+            "markblokke": [2005, 2025, 2026],
+            "marker": [2008, 2026],
+            "smaabiotoper": [2023, 2026],
+            "organic_areas": [2012, 2025],
+            "organic_subsidies": [2017, 2024],
+            "grassland_subsidies": [2017, 2024],
+            "environmental_subsidies": [2012, 2023],
+        },
+    )
+
+    cli_config = CliConfig(
+        env=Env.prod,
+        source=Source.fvm_wfs,
+        stage=Stage.bronze,
+        fvm_layer_type=FVMLayerType.markblokke,
+    )
+    config.apply_cli_filters(cli_config)
+
+    assert config.markblokke_years == [2005, 2025, 2026]
 
 
 def test_get_layer_name(fvm_wfs_bronze: FVMWFSBronze) -> None:

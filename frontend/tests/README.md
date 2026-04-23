@@ -1,6 +1,6 @@
 # Frontend Testing Guide
 
-Complete guide to testing in the Landbruget.dk frontend application using Playwright.
+Complete guide to testing in the Landbruget.dk frontend application using Playwright and Vitest.
 
 ## Table of Contents
 
@@ -19,7 +19,12 @@ Complete guide to testing in the Landbruget.dk frontend application using Playwr
 
 ## Overview
 
-This project uses Playwright for both E2E (end-to-end) and component testing. Playwright provides:
+This project uses:
+
+- Playwright for E2E browser coverage
+- Vitest for server-side route unit tests
+
+Playwright provides:
 
 - Fast, reliable test execution
 - Multiple browser support (Chromium, Firefox, WebKit)
@@ -30,6 +35,7 @@ This project uses Playwright for both E2E (end-to-end) and component testing. Pl
 ### Project Setup
 
 - **E2E Tests**: Located in `frontend/tests/` with config `playwright.config.ts`
+- **Route Unit Tests**: Located in `frontend/tests/routes/` with config `vitest.routes.config.ts`
 - **Component Tests**: Located in `frontend/tests/components/` with config `playwright-ct.config.ts`
 - **Test Utilities**: Located in `frontend/tests/utils/test-helpers.ts`
 
@@ -95,6 +101,41 @@ test('should render button with correct variant', async ({ mount }) => {
 });
 ```
 
+### 3. Route Unit Tests
+
+Tests Next.js route handlers directly in a Node runtime without starting the dev server.
+
+**When to use:**
+
+- Testing `src/app/api/**/route.ts` behavior
+- Verifying cache headers, status codes, and JSON payloads
+- Mocking server dependencies such as `next/cache`, `fetch`, or data loaders
+
+**Example:**
+
+```typescript
+// tests/routes/homepage-statistics.route.test.ts
+import { describe, expect, it, vi } from 'vitest';
+import { GET } from '@/app/api/homepage-statistics/route';
+
+vi.mock('@/lib/server-cache', () => ({
+  getCachedHomepageStatistics: vi
+    .fn()
+    .mockResolvedValue({ totals: { companies: 123 } }),
+}));
+
+describe('GET /api/homepage-statistics', () => {
+  it('returns cached data', async () => {
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      totals: { companies: 123 },
+    });
+  });
+});
+```
+
 ---
 
 ## Running Tests
@@ -104,6 +145,12 @@ test('should render button with correct variant', async ({ mount }) => {
 ```bash
 # Run all E2E tests
 npm test
+
+# Run route unit tests
+npm run test:routes
+
+# Run route unit tests in watch mode
+npm run test:routes:watch
 
 # Run tests in UI mode (interactive)
 npm run test:ui

@@ -1,5 +1,9 @@
 # H3 PFAS Visualization Frontend - Implementation Guide
 
+> Historical note: this guide describes an older Supabase-backed implementation plan.
+> The current live runtime uses PMTiles for H3 and BNBO data, and the browser Supabase path has been removed.
+> Do not treat the Supabase steps below as the current production architecture.
+
 ## Overview
 
 This guide provides step-by-step instructions for implementing the H3 PFAS visualization frontend that connects to data stored in GCS and serves it through Supabase.

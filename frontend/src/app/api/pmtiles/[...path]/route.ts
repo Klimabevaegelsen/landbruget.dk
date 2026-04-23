@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PMTILES_BASE_URL = 'https://data.pesticidkortet.dk';
+const PMTILES_BASE_URL = 'https://api.landbruget.dk';
 const CACHE_DURATION = 7 * 24 * 60 * 60; // 1 week in seconds
 
 export async function GET(

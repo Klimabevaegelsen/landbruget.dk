@@ -33,6 +33,7 @@ interface CompanyContribution {
 interface MunicipalityDetailsData {
   municipality: string;
   category: string;
+  metric?: string;
   year: number;
   total_municipality_value: number;
   municipality_rank: number | null;
@@ -50,11 +51,29 @@ interface MunicipalityDetailsModalProps {
   onClose: () => void;
 }
 
-const formatValue = (value: number, category: string): string => {
-  switch (category) {
-    case 'land_use':
-    case 'organic_farming':
+const formatValue = (value: number, metricOrCategory: string): string => {
+  switch (metricOrCategory) {
+    case 'total_agricultural_area_ha':
       return `${value.toLocaleString('da-DK')} ha`;
+    case 'land_use':
+      return `${value.toLocaleString('da-DK')} ha`;
+    case 'organic_farming_percentage':
+      return `${value.toFixed(1)}%`;
+    case 'total_animal_capacity':
+      return `${value.toLocaleString('da-DK')} dyr`;
+    case 'total_pesticide_burden':
+    case 'pfas_pesticide_burden':
+    case 'glyphosate_pesticide_burden':
+      return value.toFixed(1);
+    case 'total_antibiotic_ddd_usage':
+      return `${value.toLocaleString('da-DK')} DDD`;
+    case 'avg_nitrogen_leaching_kg':
+      return `${value.toFixed(1)} kg/ha`;
+    case 'total_workplace_incidents':
+    case 'total_incidents':
+      return `${value.toLocaleString('da-DK')} tilfælde`;
+    case 'organic_farming':
+      return `${value.toFixed(1)}%`;
     case 'production':
       return `${value.toLocaleString('da-DK')} dyr`;
     case 'pesticide_burden':
@@ -93,6 +112,7 @@ export function MunicipalityDetailsModal({
   const [data, setData] = useState<MunicipalityDetailsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const metric = data?.metric || category;
 
   useEffect(() => {
     if (!municipality) return;
@@ -189,7 +209,7 @@ export function MunicipalityDetailsModal({
                     </div>
                     <div>
                       <div className="text-2xl font-bold">
-                        {formatValue(data.total_municipality_value, category)}
+                        {formatValue(data.total_municipality_value, metric)}
                       </div>
                       <div className="text-muted-foreground text-sm">
                         Total værdi
@@ -280,7 +300,7 @@ export function MunicipalityDetailsModal({
                             </td>
                             <td className="px-4 py-3 text-right whitespace-nowrap">
                               <div className="text-foreground text-sm font-semibold">
-                                {formatValue(company.value, category)}
+                                {formatValue(company.value, metric)}
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right whitespace-nowrap">

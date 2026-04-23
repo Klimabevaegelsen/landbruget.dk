@@ -19,6 +19,7 @@ import {
   LayerVisibility,
   FilterState,
 } from '@/components/field-analysis/types';
+import { PMTILES_BASE_URL } from '@/lib/env';
 
 // Dynamically import the map to avoid SSR issues
 const FieldAnalysisMap = dynamic(
@@ -71,14 +72,11 @@ export function CompanyFieldsMap({
 
   // Generate PMTiles URLs for the selected year
   const pmtilesUrls = {
-    fields: `https://data.pesticidkortet.dk/pmtiles/field_analysis_${selectedYear}.pmtiles`,
-    bnbo: 'https://data.pesticidkortet.dk/pmtiles/bnbo_areas.pmtiles',
-    wetlands:
-      'https://data.pesticidkortet.dk/pmtiles/wetlands_all_2024.pmtiles',
-    water_projects:
-      'https://data.pesticidkortet.dk/pmtiles/water_projects_2024.pmtiles',
-    buildings:
-      'https://data.pesticidkortet.dk/pmtiles/buildings_proximity.pmtiles',
+    fields: `${PMTILES_BASE_URL}/pmtiles/field_analysis_${selectedYear}.pmtiles`,
+    bnbo: `${PMTILES_BASE_URL}/pmtiles/bnbo_areas.pmtiles`,
+    wetlands: `${PMTILES_BASE_URL}/pmtiles/wetlands_all_2024.pmtiles`,
+    water_projects: `${PMTILES_BASE_URL}/pmtiles/water_projects_2024.pmtiles`,
+    buildings: `${PMTILES_BASE_URL}/pmtiles/buildings_proximity.pmtiles`,
   };
 
   // Ensure client-side only rendering

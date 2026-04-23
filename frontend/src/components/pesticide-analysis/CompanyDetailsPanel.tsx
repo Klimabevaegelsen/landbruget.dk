@@ -27,6 +27,7 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
   const [details, setDetails] = useState<CompanyDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noDetailsAvailable, setNoDetailsAvailable] = useState(false);
 
   // Fetch detailed company data
   useEffect(() => {
@@ -35,6 +36,7 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
 
       setLoading(true);
       setError(null);
+      setNoDetailsAvailable(false);
 
       // Show loading toast for company details
       const toastId = toast.loading('Indlæser virksomhedsdetaljer', {
@@ -47,6 +49,11 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
         );
 
         if (!response.ok) {
+          if (response.status === 404) {
+            setDetails(null);
+            setNoDetailsAvailable(true);
+            return;
+          }
           throw new Error(
             `Failed to fetch company details: ${response.status}`
           );
@@ -140,6 +147,71 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
         >
           Prøv igen
         </Button>
+      </div>
+    );
+  }
+
+  if (noDetailsAvailable) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Building2 className="text-muted-foreground h-4 w-4" />
+            <h3 className="text-foreground text-sm font-semibold">
+              {company.company_name || `Virksomhed ${company.cvr_number}`}
+            </h3>
+          </div>
+          <div className="text-muted-foreground space-y-1 text-xs">
+            <div>CVR: {company.cvr_number}</div>
+            <div className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {company.municipality !== 'Municipality TBD'
+                ? company.municipality
+                : 'Ukendt kommune'}
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div className="bg-primary/10 rounded p-2">
+            <div className="text-primary font-medium">Total Belastning</div>
+            <div className="text-primary text-lg font-bold">
+              {formatBelastning(company.total_belastning)}
+            </div>
+          </div>
+          <div className="bg-muted rounded p-2">
+            <div className="text-muted-foreground font-medium">Anvendelser</div>
+            <div className="text-foreground text-lg font-bold">
+              {company.total_applications.toLocaleString()}
+            </div>
+          </div>
+          <div className="bg-accent/10 rounded p-2">
+            <div className="text-accent-foreground font-medium">
+              Behandlet Areal
+            </div>
+            <div className="text-accent-foreground text-lg font-bold">
+              {company.total_treated_area_ha.toLocaleString('da-DK', {
+                maximumFractionDigits: 0,
+              })}{' '}
+              ha
+            </div>
+          </div>
+          <div className="bg-secondary/10 rounded p-2">
+            <div className="text-secondary-foreground font-medium">
+              Produkter
+            </div>
+            <div className="text-secondary-foreground text-lg font-bold">
+              {company.unique_products}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-muted text-muted-foreground rounded p-3 text-sm">
+          Ingen ekstra pesticiddetaljer er tilgængelige for denne virksomhed i
+          det aktuelle eksporterede datasæt.
+        </div>
       </div>
     );
   }

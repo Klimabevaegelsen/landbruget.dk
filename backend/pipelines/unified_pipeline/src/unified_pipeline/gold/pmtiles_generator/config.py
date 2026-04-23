@@ -16,10 +16,10 @@ class PMTilesGeneratorConfig(BaseJobConfig):
 
     # Output configuration
     cloudflare_r2_bucket: str = Field(
-        default="pesticidkortet", description="Cloudflare R2 bucket name"
+        default="landbruget-data", description="Cloudflare R2 bucket name"
     )
     r2_base_url: str = Field(
-        default="https://data.pesticidkortet.dk", description="R2 base URL for public access"
+        default="https://api.landbruget.dk", description="R2 base URL for public access"
     )
 
     # PMTiles generation settings

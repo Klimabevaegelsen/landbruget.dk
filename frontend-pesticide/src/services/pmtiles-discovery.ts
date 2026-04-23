@@ -30,7 +30,7 @@ interface PMTilesManifest {
 
 class PMTilesDiscoveryService {
   private cache: Map<string, unknown> = new Map();
-  private readonly baseUrl = 'https://data.pesticidkortet.dk';
+  private readonly baseUrl = 'https://api.landbruget.dk';
   private readonly manifestUrl = `${this.baseUrl}/pmtiles/pmtiles-manifest.json`;
 
   private async getManifest(): Promise<PMTilesManifest> {

@@ -35,7 +35,7 @@ class WorkerSafetyGoldConfig(BaseJobConfig):
     )
 
     # Input silver datasets
-    worker_safety_dataset: str = "worker safety"  # Note: space in dataset name as per storage path
+    worker_safety_dataset: str = "worker_safety"
 
     # Processing configuration
     start_year: int = Field(default=2020, description="Start year for analysis")
@@ -407,28 +407,44 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         self.log.info(f"✅ Saved {table_name} to {full_storage_path}")
 
     def _get_latest_silver_path(self, dataset: str) -> str | None:
-        """Get the latest silver data directory path for a dataset."""
-        try:
-            # Try specific _mv files first (original two-file format)
-            pattern = f"{self.config.bucket}/silver/{dataset}/*/worker_safety_2020-2024_mv.parquet"
-            files = self.storage.list_files(pattern)
+        """Get the latest silver data directory path for worker safety.
 
-            if not files:
-                # Fall back to any worker_safety parquet files
-                # (drive pipeline may produce a single file without _mv/_skadeart suffix)
-                pattern = f"{self.config.bucket}/silver/{dataset}/*/worker_safety*.parquet"
+        The silver path historically used a space in the dataset name, but the
+        current R2 layout uses `worker_safety`. Check both to stay compatible
+        with older buckets and existing docs.
+        """
+        try:
+            candidate_datasets = [dataset]
+            if dataset == "worker_safety":
+                candidate_datasets.append("worker safety")
+            elif dataset == "worker safety":
+                candidate_datasets.append("worker_safety")
+
+            files: list[str] = []
+            for candidate in candidate_datasets:
+                pattern = (
+                    f"{self.config.bucket}/silver/{candidate}/*/worker_safety_2020-2024_mv.parquet"
+                )
                 files = self.storage.list_files(pattern)
 
-            if not files:
-                self.log.warning(f"No worker safety files found for dataset: {dataset}")
-                return None
+                if not files:
+                    pattern = f"{self.config.bucket}/silver/{candidate}/*/worker_safety*.parquet"
+                    files = self.storage.list_files(pattern)
 
-            # Get the latest file and extract its directory
-            latest_file = sorted(files)[-1]
-            directory_path = "/".join(latest_file.split("/")[:-1])
+                if files:
+                    latest_file = sorted(files)[-1]
+                    directory_path = "/".join(latest_file.split("/")[:-1])
+                    self.log.info(
+                        "Found latest worker safety silver data directory: %s",
+                        directory_path,
+                    )
+                    return directory_path
 
-            self.log.info(f"Found latest worker safety silver data directory: {directory_path}")
-            return directory_path
+            self.log.warning(
+                "No worker safety files found for dataset candidates: %s",
+                candidate_datasets,
+            )
+            return None
 
         except Exception as e:
             self.log.error(f"Error finding latest silver path for {dataset}: {e}")
