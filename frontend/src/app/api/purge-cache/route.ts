@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PMTILES_BASE_URL } from '@/lib/env';
 
 interface PurgeRequest {
   files: string[];
 }
+
+const PMTILES_BASE_URL = (
+  process.env.PMTILES_BASE_URL ||
+  process.env.NEXT_PUBLIC_PMTILES_BASE_URL ||
+  'https://api.landbruget.dk'
+).replace(/\/$/, '');
 
 export async function POST(request: NextRequest) {
   const { CLOUDFLARE_ZONE_ID, CLOUDFLARE_API_TOKEN } = process.env;

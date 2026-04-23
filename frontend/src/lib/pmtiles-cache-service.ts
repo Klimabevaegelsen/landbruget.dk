@@ -14,8 +14,8 @@ interface PMTilesPreloadOptions {
 class PMTilesCacheService {
   private cache = new Map<string, CachedPMTilesUrl>();
   private readonly CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week in milliseconds
-  private readonly USE_PROXY = false; // Canonical public host is direct
-  private readonly PROXY_BASE_URL = 'https://www.landbruget.dk'; // Enforce www for consistency
+  private readonly USE_PROXY = true; // Use proxy to avoid CORS issues
+  private readonly PMTILES_BASE_URL = PMTILES_BASE_URL.replace(/\/$/, '');
 
   /**
    * Get a PMTiles URL with caching optimization
@@ -31,8 +31,8 @@ class PMTilesCacheService {
 
     // Determine URL based on proxy setting
     const url = this.USE_PROXY
-      ? `${this.PROXY_BASE_URL}/api/pmtiles/${filename}` // Use our caching proxy
-      : `${PMTILES_BASE_URL}/pmtiles/${filename}`; // Direct R2 URL
+      ? `/api/pmtiles/${filename}` // Same-origin caching proxy
+      : `${this.PMTILES_BASE_URL}/pmtiles/${filename}`; // Direct R2 URL
 
     // Cache the URL
     this.cache.set(cacheKey, {

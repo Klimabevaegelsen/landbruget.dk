@@ -30,8 +30,13 @@ interface PMTilesManifest {
 
 class PMTilesDiscoveryService {
   private cache: Map<string, unknown> = new Map();
-  private readonly baseUrl = 'https://api.landbruget.dk';
-  private readonly manifestUrl = `${this.baseUrl}/pmtiles/pmtiles-manifest.json`;
+  private readonly baseUrl = (
+    process.env.NEXT_PUBLIC_PMTILES_BASE_URL || 'https://api.landbruget.dk'
+  ).replace(/\/$/, '');
+  private readonly manifestPath =
+    process.env.NEXT_PUBLIC_PMTILES_MANIFEST_PATH ||
+    '/pmtiles/pmtiles-manifest.json';
+  private readonly manifestUrl = `${this.baseUrl}${this.manifestPath.startsWith('/') ? this.manifestPath : `/${this.manifestPath}`}`;
 
   private async getManifest(): Promise<PMTilesManifest> {
     const cacheKey = 'pmtiles_manifest';

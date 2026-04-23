@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PMTILES_BASE_URL = 'https://api.landbruget.dk';
+const PMTILES_BASE_URL = (
+  process.env.PMTILES_BASE_URL ||
+  process.env.NEXT_PUBLIC_PMTILES_BASE_URL ||
+  'https://api.landbruget.dk'
+).replace(/\/$/, '');
 
 // PMTiles files to proactively warm (in priority order)
 const WARMUP_FILES = [

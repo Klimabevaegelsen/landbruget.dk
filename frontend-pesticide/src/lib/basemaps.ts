@@ -15,8 +15,10 @@ const DENMARK_BOUNDS = {
 };
 
 // Denmark PMTiles URL on R2
-const DENMARK_PMTILES_URL =
-  'pmtiles://https://api.landbruget.dk/pmtiles/protomaps_denmark.pmtiles';
+const PMTILES_BASE_URL = (
+  process.env.NEXT_PUBLIC_PMTILES_BASE_URL || 'https://api.landbruget.dk'
+).replace(/\/$/, '');
+const DENMARK_PMTILES_URL = `pmtiles://${PMTILES_BASE_URL}/pmtiles/protomaps_denmark.pmtiles`;
 
 // Create basemap styles using the actual Denmark PMTiles
 function createDenmarkBasemapStyle(flavor: 'light' | 'black') {
