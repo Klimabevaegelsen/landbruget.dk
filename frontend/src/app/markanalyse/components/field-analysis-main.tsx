@@ -85,13 +85,13 @@ export function FieldAnalysisMain() {
     bnbo: string;
     wetlands: string;
     water_projects: string;
-    buildings: string;
+    buildings: string | null;
   }>({
     fields: '',
     bnbo: '',
     wetlands: '',
     water_projects: '',
-    buildings: '',
+    buildings: null,
   });
 
   // Ref to access map's queryVisibleFields function

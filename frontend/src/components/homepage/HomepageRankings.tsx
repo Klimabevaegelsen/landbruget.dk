@@ -228,10 +228,15 @@ export function HomepageRankings() {
 
       {/* Rankings Grid */}
       {!loading && !error && filteredRankings.length > 0 && (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-6" data-testid="ranking-table">
           {filteredRankings.map((ranking) => (
             <RankingTable
               key={ranking.id}
+              testId={
+                ranking.id === filteredRankings[0]?.id
+                  ? 'ranking-table'
+                  : undefined
+              }
               id={ranking.id}
               title={ranking.title}
               category={ranking.category}

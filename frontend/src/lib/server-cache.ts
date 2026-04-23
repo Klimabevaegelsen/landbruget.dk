@@ -111,8 +111,8 @@ export interface DriftExposureIndex {
   pesticide_year: number | null;
   national_avg_drift_dose_kg: number | null;
   building_count: number;
-  unmatched_count: number;
-  kommunekoder: string[];
+  tile_zoom: number;
+  tile_count: number;
 }
 
 export interface DriftExposureBuilding {
@@ -130,12 +130,12 @@ export const getCachedDriftExposureIndex = unstable_cache(
   { revalidate: 604800, tags: ['drift-exposure'] }
 );
 
-export const getCachedDriftExposureKommune = unstable_cache(
-  async (kommunekode: string) =>
+export const getCachedDriftExposureTile = unstable_cache(
+  async (z: number, x: number, y: number) =>
     fetchR2Json<DriftExposureBuilding[]>(
-      `/pesticides/drift-exposure/${encodeURIComponent(kommunekode)}.json`
+      `/pesticides/drift-exposure/tiles/${z}/${x}/${y}.json`
     ),
-  ['drift-exposure-kommune'],
+  ['drift-exposure-tile'],
   { revalidate: 604800, tags: ['drift-exposure'] }
 );
 export const invalidateAllCaches = async () => {

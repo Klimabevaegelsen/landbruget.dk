@@ -1,7 +1,18 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Layers, Filter, Calendar, Settings, Download } from 'lucide-react';
+import {
+  Layers,
+  Filter,
+  Calendar,
+  Settings,
+  Download,
+  Wheat,
+  Droplets,
+  Wind,
+  Waves,
+  Home,
+} from 'lucide-react';
 import {
   Sidebar,
   SidebarHeader,
@@ -49,9 +60,10 @@ export function FieldSidebar({
 
   return (
     <Sidebar
-      defaultExpanded={false}
+      defaultExpanded={true}
       collapsible
       onExpandedChange={onExpandedChange}
+      data-testid="layer-control-panel"
     >
       <SidebarHeader className="flex items-center justify-center">
         <div className="bg-primary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl shadow-sm">
@@ -141,6 +153,39 @@ function FieldSidebarExpandedContent({
 }) {
   const { isExpanded } = useSidebar();
 
+  const layerConfigs = [
+    {
+      key: 'fields' as const,
+      name: 'Landbrugsmarker',
+      description: '617.774 marker med pesticidforbrug og miljodata',
+      icon: Wheat,
+    },
+    {
+      key: 'bnbo' as const,
+      name: 'BNBO Omrader',
+      description: '2.761 boringsnaere beskyttelsesomrader',
+      icon: Droplets,
+    },
+    {
+      key: 'wetlands' as const,
+      name: 'Lavbundsomrader',
+      description: '768.646 lavbundsjorder med torvindhold',
+      icon: Wind,
+    },
+    {
+      key: 'water_projects' as const,
+      name: 'Vandprojekter',
+      description: '2.138 vandprojekter til miljogenopretning',
+      icon: Waves,
+    },
+    {
+      key: 'buildings' as const,
+      name: 'Bygninger',
+      description: '268.260 bygninger taet pa pesticidmarker',
+      icon: Home,
+    },
+  ];
+
   // Don't render any detailed content when collapsed
   if (!isExpanded) {
     return null;
@@ -152,52 +197,7 @@ function FieldSidebarExpandedContent({
       {activeSection === 'layers' && (
         <SidebarGroup label="Kortlag">
           <div className="space-y-3 px-3 py-2">
-            {Object.entries(layerVisibility).map(([key, visible]) => {
-              const layerNames: Record<string, string> = {
-                fields: 'Landbrugsmarker',
-                bnbo: 'BNBO Områder',
-                wetlands: 'Lavbundsområder',
-                water_projects: 'Vandprojekter',
-                buildings: 'Bygninger',
-              };
-              return (
-                <label
-                  key={key}
-                  className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={visible}
-                    onChange={() => onLayerToggle(key as keyof LayerVisibility)}
-                    data-testid={`layer-${key}-checkbox`}
-                    className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
-                  />
-                  <span className="font-medium">{layerNames[key] || key}</span>
-                </label>
-              );
-            })}
-          </div>
-        </SidebarGroup>
-      )}
-
-      {/* Filter Controls */}
-      {activeSection === 'filters' && (
-        <SidebarGroup label="Filtre">
-          <div className="space-y-4 px-3 py-2">
-            <label className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors">
-              <input
-                type="checkbox"
-                checked={filterState.organicOnly}
-                onChange={(e) =>
-                  onFilterChange({ organicOnly: e.target.checked })
-                }
-                data-testid="organic-only-checkbox"
-                className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
-              />
-              <span className="font-medium">Kun økologiske marker</span>
-            </label>
-
-            <div className="space-y-2">
+            <div className="space-y-2" data-testid="filter-control">
               <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
                 Visualisering
               </label>
@@ -208,18 +208,91 @@ function FieldSidebarExpandedContent({
               />
             </div>
 
-            <label className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors">
-              <input
-                type="checkbox"
-                checked={filterState.useDecileColoring}
-                onChange={(e) =>
-                  onFilterChange({ useDecileColoring: e.target.checked })
-                }
-                data-testid="decile-coloring-checkbox"
-                className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
+            {layerConfigs.map((layer) => {
+              const visible = layerVisibility[layer.key];
+              const Icon = layer.icon;
+
+              return (
+                <div
+                  key={layer.key}
+                  className="hover:bg-accent/50 rounded p-2 transition-colors"
+                  data-testid="layer-item"
+                >
+                  <label className="flex cursor-pointer items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={visible}
+                      onChange={() => onLayerToggle(layer.key)}
+                      data-testid="layer-toggle"
+                      aria-label={layer.name}
+                      className="text-primary border-border focus:ring-primary mt-0.5 h-4 w-4 rounded focus:ring-2"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 flex-shrink-0" />
+                        <span className="font-medium" data-testid="layer-name">
+                          {layer.name}
+                        </span>
+                      </div>
+                      <p
+                        className="text-muted-foreground mt-1 text-xs"
+                        data-testid="layer-description"
+                      >
+                        {layer.description}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </SidebarGroup>
+      )}
+
+      {/* Filter Controls */}
+      {activeSection === 'filters' && (
+        <SidebarGroup label="Filtre">
+          <div className="space-y-4 px-3 py-2">
+            <div data-testid="filter-control">
+              <label className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors">
+                <input
+                  type="checkbox"
+                  checked={filterState.organicOnly}
+                  onChange={(e) =>
+                    onFilterChange({ organicOnly: e.target.checked })
+                  }
+                  data-testid="organic-only-checkbox"
+                  className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
+                />
+                <span className="font-medium">Kun økologiske marker</span>
+              </label>
+            </div>
+
+            <div className="space-y-2" data-testid="filter-control">
+              <label className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                Visualisering
+              </label>
+              <VisualizationModeSelect
+                value={filterState.visualizationMode}
+                onChange={(mode) => onFilterChange({ visualizationMode: mode })}
+                className="w-full"
               />
-              <span className="font-medium">Decile farvning</span>
-            </label>
+            </div>
+
+            <div data-testid="filter-control">
+              <label className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors">
+                <input
+                  type="checkbox"
+                  checked={filterState.useDecileColoring}
+                  onChange={(e) =>
+                    onFilterChange({ useDecileColoring: e.target.checked })
+                  }
+                  data-testid="decile-coloring-checkbox"
+                  className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
+                />
+                <span className="font-medium">Decile farvning</span>
+              </label>
+            </div>
           </div>
         </SidebarGroup>
       )}

@@ -34,6 +34,7 @@ interface RankingTableEnhancedProps {
   items: RankingItem[];
   last_updated?: string;
   showTop?: number;
+  testId?: string;
 }
 
 type SortField = 'rank' | 'company_name' | 'value' | 'municipality';
@@ -45,6 +46,7 @@ export function RankingTableEnhanced({
   description,
   items,
   showTop = 20,
+  testId,
 }: RankingTableEnhancedProps) {
   const { navigateToCompany } = useCompanyNavigation();
   const { getCompanyForDisplay } = useCompanyCache();
@@ -119,11 +121,16 @@ export function RankingTableEnhanced({
   );
 
   return (
-    <Card className="w-full">
-      <CardHeader className="pb-4">
+    <Card className="w-full" data-testid={testId}>
+      <CardHeader className="card-header pb-4">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <CardTitle className="text-lg font-semibold">{title}</CardTitle>
+            <CardTitle
+              className="text-lg font-semibold"
+              data-testid="ranking-title"
+            >
+              {title}
+            </CardTitle>
             <Badge
               variant="outline"
               className={`text-xs ${getCategoryColor(category)}`}
@@ -132,10 +139,15 @@ export function RankingTableEnhanced({
             </Badge>
           </div>
         </div>
-        <p className="text-muted-foreground text-sm">{description}</p>
+        <p
+          className="text-muted-foreground text-sm"
+          data-testid="ranking-description"
+        >
+          {description}
+        </p>
       </CardHeader>
 
-      <CardContent className="p-0">
+      <CardContent className="card-content p-0">
         {items.length === 0 ? (
           <div className="px-6 py-8 text-center">
             <p className="text-muted-foreground text-sm">
@@ -169,6 +181,7 @@ export function RankingTableEnhanced({
                   return (
                     <TableRow
                       key={`${item.company_id}-${item.rank}`}
+                      data-testid="ranking-row"
                       className="hover:bg-muted/50 cursor-pointer"
                       onClick={() =>
                         navigateToCompany(item.company_id, item.company_name)
@@ -184,7 +197,10 @@ export function RankingTableEnhanced({
                         <div className="space-y-1">
                           <div className="flex items-center space-x-2">
                             <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-                            <span className="truncate font-medium">
+                            <span
+                              className="truncate font-medium"
+                              data-testid="company-link"
+                            >
                               {item.company_name}
                             </span>
                             <ExternalLink className="text-muted-foreground h-3 w-3" />

@@ -6,6 +6,11 @@ interface CachedPMTilesUrl {
   etag?: string;
 }
 
+interface CachedPMTilesAvailability {
+  available: boolean;
+  timestamp: number;
+}
+
 interface PMTilesPreloadOptions {
   preloadAdjacentYears?: boolean;
   preloadCommonLayers?: boolean;
@@ -13,6 +18,7 @@ interface PMTilesPreloadOptions {
 
 class PMTilesCacheService {
   private cache = new Map<string, CachedPMTilesUrl>();
+  private availabilityCache = new Map<string, CachedPMTilesAvailability>();
   private readonly CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week in milliseconds
   private readonly USE_PROXY = true; // Use proxy to avoid CORS issues
   private readonly PMTILES_BASE_URL = PMTILES_BASE_URL.replace(/\/$/, '');
@@ -52,7 +58,7 @@ class PMTilesCacheService {
     bnbo: string;
     wetlands: string;
     water_projects: string;
-    buildings: string;
+    buildings: string | null;
   }> {
     const [fields, overview, bnbo, wetlands, water_projects, buildings] =
       await Promise.all([
@@ -61,10 +67,23 @@ class PMTilesCacheService {
         this.getPMTilesUrl('pmtiles/bnbo_areas.pmtiles'),
         this.getPMTilesUrl('pmtiles/wetlands_all.pmtiles'),
         this.getPMTilesUrl('pmtiles/water_projects.pmtiles'),
-        this.getPMTilesUrl('pmtiles/buildings_proximity.pmtiles'),
+        this.getOptionalPMTilesUrl('pmtiles/buildings_proximity.pmtiles'),
       ]);
 
     return { fields, overview, bnbo, wetlands, water_projects, buildings };
+  }
+
+  /**
+   * Get a PMTiles URL for an optional layer and return null when the file is
+   * missing so map consumers can skip the source entirely.
+   */
+  async getOptionalPMTilesUrl(filename: string): Promise<string | null> {
+    const isAvailable = await this.checkPMTilesAvailability(filename);
+    if (!isAvailable) {
+      return null;
+    }
+
+    return this.getPMTilesUrl(filename);
   }
 
   /**
@@ -139,11 +158,28 @@ class PMTilesCacheService {
    * Check if a PMTiles file is available
    */
   async checkPMTilesAvailability(filename: string): Promise<boolean> {
+    const cached = this.availabilityCache.get(filename);
+
+    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+      return cached.available;
+    }
+
     try {
       const url = await this.getPMTilesUrl(filename);
       const response = await fetch(url, { method: 'HEAD' });
-      return response.ok;
+      const available = response.ok;
+
+      this.availabilityCache.set(filename, {
+        available,
+        timestamp: Date.now(),
+      });
+
+      return available;
     } catch {
+      this.availabilityCache.set(filename, {
+        available: false,
+        timestamp: Date.now(),
+      });
       return false;
     }
   }
@@ -179,6 +215,7 @@ class PMTilesCacheService {
    */
   clearCache(): void {
     this.cache.clear();
+    this.availabilityCache.clear();
   }
 
   /**
@@ -192,6 +229,12 @@ class PMTilesCacheService {
       if (now - value.timestamp > this.CACHE_DURATION) {
         this.cache.delete(key);
         removedCount++;
+      }
+    }
+
+    for (const [key, value] of this.availabilityCache.entries()) {
+      if (now - value.timestamp > this.CACHE_DURATION) {
+        this.availabilityCache.delete(key);
       }
     }
 

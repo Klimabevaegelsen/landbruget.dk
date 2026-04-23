@@ -33,7 +33,7 @@ const analyserLinks = [
 
 function DesktopNav() {
   return (
-    <nav className="relative hidden items-center gap-4 lg:flex">
+    <nav className="relative flex items-center gap-4">
       <Menu as="div" className="relative">
         <MenuButton className="text-foreground data-hover:bg-muted/50 flex items-center px-4 py-3 text-sm font-medium bg-blend-multiply transition-colors hover:underline">
           Analyser

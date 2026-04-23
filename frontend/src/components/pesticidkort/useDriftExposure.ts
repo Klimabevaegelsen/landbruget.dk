@@ -1,6 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import {
+  DEFAULT_DRIFT_TILE_ZOOM,
+  haversineMeters,
+  lngLatToTile,
+  MATCH_TOLERANCE_M,
+  surroundingTiles,
+} from '@/lib/drift-exposure-tiles';
 
 export interface DriftExposureMatch {
   exposure_percentile: number;
@@ -12,6 +19,7 @@ export interface DriftExposureMatch {
 interface DriftExposureIndexResponse {
   pesticide_year: number | null;
   national_avg_drift_dose_kg: number | null;
+  tile_zoom: number;
 }
 
 interface DriftExposureBuildingResponse {
@@ -22,48 +30,11 @@ interface DriftExposureBuildingResponse {
   dose: number;
 }
 
-// Match tolerance: DAWA coordinates are building-centroid snapshots; drift
-// exposure uses BBR centroids. 60 m covers most cases without matching a
-// neighbor in dense residential areas.
-const MATCH_TOLERANCE_M = 60;
-
-function haversineMeters(
-  aLat: number,
-  aLng: number,
-  bLat: number,
-  bLng: number
-): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-async function reverseLookupKommune(
-  lat: number,
-  lng: number
-): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://api.dataforsyningen.dk/kommuner/reverse?x=${lng}&y=${lat}&format=json`
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as { kode?: string };
-    return data.kode ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Look up drift-exposure percentile for a coordinate by finding the nearest
- * BBR building in the address's kommune. Returns null when the coordinate
- * falls outside any kommune, the kommune has no drift data, or no building
- * is within {@link MATCH_TOLERANCE_M}.
+ * Look up drift-exposure percentile for a coordinate by loading the address's
+ * slippy-map tile plus adjacent tiles, then finding the nearest BBR building.
+ * Returns null when no nearby building shard exists or no building is within
+ * {@link MATCH_TOLERANCE_M}.
  */
 export function useDriftExposure(
   lat: number | undefined,
@@ -88,28 +59,35 @@ export function useDriftExposure(
     setMatch(null);
 
     (async () => {
-      const kommunekode = await reverseLookupKommune(lat, lng);
+      const indexRes = await fetch('/api/drift-exposure');
       if (cancelled) return;
-      if (!kommunekode) {
-        setStatus('no_match');
-        return;
-      }
-
-      const [buildingsRes, indexRes] = await Promise.all([
-        fetch(`/api/drift-exposure?kommunekode=${kommunekode}`),
-        fetch('/api/drift-exposure'),
-      ]);
-      if (cancelled) return;
-      if (!buildingsRes.ok) {
-        setStatus('no_match');
-        return;
-      }
-      const buildings =
-        (await buildingsRes.json()) as DriftExposureBuildingResponse[];
       const index = indexRes.ok
         ? ((await indexRes.json()) as DriftExposureIndexResponse)
         : null;
       if (cancelled) return;
+      const tileZoom = index?.tile_zoom ?? DEFAULT_DRIFT_TILE_ZOOM;
+      const centerTile = lngLatToTile(lat, lng, tileZoom);
+      const tileResponses = await Promise.all(
+        surroundingTiles(centerTile.x, centerTile.y, centerTile.z).map(
+          async (tile) => {
+            const response = await fetch(
+              `/api/drift-exposure?z=${tile.z}&x=${tile.x}&y=${tile.y}`
+            );
+            if (!response.ok) return [];
+            return (await response.json()) as DriftExposureBuildingResponse[];
+          }
+        )
+      );
+      if (cancelled) return;
+      const seen = new Set<string>();
+      const buildings: DriftExposureBuildingResponse[] = [];
+      for (const tileBuildings of tileResponses) {
+        for (const building of tileBuildings) {
+          if (seen.has(building.uid)) continue;
+          seen.add(building.uid);
+          buildings.push(building);
+        }
+      }
 
       let nearest: DriftExposureBuildingResponse | null = null;
       let nearestDist = Infinity;

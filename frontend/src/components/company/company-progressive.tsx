@@ -71,7 +71,7 @@ export function CompanyProgressive({ companyId }: CompanyProgressiveProps) {
     ) || [];
 
   return (
-    <article>
+    <main>
       <CompanyHero
         company={fullCompanyData || undefined}
         basicInfo={basicCompanyInfo}
@@ -90,6 +90,6 @@ export function CompanyProgressive({ companyId }: CompanyProgressiveProps) {
           <PageBuilder pageBlocks={filteredPageBuilder} />
         )}
       </Container>
-    </article>
+    </main>
   );
 }

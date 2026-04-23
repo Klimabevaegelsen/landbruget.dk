@@ -10,7 +10,7 @@ export async function generateStaticParams() {
   return [];
 }
 
-export default async function CompanyPage({ params }: Props) {
+export default async function CompanyAliasPage({ params }: Props) {
   const { id } = await params;
 
   return <CompanyPageContent companyId={id} />;
