@@ -28,7 +28,7 @@ export function LandingHero({
       variants={staggerContainer(!!reducedMotion)}
       initial={reducedMotion ? false : 'hidden'}
       animate="visible"
-      className="relative flex min-h-screen flex-col overflow-hidden px-6 sm:px-8"
+      className="relative flex min-h-screen flex-col overflow-hidden px-6 pb-[var(--pesticidkort-footer-height)] sm:px-8"
     >
       {/* Map background */}
       <div className="absolute inset-0 -z-10" aria-hidden="true">
@@ -75,7 +75,7 @@ export function LandingHero({
 
         <motion.div
           variants={fadeSlideUp}
-          className="mt-6 flex items-center gap-3 text-sm"
+          className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"
         >
           <button
             onClick={onExploreMap}
@@ -84,7 +84,7 @@ export function LandingHero({
           >
             Udforsk kortet
           </button>
-          <span className="text-border">·</span>
+          <span className="text-border hidden sm:block">·</span>
           <button
             onClick={() => router.push('/markanalyse')}
             data-testid="go-expert-button"
@@ -92,7 +92,7 @@ export function LandingHero({
           >
             Ekspertvisning
           </button>
-          <span className="text-border">·</span>
+          <span className="text-border hidden sm:block">·</span>
           <Link
             href="/pesticidanalyse/metode"
             data-testid="methodology-link"

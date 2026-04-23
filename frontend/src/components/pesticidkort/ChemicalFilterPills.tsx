@@ -23,43 +23,47 @@ export function ChemicalFilterPills({
 }: ChemicalFilterPillsProps) {
   return (
     <div
-      className="bg-background/90 pointer-events-auto inline-flex gap-0.5 rounded-full p-0.5 shadow-sm backdrop-blur-sm"
+      className="flex w-full max-w-full justify-center overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       data-testid="chemical-filter-pills"
-      role="radiogroup"
-      aria-label="Filtrer kort-visning"
     >
-      {PILLS.map(({ id, label, dot }) => {
-        const isActive = active === id;
-        const needsZoom = id !== 'none' && id !== 'pfas' && zoomLevel < 12;
+      <div
+        className="bg-background/90 pointer-events-auto inline-flex min-w-max gap-0.5 rounded-full p-0.5 shadow-sm backdrop-blur-sm"
+        role="radiogroup"
+        aria-label="Filtrer kort-visning"
+      >
+        {PILLS.map(({ id, label, dot }) => {
+          const isActive = active === id;
+          const needsZoom = id !== 'none' && id !== 'pfas' && zoomLevel < 12;
 
-        return (
-          <button
-            key={id}
-            role="radio"
-            aria-checked={isActive}
-            disabled={needsZoom}
-            onClick={() => onChange(id)}
-            data-testid={`chemical-filter-${id}`}
-            title={needsZoom ? 'Zoom ind for at se' : undefined}
-            className={cn(
-              'flex items-center gap-1 rounded-full px-2.5 py-2 text-[11px] font-medium transition-colors',
-              isActive
-                ? 'bg-foreground text-background shadow-sm'
-                : 'hover:bg-muted text-muted-foreground',
-              needsZoom && 'pointer-events-none opacity-40'
-            )}
-          >
-            <span
+          return (
+            <button
+              key={id}
+              role="radio"
+              aria-checked={isActive}
+              disabled={needsZoom}
+              onClick={() => onChange(id)}
+              data-testid={`chemical-filter-${id}`}
+              title={needsZoom ? 'Zoom ind for at se' : undefined}
               className={cn(
-                'inline-block h-2 w-2 shrink-0 rounded-full',
-                isActive ? 'ring-background/50 ring-1' : '',
-                dot
+                'flex items-center gap-1 rounded-full px-2 py-1.5 text-[11px] font-medium whitespace-nowrap transition-colors sm:px-2.5 sm:py-2',
+                isActive
+                  ? 'bg-foreground text-background shadow-sm'
+                  : 'hover:bg-muted text-muted-foreground',
+                needsZoom && 'pointer-events-none opacity-40'
               )}
-            />
-            {label}
-          </button>
-        );
-      })}
+            >
+              <span
+                className={cn(
+                  'inline-block h-2 w-2 shrink-0 rounded-full',
+                  isActive ? 'ring-background/50 ring-1' : '',
+                  dot
+                )}
+              />
+              {label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
