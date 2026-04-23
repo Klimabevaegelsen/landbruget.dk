@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "backend/common/**"
       - "backend/pipelines/**"
       - ".github/workflows/**"
 
@@ -15,12 +16,8 @@ jobs:
   detect-backend-changes:
     runs-on: ubuntu-latest
     outputs:
-      run_field_area: ${{ steps.detect.outputs.run_field_area }}
-      run_pesticide_disaggregation: ${{ steps.detect.outputs.run_pesticide_disaggregation }}
-      run_field_production: ${{ steps.detect.outputs.run_field_production }}
-      run_chr: ${{ steps.detect.outputs.run_chr }}
-      run_drive: ${{ steps.detect.outputs.run_drive }}
-      run_bbr: ${{ steps.detect.outputs.run_bbr }}
+      dispatch_targets: ${{ steps.detect.outputs.dispatch_targets }}
+      dispatch_count: ${{ steps.detect.outputs.dispatch_count }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -35,11 +32,15 @@ jobs:
 
           BEFORE="${{ github.event.before }}"
           AFTER="${{ github.sha }}"
+          TARGETS_FILE="$(mktemp)"
+
+          COMMON_SHARED_PATTERN='^backend/common/'
+          UNIFIED_SHARED_PATTERN='^backend/pipelines/unified_pipeline/pyproject.toml$|^backend/pipelines/unified_pipeline/src/unified_pipeline/(app\.py|__init__\.py|base/|common/|core/|model/|util/)|^\.github/workflows/unified_pipeline.yml$|^\.github/workflows/unified_pipeline_monthly.yml$|^\.github/workflows/unified_pipeline_weekly.yml$'
 
           if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
-            CHANGED_FILES=$(git show --name-only --pretty='' "$AFTER")
+            CHANGED_FILES="$(git show --name-only --pretty='' "$AFTER")"
           else
-            CHANGED_FILES=$(git diff --name-only "$BEFORE" "$AFTER")
+            CHANGED_FILES="$(git diff --name-only "$BEFORE" "$AFTER")"
           fi
 
           echo "Changed files:"
@@ -47,27 +48,242 @@ jobs:
 
           has_match() {
             local pattern="$1"
-            if echo "$CHANGED_FILES" | grep -Eq "$pattern"; then
-              echo "true"
-            else
-              echo "false"
+            if printf '%s\n' "$CHANGED_FILES" | grep -Eq "$pattern"; then
+              return 0
+            fi
+            return 1
+          }
+
+          add_target() {
+            local workflow_file="$1"
+            local payload="$2"
+            local reason="$3"
+            local payload_b64
+            local record
+
+            payload_b64="$(printf '%s' "$payload" | base64 | tr -d '\n')"
+            record="${workflow_file}"$'\t'"${payload_b64}"$'\t'"${reason}"
+
+            if ! grep -Fqx "$record" "$TARGETS_FILE" 2>/dev/null; then
+              printf '%s\n' "$record" >> "$TARGETS_FILE"
             fi
           }
 
-          RUN_FIELD_AREA=$(has_match '^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_area_analysis/|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/bnbo_status.py$|^\.github/workflows/field_area_analysis_multi_stage.yml$')
-          RUN_PESTICIDE_DISAGGREGATION=$(has_match '^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pesticide_disaggregation/|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/pesticides.py$|^\.github/workflows/pesticide_disaggregation_matrix.yml$')
-          RUN_FIELD_PRODUCTION=$(has_match '^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_production/|^\.github/workflows/field_production_matrix.yml$')
-          RUN_CHR=$(has_match '^backend/pipelines/chr_pipeline/|^\.github/workflows/chr_pipeline.yml$')
-          RUN_DRIVE=$(has_match '^backend/pipelines/drive_data_pipeline/|^\.github/workflows/drive_pipeline.yml$')
-          RUN_BBR=$(has_match '^backend/pipelines/bbr_buildings/|^\.github/workflows/bbr_buildings_pipeline.yml$')
+          add_unified_source() {
+            local source="$1"
+            local reason="$2"
+            add_target \
+              "unified_pipeline.yml" \
+              "{\"ref\":\"main\",\"inputs\":{\"source\":\"${source}\",\"stage\":\"all\",\"agricultural_fields_year\":\"both\"}}" \
+              "$reason"
+          }
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_area_analysis/|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/bnbo_status.py$|^\\.github/workflows/field_area_analysis_multi_stage.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "field_area_analysis_multi_stage.yml" \
+              '{"ref":"main","inputs":{"stage":"all","agricultural_fields_year":"both"}}' \
+              "field_area_analysis"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pesticide_disaggregation/|^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pesticide_disaggregation.py$|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/pesticides.py$|^\\.github/workflows/pesticide_disaggregation_matrix.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "pesticide_disaggregation_matrix.yml" \
+              '{"ref":"main","inputs":{"years":"all","max_parallel_jobs":"5","stage":"gold"}}' \
+              "pesticide_disaggregation"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_production.py$|^\\.github/workflows/field_production_matrix.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "field_production_matrix.yml" \
+              '{"ref":"main","inputs":{"years":"all","max_parallel_jobs":"8"}}' \
+              "field_production"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pesticide_compliance.py$|^\\.github/workflows/pesticide_compliance_matrix.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "pesticide_compliance_matrix.yml" \
+              '{"ref":"main","inputs":{"years":"all","max_parallel_jobs":"3","stage":"gold"}}' \
+              "pesticide_compliance"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/carbon_emissions/|^\\.github/workflows/climate_pipeline.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "climate_pipeline.yml" \
+              '{"ref":"main","inputs":{"years":"2021,2022,2023","test_limit":"0","max_parallel_jobs":"3","dry_run":"false"}}' \
+              "carbon_emissions"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/cvr_enrichment/|^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/cvr_enrichment.py$|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/cvr_data_parser.py$|^\\.github/workflows/cvr_enrichment_pipeline.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "cvr_enrichment_pipeline.yml" \
+              '{"ref":"main","inputs":{"run_only_step":"none","log_level":"INFO"}}' \
+              "cvr_enrichment"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/fvm_wfs.py$|^backend/pipelines/unified_pipeline/src/unified_pipeline/util/fvm_wfs_year_discovery.py$|^\\.github/workflows/fvm_wfs_matrix_download.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "fvm_wfs_matrix_download.yml" \
+              '{"ref":"main","inputs":{"layer_types":"all","years":"all","stage":"all"}}' \
+              "fvm_wfs"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pmtiles_generator/|^\\.github/workflows/generate-pmtiles.yml$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "generate-pmtiles.yml" \
+              '{"ref":"main"}' \
+              "generate_pmtiles"
+          fi
+
+          if has_match "^backend/pipelines/chr_pipeline/|^\\.github/workflows/chr_pipeline.yml$|${COMMON_SHARED_PATTERN}|${UNIFIED_SHARED_PATTERN}"; then
+            add_target \
+              "chr_pipeline.yml" \
+              '{"ref":"main","inputs":{"step":"all","log_level":"WARNING"}}' \
+              "chr_pipeline"
+          fi
+
+          if has_match "^backend/pipelines/drive_data_pipeline/|^\\.github/workflows/drive_pipeline.yml$|${COMMON_SHARED_PATTERN}|${UNIFIED_SHARED_PATTERN}"; then
+            add_target \
+              "drive_pipeline.yml" \
+              '{"ref":"main","inputs":{"use_matrix":"true","max_parallel_jobs":"5","log_level":"INFO","max_workers":"4"}}' \
+              "drive_pipeline"
+          fi
+
+          if has_match "^backend/pipelines/bbr_buildings/|^\\.github/workflows/bbr_buildings_pipeline.yml$|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "bbr_buildings_pipeline.yml" \
+              '{"ref":"main","inputs":{"layer":"both","log_level":"INFO"}}' \
+              "bbr_buildings"
+          fi
+
+          if has_match "^backend/pipelines/api_export/|^\\.github/workflows/api_export_pipeline.yml$|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "api_export_pipeline.yml" \
+              '{"ref":"main"}' \
+              "api_export"
+          fi
+
+          if has_match "^backend/pipelines/dma_scraper/|^\\.github/workflows/dma_pipeline.yml$|${COMMON_SHARED_PATTERN}|${UNIFIED_SHARED_PATTERN}"; then
+            add_target \
+              "dma_pipeline.yml" \
+              '{"ref":"main","inputs":{"vm_machine_type":"e2-standard-4","auto_shutdown":"true"}}' \
+              "dma_scraper"
+          fi
+
+          if has_match "^backend/pipelines/bmd_scraper/|^\\.github/workflows/bmd_monthly_pipeline.yml$|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "bmd_monthly_pipeline.yml" \
+              '{"ref":"main","inputs":{"environment":"production"}}' \
+              "bmd_scraper"
+          fi
+
+          if has_match "^backend/pipelines/arbejdstilsynet_inspections/|^\\.github/workflows/arbejdstilsynet_inspections_pipeline.yml$|${COMMON_SHARED_PATTERN}|${UNIFIED_SHARED_PATTERN}"; then
+            add_target \
+              "arbejdstilsynet_inspections_pipeline.yml" \
+              '{"ref":"main","inputs":{"log_level":"WARNING"}}' \
+              "arbejdstilsynet_pipeline"
+          fi
+
+          if has_match "^backend/pipelines/property_owners_sftp/|^\\.github/workflows/property_owners_sftp_transfer_pipeline.yml$|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "property_owners_sftp_transfer_pipeline.yml" \
+              '{"ref":"main"}' \
+              "property_owners_sftp"
+          fi
+
+          if has_match "^backend/pipelines/svineflytning_pipeline/|^\\.github/workflows/svineflytning_pipeline.yml$|${COMMON_SHARED_PATTERN}"; then
+            add_target \
+              "svineflytning_pipeline.yml" \
+              '{"ref":"main","inputs":{"stage":"all","processing_mode":"incremental","log_level":"WARNING","show_progress":"true","max_concurrent_fetches":"10"}}' \
+              "svineflytning"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/agricultural_fields.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "agricultural_fields" "unified_agricultural_fields"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/bnbo_status.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "bnbo" "unified_bnbo"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/cadastral.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "cadastral" "unified_cadastral"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/dagi.py$|^backend/pipelines/unified_pipeline/src/unified_pipeline/silver/dst_zone_mapping.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "dagi" "unified_dagi"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/dmi.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "dmi" "unified_dmi"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/dst.py$|^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/dst_field_crop_mapping.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "dst" "unified_dst"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/geus_dataverse_pesticides.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "geus_dataverse_pesticides" "unified_geus_dataverse_pesticides"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/grukos.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "grukos" "unified_grukos"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/jordbrugsanalyser.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "jordbrugsanalyser" "unified_jordbrugsanalyser"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/kemidata_surface_water.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "kemidata_surface_water_pesticides" "unified_kemidata_surface_water_pesticides"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/nles5_nitrogen_estimation/|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "nles5_nitrogen_estimation" "unified_nles5_nitrogen_estimation"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/property_cadastral_merge.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "property_cadastral_merge" "unified_property_cadastral_merge"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/soil_types.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "soil_types" "unified_soil_types"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/water_projects.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "water_projects" "unified_water_projects"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/water_typology.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "water_typology" "unified_water_typology"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/(bronze|silver)/wetlands.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "wetlands" "unified_wetlands"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/worker_safety.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "worker_safety" "unified_worker_safety"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/work_permits.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "work_permits" "unified_work_permits"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pesticide_drift_exposure.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "pesticide_drift_exposure" "unified_pesticide_drift_exposure"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/arbejdstilsynet_inspections.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "arbejdstilsynet_inspections" "unified_arbejdstilsynet_inspections"
+          fi
+
+          dispatch_count="$(wc -l < "$TARGETS_FILE" | tr -d ' ')"
 
           {
-            echo "run_field_area=$RUN_FIELD_AREA"
-            echo "run_pesticide_disaggregation=$RUN_PESTICIDE_DISAGGREGATION"
-            echo "run_field_production=$RUN_FIELD_PRODUCTION"
-            echo "run_chr=$RUN_CHR"
-            echo "run_drive=$RUN_DRIVE"
-            echo "run_bbr=$RUN_BBR"
+            echo "dispatch_targets<<EOF"
+            cat "$TARGETS_FILE"
+            echo "EOF"
+            echo "dispatch_count=$dispatch_count"
           } >> "$GITHUB_OUTPUT"
 
   dispatch-workflows:
@@ -77,15 +293,16 @@ jobs:
       - name: Dispatch selected pipelines
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_FIELD_AREA: ${{ needs.detect-backend-changes.outputs.run_field_area }}
-          RUN_PESTICIDE_DISAGGREGATION: ${{ needs.detect-backend-changes.outputs.run_pesticide_disaggregation }}
-          RUN_FIELD_PRODUCTION: ${{ needs.detect-backend-changes.outputs.run_field_production }}
-          RUN_CHR: ${{ needs.detect-backend-changes.outputs.run_chr }}
-          RUN_DRIVE: ${{ needs.detect-backend-changes.outputs.run_drive }}
-          RUN_BBR: ${{ needs.detect-backend-changes.outputs.run_bbr }}
+          DISPATCH_TARGETS: ${{ needs.detect-backend-changes.outputs.dispatch_targets }}
+          DISPATCH_COUNT: ${{ needs.detect-backend-changes.outputs.dispatch_count }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ -z "${DISPATCH_TARGETS}" || "${DISPATCH_COUNT}" == "0" ]]; then
+            echo "No mapped backend pipeline changes detected."
+            exit 0
+          fi
 
           dispatch() {
             local workflow_file="$1"
@@ -105,30 +322,12 @@ jobs:
             fi
           }
 
-          if [[ "$RUN_FIELD_AREA" == "true" ]]; then
-            dispatch "field_area_analysis_multi_stage.yml" '{"ref":"main","inputs":{"stage":"all","agricultural_fields_year":"both"}}'
-          fi
+          while IFS=$'\t' read -r workflow_file payload_b64 reason; do
+            if [[ -z "${workflow_file}" ]]; then
+              continue
+            fi
 
-          if [[ "$RUN_PESTICIDE_DISAGGREGATION" == "true" ]]; then
-            dispatch "pesticide_disaggregation_matrix.yml" '{"ref":"main","inputs":{"years":"all","max_parallel_jobs":"5","stage":"gold"}}'
-          fi
-
-          if [[ "$RUN_FIELD_PRODUCTION" == "true" ]]; then
-            dispatch "field_production_matrix.yml" '{"ref":"main","inputs":{"years":"all","max_parallel_jobs":"8"}}'
-          fi
-
-          if [[ "$RUN_CHR" == "true" ]]; then
-            dispatch "chr_pipeline.yml" '{"ref":"main","inputs":{"step":"all","log_level":"WARNING"}}'
-          fi
-
-          if [[ "$RUN_DRIVE" == "true" ]]; then
-            dispatch "drive_pipeline.yml" '{"ref":"main","inputs":{"log_level":"INFO"}}'
-          fi
-
-          if [[ "$RUN_BBR" == "true" ]]; then
-            dispatch "bbr_buildings_pipeline.yml" '{"ref":"main","inputs":{"layer":"both","log_level":"INFO"}}'
-          fi
-
-          if [[ "$RUN_FIELD_AREA" != "true" && "$RUN_PESTICIDE_DISAGGREGATION" != "true" && "$RUN_FIELD_PRODUCTION" != "true" && "$RUN_CHR" != "true" && "$RUN_DRIVE" != "true" && "$RUN_BBR" != "true" ]]; then
-            echo "No mapped backend pipeline changes detected."
-          fi
+            payload="$(printf '%s' "${payload_b64}" | base64 --decode)"
+            echo "Mapped change: ${reason}"
+            dispatch "${workflow_file}" "${payload}"
+          done <<< "${DISPATCH_TARGETS}"
