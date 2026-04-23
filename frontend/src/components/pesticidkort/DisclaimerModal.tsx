@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Dialog,
@@ -21,10 +21,14 @@ const BULLETS: string[] = [
 ];
 
 export function DisclaimerModal() {
-  const [open, setOpen] = useState(() => !localStorage.getItem(STORAGE_KEY));
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setOpen(!window.localStorage.getItem(STORAGE_KEY));
+  }, []);
 
   const handleAccept = () => {
-    localStorage.setItem(STORAGE_KEY, new Date().toISOString());
+    window.localStorage.setItem(STORAGE_KEY, new Date().toISOString());
     setOpen(false);
   };
 

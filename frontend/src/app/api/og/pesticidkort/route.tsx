@@ -1,25 +1,32 @@
 /* oxlint-disable landbruget/no-inline-styles */
 import { ImageResponse } from 'next/og';
 import type { NextRequest } from 'next/server';
+import {
+  GRADE_DEFINITIONS,
+  getGradeHexColor,
+  isPesticideGrade,
+} from '@/lib/pesticide-score';
+import type { PesticideGrade } from '@/components/pesticidkort/types';
 
 export const runtime = 'edge';
 
-const GRADE_COLORS: Record<string, string> = {
-  A: '#2d9a6e',
-  B: '#5aa85e',
-  C: '#c9a030',
-  D: '#c06a28',
-  E: '#b83a2a',
+const DEFAULT_ACCENT_COLOR = '#57534e';
+const DEFAULT_GRADE_META = {
+  label: 'Pesticideksponering',
+  description: 'Modelleret estimat baseret på offentlige data',
 };
 
-export async function GET(request: NextRequest) {
+export function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const grade = searchParams.get('grade') ?? 'C';
+  const rawGrade = searchParams.get('grade');
+  const grade: PesticideGrade | null =
+    rawGrade && isPesticideGrade(rawGrade) ? rawGrade : null;
   const addr = searchParams.get('addr') ?? 'Din adresse';
   const fields = searchParams.get('fields') ?? '0';
   const pfas = searchParams.get('pfas') ?? '0';
   const dist = searchParams.get('dist') ?? '0';
-  const color = GRADE_COLORS[grade] ?? GRADE_COLORS.C;
+  const color = grade ? getGradeHexColor(grade) : DEFAULT_ACCENT_COLOR;
+  const gradeMeta = grade ? GRADE_DEFINITIONS[grade] : DEFAULT_GRADE_META;
 
   return new ImageResponse(
     <div
@@ -38,19 +45,48 @@ export async function GET(request: NextRequest) {
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: 'column',
             justifyContent: 'center',
-            width: '160px',
+            width: '320px',
             height: '160px',
             borderRadius: '24px',
-            backgroundColor: color,
-            color: '#fff',
-            fontSize: '96px',
-            fontWeight: 700,
-            lineHeight: 1,
+            backgroundColor: '#f5f5f4',
+            border: `3px solid ${color}`,
+            padding: '20px 24px',
           }}
         >
-          {grade}
+          <div
+            style={{
+              fontSize: '18px',
+              color: color,
+              marginBottom: '10px',
+              textTransform: 'uppercase' as const,
+              letterSpacing: '0.06em',
+              fontWeight: 700,
+            }}
+          >
+            Pesticideksponering
+          </div>
+          <div
+            style={{
+              fontSize: grade ? '34px' : '38px',
+              fontWeight: 700,
+              color: '#1c1917',
+              lineHeight: 1.15,
+              marginBottom: '8px',
+            }}
+          >
+            {gradeMeta.label}
+          </div>
+          <div
+            style={{
+              fontSize: '16px',
+              color: '#57534e',
+              lineHeight: 1.3,
+            }}
+          >
+            {gradeMeta.description}
+          </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
           <div

@@ -30,12 +30,11 @@ backend/
 ## Quick Start
 
 ```bash
-cd backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+# From repo root
+uv sync --all-packages --group dev
 
 # Run a pipeline
-cd pipelines/chr_pipeline && python main.py --step bronze
+cd backend/pipelines/chr_pipeline && python main.py --step bronze
 ```
 
 ## Stack
@@ -129,9 +128,8 @@ DuckDB is the primary processor. Key DuckDB 1.5 considerations:
 ## Testing
 
 ```bash
-source venv/bin/activate
-python -m pytest                      # All tests
-python -m pytest -v -k test_name      # Specific test
+uv run --all-packages --group dev pytest                              # All tests
+uv run --package api-export --group dev pytest -v -k test_name        # Specific test
 ```
 
 - Each pipeline has its own `tests/` and `conftest.py`

@@ -127,20 +127,22 @@ export function PesticidkortMap({
 
   return (
     <>
-      <Map
-        ref={mapRef}
-        initialViewState={{ longitude: lng, latitude: lat, zoom: 13.5 }}
-        mapStyle={mapStyle}
-        onLoad={handleMapLoad}
-        attributionControl={false}
-        data-testid="pesticidkort-map"
-      >
-        <NavigationControl position="top-left" />
-        {isReady && <ProximityRings lat={lat} lng={lng} radiusM={radiusM} />}
-        <Marker longitude={lng} latitude={lat} anchor="center">
-          <div className="bg-primary border-background h-4 w-4 rounded-full border-2 shadow-md" />
-        </Marker>
-      </Map>
+      <div className="pesticidkort-map-shell pesticidkort-map-shell--report h-full w-full">
+        <Map
+          ref={mapRef}
+          initialViewState={{ longitude: lng, latitude: lat, zoom: 13.5 }}
+          mapStyle={mapStyle}
+          onLoad={handleMapLoad}
+          attributionControl={false}
+          data-testid="pesticidkort-map"
+        >
+          <NavigationControl position="top-left" />
+          {isReady && <ProximityRings lat={lat} lng={lng} radiusM={radiusM} />}
+          <Marker longitude={lng} latitude={lat} anchor="center">
+            <div className="bg-primary border-background h-4 w-4 rounded-full border-2 shadow-md" />
+          </Marker>
+        </Map>
+      </div>
       {hoverData && <FieldHoverTooltip {...hoverData} />}
     </>
   );

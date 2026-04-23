@@ -76,7 +76,7 @@ npm run dev                       # http://localhost:3000
 uv sync --python 3.11 --all-packages --group dev
 
 # Run a specific pipeline
-cd pipelines/unified_pipeline
+cd backend/pipelines/unified_pipeline
 uv run python -m unified_pipeline bronze --source cadastral
 ```
 
@@ -146,8 +146,9 @@ cd frontend && npm test         # Playwright E2E
 cd frontend && npm run lint     # oxlint
 
 # Backend
-uv run pytest                   # pytest
-uv run ruff check . && uv run ruff format .   # Lint + format
+uv run --all-packages --group dev pytest   # pytest
+uv run --all-packages --group dev ruff check backend
+uv run --all-packages --group dev ruff format backend
 ```
 
 ### Branch Naming
@@ -168,8 +169,8 @@ Examples: `feat(frontend): add interactive map view`, `fix(pipeline): correct CH
 
 1. Create a branch from `main` following the naming convention above
 2. Make your changes
-3. Run all tests (`npm test` + `uv run pytest`)
-4. Run linters (`npm run lint` + `uv run ruff check .`)
+3. Run all tests (`npm test` + `uv run --all-packages --group dev pytest`)
+4. Run linters (`npm run lint` + `uv run --all-packages --group dev ruff check backend`)
 5. Open a pull request — all PRs require review before merge
 
 ## License

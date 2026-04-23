@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: 'Run only specific exporters (comma-separated: homepage,search,municipalities,pesticides,drift_exposure,companies)'
+        description: 'Run only specific exporters (comma-separated: homepage,search,municipalities,drift_exposure,pesticides,companies)'
         required: false
         type: string
   workflow_call:

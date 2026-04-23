@@ -31,9 +31,8 @@ npm test
 
 **Backend Tests:**
 ```bash
-cd $CLAUDE_PROJECT_DIR/backend
-source venv/bin/activate
-python -m pytest -v
+cd $CLAUDE_PROJECT_DIR
+uv run --all-packages --group dev pytest -v
 ```
 
 **Smoke Tests (fast):**
@@ -96,7 +95,7 @@ For each failure, report:
 cd frontend && npm test
 
 # Backend only
-cd backend && source venv/bin/activate && pytest -v
+uv run --all-packages --group dev pytest -v
 
 # Smoke tests (< 30 seconds)
 cd frontend && npm run test:smoke

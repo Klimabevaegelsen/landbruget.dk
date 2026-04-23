@@ -65,7 +65,7 @@ def test_acceptance_criterion_1():
 cd frontend && npm test -- --grep "Feature Name"
 
 # Backend
-cd backend && pytest tests/test_feature.py -v
+uv run --all-packages --group dev pytest backend/tests/test_feature.py -v
 ```
 
 **IMPORTANT**: Tests MUST fail before implementation. If they pass, the test is invalid.
@@ -84,7 +84,7 @@ Write only the code needed to make tests pass:
 cd frontend && npm test
 
 # Backend
-cd backend && pytest
+uv run --all-packages --group dev pytest
 ```
 
 ### 6. Verify Acceptance Criteria
@@ -105,7 +105,7 @@ cd frontend && npm run build
 
 # All tests
 cd frontend && npm test
-cd backend && pytest
+uv run --all-packages --group dev pytest
 ```
 
 ### 8. Update Spec
@@ -143,9 +143,9 @@ Every `/implement` must pass these gates:
 | Gate | Command | Required |
 |------|---------|----------|
 | Tests written first | - | Yes |
-| Tests fail initially | `npm test` / `pytest` | Yes |
+| Tests fail initially | `npm test` / `uv run --all-packages --group dev pytest` | Yes |
 | Implementation complete | - | Yes |
-| Tests pass | `npm test` / `pytest` | Yes |
+| Tests pass | `npm test` / `uv run --all-packages --group dev pytest` | Yes |
 | Lint passes | `npm run lint` | Yes |
 | No regressions | Full test suite | Yes |
 | Spec criteria met | Manual check | Yes |

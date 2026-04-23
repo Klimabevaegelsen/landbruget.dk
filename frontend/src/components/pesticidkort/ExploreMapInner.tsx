@@ -104,21 +104,23 @@ export function ExploreMapInner({
 
   return (
     <>
-      <Map
-        ref={mapRef}
-        initialViewState={{
-          longitude: DENMARK_CENTER.longitude,
-          latitude: DENMARK_CENTER.latitude,
-          zoom: DENMARK_ZOOM,
-        }}
-        mapStyle={mapStyle}
-        onLoad={handleMapLoad}
-        onZoom={handleZoom}
-        attributionControl={false}
-        data-testid="explore-map"
-      >
-        <NavigationControl position="top-left" />
-      </Map>
+      <div className="pesticidkort-map-shell pesticidkort-map-shell--explore h-full w-full">
+        <Map
+          ref={mapRef}
+          initialViewState={{
+            longitude: DENMARK_CENTER.longitude,
+            latitude: DENMARK_CENTER.latitude,
+            zoom: DENMARK_ZOOM,
+          }}
+          mapStyle={mapStyle}
+          onLoad={handleMapLoad}
+          onZoom={handleZoom}
+          attributionControl={false}
+          data-testid="explore-map"
+        >
+          <NavigationControl position="top-left" />
+        </Map>
+      </div>
       {hoverData && <FieldHoverTooltip {...hoverData} />}
     </>
   );

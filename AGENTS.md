@@ -34,7 +34,7 @@ cd frontend && npm test              # Playwright E2E
 cd frontend && npm run lint          # oxlint
 
 # Backend
-uv run pytest                        # Run tests
+uv run --all-packages --group dev pytest  # Run backend tests
 cd backend/pipelines/<name> && uv run python main.py  # Run pipeline
 
 # Database
@@ -49,7 +49,7 @@ supabase db push                     # Push migrations
 
 ```bash
 cd frontend && npm test && npm run lint
-uv run pytest
+uv run --all-packages --group dev pytest
 ```
 
 ## Conventions
@@ -101,7 +101,7 @@ Before any commit, run:
 
 ```bash
 cd frontend && npm test && npm run lint   # Playwright E2E + oxlint
-uv run pytest                             # Python tests
+uv run --all-packages --group dev pytest  # Python tests
 ```
 
 Confirm:

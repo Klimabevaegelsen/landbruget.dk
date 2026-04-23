@@ -14,6 +14,16 @@ from common.logging_utils import get_pipeline_logger
 logger = get_pipeline_logger("api_export")
 
 
+def _to_json_safe(value):
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {key: _to_json_safe(inner) for key, inner in value.items()}
+    if isinstance(value, list):
+        return [_to_json_safe(item) for item in value]
+    return value
+
+
 class BaseExporter:
     """Base class for all API export modules.
 
