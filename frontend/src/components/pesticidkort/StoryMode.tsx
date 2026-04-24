@@ -44,7 +44,7 @@ export function StoryMode({ report, onClose }: StoryModeProps) {
   return (
     <div
       data-testid="story-mode"
-      className="bg-background fixed inset-0 z-50 flex"
+      className="bg-background fixed inset-0 z-50 flex flex-col md:flex-row"
     >
       <button
         onClick={onClose}
@@ -54,7 +54,17 @@ export function StoryMode({ report, onClose }: StoryModeProps) {
         <X className="h-5 w-5" />
       </button>
 
-      <div className="w-full overflow-y-auto md:w-2/5">
+      <div className="h-[45vh] shrink-0 md:order-2 md:h-screen md:w-3/5">
+        <StoryMap
+          lat={report.lat}
+          lng={report.lng}
+          radiusM={report.radius_m}
+          year={report.year}
+          chapter={STORY_CHAPTERS[activeChapter]}
+        />
+      </div>
+
+      <div className="flex-1 overflow-y-auto md:order-1 md:h-screen md:w-2/5 md:flex-none">
         {STORY_CHAPTERS.map((ch, i) => (
           <StoryChapter
             key={ch.id}
@@ -66,16 +76,6 @@ export function StoryMode({ report, onClose }: StoryModeProps) {
             onEnterView={() => handleChapterEnter(i)}
           />
         ))}
-      </div>
-
-      <div className="sticky top-0 hidden h-screen md:block md:w-3/5">
-        <StoryMap
-          lat={report.lat}
-          lng={report.lng}
-          radiusM={report.radius_m}
-          year={report.year}
-          chapter={STORY_CHAPTERS[activeChapter]}
-        />
       </div>
     </div>
   );
