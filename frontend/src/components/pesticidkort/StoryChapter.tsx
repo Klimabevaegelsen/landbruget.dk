@@ -35,7 +35,7 @@ export function StoryChapter({
     <div
       ref={ref}
       data-testid={`story-chapter-${index}`}
-      className="flex min-h-screen items-center"
+      className="flex min-h-[70vh] items-center md:min-h-screen"
     >
       <motion.div
         initial={{ opacity: 0, y: 30 }}
