@@ -186,6 +186,48 @@ def test_export_matches_utm_drift_geometry_without_crs_metadata(tmp_path: Path) 
     assert [b["uid"] for b in tile_payload] == ["b1"]
 
 
+def test_export_handles_wkb_blob_geometry_from_parquet(tmp_path: Path) -> None:
+    """Parquet stores geometry as WKB BLOB; the exporter must cast it to GEOMETRY."""
+    conn = duckdb.connect(":memory:")
+    _install_spatial(conn)
+
+    conn.execute("""
+        CREATE TABLE drift_exposure AS
+        SELECT * FROM (VALUES
+            ('b1', 'Addr 1', 'residential', 2024, 0.10, 3, 2, 50.0, 1.5, 10.0, FALSE,
+             ST_AsWKB(ST_Point(8.2500, 55.2500)))
+        ) AS t(building_uuid, address, category_group, pesticide_year,
+               total_drift_dose_kg, contributing_fields, unique_pesticides,
+               nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
+               wind_weighted, geometry)
+    """)
+
+    geom_type = conn.execute(
+        "SELECT data_type FROM information_schema.columns "
+        "WHERE table_name = 'drift_exposure' AND column_name = 'geometry'"
+    ).fetchone()
+    assert geom_type[0] == "BLOB"
+
+    exporter = _StubbedExporter(conn=conn, output_dir=str(tmp_path))
+    stats = exporter.export()
+
+    assert stats["files_written"] == 2
+    assert stats["building_count"] == 1
+    tile_x, tile_y = _slippy_tile(55.25, 8.25)
+    tile_payload = json.loads(
+        (
+            tmp_path
+            / "pesticides"
+            / "drift-exposure"
+            / "tiles"
+            / str(DRIFT_TILE_ZOOM)
+            / str(tile_x)
+            / f"{tile_y}.json"
+        ).read_text()
+    )
+    assert [b["uid"] for b in tile_payload] == ["b1"]
+
+
 def test_export_noop_when_drift_parquet_missing(tmp_path: Path) -> None:
     conn = duckdb.connect(":memory:")
     _install_spatial(conn)

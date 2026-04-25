@@ -4,14 +4,17 @@
 def worker_yearly_summary_count_query(
     employment_relation: str, work_permits_relation: str, incidents_relation: str
 ) -> str:
+    # silver/cvr_employment switched from monthly rows (`company_id`, `month_year`)
+    # to per-period rows (`cvr_number`, `period_start`, `period_end`); derive the
+    # year from `period_start` here so the count survives that schema drift.
     return f"""
         WITH employee_yearly AS (
             SELECT
-                CAST(company_id AS VARCHAR) AS company_id,
-                EXTRACT(year FROM month_year)::INTEGER AS year
+                CAST(cvr_number AS VARCHAR) AS company_id,
+                EXTRACT(year FROM TRY_CAST(period_start AS DATE))::INTEGER AS year
             FROM {employment_relation}
-            WHERE company_id IS NOT NULL
-              AND month_year IS NOT NULL
+            WHERE cvr_number IS NOT NULL
+              AND period_start IS NOT NULL
               AND employee_count > 0
             GROUP BY 1, 2
         ),

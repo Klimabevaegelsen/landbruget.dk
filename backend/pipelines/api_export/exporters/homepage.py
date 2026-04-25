@@ -184,7 +184,23 @@ class HomepageExporter(BaseExporter):
                 "SELECT count(*) FROM companies"
             ).fetchone()[0]
 
-        sources = [self._count_statistics_source(source) for source in HOMEPAGE_STATS_SOURCES]
+        sources = []
+        for source in HOMEPAGE_STATS_SOURCES:
+            try:
+                sources.append(self._count_statistics_source(source))
+            except Exception as exc:
+                logger.exception(f"Skipping statistics source {source.legacy_table}: {exc}")
+                sources.append(
+                    {
+                        "legacy_table": source.legacy_table,
+                        "status": "error",
+                        "count_mode": source.count_mode,
+                        "row_count": 0,
+                        "source_path": None,
+                        "source_paths": [],
+                        "note": (f"{source.note} Query failed: {type(exc).__name__}: {exc}"),
+                    }
+                )
         stats["total_data_points"] = sum(source["row_count"] for source in sources)
 
         stats["formatted"] = {
@@ -843,27 +859,47 @@ class HomepageExporter(BaseExporter):
         inspections_ready = False
 
         if self._table_exists("employment") and self._table_exists("companies"):
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE employee_summary AS
-                WITH latest_year AS (
-                    SELECT MAX(EXTRACT(year FROM month_year))::INTEGER AS year
-                    FROM employment
-                    WHERE month_year IS NOT NULL
+            employment_columns = self._table_columns("employment")
+            if "month_year" in employment_columns and "company_id" in employment_columns:
+                join_year_expr = "EXTRACT(year FROM e.month_year)::INTEGER"
+                cvr_expr = "CAST(e.company_id AS VARCHAR)"
+                year_filter_col = "month_year"
+            else:
+                join_year_expr = "EXTRACT(year FROM TRY_CAST(e.period_start AS DATE))::INTEGER"
+                cvr_expr = "CAST(e.cvr_number AS VARCHAR)"
+                year_filter_col = "period_start"
+
+            try:
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE employee_summary AS
+                    WITH employment_yearly AS (
+                        SELECT
+                            {cvr_expr} AS cvr_number,
+                            {join_year_expr} AS year,
+                            COALESCE(e.employee_count, 0) AS employee_count
+                        FROM employment e
+                        WHERE e.{year_filter_col} IS NOT NULL
+                          AND {cvr_expr} IS NOT NULL
+                    ),
+                    latest_year AS (
+                        SELECT MAX(year) AS year FROM employment_yearly
+                    )
+                    SELECT
+                        ey.cvr_number,
+                        c.company_name,
+                        c.current_municipality_name AS municipality,
+                        MAX(ey.employee_count) AS max_employees
+                    FROM employment_yearly ey
+                    JOIN latest_year ly ON ey.year = ly.year
+                    JOIN companies c
+                      ON ey.cvr_number = c.cvr_number::VARCHAR
+                    GROUP BY 1, 2, 3
+                """)
+                employment_ready = True
+            except Exception:
+                logger.exception(
+                    "Failed to build employee_summary; employment-based rankings will be empty"
                 )
-                SELECT
-                    CAST(e.company_id AS VARCHAR) AS cvr_number,
-                    c.company_name,
-                    c.current_municipality_name AS municipality,
-                    MAX(COALESCE(e.employee_count, 0)) AS max_employees
-                FROM employment e
-                JOIN latest_year ly
-                  ON EXTRACT(year FROM e.month_year) = ly.year
-                JOIN companies c
-                  ON CAST(e.company_id AS VARCHAR) = c.cvr_number::VARCHAR
-                WHERE e.company_id IS NOT NULL
-                GROUP BY 1, 2, 3
-            """)
-            employment_ready = True
 
         # Work permits: company_id (VARCHAR), year, nationality, first_permits_count
         if self._table_exists("work_permits") and self._table_exists("companies"):
