@@ -90,6 +90,19 @@ class TestBronzeRun:
         details_dir = tmp_path / "details"
         assert len(list(details_dir.glob("*.html"))) == 3
 
+    def test_limit_zero_fetches_no_details(self, requests_mock, bronze_runner, tmp_path):
+        requests_mock.get(
+            f"{BASE}/wp-json/wp/v2/kontrol",
+            json=_index_payload(1, 5),
+            headers={"X-WP-TotalPages": "1", "X-WP-Total": "5"},
+        )
+        requests_mock.get(f"{BASE}/wp-json/wp/v2/kontrol_tag", json=[])
+
+        manifest = bronze_runner.run(limit=0)
+        assert manifest["detail_count"] == 0
+        assert manifest["detail_errors"] == 0
+        assert len(list((tmp_path / "details").glob("*.html"))) == 0
+
     def test_partial_failure_does_not_abort(self, requests_mock, bronze_runner, tmp_path):
         requests_mock.get(
             f"{BASE}/wp-json/wp/v2/kontrol",

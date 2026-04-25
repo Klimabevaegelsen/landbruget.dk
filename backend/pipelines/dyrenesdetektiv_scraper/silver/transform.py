@@ -13,6 +13,29 @@ from .parse import parse_detail_html
 
 logger = logging.getLogger(__name__)
 
+REQUIRED_COLUMNS: tuple[str, ...] = (
+    "kontrol_id",
+    "link",
+    "slug",
+    "published_at",
+    "modified_at",
+    "sagsnummer",
+    "kontrol_dato",
+    "dyreart",
+    "antal_dyr",
+    "aarsag",
+    "by",
+    "chr_nummer",
+    "cvr_nummer",
+    "sanktion",
+    "sanktion_ordinal",
+    "kontroltekst",
+    "tag_year",
+    "tag_kommune",
+    "tag_dyreart",
+    "parsed_at",
+)
+
 
 def _build_slug_to_name(taxonomy: list[dict]) -> dict[str, str]:
     """Build a `kontrol_tag` slug → display name lookup."""
@@ -66,8 +89,15 @@ def transform_bronze_to_dataframe(bronze_dir: Path) -> pd.DataFrame:
 
     logger.info("Parsed %s records (%s errors)", len(rows), parse_errors)
     df = pd.DataFrame(rows)
+
+    # Keep a stable schema even when there are zero rows (or partially populated rows).
+    for column in REQUIRED_COLUMNS:
+        if column not in df.columns:
+            df[column] = None
+    df = df[list(REQUIRED_COLUMNS)]
+
     if "antal_dyr" in df.columns:
-        df["antal_dyr"] = df["antal_dyr"].astype("Int64")
+        df["antal_dyr"] = pd.to_numeric(df["antal_dyr"], errors="coerce").astype("Int64")
     return df
 
 

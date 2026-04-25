@@ -93,6 +93,9 @@ class DyrenesDetektivBronze:
 
         Returns a manifest dict (also written to metadata.json).
         """
+        if limit is not None and limit < 0:
+            raise ValueError("limit must be >= 0")
+
         start = datetime.now(UTC)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         details_dir = self.output_dir / "details"
@@ -109,7 +112,7 @@ class DyrenesDetektivBronze:
             json.dumps(taxonomy, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
-        targets = index_records[:limit] if limit else index_records
+        targets = index_records if limit is None else index_records[:limit]
         detail_count = 0
         detail_errors = 0
         total_bytes = 0
