@@ -665,6 +665,23 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         display_description="Official Danish pesticide registration and approval database",
     ),
     # ========================================
+    # DYRENES DETEKTIV PIPELINE
+    # ========================================
+    "dyrenesdetektiv_kontrol": DataSourceInfo(
+        source_authority="Fødevarestyrelsen (via dyrenesdetektiv.dk)",
+        source_contact=None,
+        data_acquisition_date=None,  # Scraping - always current
+        data_acquisition_method="Web Scraping (WordPress REST + HTML)",
+        data_description="Animal welfare control records from Fødevarestyrelsen, republished by dyrenesdetektiv.dk; joinable on CHR and CVR",
+        update_frequency="Monthly",
+        pipeline_name="dyrenesdetektiv_scraper",
+        data_format="HTML/JSON",
+        data_source_type=DataSourceType.SCRAPING,
+        display_name="Dyrevelfærdskontroller",
+        display_description="Fødevarestyrelsens dyrevelfærdskontroller på besætninger og slagterier, samlet af dyrenesdetektiv.dk",
+        custom_fields={"source_url": "https://dyrenesdetektiv.dk/kontrol/"},
+    ),
+    # ========================================
     # SVINEFLYTNING PIPELINE
     # ========================================
     "svineflytning_movements": DataSourceInfo(
