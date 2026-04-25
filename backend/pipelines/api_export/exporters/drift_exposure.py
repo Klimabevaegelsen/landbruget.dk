@@ -52,6 +52,30 @@ class DriftExposureExporter(BaseExporter):
             self.conn.execute("INSTALL spatial")
             self.conn.execute("LOAD spatial")
 
+    def _ensure_geometry_column(self, table_name: str, column_name: str) -> None:
+        """Cast a parquet WKB BLOB column to GEOMETRY in place.
+
+        DuckDB reads parquet `geometry` columns as BLOB unless GeoParquet
+        metadata is present, but every downstream call here (ST_Centroid,
+        ST_X, ST_FlipCoordinates, ST_Transform) requires GEOMETRY. No-op
+        when the column is already GEOMETRY.
+        """
+        col_type = self.conn.execute(
+            """
+            SELECT data_type FROM information_schema.columns
+            WHERE table_name = ? AND column_name = ?
+            """,
+            [table_name, column_name],
+        ).fetchone()
+        if col_type and col_type[0] == "BLOB":
+            self.conn.execute(
+                f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT * REPLACE (ST_GeomFromWKB({column_name}) AS {column_name})
+                FROM {table_name}
+                """
+            )
+
     def _normalized_wgs84_geometry_expr(self, table_name: str, geometry_expr: str) -> str:
         """Return a geometry SQL expression normalized to lon/lat WGS84.
 
@@ -169,6 +193,7 @@ class DriftExposureExporter(BaseExporter):
             return stats
 
         self._ensure_spatial_loaded()
+        self._ensure_geometry_column("drift_exposure", "geometry")
 
         drift_geom_expr = self._normalized_wgs84_geometry_expr("drift_exposure", "geometry")
 
