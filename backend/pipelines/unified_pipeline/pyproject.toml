@@ -17,7 +17,7 @@ dependencies = [
     "loguru>=0.7.3",
     "lxml>=6.0.4,<6.1",
     "psutil>=7.2.2",
-    "pyarrow>=20.0.0",
+    "pyarrow>=24.0.0",
     "pydantic-settings>=2.9.1",
     "pydantic",
     "python-dotenv>=1.1.0",
