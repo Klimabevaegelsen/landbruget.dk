@@ -28,7 +28,7 @@ dependencies = [
     "loguru>=0.7.3",
     "shapely>=2.0.0",
     "pdf2image>=1.17.0",
-    "pytesseract>=0.3.10",
+    "pytesseract>=0.3.13",
     "landbruget-common",
 ]
 
