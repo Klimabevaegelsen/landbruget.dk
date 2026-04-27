@@ -11,7 +11,7 @@ authors = [
 dependencies = [
     # Core dependencies
     "duckdb",
-    "loguru>=0.7.0",
+    "loguru>=0.7.3",
     "python-dotenv>=1.0.0",
     # Data processing
     "fsspec>=2023.12.0",
