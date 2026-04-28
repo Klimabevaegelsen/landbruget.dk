@@ -166,12 +166,13 @@ jobs:
 
           echo "Starting DMA VM runner at $(date -u)"
           sudo apt-get update
-          sudo apt-get install -y ca-certificates curl build-essential
+          sudo apt-get install -y ca-certificates curl
 
           if ! command -v uv >/dev/null 2>&1; then
             curl -LsSf https://astral.sh/uv/install.sh | sh
           fi
-          export PATH="$HOME/.cargo/bin:$PATH"
+          export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+          uv --version
 
           set -a
           source /tmp/dma.env
@@ -184,10 +185,10 @@ jobs:
 
           cd /opt/dma-workspace
           uv python install 3.11
-          uv sync --package dma-scraper --group dev
+          uv sync --frozen --python 3.11 --package dma-scraper --group dev
 
           if [ "${DMA_RUN_TESTS}" = "true" ]; then
-            uv run --package dma-scraper pytest -q backend/pipelines/dma_scraper/tests
+            uv run --frozen --package dma-scraper pytest -q backend/pipelines/dma_scraper/tests
           fi
 
           args=(--log-level "${DMA_LOG_LEVEL:-INFO}")
@@ -207,10 +208,10 @@ jobs:
           fi
 
           cd backend/pipelines/dma_scraper
-          uv run --package dma-scraper python main.py "${args[@]}"
+          uv run --frozen --package dma-scraper python main.py "${args[@]}"
 
           cd /opt/dma-workspace
-          uv run --package dma-scraper python - <<'PY'
+          uv run --frozen --package dma-scraper python - <<'PY'
           import os
           import s3fs
 
