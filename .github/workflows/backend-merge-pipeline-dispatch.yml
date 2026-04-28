@@ -165,7 +165,7 @@ jobs:
           if has_match "^backend/pipelines/dma_scraper/|^\\.github/workflows/dma_pipeline.yml$|${COMMON_SHARED_PATTERN}|${UNIFIED_SHARED_PATTERN}"; then
             add_target \
               "dma_pipeline.yml" \
-              '{"ref":"main","inputs":{"vm_machine_type":"e2-standard-4","auto_shutdown":"true"}}' \
+              '{"ref":"main","inputs":{"log_level":"INFO","run_tests":"true"}}' \
               "dma_scraper"
           fi
 

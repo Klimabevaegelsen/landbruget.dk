@@ -8,6 +8,8 @@ import json
 
 import duckdb
 
+from silver.transformation import transform_dma_json
+
 
 def _transform_with_duckdb(records):
     """Replicate silver's transform_dma_json using pure DuckDB.
@@ -53,6 +55,12 @@ def _transform_with_duckdb(records):
 
 class TestTransformFlattening:
     """Test the UNNEST-based flattening of nested arrays."""
+
+    def test_real_transform_returns_dataframe(self, sample_bronze_records):
+        """The real pyarrow + DuckDB transform works with the pinned DuckDB API."""
+        df = transform_dma_json(sample_bronze_records)
+        assert list(df.columns) == ["id", "section", "detail_json"]
+        assert len(df) == 3
 
     def test_produces_correct_row_count(self, sample_bronze_records):
         """Output rows = sum of all nested array items."""

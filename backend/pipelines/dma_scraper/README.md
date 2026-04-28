@@ -34,11 +34,19 @@ The pipeline scrapes the Danish Environmental Protection Agency's DMA registry a
 GitHub Actions Workflow (.github/workflows/dma_pipeline.yml)
             │
             ▼
-DMA Scraper (main.py)
+GCP VM provisioned by GitHub Actions
+            │
+            ▼
+uv workspace package (dma-scraper) installed on the VM
+            │
+            ▼
+DMA Scraper (main.py, ENVIRONMENT=production)
     ├── bronze/fetch_company_data.py    → Paginated company list scraping
     ├── bronze/fetch_company_detail.py  → Per-company detail scraping (inspections, PDFs)
     └── silver/transformation.py        → Transform to Parquet + CVR extraction
 ```
+
+The GitHub workflow provisions a GCP VM for the long-running scrape, copies the checked-out workspace to the VM, installs the `dma-scraper` workspace package with `uv`, validates R2 credentials, runs the DMA tests, then executes `main.py` on the VM. Production output is written to R2 under `bronze/dma/` and `silver/dma/`.
 
 ## Directory Structure
 

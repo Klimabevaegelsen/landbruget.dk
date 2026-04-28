@@ -34,7 +34,7 @@ def transform_dma_json(data):
         FROM dma_raw d, UNNEST(d.Afgørelser) AS a(detail)
     """)
     # Fetch as Arrow table and convert to Pandas
-    arrow_table = con.execute("SELECT id, section, detail_json FROM dma_flattened").arrow()
+    arrow_table = con.execute("SELECT id, section, detail_json FROM dma_flattened").to_arrow_table()
     con.close()
     return arrow_table.to_pandas()
 
