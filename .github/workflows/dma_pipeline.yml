@@ -9,24 +9,9 @@ on:
     # Run monthly on the 1st at 2 AM UTC
     - cron: "0 2 1 * *"
   workflow_dispatch:
-    # Allow manual triggering
     inputs:
-      vm_machine_type:
-        description: "VM machine type"
-        required: true
-        default: "e2-standard-4"
-        type: choice
-        options:
-          - e2-standard-2
-          - e2-standard-4
-          - e2-standard-8
-      auto_shutdown:
-        description: "Auto shutdown VM after completion"
-        required: true
-        default: true
-        type: boolean
-      max_companies:
-        description: "Maximum number of companies to process (leave empty for all)"
+      total_pages:
+        description: "Limit DMA listing pages to scrape. Leave empty for all pages."
         required: false
         type: string
       start_date:
@@ -37,305 +22,281 @@ on:
         description: "End date for filtering Tilsynsdato (YYYY-MM-DD)"
         required: false
         type: string
+      log_level:
+        description: "Logging level"
+        required: true
+        default: "INFO"
+        type: choice
+        options:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+      run_tests:
+        description: "Run DMA tests on the VM before scraping"
+        required: true
+        default: true
+        type: boolean
+      vm_machine_type:
+        description: "VM machine type"
+        required: true
+        default: "e2-standard-4"
+        type: choice
+        options:
+          - e2-standard-2
+          - e2-standard-4
+          - e2-standard-8
+      auto_shutdown:
+        description: "Delete VM after completion"
+        required: true
+        default: true
+        type: boolean
+      max_companies:
+        description: "Deprecated compatibility input. Use total_pages instead."
+        required: false
+        type: string
 
 env:
   PROJECT_ID: landbrugsdata-1
   ZONE: europe-west1-b
-  R2_BUCKET: landbruget-data
+  ENVIRONMENT: production
+  R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET || 'landbruget-data' }}
+  GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET || 'landbruget-data' }}
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
-
 
 jobs:
   run-dma-scraper:
     name: Run DMA Scraper Pipeline
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 350
 
     permissions:
-      contents: "read"
-      id-token: "write"
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
       - name: Authenticate to Google Cloud
-        uses: 'google-github-actions/auth@v3'
+        uses: google-github-actions/auth@v3
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Create VM and run DMA pipeline
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Validate configuration
         run: |
-          # Generate unique VM name with timestamp
-          VM_NAME="dma-monthly-$(date +%Y%m%d-%H%M%S)"
+          missing=0
+
+          if [ -z "$R2_BUCKET" ]; then
+            echo "Missing R2_BUCKET. Set secret/var R2_BUCKET or rely on the landbruget-data default."
+            missing=1
+          fi
+
+          if [ -z "$R2_ACCESS_KEY_ID" ]; then
+            echo "Missing R2_ACCESS_KEY_ID secret."
+            missing=1
+          fi
+
+          if [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "Missing R2_SECRET_ACCESS_KEY secret."
+            missing=1
+          fi
+
+          if [ -z "$R2_ACCOUNT_ID" ]; then
+            echo "Missing R2_ACCOUNT_ID secret/variable."
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Package workspace for VM
+        env:
+          DMA_TOTAL_PAGES: ${{ github.event.inputs.total_pages }}
+          DMA_START_DATE: ${{ github.event.inputs.start_date }}
+          DMA_END_DATE: ${{ github.event.inputs.end_date }}
+          DMA_LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          DMA_RUN_TESTS: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.run_tests != 'false' }}
+          DMA_AUTO_SHUTDOWN: ${{ github.event.inputs.auto_shutdown || 'true' }}
+          DMA_MAX_COMPANIES: ${{ github.event.inputs.max_companies }}
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='.context' \
+            --exclude='frontend/node_modules' \
+            --exclude='**/__pycache__' \
+            -czf /tmp/dma-workspace.tgz .
+
+          python3 - <<'PY' > /tmp/dma.env
+          import os
+          import shlex
+
+          keys = [
+              "ENVIRONMENT",
+              "R2_BUCKET",
+              "GCS_BUCKET",
+              "R2_ACCESS_KEY_ID",
+              "R2_SECRET_ACCESS_KEY",
+              "R2_ACCOUNT_ID",
+              "DMA_TOTAL_PAGES",
+              "DMA_START_DATE",
+              "DMA_END_DATE",
+              "DMA_LOG_LEVEL",
+              "DMA_RUN_TESTS",
+              "DMA_AUTO_SHUTDOWN",
+              "DMA_MAX_COMPANIES",
+          ]
+
+          for key in keys:
+              print(f"{key}={shlex.quote(os.environ.get(key, ''))}")
+          PY
+
+          cat > /tmp/run-dma-remote.sh <<'REMOTE'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          exec > >(tee -a /tmp/dma_pipeline.log) 2>&1
+
+          echo "Starting DMA VM runner at $(date -u)"
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl build-essential
+
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+
+          set -a
+          source /tmp/dma.env
+          set +a
+
+          sudo rm -rf /opt/dma-workspace
+          sudo mkdir -p /opt/dma-workspace
+          sudo chown "$USER:$USER" /opt/dma-workspace
+          tar -xzf /tmp/dma-workspace.tgz -C /opt/dma-workspace
+
+          cd /opt/dma-workspace
+          uv python install 3.11
+          uv sync --package dma-scraper --group dev
+
+          if [ "${DMA_RUN_TESTS}" = "true" ]; then
+            uv run --package dma-scraper pytest -q backend/pipelines/dma_scraper/tests
+          fi
+
+          args=(--log-level "${DMA_LOG_LEVEL:-INFO}")
+
+          if [ -n "${DMA_TOTAL_PAGES:-}" ]; then
+            args+=(--total-pages "${DMA_TOTAL_PAGES}")
+          elif [ -n "${DMA_MAX_COMPANIES:-}" ]; then
+            echo "max_companies is deprecated and ignored. Use total_pages for bounded manual runs."
+          fi
+
+          if [ -n "${DMA_START_DATE:-}" ]; then
+            args+=(--start-date "${DMA_START_DATE}")
+          fi
+
+          if [ -n "${DMA_END_DATE:-}" ]; then
+            args+=(--end-date "${DMA_END_DATE}")
+          fi
+
+          cd backend/pipelines/dma_scraper
+          uv run --package dma-scraper python main.py "${args[@]}"
+
+          cd /opt/dma-workspace
+          uv run --package dma-scraper python - <<'PY'
+          import os
+          import s3fs
+
+          bucket = os.environ["R2_BUCKET"]
+          account_id = os.environ["R2_ACCOUNT_ID"]
+          fs = s3fs.S3FileSystem(
+              key=os.environ["R2_ACCESS_KEY_ID"],
+              secret=os.environ["R2_SECRET_ACCESS_KEY"],
+              client_kwargs={"endpoint_url": f"https://{account_id}.r2.cloudflarestorage.com"},
+          )
+
+          for prefix in ("bronze/dma/", "silver/dma/"):
+              path = f"{bucket}/{prefix}"
+              matches = fs.glob(f"{path}*")
+              if not matches:
+                  raise SystemExit(f"No DMA output found under s3://{path}")
+              latest = sorted(matches)[-1]
+              print(f"Latest {prefix} output: s3://{latest}")
+          PY
+
+          echo "DMA VM runner completed at $(date -u)"
+          REMOTE
+
+          chmod +x /tmp/run-dma-remote.sh
+
+      - name: Create VM
+        run: |
+          VM_NAME="dma-monthly-$(date -u +%Y%m%d-%H%M%S)"
           MACHINE_TYPE="${{ github.event.inputs.vm_machine_type || 'e2-standard-4' }}"
           AUTO_SHUTDOWN="${{ github.event.inputs.auto_shutdown || 'true' }}"
 
-          echo "🚀 Creating DMA scraper VM: $VM_NAME"
-          echo "Machine Type: $MACHINE_TYPE"
-          echo "Auto Shutdown: $AUTO_SHUTDOWN"
+          echo "VM_NAME=$VM_NAME" >> "$GITHUB_ENV"
+          echo "MACHINE_TYPE=$MACHINE_TYPE" >> "$GITHUB_ENV"
+          echo "AUTO_SHUTDOWN=$AUTO_SHUTDOWN" >> "$GITHUB_ENV"
 
-          # Create service account if it doesn't exist
-          echo "📋 Creating service account..."
-          gcloud iam service-accounts create dma-scraper-sa \
-            --display-name="DMA Scraper Service Account" \
-            --description="Service account for DMA scraper pipeline" \
-            --project=${{ env.PROJECT_ID }} || echo "Service account already exists"
-
-          # Grant necessary permissions
-          echo "🔐 Granting permissions..."
-          gcloud projects add-iam-policy-binding ${{ env.PROJECT_ID }} \
-            --member="serviceAccount:dma-scraper-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/storage.objectAdmin" --quiet
-
-          gcloud projects add-iam-policy-binding ${{ env.PROJECT_ID }} \
-            --member="serviceAccount:dma-scraper-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/logging.logWriter" --quiet
-
-          gcloud projects add-iam-policy-binding ${{ env.PROJECT_ID }} \
-            --member="serviceAccount:dma-scraper-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
-            --role="roles/monitoring.metricWriter" --quiet
-
-          # Create startup script
-          cat > /tmp/startup-script.sh << 'EOF'
-          #!/bin/bash
-          # DMA Scraper VM startup script
-
-          # Update system
-          apt-get update
-          apt-get install -y python3 python3-pip python3-venv git sqlite3 curl
-
-          # Install Python dependencies
-          pip3 install aiohttp beautifulsoup4 tqdm
-
-          # Create working directory
-          mkdir -p /tmp/dma_scraper
-          cd /tmp/dma_scraper
-
-          # Create data directory
-          mkdir -p /tmp/dma_data
-          chmod 777 /tmp/dma_data
-
-          # Log startup completion
-          echo "$(date): DMA scraper VM startup completed" >> /tmp/startup.log
-          EOF
-
-          # Create the VM instance
-          echo "🖥️ Creating VM instance..."
-          gcloud compute instances create $VM_NAME \
-            --zone=${{ env.ZONE }} \
-            --machine-type=$MACHINE_TYPE \
+          gcloud compute instances create "$VM_NAME" \
+            --zone="${{ env.ZONE }}" \
+            --machine-type="$MACHINE_TYPE" \
             --network-interface=network-tier=PREMIUM,subnet=default \
             --maintenance-policy=MIGRATE \
             --provisioning-model=STANDARD \
-            --service-account="dma-scraper-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
             --scopes=https://www.googleapis.com/auth/cloud-platform \
-            --create-disk=auto-delete=yes,boot=yes,device-name=$VM_NAME,image=projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts,mode=rw,size=100GB,type=projects/${{ env.PROJECT_ID }}/zones/${{ env.ZONE }}/diskTypes/pd-standard \
-            --metadata-from-file startup-script=/tmp/startup-script.sh \
+            --create-disk=auto-delete=yes,boot=yes,device-name="$VM_NAME",image=projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts,mode=rw,size=100GB,type=projects/${{ env.PROJECT_ID }}/zones/${{ env.ZONE }}/diskTypes/pd-standard \
             --tags=dma-scraper \
-            --project=${{ env.PROJECT_ID }}
+            --project="${{ env.PROJECT_ID }}"
 
-          # Wait for instance to be ready
-          echo "⏳ Waiting for instance to be ready..."
-          sleep 60
-
-          # Upload the enhanced scraper script
-          echo "📤 Uploading enhanced scraper script..."
-          gcloud compute scp backend/pipelines/dma_scraper/enhanced_dma_detail_scraper.py $VM_NAME:/tmp/enhanced_dma_detail_scraper.py --zone=${{ env.ZONE }}
-
-          # Build command with optional parameters
-          CMD="sudo python3 /tmp/enhanced_dma_detail_scraper.py --full-pipeline"
-
-          # Add optional parameters if provided
-          if [ -n "${{ github.event.inputs.max_companies }}" ]; then
-            CMD="$CMD --max-companies ${{ github.event.inputs.max_companies }}"
-          fi
-
-          if [ -n "${{ github.event.inputs.start_date }}" ]; then
-            CMD="$CMD --start-date ${{ github.event.inputs.start_date }}"
-          fi
-
-          if [ -n "${{ github.event.inputs.end_date }}" ]; then
-            CMD="$CMD --end-date ${{ github.event.inputs.end_date }}"
-          fi
-
-          # Run the scraper
-          echo "🚀 Starting DMA scraper on VM..."
-          echo "Command: $CMD"
-
-          gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="
-            sudo rm -rf /tmp/dma_data/* &&
-            nohup $CMD > /tmp/dma_pipeline.log 2>&1 &
-            echo 'DMA scraper started. Process PID:' \$(pgrep -f enhanced_dma_detail_scraper.py)
-          "
-
-          # Store VM info for monitoring
-          echo "VM_NAME=$VM_NAME" >> $GITHUB_ENV
-          echo "MACHINE_TYPE=$MACHINE_TYPE" >> $GITHUB_ENV
-          echo "AUTO_SHUTDOWN=$AUTO_SHUTDOWN" >> $GITHUB_ENV
-
-          echo "✅ VM created and DMA scraper started!"
-          echo "VM Name: $VM_NAME"
-          echo "Zone: ${{ env.ZONE }}"
-          echo "Machine Type: $MACHINE_TYPE"
-
-      - name: Monitor pipeline progress
+      - name: Copy workspace to VM
         run: |
-          VM_NAME="${{ env.VM_NAME }}"
-          echo "📊 Monitoring DMA pipeline progress..."
+          gcloud compute scp \
+            /tmp/dma-workspace.tgz \
+            /tmp/dma.env \
+            /tmp/run-dma-remote.sh \
+            "${VM_NAME}:/tmp/" \
+            --zone="${{ env.ZONE }}" \
+            --project="${{ env.PROJECT_ID }}"
 
-          # Monitor for up to 4 hours (240 minutes)
-          MAX_WAIT_MINUTES=240
-          WAIT_MINUTES=0
-
-          while [ $WAIT_MINUTES -lt $MAX_WAIT_MINUTES ]; do
-            echo "⏱️ Checking progress (${WAIT_MINUTES}/${MAX_WAIT_MINUTES} minutes)..."
-
-            # Check if process is still running
-            PROCESS_COUNT=$(gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="pgrep -f enhanced_dma_detail_scraper.py | wc -l" 2>/dev/null || echo "0")
-
-            if [ "$PROCESS_COUNT" -eq "0" ]; then
-              echo "✅ Pipeline completed or stopped"
-              break
-            fi
-
-            # Show progress
-            gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="
-              echo '📈 Current progress:'
-              ls -la /tmp/dma_data/ 2>/dev/null || echo 'No data directory yet'
-              if [ -d '/tmp/dma_data' ]; then
-                find /tmp/dma_data -name '*.json' | wc -l | xargs echo 'JSON files:'
-                find /tmp/dma_data -name '*.pdf' | wc -l | xargs echo 'PDF files:'
-                du -sh /tmp/dma_data 2>/dev/null | xargs echo 'Data size:'
-              fi
-              echo '📋 Recent log entries:'
-              tail -5 /tmp/dma_pipeline.log 2>/dev/null || echo 'No log file yet'
-            " 2>/dev/null || echo "Could not connect to VM"
-
-            sleep 300  # Wait 5 minutes between checks
-            WAIT_MINUTES=$((WAIT_MINUTES + 5))
-          done
-
-          if [ $WAIT_MINUTES -ge $MAX_WAIT_MINUTES ]; then
-            echo "⚠️ Pipeline monitoring timeout reached (4 hours)"
-            echo "🚨 FORCING VM SHUTDOWN due to timeout"
-
-            # Force kill the process and shutdown VM
-            gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="
-              echo 'Killing DMA scraper process due to timeout...'
-              pkill -f enhanced_dma_detail_scraper.py || echo 'Process already stopped'
-              echo 'Uploading partial results...'
-              if [ -d '/tmp/dma_data' ]; then
-                aws s3 cp /tmp/dma_data/ s3://${{ env.R2_BUCKET }}/bronze/dma/timeout_$(date +%Y%m%d_%H%M%S)/ --recursive --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com || echo 'Upload failed'
-              fi
-              echo 'Timeout cleanup completed'
-            " 2>/dev/null || echo "Could not connect to VM for timeout cleanup"
-
-            # Mark for forced deletion
-            echo "FORCE_DELETE=true" >> $GITHUB_ENV
-          fi
-
-      - name: Upload results to R2
+      - name: Run DMA pipeline on VM
         run: |
-          VM_NAME="${{ env.VM_NAME }}"
-          echo "📤 Uploading results to R2..."
+          gcloud compute ssh "$VM_NAME" \
+            --zone="${{ env.ZONE }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --command="chmod +x /tmp/run-dma-remote.sh && /tmp/run-dma-remote.sh"
 
-          # Create timestamp for this run
-          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-
-                     # Upload data from VM to R2
-          gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="
-            export AWS_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
-            export AWS_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
-            if [ -d '/tmp/dma_data' ]; then
-              echo 'Uploading DMA data to R2...'
-              aws s3 cp /tmp/dma_data/ s3://${{ env.R2_BUCKET }}/bronze/dma/${TIMESTAMP}/ --recursive --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-              echo 'Upload completed'
-            else
-              echo 'No data directory found'
-            fi
-
-            # Upload logs
-            if [ -f '/tmp/dma_pipeline.log' ]; then
-              aws s3 cp /tmp/dma_pipeline.log s3://${{ env.R2_BUCKET }}/logs/dma/${TIMESTAMP}/pipeline.log --endpoint-url https://${{ env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-            fi
-          "
-
-      - name: Generate summary report
+      - name: Fetch VM logs on failure
+        if: failure() && env.VM_NAME != ''
         run: |
-          VM_NAME="${{ env.VM_NAME }}"
-          echo "📊 Generating pipeline summary..."
-
-          # Get final statistics
-          gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="
-            echo '=== DMA Monthly Pipeline Summary ==='
-            echo 'Completion time:' \$(date)
-            echo 'VM:' $VM_NAME
-            echo 'Machine type:' ${{ env.MACHINE_TYPE }}
-            echo ''
-            if [ -d '/tmp/dma_data' ]; then
-              echo 'Data collection results:'
-              find /tmp/dma_data -name '*.json' | wc -l | xargs echo '  Companies processed:'
-              find /tmp/dma_data -name '*.pdf' | wc -l | xargs echo '  PDFs downloaded:'
-              du -sh /tmp/dma_data 2>/dev/null | xargs echo '  Total data size:'
-                             echo '  Data location: s3://${{ env.R2_BUCKET }}/bronze/dma/$(date +%Y%m%d_%H%M%S)/'
-            else
-              echo 'No data collected'
-            fi
-            echo ''
-            echo '=== Pipeline Log Summary ==='
-            if [ -f '/tmp/dma_pipeline.log' ]; then
-              tail -20 /tmp/dma_pipeline.log
-            else
-              echo 'No log file found'
-            fi
-          " || echo "Could not generate summary"
+          gcloud compute ssh "$VM_NAME" \
+            --zone="${{ env.ZONE }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --command="tail -200 /tmp/dma_pipeline.log 2>/dev/null || true" || true
 
       - name: Cleanup VM
-        if: always()
+        if: always() && env.VM_NAME != '' && env.AUTO_SHUTDOWN == 'true'
         run: |
-          VM_NAME="${{ env.VM_NAME }}"
-          AUTO_SHUTDOWN="${{ env.AUTO_SHUTDOWN }}"
-          FORCE_DELETE="${{ env.FORCE_DELETE }}"
-
-          if [ "$FORCE_DELETE" = "true" ]; then
-            echo "🚨 FORCED DELETION due to timeout - deleting VM immediately..."
-            gcloud compute instances delete $VM_NAME --zone=${{ env.ZONE }} --quiet || echo "VM deletion failed or already deleted"
-            echo "✅ Forced VM cleanup completed"
-          elif [ "$AUTO_SHUTDOWN" = "true" ]; then
-            echo "🧹 Auto-shutdown enabled, deleting VM..."
-            gcloud compute instances delete $VM_NAME --zone=${{ env.ZONE }} --quiet || echo "VM deletion failed or already deleted"
-            echo "✅ VM cleanup completed"
-          else
-            echo "⚠️ Auto-shutdown disabled, VM $VM_NAME left running"
-            echo "💡 Remember to manually delete the VM to save costs:"
-            echo "   gcloud compute instances delete $VM_NAME --zone=${{ env.ZONE }}"
-            echo "⚠️ WARNING: VM will continue running and incurring costs!"
-            echo "🚨 Consider running: ./scripts/deployment/emergency_vm_cleanup.sh"
-          fi
+          gcloud compute instances delete "$VM_NAME" \
+            --zone="${{ env.ZONE }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --quiet || true
 
       - name: Notify on success
         if: success()
         run: |
-          echo "✅ DMA Monthly Pipeline completed successfully on $(date)"
-          echo "📍 Data location: s3://${{ env.R2_BUCKET }}/bronze/dma/"
-          echo "📍 Logs location: s3://${{ env.R2_BUCKET }}/logs/dma/"
+          echo "DMA Monthly Pipeline completed successfully on $(date -u)"
+          echo "Data location: s3://${R2_BUCKET}/bronze/dma/ and s3://${R2_BUCKET}/silver/dma/"
 
       - name: Notify on failure
         if: failure()
         run: |
-          echo "❌ DMA Monthly Pipeline failed on $(date)"
-          echo "🔍 Check the logs above for details"
-
-          # Try to get VM logs if available
-          if [ -n "${{ env.VM_NAME }}" ]; then
-            echo "🔍 Attempting to get VM logs..."
-            gcloud compute ssh ${{ env.VM_NAME }} --zone=${{ env.ZONE }} --command="
-              echo '=== VM Error Logs ==='
-              tail -50 /tmp/dma_pipeline.log 2>/dev/null || echo 'No pipeline log found'
-              echo '=== VM Startup Logs ==='
-              tail -20 /tmp/startup.log 2>/dev/null || echo 'No startup log found'
-            " || echo "Could not retrieve VM logs"
-          fi
+          echo "DMA Monthly Pipeline failed on $(date -u)"

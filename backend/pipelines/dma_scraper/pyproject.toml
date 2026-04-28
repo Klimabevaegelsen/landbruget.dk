@@ -11,6 +11,7 @@ authors = [
 dependencies = [
     "requests>=2.33.1",
     "beautifulsoup4>=4.14.3",
+    "certifi",
     "python-dotenv>=1.0.0",
     "pyarrow>=24.0.0",
     "duckdb",

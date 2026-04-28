@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import ssl
 import subprocess
 import time
 import traceback
@@ -10,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 import aiohttp
+import certifi
 from bs4 import BeautifulSoup
 from common.logging_utils import get_pipeline_logger
 from tqdm.asyncio import tqdm
@@ -27,6 +29,12 @@ async def fetch(session, url):
     async with session.get(url) as response:
         response.raise_for_status()
         return await response.text()
+
+
+def create_dma_connector():
+    """Create an aiohttp connector using certifi's CA bundle."""
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    return aiohttp.TCPConnector(ssl=ssl_context)
 
 
 def fetch_text(soup, selector):
@@ -254,7 +262,7 @@ class EnhancedDMACompanyDetailScraper:
         processed_count = 0
         failure_count = 0
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=create_dma_connector()) as session:
 
             async def bounded(item):
                 nonlocal processed_count, failure_count
@@ -651,7 +659,7 @@ class FullDMAPipeline:
         logger.info("🚀 Starting FULL DMA Pipeline (Server-Friendly Mode)...")
 
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=create_dma_connector()) as session:
                 # Step 1: Fetch all companies
                 companies = await self.fetch_companies_from_api(session)
 
