@@ -151,6 +151,175 @@ class TestPMTilesDataLoader:
 
             assert table_name == "fvm_marker_2021"
 
+    def _make_pesticide_input(self, conn, rows):
+        """Materialise a synthetic enhanced-pesticide table for summary-query tests.
+
+        Each row is a dict with the columns the BMD-enhanced summary query reads.
+        """
+        columns = [
+            ("field_uuid", "VARCHAR"),
+            ("PesticideName", "VARCHAR"),
+            ("DosageQuantity", "DOUBLE"),
+            ("DosageUnit", "VARCHAR"),
+            ("AllocatedArea", "DOUBLE"),
+            ("contains_pfas", "BOOLEAN"),
+            ("contains_diquat", "BOOLEAN"),
+            ("contains_glyphosate", "BOOLEAN"),
+            ("health_risk", "VARCHAR"),
+            ("environmental_risk", "VARCHAR"),
+            ("signal_word", "VARCHAR"),
+            ("product_group", "VARCHAR"),
+            ("samlet_belastning", "DOUBLE"),
+            ("residential_buildings_formatted", "VARCHAR"),
+            ("educational_facilities_formatted", "VARCHAR"),
+            ("water_distance_formatted", "VARCHAR"),
+            ("MatchConfidence", "DOUBLE"),
+        ]
+        column_defs = ", ".join(f"{n} {t}" for n, t in columns)
+        conn.execute(f"CREATE OR REPLACE TABLE pest_in ({column_defs})")
+        placeholders = ", ".join("?" * len(columns))
+        for row in rows:
+            conn.execute(
+                f"INSERT INTO pest_in VALUES ({placeholders})",
+                [row.get(name) for name, _ in columns],
+            )
+
+    def test_classification_detail_emits_per_ha_dosage(
+        self, test_config, mock_storage_access, duckdb_conn
+    ):
+        """All per-field dosage values carry dose-per-hectare, not field totals.
+
+        Frederik V. Larsen reported (2026-04) that /pesticidkort labels
+        per-product dosages with "/ha", but the value was the SJI-reported
+        field total. Example: 2 L applied to a 30 ha field rendered as
+        "2 L/ha" instead of the actual ~0.067 L/ha. The aggregator divides
+        by AllocatedArea so the values match how the UIs label them.
+        """
+        self._make_pesticide_input(
+            duckdb_conn,
+            [
+                {
+                    "field_uuid": "field-1",
+                    "PesticideName": "Starane 333HL",
+                    "DosageQuantity": 2.0,
+                    "DosageUnit": "4",
+                    "AllocatedArea": 30.0,
+                    "contains_pfas": False,
+                    "contains_diquat": False,
+                    "contains_glyphosate": False,
+                    "health_risk": "",
+                    "environmental_risk": "",
+                    "signal_word": "",
+                    "product_group": "Herbicider",
+                    "samlet_belastning": 1.5,
+                    "residential_buildings_formatted": "",
+                    "educational_facilities_formatted": "",
+                    "water_distance_formatted": "",
+                    "MatchConfidence": 1.0,
+                },
+            ],
+        )
+
+        loader = PMTilesDataLoader(test_config, mock_storage_access, duckdb_conn)
+        duckdb_conn.execute(loader._build_pesticide_summary_query("pest_in", has_bmd_data=True))
+
+        # /pesticidkort detail string: name:dose_per_ha:unit:health:env:signal:group:burden
+        detail = duckdb_conn.execute(
+            "SELECT other_products_detail FROM temp_pesticide_summary"
+        ).fetchone()[0]
+        dose_per_ha = float(detail.split(":")[1])
+        assert dose_per_ha == pytest.approx(2.0 / 30.0, abs=1e-4)
+
+        # /markanalyse legacy unit-bucketed detail string: name:dose_per_ha
+        legacy = duckdb_conn.execute(
+            "SELECT pesticides_liters_detail FROM temp_pesticide_summary"
+        ).fetchone()[0]
+        legacy_dose_per_ha = float(legacy.split(":")[1])
+        assert legacy_dose_per_ha == pytest.approx(2.0 / 30.0, abs=1e-4)
+
+        # /markanalyse aggregate "Total dosering" is now also per-ha
+        # (cumulative L/ha across all liquid herbicide events on the field).
+        total = duckdb_conn.execute(
+            "SELECT total_dosage_liters FROM temp_pesticide_summary"
+        ).fetchone()[0]
+        assert total == pytest.approx(2.0 / 30.0, abs=1e-4)
+
+    def test_classification_detail_handles_zero_allocated_area(
+        self, test_config, mock_storage_access, duckdb_conn
+    ):
+        """Rows with AllocatedArea=0 emit 0 instead of dividing by zero."""
+        self._make_pesticide_input(
+            duckdb_conn,
+            [
+                {
+                    "field_uuid": "field-2",
+                    "PesticideName": "Roundup",
+                    "DosageQuantity": 5.0,
+                    "DosageUnit": "4",
+                    "AllocatedArea": 0.0,
+                    "contains_pfas": False,
+                    "contains_diquat": False,
+                    "contains_glyphosate": True,
+                    "health_risk": "",
+                    "environmental_risk": "",
+                    "signal_word": "",
+                    "product_group": "Herbicider",
+                    "samlet_belastning": 1.0,
+                    "residential_buildings_formatted": "",
+                    "educational_facilities_formatted": "",
+                    "water_distance_formatted": "",
+                    "MatchConfidence": 1.0,
+                },
+            ],
+        )
+
+        loader = PMTilesDataLoader(test_config, mock_storage_access, duckdb_conn)
+        duckdb_conn.execute(loader._build_pesticide_summary_query("pest_in", has_bmd_data=True))
+
+        detail = duckdb_conn.execute(
+            "SELECT glyphosate_products_detail FROM temp_pesticide_summary"
+        ).fetchone()[0]
+        dose_per_ha = float(detail.split(":")[1])
+        assert dose_per_ha == 0.0
+
+    def test_fallback_summary_query_also_uses_per_ha(
+        self, test_config, mock_storage_access, duckdb_conn
+    ):
+        """No-BMD fallback path must apply the same per-ha conversion."""
+        self._make_pesticide_input(
+            duckdb_conn,
+            [
+                {
+                    "field_uuid": "field-3",
+                    "PesticideName": "Starane 333HL",
+                    "DosageQuantity": 2.0,
+                    "DosageUnit": "4",
+                    "AllocatedArea": 30.0,
+                    "contains_pfas": None,
+                    "contains_diquat": None,
+                    "contains_glyphosate": None,
+                    "health_risk": None,
+                    "environmental_risk": None,
+                    "signal_word": None,
+                    "product_group": None,
+                    "samlet_belastning": None,
+                    "residential_buildings_formatted": "",
+                    "educational_facilities_formatted": "",
+                    "water_distance_formatted": "",
+                    "MatchConfidence": 1.0,
+                },
+            ],
+        )
+
+        loader = PMTilesDataLoader(test_config, mock_storage_access, duckdb_conn)
+        duckdb_conn.execute(loader._build_pesticide_summary_query("pest_in", has_bmd_data=False))
+
+        detail = duckdb_conn.execute(
+            "SELECT other_products_detail FROM temp_pesticide_summary"
+        ).fetchone()[0]
+        dose_per_ha = float(detail.split(":")[1])
+        assert dose_per_ha == pytest.approx(2.0 / 30.0, abs=1e-4)
+
     @pytest.mark.asyncio
     async def test_load_and_integrate_field_data(
         self, test_config, mock_storage_access, duckdb_conn

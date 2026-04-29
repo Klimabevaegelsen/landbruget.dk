@@ -69,34 +69,34 @@ export function PesticideSummaryCard({ field }: PesticideSummaryCardProps) {
       {hasDosageData(field) && (
         <div className="space-y-2 lg:space-y-3">
           <DosageRow
-            label="Total dosering (kg)"
+            label="Samlet dosering (kg/ha)"
             value={field.total_dosage_kg}
-            unit="kg"
-            decimals={2}
+            unit="kg/ha"
+            decimals={3}
           />
           <DosageRow
-            label="Total dosering (L)"
+            label="Samlet dosering (L/ha)"
             value={field.total_dosage_liters}
-            unit="L"
+            unit="L/ha"
+            decimals={3}
+          />
+          <DosageRow
+            label="Samlet dosering (g/ha)"
+            value={field.total_dosage_grams}
+            unit="g/ha"
             decimals={1}
           />
           <DosageRow
-            label="Total dosering (g)"
-            value={field.total_dosage_grams}
-            unit="g"
-            decimals={0}
-          />
-          <DosageRow
-            label="Total dosering (ml)"
+            label="Samlet dosering (ml/ha)"
             value={field.total_dosage_ml}
-            unit="ml"
-            decimals={0}
+            unit="ml/ha"
+            decimals={1}
           />
           <DosageRow
-            label="Total dosering"
+            label="Samlet dosering (tabletter/ha)"
             value={field.total_dosage_tablets}
-            unit="tabletter"
-            decimals={0}
+            unit="tabletter/ha"
+            decimals={2}
             threshold={0}
           />
         </div>

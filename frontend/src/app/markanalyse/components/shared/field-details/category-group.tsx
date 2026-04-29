@@ -46,7 +46,7 @@ export function CategoryGroup({ category, products }: CategoryGroupProps) {
                     {product.name}
                   </div>
                   <div className={`text-sm ${category.itemSubText}`}>
-                    {formatNumber(product.dosage, 2)} {product.unit}
+                    {formatNumber(product.dosage, 3)} {product.unit}/ha
                   </div>
                 </div>
                 {riskIcon && (

@@ -136,7 +136,7 @@ export function CategorySection({
                   </div>
                   <span className="text-muted-foreground">
                     {groupLabel && <>{groupLabel} · </>}
-                    {formatNumber(p.dosage, 2)} {p.unit}/ha
+                    {formatNumber(p.dosage, 3)} {p.unit}/ha
                   </span>
                 </li>
               );
