@@ -175,4 +175,19 @@ Examples: `feat(frontend): add interactive map view`, `fix(pipeline): correct CH
 
 ## License
 
-See repository license file.
+### Code
+
+The source code in this repository is licensed under the [MIT License](./LICENSE).
+
+### Data
+
+The MIT license **does not** cover the data. This includes both:
+
+- **Upstream data** ingested from Danish public-sector sources (Landbrugsstyrelsen, CHR Registry, Geodatastyrelsen, Miljøstyrelsen, Danmarks Statistik, DMI, and others — see `docs/PIPELINE_INDEX.md`), and
+- **Derived datasets** we publish to the Cloudflare R2 CDN (JSON, Parquet, PMTiles).
+
+Each dataset retains the licensing terms of its original source — typically Danish government open-data terms or, where applicable, a Creative Commons license. Where the source is not openly licensed, the original copyright and conditions of the issuing public authority apply. Reusing data from this project requires complying with the upstream source's terms.
+
+See [/om-os](https://landbruget.dk/om-os) for the project's overall data policy and [/kilder](https://landbruget.dk/kilder) for per-source attribution.
+
+The data is provided "as is and as available" — no warranty is given as to completeness, accuracy, or timeliness.
