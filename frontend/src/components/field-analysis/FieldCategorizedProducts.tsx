@@ -111,7 +111,7 @@ export function FieldCategorizedProducts({
                           {product.name}
                         </div>
                         <div className={`${cat.sub} text-sm`}>
-                          {formatNumber(product.dosage, 2)} {product.unit}
+                          {formatNumber(product.dosage, 3)} {product.unit}/ha
                         </div>
                       </div>
                       {riskIcon && (

@@ -495,45 +495,32 @@ class PMTilesDataLoader:
             logger.error(f"Error integrating field data for year {year}: {e}")
             raise
 
-    async def _add_pesticide_summary(self, integrated_table: str, pesticide_table: str):
-        """Add pesticide summary data to the integrated table.
+    def _build_pesticide_summary_query(self, source_table: str, has_bmd_data: bool) -> str:
+        """Build the per-field pesticide aggregation SQL.
 
-        Args:
-            integrated_table: Name of the integrated table to update
-            pesticide_table: Name of the pesticide proximity table
+        All per-field dosage values — both the BMD-classification detail
+        strings (pfas/diquat/glyphosate/other_products_detail) consumed by
+        /pesticidkort and the legacy unit-bucketed detail strings + total_dosage_*
+        aggregates consumed by /markanalyse — are emitted as
+        dose-per-hectare (DosageQuantity / AllocatedArea). SJI reports total
+        amount applied per field, so the aggregator divides by AllocatedArea
+        to produce rates that match how the UIs label them ("/ha").
         """
-        try:
-            # First, check if BMD data is available and enhance pesticide data
-            enhanced_pesticide_table = await self._enhance_pesticide_with_bmd(pesticide_table)
-
-            # Check if enhancement worked by testing for BMD columns
-            has_bmd_data = False
-            try:
-                await asyncio.to_thread(
-                    self.conn.execute,
-                    f"SELECT COUNT(*) FROM {enhanced_pesticide_table} "
-                    "WHERE contains_pfas IS NOT NULL LIMIT 1",
-                )
-                has_bmd_data = True
-                logger.info("BMD enhancement successful - using categorized pesticide aggregation")
-            except Exception:
-                logger.warning("BMD enhancement failed - falling back to basic aggregation")
-                has_bmd_data = False
-
-            if has_bmd_data:
-                # Enhanced aggregation with BMD classifications
-                summary_query = f"""
+        if has_bmd_data:
+            return f"""
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
                     field_uuid,
                     COUNT(*) as pesticide_applications,
                     STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
 
-                    -- Enhanced categorized product details with risk + product group + burden
-                    -- Format: Name:Dosage:Unit:HealthRisk:EnvRisk:SignalWord:ProductGroup:Burden
+                    -- Format: Name:DosagePerHa:Unit:HealthRisk:EnvRisk:SignalWord:ProductGroup:Burden
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_pfas, false) = true
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
                              COALESCE(health_risk, '') || ':' ||
                              COALESCE(environmental_risk, '') || ':' ||
@@ -548,7 +535,10 @@ class PMTilesDataLoader:
 
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_diquat, false) = true
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
                              COALESCE(health_risk, '') || ':' ||
                              COALESCE(environmental_risk, '') || ':' ||
@@ -565,7 +555,10 @@ class PMTilesDataLoader:
 
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_glyphosate, false) = true
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
                              COALESCE(health_risk, '') || ':' ||
                              COALESCE(environmental_risk, '') || ':' ||
@@ -584,7 +577,10 @@ class PMTilesDataLoader:
                         CASE WHEN COALESCE(contains_pfas, false) = false
                                   AND COALESCE(contains_diquat, false) = false
                                   AND COALESCE(contains_glyphosate, false) = false
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
                              COALESCE(health_risk, '') || ':' ||
                              COALESCE(environmental_risk, '') || ':' ||
@@ -601,28 +597,41 @@ class PMTilesDataLoader:
                                   AND COALESCE(contains_glyphosate, false) = false
                                   THEN 1 END) as other_applications,
 
-                    -- Legacy unit-based aggregations for backward compatibility
+                    -- Legacy unit-bucketed detail strings (consumed by /markanalyse).
+                    -- Same per-ha conversion as the classification detail strings above.
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('2', 'kg')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (WHERE DosageUnit IN ('2', 'kg')) as pesticides_kg_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('4', 'L', 'liter')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (WHERE DosageUnit IN ('4', 'L', 'liter')) as pesticides_liters_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('1', 'g', 'gram')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (WHERE DosageUnit IN ('1', 'g', 'gram')) as pesticides_grams_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (
                         WHERE DosageUnit IN ('5', 'ml', 'milliliter')
@@ -630,7 +639,10 @@ class PMTilesDataLoader:
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (
                         WHERE DosageUnit IN ('3', 'tablet', 'tabletter')
@@ -665,30 +677,38 @@ class PMTilesDataLoader:
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
-                    -- Total dosage by unit (frontend displays as total per field)
-                    SUM(CASE WHEN DosageUnit IN ('2', 'kg')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
-                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
-                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
-                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
-                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
-
+                    -- Total dosage per ha by unit (sum of per-application amounts / field area).
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('2', 'kg')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_kg,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_liters,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_grams,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_ml,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_tablets,
 
                     -- Proximity data (ANY_VALUE since proximity is per field_uuid which may vary)
                     ANY_VALUE(residential_buildings_formatted) as residential_buildings_formatted,
                     ANY_VALUE(educational_facilities_formatted) as educational_facilities_formatted,
                     ANY_VALUE(water_distance_formatted) as water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
-                FROM {enhanced_pesticide_table}
+                FROM {source_table}
                 GROUP BY field_uuid
                 """
-            else:
-                # Fallback to basic aggregation without BMD classifications
-                summary_query = f"""
+
+        return f"""
                 CREATE OR REPLACE TABLE temp_pesticide_summary AS
                 SELECT
                     field_uuid,
@@ -702,34 +722,51 @@ class PMTilesDataLoader:
                     0 as diquat_applications,
                     NULL as glyphosate_products_detail,
                     0 as glyphosate_applications,
+                    -- Per-ha rate for /pesticidkort, mirroring the BMD-enhanced path.
                     STRING_AGG(
-                        PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                        PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4) || ':' ||
                         COALESCE(DosageUnit, 'ukendt'), ';'
                     ) as other_products_detail,
                     COUNT(*) as other_applications,
 
-                    -- Legacy unit-based aggregations
+                    -- Legacy unit-bucketed detail strings (consumed by /markanalyse).
+                    -- Per-ha conversion mirrors the BMD path.
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('2', 'kg')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (WHERE DosageUnit IN ('2', 'kg')) as pesticides_kg_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('4', 'L', 'liter')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (WHERE DosageUnit IN ('4', 'L', 'liter')) as pesticides_liters_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('1', 'g', 'gram')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (WHERE DosageUnit IN ('1', 'g', 'gram')) as pesticides_grams_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (
                         WHERE DosageUnit IN ('5', 'ml', 'milliliter')
@@ -737,7 +774,10 @@ class PMTilesDataLoader:
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
-                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        THEN PesticideName || ':' || ROUND(
+                                CASE WHEN AllocatedArea > 0
+                                     THEN COALESCE(DosageQuantity, 0) / AllocatedArea
+                                     ELSE 0 END, 4)
                         END, ';'
                     ) FILTER (
                         WHERE DosageUnit IN ('3', 'tablet', 'tabletter')
@@ -756,27 +796,64 @@ class PMTilesDataLoader:
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
-                    -- Total dosage by unit (frontend displays as total per field) - fallback version
-                    SUM(CASE WHEN DosageUnit IN ('2', 'kg')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
-                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
-                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
-                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
-                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
-                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
+                    -- Total dosage per ha by unit (fallback version).
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('2', 'kg')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_kg,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_liters,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_grams,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_ml,
+                    CASE WHEN MAX(AllocatedArea) > 0 THEN
+                        SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
+                            THEN COALESCE(DosageQuantity, 0) ELSE 0 END) / MAX(AllocatedArea)
+                        ELSE 0 END as total_dosage_tablets,
 
                     -- Proximity data (ANY_VALUE since proximity is per field_uuid which may vary)
                     ANY_VALUE(residential_buildings_formatted) as residential_buildings_formatted,
                     ANY_VALUE(educational_facilities_formatted) as educational_facilities_formatted,
                     ANY_VALUE(water_distance_formatted) as water_distance_formatted,
                     AVG(MatchConfidence) as avg_match_confidence
-                FROM {pesticide_table}
+                FROM {source_table}
                 GROUP BY field_uuid
                 """
 
+    async def _add_pesticide_summary(self, integrated_table: str, pesticide_table: str):
+        """Add pesticide summary data to the integrated table.
+
+        Args:
+            integrated_table: Name of the integrated table to update
+            pesticide_table: Name of the pesticide proximity table
+        """
+        try:
+            # First, check if BMD data is available and enhance pesticide data
+            enhanced_pesticide_table = await self._enhance_pesticide_with_bmd(pesticide_table)
+
+            # Check if enhancement worked by testing for BMD columns
+            has_bmd_data = False
+            try:
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT COUNT(*) FROM {enhanced_pesticide_table} "
+                    "WHERE contains_pfas IS NOT NULL LIMIT 1",
+                )
+                has_bmd_data = True
+                logger.info("BMD enhancement successful - using categorized pesticide aggregation")
+            except Exception:
+                logger.warning("BMD enhancement failed - falling back to basic aggregation")
+                has_bmd_data = False
+
+            source_table = enhanced_pesticide_table if has_bmd_data else pesticide_table
+            summary_query = self._build_pesticide_summary_query(source_table, has_bmd_data)
             await asyncio.to_thread(self.conn.execute, summary_query)
 
             # DEBUG: Check what was created in the pesticide summary
