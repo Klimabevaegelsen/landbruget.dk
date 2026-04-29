@@ -3,6 +3,7 @@ name = "landbruget-dk"
 version = "0.1.0"
 description = "Agricultural data analysis platform"
 requires-python = ">=3.11"
+license = { text = "MIT" }
 dynamic = ["readme"]
 dependencies = []
 
