@@ -92,13 +92,13 @@ jobs:
 
           dynamic_years = {
               "markblokke": sorted(
-                  {int(year) for year in re.findall(r"\\bMarkblokke:Markblokke_(\\d{4})\\b", capabilities_xml)}
+                  {int(year) for year in re.findall(r"\bMarkblokke:Markblokke_(\d{4})\b", capabilities_xml)}
               ),
               "marker": sorted(
-                  {int(year) for year in re.findall(r"\\bMarker:Marker_(\\d{4})\\b", capabilities_xml)}
+                  {int(year) for year in re.findall(r"\bMarker:Marker_(\d{4})\b", capabilities_xml)}
               ),
               "smaabiotoper": sorted(
-                  {int(year) for year in re.findall(r"\\bMarker:Smaabiotoper_(\\d{4})\\b", capabilities_xml)}
+                  {int(year) for year in re.findall(r"\bMarker:Smaabiotoper_(\d{4})\b", capabilities_xml)}
               ),
           }
           for layer_name in ("markblokke", "marker", "smaabiotoper"):
