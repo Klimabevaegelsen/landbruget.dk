@@ -87,7 +87,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.11.2",
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/eslintrc": "^3.3.5",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/mapbox-gl": "^3.5.0",
@@ -95,7 +95,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "axe-core": "^4.11.3",
-    "eslint": "^10.2.1",
+    "eslint": "^10.3.0",
     "eslint-config-next": "^16.2.4",
     "oxfmt": "^0.47.0",
     "oxlint": "^1.62.0",
