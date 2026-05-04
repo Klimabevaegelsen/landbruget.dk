@@ -164,6 +164,40 @@ jobs:
 
           exec > >(tee -a /tmp/dma_pipeline.log) 2>&1
 
+          shutdown_vm() {
+            if [ "${DMA_AUTO_SHUTDOWN:-true}" != "true" ]; then
+              echo "DMA_AUTO_SHUTDOWN is not true; leaving VM running for inspection."
+              return 0
+            fi
+
+            echo "Deleting DMA VM at $(date -u)"
+            local vm_name zone project_id token
+            vm_name="$(curl -fsS -H "Metadata-Flavor: Google" \
+              http://metadata.google.internal/computeMetadata/v1/instance/name)"
+            zone="$(curl -fsS -H "Metadata-Flavor: Google" \
+              http://metadata.google.internal/computeMetadata/v1/instance/zone | awk -F/ '{print $NF}')"
+            project_id="$(curl -fsS -H "Metadata-Flavor: Google" \
+              http://metadata.google.internal/computeMetadata/v1/project/project-id)"
+            token="$(curl -fsS -H "Metadata-Flavor: Google" \
+              http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin)["access_token"])')"
+
+            sync
+            curl -fsS -X DELETE \
+              -H "Authorization: Bearer ${token}" \
+              -H "Content-Type: application/json" \
+              "https://compute.googleapis.com/compute/v1/projects/${project_id}/zones/${zone}/instances/${vm_name}" \
+              || echo "Failed to delete VM ${vm_name}; manual cleanup may be required."
+          }
+
+          finish() {
+            status=$?
+            echo "DMA VM runner exiting with status ${status} at $(date -u)"
+            shutdown_vm
+            exit "${status}"
+          }
+          trap finish EXIT
+
           echo "Starting DMA VM runner at $(date -u)"
           sudo apt-get update
           sudo apt-get install -y ca-certificates curl
@@ -268,15 +302,18 @@ jobs:
             --zone="${{ env.ZONE }}" \
             --project="${{ env.PROJECT_ID }}"
 
-      - name: Run DMA pipeline on VM
+      - name: Launch DMA pipeline on VM
         run: |
           gcloud compute ssh "$VM_NAME" \
             --zone="${{ env.ZONE }}" \
             --project="${{ env.PROJECT_ID }}" \
-            --command="chmod +x /tmp/run-dma-remote.sh && /tmp/run-dma-remote.sh"
+            --command="chmod +x /tmp/run-dma-remote.sh && nohup /tmp/run-dma-remote.sh >/tmp/dma_pipeline_launcher.log 2>&1 </dev/null & echo \$! >/tmp/dma_pipeline.pid && echo Started detached DMA pipeline PID \$(cat /tmp/dma_pipeline.pid)"
+
+          echo "VM_LAUNCHED_DETACHED=true" >> "$GITHUB_ENV"
+          echo "DMA pipeline launched detached on VM: $VM_NAME"
 
       - name: Fetch VM logs on failure
-        if: failure() && env.VM_NAME != ''
+        if: failure() && env.VM_NAME != '' && env.VM_LAUNCHED_DETACHED != 'true'
         run: |
           gcloud compute ssh "$VM_NAME" \
             --zone="${{ env.ZONE }}" \
@@ -284,7 +321,7 @@ jobs:
             --command="tail -200 /tmp/dma_pipeline.log 2>/dev/null || true" || true
 
       - name: Cleanup VM
-        if: always() && env.VM_NAME != '' && env.AUTO_SHUTDOWN == 'true'
+        if: always() && env.VM_NAME != '' && env.AUTO_SHUTDOWN == 'true' && env.VM_LAUNCHED_DETACHED != 'true'
         run: |
           gcloud compute instances delete "$VM_NAME" \
             --zone="${{ env.ZONE }}" \
@@ -294,8 +331,10 @@ jobs:
       - name: Notify on success
         if: success()
         run: |
-          echo "DMA Monthly Pipeline completed successfully on $(date -u)"
+          echo "DMA Monthly Pipeline launched successfully on $(date -u)"
+          echo "Detached VM: ${VM_NAME}"
           echo "Data location: s3://${R2_BUCKET}/bronze/dma/ and s3://${R2_BUCKET}/silver/dma/"
+          echo "The VM will upload outputs and delete itself when complete if auto_shutdown is true."
 
       - name: Notify on failure
         if: failure()
