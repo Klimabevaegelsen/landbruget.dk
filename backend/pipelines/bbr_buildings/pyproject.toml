@@ -45,7 +45,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "ruff",
     "ty",
-    "types-requests>=2.33.0.20260408",
+    "types-requests>=2.33.0.20260503",
     "types-beautifulsoup4>=4.12.0.20250516",
 ]
 
