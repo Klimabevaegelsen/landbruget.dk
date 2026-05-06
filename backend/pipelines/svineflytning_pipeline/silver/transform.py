@@ -176,8 +176,8 @@ class SvineflytningSilverProcessor:
         all_movements = []
 
         for chunk in raw_data:
-            response = chunk.get("response", {}).get("Response", {})
-            svineflytning_liste = response.get("SvineflytningListe", {})
+            response = ((chunk or {}).get("response") or {}).get("Response") or {}
+            svineflytning_liste = response.get("SvineflytningListe") or {}
 
             if isinstance(svineflytning_liste, dict) and "Svineflytning" in svineflytning_liste:
                 movements = svineflytning_liste["Svineflytning"]
