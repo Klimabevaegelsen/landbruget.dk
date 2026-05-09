@@ -1488,7 +1488,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
             # Save year summary
             year_summary_path = f"{self.config.bucket}/{base_path}/summary_{ag_year}.json"
-            year_summary = {k: v for k, v in year_results.items() if k != "issues_data"}
+            year_summary = {
+                k: v for k, v in year_results.items() if k not in {"issues_data", "compliance_data"}
+            }
             self.storage.upload_json(year_summary, year_summary_path)
 
         # Generate human-readable report
