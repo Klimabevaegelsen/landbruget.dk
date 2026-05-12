@@ -9,7 +9,7 @@ authors = [
     { name = "Landbruget.dk Team" },
 ]
 dependencies = [
-    "requests>=2.33.1",
+    "requests>=2.34.0",
     "beautifulsoup4>=4.14.3",
     "certifi",
     "click>=8.3.3",
