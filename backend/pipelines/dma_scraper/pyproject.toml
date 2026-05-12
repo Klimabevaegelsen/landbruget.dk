@@ -14,7 +14,7 @@ dependencies = [
     "certifi",
     "click>=8.3.3",
     "python-dotenv>=1.0.0",
-    "pandas>=3.0.2",
+    "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "duckdb",
     "aiohttp>=3.13.5",
