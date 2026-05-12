@@ -27,7 +27,7 @@ dependencies = [
     "xmltodict>=0.13.0",
     "zeep>=4.3.2",
     "duckdb",
-    "pyreadr>=0.5.0",
+    "pyreadr>=0.5.6",
     "beautifulsoup4>=4.14.3",
     "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
