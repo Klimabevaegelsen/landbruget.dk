@@ -34,7 +34,7 @@ dependencies = [
     "shapely>=2.0.0",
     "tabulate>=0.10.0",
     "landbruget-common",
-    "requests>=2.34.0",
+    "requests>=2.34.2",
 ]
 
 [build-system]
