@@ -10,7 +10,7 @@ authors = [
 ]
 dependencies = [
     "aiohttp>=3.13.5",
-    "certifi>=2026.4.22",
+    "certifi>=2026.5.20",
     "click>=8.4.1",
     "cryptography>=48.0.0",
     "s3fs",
