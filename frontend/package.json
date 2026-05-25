@@ -65,7 +65,7 @@
     "lodash": "^4.17.23",
     "lucide-react": "^1.16.0",
     "maplibre-gl": "^5.24.0",
-    "motion": "^12.39.0",
+    "motion": "^12.40.0",
     "next": "^16.2.6",
     "next-themes": "^0.4.6",
     "playwright-core": "^1.55.0",
