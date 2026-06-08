@@ -9,7 +9,7 @@ dependencies = [
     "s3fs",
     "duckdb",
     "tenacity",
-    "google-cloud-secret-manager>=2.28.0",
+    "google-cloud-secret-manager>=2.29.0",
 ]
 
 [build-system]
