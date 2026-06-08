@@ -10,7 +10,7 @@ authors = [
 ]
 dependencies = [
     "requests>=2.34.2",
-    "beautifulsoup4>=4.14.3",
+    "beautifulsoup4>=4.15.0",
     "duckdb",
     "shapely>=2.0.0",
     "pyogrio>=0.12.1",
