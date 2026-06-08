@@ -10,7 +10,7 @@ authors = [
 ]
 dependencies = [
     "requests>=2.34.2",
-    "beautifulsoup4>=4.14.3",
+    "beautifulsoup4>=4.15.0",
     "certifi",
     "click>=8.4.1",
     "python-dotenv>=1.0.0",
