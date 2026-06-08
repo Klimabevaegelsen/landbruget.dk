@@ -9,7 +9,7 @@ authors = [
     {name = "Rahul Sahoo", email = "rahulsahoo66@gmail.com"},
 ]
 dependencies = [
-    "aiohttp>=3.14.0",
+    "aiohttp>=3.14.1",
     "certifi>=2026.5.20",
     "click>=8.4.1",
     "cryptography>=48.0.0",
