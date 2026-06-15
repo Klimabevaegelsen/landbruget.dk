@@ -20,7 +20,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "xlrd>=2.0.2",
     "pypdf>=6.13.1",
-    "pdfplumber>=0.11.9",
+    "pdfplumber>=0.11.10",
     "tabula-py>=2.10.0",
     "JPype1>=1.4.1",
     "s3fs",
