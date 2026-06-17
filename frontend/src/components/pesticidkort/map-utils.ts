@@ -68,6 +68,28 @@ function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
+const METERS_PER_DEGREE = 111320;
+
+export function latitudeDeltaForMeters(meters: number): number {
+  return meters / METERS_PER_DEGREE;
+}
+
+export function longitudeDeltaForMeters(lat: number, meters: number): number {
+  return meters / (METERS_PER_DEGREE * Math.cos(toRad(lat)));
+}
+
+export function offsetLatLngByMeters(
+  lat: number,
+  lng: number,
+  northMeters: number,
+  eastMeters = 0
+): { lat: number; lng: number } {
+  return {
+    lat: lat + latitudeDeltaForMeters(northMeters),
+    lng: lng + longitudeDeltaForMeters(lat, eastMeters),
+  };
+}
+
 /**
  * Approximate bounding box for a radius around a point.
  * Returns [west, south, east, north] in degrees.
@@ -77,7 +99,7 @@ export function radiusToBbox(
   lng: number,
   radiusM: number
 ): [number, number, number, number] {
-  const latDelta = radiusM / 111320;
-  const lngDelta = radiusM / (111320 * Math.cos(toRad(lat)));
+  const latDelta = latitudeDeltaForMeters(radiusM);
+  const lngDelta = longitudeDeltaForMeters(lat, radiusM);
   return [lng - lngDelta, lat - latDelta, lng + lngDelta, lat + latDelta];
 }

@@ -1,5 +1,6 @@
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
+import { BURDEN_COLOR_STOPS } from '@/components/pesticidkort/field-utils';
 
 export type ChemicalFilter = 'none' | 'pfas' | 'glyphosate' | 'diquat';
 
@@ -25,6 +26,7 @@ function getChemicalColors() {
 
 /** Stepped burden gradient based on total_pesticide_belastning (B/ha). */
 export function getGradeFillColor() {
+  const [baseStop, ...stops] = BURDEN_COLOR_STOPS;
   return [
     'case',
     ['==', ['coalesce', ['get', 'total_pesticide_belastning'], 0], 0],
@@ -32,15 +34,11 @@ export function getGradeFillColor() {
     [
       'step',
       ['get', 'total_pesticide_belastning'],
-      resolvePesticidkortColor('burdenLow'),
-      0.5,
-      resolvePesticidkortColor('burdenMidLow'),
-      2.0,
-      resolvePesticidkortColor('burdenMid'),
-      4.0,
-      resolvePesticidkortColor('burdenMidHigh'),
-      8.0,
-      resolvePesticidkortColor('burdenHigh'),
+      resolvePesticidkortColor(baseStop.level.colorKey),
+      ...stops.flatMap(({ min, level }) => [
+        min,
+        resolvePesticidkortColor(level.colorKey),
+      ]),
     ],
   ];
 }

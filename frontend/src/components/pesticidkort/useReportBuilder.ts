@@ -3,6 +3,7 @@ import {
   computePesticideScore,
   driftPercentileToGrade,
 } from '@/lib/pesticide-score';
+import { NEAR_EXPOSURE_RADIUS_M } from '@/components/pesticidkort/exposure-utils';
 import type {
   PesticideReport,
   NearbyFieldSummary,
@@ -115,7 +116,7 @@ export function useReportBuilder({
       fields,
       has_bnbo_overlap: hasBnbo,
       has_violations: false,
-      exposure_100m: computeExposure(fields, 100),
+      exposure_100m: computeExposure(fields, NEAR_EXPOSURE_RADIUS_M),
       exposure_1000m: computeExposure(fields, radiusM),
     });
   }, [address, driftExposure, driftStatus, fields, lat, lng, radiusM, year]);

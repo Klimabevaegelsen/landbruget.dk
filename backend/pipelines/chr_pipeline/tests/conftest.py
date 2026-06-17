@@ -17,8 +17,71 @@ import pytest
 #   from silver.X import Y
 #   from bronze.X import Y
 chr_pipeline_dir = Path(__file__).resolve().parent.parent
-if str(chr_pipeline_dir) not in sys.path:
+
+
+def _is_local_test(item) -> bool:
+    return Path(str(item.path)).resolve().is_relative_to(chr_pipeline_dir)
+
+
+def _is_sibling_pipeline_module(module: object) -> bool:
+    path = getattr(module, "__file__", None)
+    return path is not None and not Path(path).resolve().is_relative_to(chr_pipeline_dir)
+
+
+def _clear_bronze_modules() -> None:
+    for module_name in list(sys.modules):
+        if module_name == "bronze" or module_name.startswith("bronze."):
+            del sys.modules[module_name]
+
+
+def _restore_file_scoped_bronze_mocks(test_module: object | None) -> bool:
+    if test_module is None:
+        return False
+
+    bronze_mocks = {
+        "auth": getattr(test_module, "mock_bronze_auth", None),
+        "export": getattr(test_module, "mock_bronze_export", None),
+        "load_besaetning": getattr(test_module, "mock_load_besaetning", None),
+        "load_vetstat": getattr(test_module, "mock_load_vetstat", None),
+    }
+    bronze_mocks = {submodule: mock for submodule, mock in bronze_mocks.items() if mock is not None}
+    if not bronze_mocks:
+        return False
+
+    _clear_bronze_modules()
+    mock_bronze = type(sys)("bronze")
+    mock_bronze.__path__ = []
+    sys.modules["bronze"] = mock_bronze
+    for submodule, mock in bronze_mocks.items():
+        setattr(mock_bronze, submodule, mock)
+        sys.modules[f"bronze.{submodule}"] = mock
+    return True
+
+
+def _prefer_chr_imports(test_module: object | None = None) -> None:
+    """Put CHR first and clear cached sibling pipeline modules."""
+    for module_name, module in list(sys.modules.items()):
+        if (
+            module_name == "silver"
+            or module_name.startswith("silver.")
+            or module_name == "bronze"
+            or module_name.startswith("bronze.")
+        ) and _is_sibling_pipeline_module(module):
+            del sys.modules[module_name]
+    if str(chr_pipeline_dir) in sys.path:
+        sys.path.remove(str(chr_pipeline_dir))
     sys.path.insert(0, str(chr_pipeline_dir))
+    _restore_file_scoped_bronze_mocks(test_module)
+
+
+_prefer_chr_imports()
+
+
+def pytest_runtest_setup(item):
+    """Keep top-level bronze/silver imports pointed at CHR during CHR tests."""
+    if _is_local_test(item):
+        _prefer_chr_imports(item.module)
+
 
 # Optional zeep import - only needed for type hints
 try:

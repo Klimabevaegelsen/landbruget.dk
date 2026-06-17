@@ -2,10 +2,7 @@
 
 import { X } from 'lucide-react';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
-import {
-  getCropEmoji,
-  formatBurden,
-} from '@/components/pesticidkort/field-utils';
+import { burdenHeadline } from '@/components/pesticidkort/field-utils';
 import {
   FieldProximity,
   FieldProducts,
@@ -17,7 +14,6 @@ interface ExploreFieldPanelProps {
 }
 
 export function ExploreFieldPanel({ field, onClose }: ExploreFieldPanelProps) {
-  const burden = field.total_pesticide_belastning;
   const hasPfas = field.pfas_applications > 0;
 
   return (
@@ -28,7 +24,7 @@ export function ExploreFieldPanel({ field, onClose }: ExploreFieldPanelProps) {
       <div className="mb-3 flex items-start justify-between">
         <div>
           <p className="text-foreground text-sm font-medium">
-            {getCropEmoji(field.crop_name)} {field.crop_name}
+            {burdenHeadline(field.total_pesticide_belastning)}
           </p>
           <p className="text-muted-foreground text-xs">
             {field.area_hectares.toFixed(1)} ha
@@ -56,9 +52,6 @@ export function ExploreFieldPanel({ field, onClose }: ExploreFieldPanelProps) {
             PFAS
           </span>
         )}
-        <span className="text-muted-foreground text-xs tabular-nums">
-          {burden > 0 ? formatBurden(burden) : 'Ingen pesticider'}
-        </span>
       </div>
 
       <FieldProximity field={field} />

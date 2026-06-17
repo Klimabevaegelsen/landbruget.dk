@@ -67,7 +67,6 @@ export interface PesticideReport {
 }
 
 export interface FieldHoverData {
-  cropName: string;
   cvrNumber?: string;
   burden: number;
   x: number;
