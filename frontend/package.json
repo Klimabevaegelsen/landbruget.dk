@@ -109,6 +109,9 @@
     "eslint-config-next": {
       "eslint": "$eslint",
       "typescript": "$typescript"
+    },
+    "next": {
+      "postcss": "8.5.10"
     }
   }
 }
