@@ -2,6 +2,7 @@
 
 import type { ExposureSummary } from '@/components/pesticidkort/types';
 import { EstimatedBadge } from '@/components/pesticidkort/EstimatedBadge';
+import { formatRadiusLabel } from '@/components/pesticidkort/exposure-utils';
 
 interface AddressExposureProps {
   exposure100m: ExposureSummary;
@@ -12,10 +13,7 @@ function ExposureRow({ summary }: { summary: ExposureSummary }) {
   return (
     <div>
       <p className="text-foreground mb-1.5 text-xs font-semibold">
-        Inden for{' '}
-        {summary.radius_m >= 1000
-          ? `${(summary.radius_m / 1000).toFixed(0)} km`
-          : `${summary.radius_m} m`}
+        Inden for {formatRadiusLabel(summary.radius_m)}
       </p>
       <div className="grid grid-cols-3 gap-3 text-center">
         <div>
