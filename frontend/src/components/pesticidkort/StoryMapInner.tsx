@@ -12,6 +12,7 @@ import {
 import { registerPmtilesProtocol } from '@/components/pesticidkort/pmtiles-protocol';
 import { ProximityRings } from '@/components/pesticidkort/ProximityRings';
 import { resolvePesticidkortColor } from '@/components/pesticidkort/color-theme';
+import { BURDEN_COLOR_STOPS } from '@/components/pesticidkort/field-utils';
 import type { StoryChapter } from '@/components/pesticidkort/story-chapters';
 import type { MapInstance } from '@/components/field-analysis/map-constants';
 
@@ -106,19 +107,7 @@ function applyPaintMode(
     ];
     opacity = 0.8;
   } else if (mode === 'burden') {
-    color = [
-      'interpolate',
-      ['linear'],
-      ['coalesce', ['get', 'total_pesticide_belastning'], 0],
-      0,
-      resolvePesticidkortColor('burdenLow'),
-      2,
-      resolvePesticidkortColor('burdenMid'),
-      5,
-      resolvePesticidkortColor('burdenMidHigh'),
-      10,
-      resolvePesticidkortColor('burdenHigh'),
-    ];
+    color = getBurdenColorExpression();
     opacity = 0.7;
   } else {
     color = resolvePesticidkortColor('highlight');
@@ -128,4 +117,19 @@ function applyPaintMode(
     map.setPaintProperty(id, 'fill-color', color);
     map.setPaintProperty(id, 'fill-opacity', opacity);
   }
+}
+
+function getBurdenColorExpression() {
+  const [baseStop, ...stops] = BURDEN_COLOR_STOPS;
+  return [
+    'interpolate',
+    ['linear'],
+    ['coalesce', ['get', 'total_pesticide_belastning'], 0],
+    baseStop.min,
+    resolvePesticidkortColor(baseStop.level.colorKey),
+    ...stops.flatMap(({ min, level }) => [
+      min,
+      resolvePesticidkortColor(level.colorKey),
+    ]),
+  ];
 }

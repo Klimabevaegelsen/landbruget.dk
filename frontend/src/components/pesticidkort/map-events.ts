@@ -76,7 +76,6 @@ export function setupFieldHoverHandlers(
       if (!feat || !setHoverData.current) return;
       const p = feat.properties;
       setHoverData.current({
-        cropName: String(p.crop_name ?? 'Ukendt'),
         cvrNumber: p.cvr_number ? String(p.cvr_number) : undefined,
         burden: Number(p.total_pesticide_belastning ?? 0),
         x: e.point.x,

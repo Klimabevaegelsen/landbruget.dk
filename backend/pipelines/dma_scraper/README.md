@@ -46,7 +46,7 @@ DMA Scraper (main.py, ENVIRONMENT=production)
     └── silver/transformation.py        → Transform to Parquet + CVR extraction
 ```
 
-The GitHub workflow provisions a GCP VM for the long-running scrape, copies the checked-out workspace to the VM, validates R2 credentials, and launches the VM runner as a detached background process. The VM installs the `dma-scraper` workspace package with `uv`, runs the DMA tests, executes `main.py`, writes production output to R2 under `bronze/dma/` and `silver/dma/`, then deletes itself when `auto_shutdown` is enabled.
+The GitHub workflow provisions a GCP VM for the long-running scrape, copies the checked-out workspace to the VM, validates R2 credentials, and launches the VM runner as a detached background process because full DMA scrapes can outlast GitHub Actions runtime limits. The VM installs the `dma-scraper` workspace package with `uv`, runs the DMA tests, executes `main.py`, writes production output to R2 under `bronze/dma/` and `silver/dma/`, then deletes itself when `auto_shutdown` is enabled. The workflow refuses to launch if another DMA VM is already active, deletes stale terminated DMA VMs before starting, and sets a hard 72-hour GCE auto-delete limit as a backstop.
 
 ## Directory Structure
 
