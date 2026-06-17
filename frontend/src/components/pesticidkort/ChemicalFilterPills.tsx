@@ -39,7 +39,7 @@ export function ChemicalFilterPills({
 }: ChemicalFilterPillsProps) {
   return (
     <div
-      className="flex w-full max-w-full justify-center overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex w-full max-w-full [scrollbar-width:none] justify-center overflow-x-auto px-1 [&::-webkit-scrollbar]:hidden"
       data-testid="chemical-filter-pills"
     >
       <div
