@@ -187,7 +187,7 @@ jobs:
               -H "Authorization: Bearer ${token}" \
               -H "Content-Type: application/json" \
               "https://compute.googleapis.com/compute/v1/projects/${project_id}/zones/${zone}/instances/${vm_name}" \
-              || echo "Failed to delete VM ${vm_name}; manual cleanup may be required."
+              || echo "Failed to delete VM ${vm_name}; GCE max-run-duration will delete it as a backstop."
           }
 
           finish() {
@@ -271,6 +271,38 @@ jobs:
 
           chmod +x /tmp/run-dma-remote.sh
 
+      - name: Guard against leaked DMA VMs
+        run: |
+          set -euo pipefail
+
+          echo "Checking for existing active DMA VMs..."
+          ACTIVE_VMS=$(gcloud compute instances list \
+            --project="${{ env.PROJECT_ID }}" \
+            --filter='name~^dma-monthly- AND (status=RUNNING OR status=STAGING OR status=PROVISIONING OR status=STOPPING)' \
+            --format='value(name,zone.basename(),status)')
+
+          if [ -n "$ACTIVE_VMS" ]; then
+            echo "Existing active DMA VM(s) found. Refusing to launch another:"
+            echo "$ACTIVE_VMS"
+            echo "Delete or stop the stale VM before retrying."
+            exit 1
+          fi
+
+          echo "Deleting terminated DMA VMs left from previous runs..."
+          gcloud compute instances list \
+            --project="${{ env.PROJECT_ID }}" \
+            --filter='name~^dma-monthly- AND status=TERMINATED' \
+            --format='value(name,zone.basename())' \
+            | while read -r name zone; do
+                if [ -n "$name" ] && [ -n "$zone" ]; then
+                  echo "Deleting stale terminated VM: $name ($zone)"
+                  gcloud compute instances delete "$name" \
+                    --zone="$zone" \
+                    --project="${{ env.PROJECT_ID }}" \
+                    --quiet
+                fi
+              done
+
       - name: Create VM
         run: |
           VM_NAME="dma-monthly-$(date -u +%Y%m%d-%H%M%S)"
@@ -287,6 +319,8 @@ jobs:
             --network-interface=network-tier=PREMIUM,subnet=default \
             --maintenance-policy=MIGRATE \
             --provisioning-model=STANDARD \
+            --max-run-duration=259200s \
+            --instance-termination-action=DELETE \
             --scopes=https://www.googleapis.com/auth/cloud-platform \
             --create-disk=auto-delete=yes,boot=yes,device-name="$VM_NAME",image=projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts,mode=rw,size=100GB,type=projects/${{ env.PROJECT_ID }}/zones/${{ env.ZONE }}/diskTypes/pd-standard \
             --tags=dma-scraper \
@@ -334,7 +368,8 @@ jobs:
           echo "DMA Monthly Pipeline launched successfully on $(date -u)"
           echo "Detached VM: ${VM_NAME}"
           echo "Data location: s3://${R2_BUCKET}/bronze/dma/ and s3://${R2_BUCKET}/silver/dma/"
-          echo "The VM will upload outputs and delete itself when complete if auto_shutdown is true."
+          echo "The VM deletes itself when complete if auto_shutdown is true."
+          echo "GCE will force-delete the VM after 72 hours as a backstop."
 
       - name: Notify on failure
         if: failure()
