@@ -69,6 +69,12 @@ class EnvironmentalLayersPMTilesGenerator:
                 environmental_layers["water_projects"]
             )
 
+        # Generate skovrejsning PMTiles
+        if "skovrejsning" in environmental_layers:
+            results["skovrejsning"] = await self._generate_skovrejsning_pmtiles(
+                environmental_layers["skovrejsning"]
+            )
+
         # Log summary
         successful = sum(1 for path in results.values() if path is not None)
         logger.info(f"Generated {successful}/{len(results)} environmental layer PMTiles")
@@ -180,6 +186,95 @@ class EnvironmentalLayersPMTilesGenerator:
 
         except Exception as e:
             logger.error(f"Error exporting BNBO GeoJSON: {e}")
+            return False
+
+    async def _generate_skovrejsning_pmtiles(self, table_name: str) -> str | None:
+        """Generate skovrejsning PMTiles."""
+        logger.info("Generating skovrejsning PMTiles")
+
+        with FileManager(self.config.temp_dir) as file_manager:
+            try:
+                geojson_path = file_manager.create_temp_file(
+                    suffix=".geojson", prefix="skovrejsning_"
+                )
+
+                success = await self._export_skovrejsning_geojson(table_name, geojson_path)
+                if not success:
+                    logger.error("Failed to export skovrejsning GeoJSON")
+                    return None
+
+                pmtiles_path = file_manager.create_temp_file(
+                    suffix=".pmtiles", prefix="skovrejsning_"
+                )
+
+                success = await self.tippecanoe.generate_pmtiles(
+                    geojson_path=geojson_path,
+                    output_path=pmtiles_path,
+                    layer_name="skovrejsning",
+                    max_zoom=12,
+                    min_zoom=0,
+                    buffer=32,
+                    simplification=5,
+                    additional_args=["--drop-densest-as-needed"],
+                )
+
+                if not success:
+                    logger.error("Failed to generate skovrejsning PMTiles")
+                    return None
+
+                final_path = os.path.join(
+                    os.path.dirname(self.config.temp_dir), "skovrejsning.pmtiles"
+                )
+
+                import shutil
+
+                shutil.copy2(pmtiles_path, final_path)
+
+                if os.path.exists(final_path):
+                    size_mb = os.path.getsize(final_path) / (1024 * 1024)
+                    logger.info(f"Generated skovrejsning PMTiles: {size_mb:.1f} MB")
+
+                return final_path
+
+            except Exception as e:
+                logger.error(f"Error generating skovrejsning PMTiles: {e}")
+                return None
+
+    async def _export_skovrejsning_geojson(self, table_name: str, output_path: str) -> bool:
+        """Export skovrejsning dissolved data as GeoJSON."""
+        try:
+            geom_expr = (
+                "ST_AsGeoJSON(ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))"
+                if USE_UTM_PROCESSING
+                else "ST_AsGeoJSON(ST_FlipCoordinates(geometry))"
+            )
+            query = f"""
+            SELECT
+                category,
+                CASE category
+                    WHEN 'undesired' THEN '#dc2626'
+                    WHEN 'desired' THEN '#16a34a'
+                    ELSE '#9ca3af'
+                END AS color,
+                CASE category
+                    WHEN 'undesired' THEN 'Skovrejsning uønsket'
+                    WHEN 'desired' THEN 'Skovrejsning ønsket'
+                    ELSE 'Neutralområde'
+                END AS category_danish,
+                {geom_expr} AS geometry
+            FROM {table_name}
+            WHERE geometry IS NOT NULL
+            """
+
+            return await GeoJSONWriter.write_geojson_from_query(
+                self.conn,
+                query,
+                output_path,
+                ["category", "color", "category_danish"],
+            )
+
+        except Exception as e:
+            logger.error(f"Error exporting skovrejsning GeoJSON: {e}")
             return False
 
     async def _generate_wetlands_pmtiles(self, table_name: str) -> str | None:
