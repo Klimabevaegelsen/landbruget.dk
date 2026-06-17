@@ -1195,6 +1195,11 @@ class PMTilesDataLoader:
         if water_projects_table:
             layers["water_projects"] = water_projects_table
 
+        # Load skovrejsning
+        skovrejsning_table = await self._load_skovrejsning()
+        if skovrejsning_table:
+            layers["skovrejsning"] = skovrejsning_table
+
         # Load BBR buildings
         buildings_table = await self._load_bbr_buildings()
         if buildings_table:
@@ -1313,6 +1318,45 @@ class PMTilesDataLoader:
                     )
                 else:
                     logger.error(f"Error loading BNBO status data: {e}")
+
+        return None
+
+    async def _load_skovrejsning(self) -> str | None:
+        """Load skovrejsning dissolved data."""
+        base_path = f"r2://{self.config.storage_bucket}/{self.config.skovrejsning_path}"
+        storage_paths = await self._find_timestamped_paths_ranked(base_path)
+        if not storage_paths:
+            logger.warning(f"Skovrejsning data not found in: {base_path}")
+            return None
+
+        table_name = "skovrejsning_dissolved"
+
+        for i, storage_path in enumerate(storage_paths):
+            try:
+                logger.info(f"Loading skovrejsning data from {storage_path}")
+                query = f"""
+                CREATE OR REPLACE TABLE {table_name} AS
+                SELECT *
+                FROM read_parquet('{storage_path}*.parquet')
+                """
+                await asyncio.to_thread(self.conn.execute, query)
+
+                count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
+                )
+                count = count_result.fetchone()[0]
+
+                logger.info(f"Loaded {count:,} skovrejsning records")
+                return table_name
+
+            except Exception as e:
+                if i < len(storage_paths) - 1:
+                    logger.warning(
+                        f"Failed to load skovrejsning from {storage_path}, "
+                        f"trying older timestamp: {e}"
+                    )
+                else:
+                    logger.error(f"Error loading skovrejsning data: {e}")
 
         return None
 
