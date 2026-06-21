@@ -6,13 +6,13 @@ _Sidst opdateret: 19. april 2026_
 
 ## 1. Indledning
 
-Velkommen til Landbruget.dk ("Platformen"). "Platformen" omfatter både landbruget.dk og underplatformen pesticidkortet.dk. Begge drives af Klimabevægelsen i Danmark ("os", "vi", "vores"), en almennyttig forening. Disse brugsvilkår ("Vilkårene") regulerer din ("Brugeren", "du", "din") adgang til og brug af Platformen, herunder alt indhold, data, software og funktionalitet, der stilles til rådighed.
+Velkommen til Landbruget.dk ("Platformen"). "Platformen" omfatter både landbruget.dk og underplatformen pesticidkortet.dk. Begge drives af Bureau 10 ("os", "vi", "vores"), en almennyttig forening. Disse brugsvilkår ("Vilkårene") regulerer din ("Brugeren", "du", "din") adgang til og brug af Platformen, herunder alt indhold, data, software og funktionalitet, der stilles til rådighed.
 
 Ved at tilgå eller bruge Platformen accepterer du at være bundet af disse Vilkår samt vores Privatlivspolitik, som er tilgængelig på Platformen og udgør en integreret del af disse Vilkår. Hvis du ikke accepterer disse Vilkår, bedes du undlade at bruge Platformen.
 
 ## 2. Platformens Formål og Beskrivelse af Tjenesten
 
-Landbruget.dk er et almennyttigt, [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) og non-profit initiativ. Vores mission er at indsamle, systematisere og formidle offentligt tilgængelige data om den danske landbrugssektor. Formålet er at fremme offentlig oplysning, transparens og en informeret demokratisk debat om den danske landbrugssektors miljø-, sundheds- og klimapåvirkning, samt at understøtte sektorens grønne omstilling. Platformen sigter mod at gøre komplekse data tilgængelige og brugbare for borgere, journalister, forskere, landmænd og embedsmænd.
+Landbruget.dk er et almennyttigt, [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) og non-profit initiativ. Vores mission er at indsamle, systematisere og formidle offentligt tilgængelige data om den danske landbrugssektor. Formålet er at fremme offentlig oplysning, transparens og en informeret offentlig debat om den danske landbrugssektor og dens forhold ved at gøre offentligt tilgængelige data samlet, søgbart og anvendeligt for borgere, journalister, forskere, landmænd og embedsmænd.
 
 Pesticidkortet.dk er en del af Platformen og har særligt fokus på at visualisere, hvilke pesticider der er rapporteret brugt på danske landbrugsmarker, samt at estimere eksponering nær konkrete adresser. Værdierne på pesticidkortet.dk er modellerede og bygger på offentlige data kombineret med anerkendte beregningsmetoder — se afsnit 4 for detaljer om datakvalitet og forbehold.
 
@@ -36,7 +36,7 @@ Det er strengt forbudt at bruge Platformen eller dens data til følgende formål
 
 - **Uhensigtsmæssig automatiseret dataindsamling**: Intensiv eller uansvarlig automatiseret dataindsamling (herunder scraping, crawling) der uforholdsmæssigt belaster Platformens servere, forringer Platformens ydeevne for andre brugere, eller har til formål at omgå disse Vilkår. Landbruget.dk drives i vid udstrækning af frivillige og med begrænsede økonomiske midler, og vores infrastruktur er dimensioneret til almindelig brugeradgang. Misbrug gennem aggressiv automatiseret dataindsamling kan true Platformens stabilitet og tilgængelighed for alle og vil medføre øjeblikkelig blokering af adgang
 
-- Kommerciel udnyttelse af Platformens data eller funktionalitet uden udtrykkelig skriftlig tilladelse fra Klimabevægelsen, medmindre andet følger af den specifikke licens, data stilles til rådighed under
+- Kommerciel udnyttelse af Platformens data eller funktionalitet uden udtrykkelig skriftlig tilladelse fra Bureau 10, medmindre andet følger af den specifikke licens, data stilles til rådighed under
 
 - At forsøge at opnå uautoriseret adgang til Platformens systemer eller netværk
 
@@ -48,7 +48,7 @@ Det er strengt forbudt at bruge Platformen eller dens data til følgende formål
 
 ### Særlige Dataudtræk til Almennyttige Formål
 
-Landbruget.dk ønsker at understøtte journalistik, forskning og andre almennyttige projekter, der er i tråd med Platformens overordnede formål. Hvis du har behov for et specifikt, større dataudtræk, som ikke hensigtsmæssigt kan opnås via almindelig brug af Platformen, og som tjener et klart almennyttigt formål, opfordrer vi dig til at rette henvendelse til os på kontakt@klimabev.dk. Beskriv venligst dit projekt og dine databehov. Vi vil da vurdere, om og hvordan vi inden for rammerne af vores tilgængelige ressourcer kan imødekomme din anmodning. Vi kan ikke garantere, at alle anmodninger kan efterkommes, men vi bestræber os på at være så hjælpsomme som muligt.
+Landbruget.dk ønsker at understøtte journalistik, forskning og andre almennyttige projekter, der er i tråd med Platformens overordnede formål. Hvis du har behov for et specifikt, større dataudtræk, som ikke hensigtsmæssigt kan opnås via almindelig brug af Platformen, og som tjener et klart almennyttigt formål, opfordrer vi dig til at rette henvendelse til os på hej@bureau10.dk. Beskriv venligst dit projekt og dine databehov. Vi vil da vurdere, om og hvordan vi inden for rammerne af vores tilgængelige ressourcer kan imødekomme din anmodning. Vi kan ikke garantere, at alle anmodninger kan efterkommes, men vi bestræber os på at være så hjælpsomme som muligt.
 
 ## 4. Data og Informationskvalitet
 
@@ -83,12 +83,12 @@ Alle viste tal på pesticidkortet.dk skal læses som et **modelleret estimat**, 
 
 ### Platformens Indhold og Software
 
-Platformen Landbruget.dk er udviklet på [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) principper. Den specifikke software kan være underlagt en open-source licens (f.eks. MIT, GPL), som vil være angivet i Platformens dokumentation eller kildekode-repository (f.eks. på GitHub). Al anden originalt indhold skabt af Klimabevægelsen for Platformen (tekster, design, logoer) tilhører Klimabevægelsen eller er licenseret hertil, medmindre andet er angivet.
+Platformen Landbruget.dk er udviklet på [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) principper. Den specifikke software kan være underlagt en open-source licens (f.eks. MIT, GPL), som vil være angivet i Platformens dokumentation eller kildekode-repository (f.eks. på GitHub). Al anden originalt indhold skabt af Bureau 10 for Platformen (tekster, design, logoer) tilhører Bureau 10 eller er licenseret hertil, medmindre andet er angivet.
 
 ### Data
 
 - De rådata, der hentes fra offentlige registre, bevarer den ophavsret eller de brugsvilkår, som den oprindelige offentlige kilde har fastsat.
-- Den måde, hvorpå Landbruget.dk systematiserer, kombinerer og præsenterer data, samt eventuelle afledte datasæt skabt af Landbruget.dk, stilles som udgangspunkt til rådighed under en Creative Commons Attribution 4.0 International (CC BY 4.0) licens, medmindre andet udtrykkeligt er angivet for specifikke datasæt. Dette betyder, at du frit kan dele og bearbejde disse materialer, forudsat at du krediterer Landbruget.dk/Klimabevægelsen korrekt, angiver et link til licensen, og indikerer om der er foretaget ændringer.
+- Den måde, hvorpå Landbruget.dk systematiserer, kombinerer og præsenterer data, samt eventuelle afledte datasæt skabt af Landbruget.dk, stilles som udgangspunkt til rådighed under en Creative Commons Attribution 4.0 International (CC BY 4.0) licens, medmindre andet udtrykkeligt er angivet for specifikke datasæt. Dette betyder, at du frit kan dele og bearbejde disse materialer, forudsat at du krediterer Landbruget.dk/Bureau 10 korrekt, angiver et link til licensen, og indikerer om der er foretaget ændringer.
 
 ## 6. Ansvarsfraskrivelse
 
@@ -96,7 +96,7 @@ Oplysningerne på Landbruget.dk ("Platformen") stilles til rådighed i offentlig
 
 Al information og alle data på Platformen leveres dog "som de er og forefindes" ("as is and as available") og uden nogen udtrykkelig eller underforstået garanti for deres fuldstændighed, nøjagtighed, pålidelighed eller egnethed til et specifikt formål. Fejl eller udeladelser kan forekomme, dels fordi data stammer fra eksterne kilder, som vi ikke har fuld kontrol over, dels på grund af den komplekse natur af dataindsamling, -behandling og -estimering.
 
-Brugen af Platformen sker på Brugerens eget ansvar. Klimabevægelsen kan ikke holdes ansvarlig for nogen form for direkte eller indirekte tab, skade eller ulempe, herunder men ikke begrænset til tab af data, driftstab, tabt fortjeneste eller lignende, der måtte opstå som følge af:
+Brugen af Platformen sker på Brugerens eget ansvar. Bureau 10 kan ikke holdes ansvarlig for nogen form for direkte eller indirekte tab, skade eller ulempe, herunder men ikke begrænset til tab af data, driftstab, tabt fortjeneste eller lignende, der måtte opstå som følge af:
 
 a. Din adgang til, brug af eller tillid til information fundet på Platformen.
 
@@ -108,7 +108,7 @@ d. Andre brugeres eller tredjeparters fortolkning, anvendelse, videreformidling 
 
 Du accepterer ved anvendelsen af Platformen, at brugen af Platformens information sker på dit eget ansvar. Vi opfordrer til kildekritik og til, at data fra Platformen, hvor det er relevant, sammenholdes med andre kilder. Enhver bruger er selv ansvarlig for at overholde gældende lovgivning og respektere andres rettigheder i forbindelse med sin brug og eventuelle videreformidling af information fra Platformen.
 
-Denne ansvarsfraskrivelse påvirker ikke Klimabevægelsens ansvar i henhold til ufravigelig dansk lovgivning.
+Denne ansvarsfraskrivelse påvirker ikke Bureau 10's ansvar i henhold til ufravigelig dansk lovgivning.
 
 ## 7. Links til Tredjepartssider
 
@@ -116,11 +116,11 @@ Platformen kan indeholde links til hjemmesider, der drives af tredjeparter. Diss
 
 ## 8. Ændringer til Brugsvilkår
 
-Klimabevægelsen forbeholder sig retten til at ændre disse Vilkår til enhver tid. Eventuelle ændringer træder i kraft umiddelbart efter offentliggørelse på Platformen. Den dato, hvor Vilkårene sidst blev opdateret, vil fremgå øverst. Din fortsatte brug af Platformen efter sådanne ændringer udgør din accept af de nye Vilkår. Vi opfordrer dig til jævnligt at gennemgå disse Vilkår.
+Bureau 10 forbeholder sig retten til at ændre disse Vilkår til enhver tid. Eventuelle ændringer træder i kraft umiddelbart efter offentliggørelse på Platformen. Den dato, hvor Vilkårene sidst blev opdateret, vil fremgå øverst. Din fortsatte brug af Platformen efter sådanne ændringer udgør din accept af de nye Vilkår. Vi opfordrer dig til jævnligt at gennemgå disse Vilkår.
 
 ## 9. Ophør af Brugsret
 
-Klimabevægelsen forbeholder sig retten til, uden varsel og efter eget skøn, at begrænse, suspendere eller permanent ophæve din adgang til og brug af hele eller dele af Platformen, hvis du overtræder disse Vilkår eller gældende lovgivning, eller hvis din brug på anden måde vurderes at være skadelig for Platformen, Klimabevægelsen eller andre brugere.
+Bureau 10 forbeholder sig retten til, uden varsel og efter eget skøn, at begrænse, suspendere eller permanent ophæve din adgang til og brug af hele eller dele af Platformen, hvis du overtræder disse Vilkår eller gældende lovgivning, eller hvis din brug på anden måde vurderes at være skadelig for Platformen, Bureau 10 eller andre brugere.
 
 ## 10. Lovvalg og Værneting
 
@@ -134,7 +134,6 @@ Hvis en bestemmelse i disse Vilkår findes at være ugyldig, ulovlig eller uden 
 
 Hvis du har spørgsmål vedrørende disse Brugsvilkår, bedes du kontakte:
 
-**Klimabevægelsen i Danmark**  
-Bragesgade 8 B, 2200 København N  
-CVR-nr.: 34364672  
-Email: kontakt@klimabev.dk
+**Bureau 10**  
+Nørre Søgade 37D, 1370 København K  
+Email: hej@bureau10.dk
