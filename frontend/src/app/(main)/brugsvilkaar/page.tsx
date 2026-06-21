@@ -8,7 +8,7 @@ import html from 'remark-html';
 export const metadata: Metadata = {
   title: 'Brugsvilkår - Landbruget.dk',
   description:
-    'Læs vores brugsvilkår for Landbruget.dk - et almennyttigt, open-source og non-profit initiativ drevet af Klimabevægelsen.',
+    'Læs vores brugsvilkår for Landbruget.dk - et almennyttigt, open-source og non-profit initiativ drevet af Bureau 10.',
 };
 
 async function getTermsContent() {
