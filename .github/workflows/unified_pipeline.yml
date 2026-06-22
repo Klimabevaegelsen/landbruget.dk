@@ -108,7 +108,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Normalize and validate R2 environment
         run: |
@@ -337,7 +337,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Normalize and validate R2 environment
         run: |
