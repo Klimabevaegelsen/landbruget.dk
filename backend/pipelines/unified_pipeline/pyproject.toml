@@ -25,7 +25,7 @@ dependencies = [
     "tenacity>=9.1.4",
     "tqdm>=4.68.3",
     "xmltodict>=1.0.4",
-    "zeep>=4.3.2",
+    "zeep>=4.3.3",
     "duckdb",
     "pyreadr>=0.5.6",
     "beautifulsoup4>=4.15.0",
