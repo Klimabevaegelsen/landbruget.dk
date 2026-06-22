@@ -9,7 +9,7 @@ authors = [
     { name = "Landbruget.dk Team" },
 ]
 dependencies = [
-    "zeep~=4.3.2",
+    "zeep~=4.3.3",
     "certifi~=2026.5.20",
     "lxml~=6.1.1",
     "xmlsec==1.3.17",
