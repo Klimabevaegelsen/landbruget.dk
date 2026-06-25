@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 
 import duckdb
+import pytest
 
+from exporters import homepage as homepage_module
 from exporters.homepage import HomepageExporter
 
 
@@ -372,3 +374,92 @@ def test_homepage_export_writes_audited_statistics_and_all_categories(tmp_path: 
     categories = {ranking["category"] for ranking in all_payload["rankings"]}
     assert categories == {"financial", "field", "environment", "worker", "animal"}
     assert len(all_payload["rankings"]) == 26
+
+
+def test_ranking_from_sql_returns_empty_ranking_for_zero_rows(tmp_path: Path) -> None:
+    conn = duckdb.connect(":memory:")
+    conn.execute("""
+        CREATE TABLE empty_companies (
+            cvr_number VARCHAR,
+            company_name VARCHAR,
+            municipality VARCHAR,
+            value DOUBLE
+        )
+    """)
+    exporter = _StubHomepageExporter(conn=conn, output_dir=str(tmp_path), path_map={})
+
+    ranking = exporter._ranking_from_sql(
+        sql="""
+            SELECT cvr_number, company_name, municipality, value
+            FROM empty_companies
+            WHERE false
+        """,
+        count_sql="SELECT count(*) FROM empty_companies",
+        id="empty_test_ranking",
+        title="Empty test ranking",
+        category="test",
+        description="A ranking with no rows.",
+        unit="companies",
+        format_fn=str,
+    )
+
+    assert isinstance(ranking, dict)
+    assert ranking["items"] == []
+    assert ranking["company_count"] == 0
+    assert ranking["status"] == "missing"
+    assert ranking["note"] == "No rows returned for this ranking."
+
+
+def test_wrap_rankings_raises_for_none_ranking(tmp_path: Path) -> None:
+    exporter = _StubHomepageExporter(
+        conn=duckdb.connect(":memory:"),
+        output_dir=str(tmp_path),
+        path_map={},
+    )
+
+    with pytest.raises(ValueError, match="index 1"):
+        exporter._wrap_rankings(
+            [
+                {
+                    "id": "valid",
+                    "items": [],
+                },
+                None,
+            ]
+        )
+
+
+def test_wrap_rankings_accepts_valid_rankings_and_warns_for_empty(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exporter = _StubHomepageExporter(
+        conn=duckdb.connect(":memory:"),
+        output_dir=str(tmp_path),
+        path_map={},
+    )
+    rankings = [
+        {
+            "id": "populated",
+            "items": [{"rank": 1, "value": 10}],
+        },
+        {
+            "id": "missing",
+            "items": [],
+            "status": "missing",
+        },
+    ]
+    warning_calls = []
+    monkeypatch.setattr(homepage_module.logger, "warning", lambda *args: warning_calls.append(args))
+
+    payload = exporter._wrap_rankings(rankings)
+
+    assert payload["rankings"] == rankings
+    assert payload["metadata"]["total_tables"] == 2
+    assert warning_calls == [
+        (
+            "Homepage export: %s rankings have no data: %s",
+            1,
+            ["missing"],
+        )
+    ]

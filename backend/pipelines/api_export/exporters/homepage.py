@@ -93,6 +93,33 @@ class HomepageExporter(BaseExporter):
         return stats
 
     def _wrap_rankings(self, rankings: list[dict]) -> dict:
+        invalid_rankings = []
+        empty_ranking_ids = []
+
+        for index, ranking in enumerate(rankings):
+            ranking_id = ranking.get("id") if isinstance(ranking, dict) else None
+            if not isinstance(ranking, dict) or not isinstance(ranking.get("items"), list):
+                label = f"index {index}"
+                if ranking_id:
+                    label = f"{label} ({ranking_id})"
+                invalid_rankings.append(label)
+                continue
+
+            if not ranking["items"] or ranking.get("status") in {"missing", "empty", "error"}:
+                empty_ranking_ids.append(ranking.get("id", f"index {index}"))
+
+        if invalid_rankings:
+            raise ValueError(
+                "Homepage export received invalid rankings: " + ", ".join(invalid_rankings)
+            )
+
+        if empty_ranking_ids:
+            logger.warning(
+                "Homepage export: %s rankings have no data: %s",
+                len(empty_ranking_ids),
+                empty_ranking_ids,
+            )
+
         return {
             "rankings": rankings,
             "metadata": {
@@ -1668,12 +1695,19 @@ class HomepageExporter(BaseExporter):
         description: str,
         unit: str,
         format_fn: Callable,
-    ) -> dict | None:
+    ) -> dict:
         """Generate a ranking from SQL that returns cvr_number, company_name, municipality, value."""
         try:
             rows = self.query_to_dicts(sql)
             if not rows:
-                return None
+                return self._empty_ranking(
+                    id=id,
+                    title=title,
+                    category=category,
+                    description=description,
+                    unit=unit,
+                    note="No rows returned for this ranking.",
+                )
             total = self.conn.execute(count_sql).fetchone()[0]
             return {
                 "id": id,
@@ -1696,7 +1730,14 @@ class HomepageExporter(BaseExporter):
             }
         except Exception:
             logger.exception(f"Failed to generate ranking: {id}")
-            return None
+            return self._empty_ranking(
+                id=id,
+                title=title,
+                category=category,
+                description=description,
+                unit=unit,
+                note="Ranking query failed.",
+            )
 
     def _empty_ranking(
         self,
