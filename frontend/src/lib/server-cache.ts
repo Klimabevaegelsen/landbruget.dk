@@ -8,6 +8,11 @@ import { unstable_cache } from 'next/cache';
 
 import { DATA_URL } from '@/lib/env';
 
+type HomepageRanking = {
+  items: { cvr_number: string; company_id?: string }[];
+  [k: string]: unknown;
+};
+
 async function fetchR2Json<T>(path: string): Promise<T> {
   const url = `${DATA_URL}${path}`;
   const response = await fetch(url);
@@ -33,19 +38,20 @@ export const getCachedHomepageRankings = unstable_cache(
   ) => {
     // Pre-computed JSON per category; limit/rankingId filtering done client-side
     const data = await fetchR2Json<{
-      rankings: {
-        items: { cvr_number: string; company_id?: string }[];
-        [k: string]: unknown;
-      }[];
+      rankings: (HomepageRanking | null)[];
       [k: string]: unknown;
     }>(`/homepage/rankings/${category}.json`);
+    const rankings = (data.rankings ?? []).filter(
+      (ranking): ranking is HomepageRanking =>
+        ranking != null && Array.isArray(ranking.items)
+    );
     // Map cvr_number to company_id for frontend compatibility
-    for (const ranking of data.rankings ?? []) {
-      for (const item of ranking.items ?? []) {
+    for (const ranking of rankings) {
+      for (const item of ranking.items) {
         item.company_id = item.cvr_number;
       }
     }
-    return data;
+    return { ...data, rankings };
   },
   ['homepage-rankings'],
   { revalidate: 604800, tags: ['homepage-rankings'] }
@@ -75,9 +81,10 @@ export const getCachedMunicipalityDetails = unstable_cache(
 export const getCachedPesticideAnalysis = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
     const municipality = searchParams.geography;
-    const path = municipality
-      ? `/pesticides/analysis/${encodeURIComponent(municipality)}.json`
-      : '/pesticides/analysis/index.json';
+    const isNational = !municipality || municipality === 'country';
+    const path = isNational
+      ? '/pesticides/analysis/index.json'
+      : `/pesticides/analysis/${encodeURIComponent(municipality)}.json`;
     return fetchR2Json(path);
   },
   ['pesticide-analysis'],
