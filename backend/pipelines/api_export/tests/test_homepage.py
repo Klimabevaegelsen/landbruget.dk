@@ -157,9 +157,9 @@ def test_homepage_export_writes_audited_statistics_and_all_categories(tmp_path: 
         """
         SELECT * FROM (
             VALUES
-                ('1001', '12345678', 120, '15'),
-                ('1002', '87654321', 80, '12')
-        ) AS t(chr, company_id, capacity, main_species_code)
+                ('1001', '12345678', 'Aarhus', 120, '15'),
+                ('1002', '87654321', 'Odense', 80, '12')
+        ) AS t(chr, company_id, municipality, capacity, main_species_code)
         """,
     )
     path_map[("gold/chr", "production_sites.parquet")] = production_sites
@@ -329,6 +329,7 @@ def test_homepage_export_writes_audited_statistics_and_all_categories(tmp_path: 
         "most_transported_cattle",
     }
     assert animal_rankings["largest_pig_production"]["items"]
+    assert animal_rankings["largest_pig_production"]["items"][0]["municipality"] == "Aarhus"
     assert animal_rankings["most_transported_pigs"]["items"][0]["value"] == 250
     assert animal_rankings["most_transported_cattle"]["items"][0]["value"] == 40
 
@@ -408,6 +409,33 @@ def test_ranking_from_sql_returns_empty_ranking_for_zero_rows(tmp_path: Path) ->
     assert ranking["company_count"] == 0
     assert ranking["status"] == "missing"
     assert ranking["note"] == "No rows returned for this ranking."
+
+
+def test_animal_ranking_uses_production_site_municipality_when_company_municipality_is_null(
+    tmp_path: Path,
+) -> None:
+    conn = duckdb.connect(":memory:")
+    conn.execute("""
+        CREATE TABLE companies AS
+        SELECT * FROM (
+            VALUES
+                ('12345678', 'Alpha Farm', NULL::VARCHAR)
+        ) AS t(cvr_number, company_name, current_municipality_name)
+    """)
+    conn.execute("""
+        CREATE TABLE production_sites AS
+        SELECT * FROM (
+            VALUES
+                ('1001', '12345678', 'Aarhus', 120, '15'),
+                ('1002', '12345678', 'Randers', 40, '15')
+        ) AS t(chr, company_id, municipality, capacity, main_species_code)
+    """)
+    exporter = _StubHomepageExporter(conn=conn, output_dir=str(tmp_path), path_map={})
+
+    rankings = {ranking["id"]: ranking for ranking in exporter._animal_rankings()}
+
+    assert rankings["largest_pig_production"]["items"][0]["municipality"] == "Aarhus"
+    assert rankings["most_production_sites"]["items"][0]["municipality"] == "Aarhus"
 
 
 def test_wrap_rankings_raises_for_none_ranking(tmp_path: Path) -> None:

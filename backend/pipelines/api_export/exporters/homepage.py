@@ -29,6 +29,7 @@ from common.logging_utils import get_pipeline_logger
 
 from exporters.animal import (
     create_company_animal_summary,
+    create_company_municipality_lookup,
     create_company_transport_summaries,
     create_production_sites,
     site_yearly_summary_count_query,
@@ -1611,8 +1612,30 @@ class HomepageExporter(BaseExporter):
         if "company_id" not in production_columns:
             return False
 
+        if not self._table_exists("company_municipality"):
+            create_company_municipality_lookup(self.conn)
+
+        combined_municipality_join = ""
+        site_municipality_join = ""
+        combined_municipality_expr = (
+            "COALESCE(NULLIF(TRIM(c.current_municipality_name), ''), 'Ukendt kommune')"
+        )
+        site_municipality_expr = combined_municipality_expr
+        if self._table_exists("company_municipality"):
+            combined_municipality_join = (
+                "LEFT JOIN company_municipality cm ON cm.cvr_number = combined.cvr_number"
+            )
+            site_municipality_join = (
+                "LEFT JOIN company_municipality cm ON cm.cvr_number = ps.company_id"
+            )
+            combined_municipality_expr = (
+                "COALESCE(NULLIF(TRIM(c.current_municipality_name), ''), "
+                "cm.municipality, 'Ukendt kommune')"
+            )
+            site_municipality_expr = combined_municipality_expr
+
         if self._table_exists("herd_sizes") and "main_species_code" in production_columns:
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE animal_species_summary AS
                 WITH site_capacity AS (
                     SELECT
@@ -1650,7 +1673,7 @@ class HomepageExporter(BaseExporter):
                 SELECT
                     combined.cvr_number,
                     c.company_name,
-                    c.current_municipality_name AS municipality,
+                    {combined_municipality_expr} AS municipality,
                     combined.species_code,
                     combined.site_capacity,
                     combined.registered_animals,
@@ -1661,16 +1684,17 @@ class HomepageExporter(BaseExporter):
                 FROM combined
                 JOIN companies c
                   ON combined.cvr_number = c.cvr_number::VARCHAR
+                {combined_municipality_join}
             """)
             return True
 
         if "main_species_code" in production_columns:
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE animal_species_summary AS
                 SELECT
                     ps.company_id AS cvr_number,
                     c.company_name,
-                    c.current_municipality_name AS municipality,
+                    {site_municipality_expr} AS municipality,
                     CAST(ps.main_species_code AS VARCHAR) AS species_code,
                     SUM(COALESCE(ps.capacity, 0)) AS site_capacity,
                     0 AS registered_animals,
@@ -1678,6 +1702,7 @@ class HomepageExporter(BaseExporter):
                 FROM production_sites ps
                 JOIN companies c
                   ON ps.company_id = c.cvr_number::VARCHAR
+                {site_municipality_join}
                 WHERE ps.main_species_code IS NOT NULL
                 GROUP BY 1, 2, 3, 4
             """)
