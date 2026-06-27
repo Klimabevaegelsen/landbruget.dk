@@ -1,6 +1,6 @@
 # Privatlivspolitik for Landbruget.dk
 
-_Sidst opdateret: 19. april 2026_
+_Sidst opdateret: 27. juni 2026_
 
 ---
 

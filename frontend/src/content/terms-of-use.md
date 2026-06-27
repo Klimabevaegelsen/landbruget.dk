@@ -1,6 +1,6 @@
 # Brugsvilkår for Landbruget.dk
 
-_Sidst opdateret: 19. april 2026_
+_Sidst opdateret: 27. juni 2026_
 
 ---
 
@@ -92,7 +92,7 @@ Platformen Landbruget.dk er udviklet på [open-source](https://github.com/klimab
 
 ## 6. Ansvarsfraskrivelse
 
-Oplysningerne på Landbruget.dk ("Platformen") stilles til rådighed i offentlighedens interesse med det formål at fremme oplysning, transparens og en informeret demokratisk debat om den danske landbrugssektor. Vi bestræber os på at sikre, at de data, der præsenteres på Platformen, er så korrekte og ajourførte som muligt. Dette inkluderer brug af anerkendte offentlige kilder, tydelig kildeangivelse og transparens omkring metoder for eventuelle beregnede eller estimerede data.
+Oplysningerne på Landbruget.dk ("Platformen") stilles til rådighed i offentlighedens interesse med det formål at fremme oplysning, transparens og en informeret offentlig debat om den danske landbrugssektor. Vi bestræber os på at sikre, at de data, der præsenteres på Platformen, er så korrekte og ajourførte som muligt. Dette inkluderer brug af anerkendte offentlige kilder, tydelig kildeangivelse og transparens omkring metoder for eventuelle beregnede eller estimerede data.
 
 Al information og alle data på Platformen leveres dog "som de er og forefindes" ("as is and as available") og uden nogen udtrykkelig eller underforstået garanti for deres fuldstændighed, nøjagtighed, pålidelighed eller egnethed til et specifikt formål. Fejl eller udeladelser kan forekomme, dels fordi data stammer fra eksterne kilder, som vi ikke har fuld kontrol over, dels på grund af den komplekse natur af dataindsamling, -behandling og -estimering.
 
