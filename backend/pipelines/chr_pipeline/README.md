@@ -64,10 +64,16 @@ This directory contains the bronze, silver, and gold layer processing scripts fo
    ```env
    FVM_USERNAME=your_username
    FVM_PASSWORD=your_password
+   FVM_CLIENT_ID=your_client_id_if_assigned
+   VETSTAT_CERTIFICATE=base64_encoded_single_line_p12_for_ci_or_cloud
    VETSTAT_CERTIFICATE_PASSWORD=your_certificate_password
+   VETSTAT_CERTIFICATE_PATH=/path/to/vetstat.p12
    ```
 
-3. Place your `vetstat.p12` certificate in the `chr_pipeline` directory.
+3. CHR/FVST SOAP requests require the MitID `.p12` certificate for WS-Security
+   signing. For local development, set `VETSTAT_CERTIFICATE_PATH` to your `.p12`
+   file. For GitHub Actions or Secret Manager, store `VETSTAT_CERTIFICATE` as
+   single-line base64 of the `.p12` file.
 
 4. Create data directories for the raw files:
    ```bash

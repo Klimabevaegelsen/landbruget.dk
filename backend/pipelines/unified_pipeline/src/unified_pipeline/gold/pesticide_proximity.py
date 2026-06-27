@@ -160,6 +160,14 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         # Get available years from disaggregated pesticide data
         if self.config.pesticide_year:
             # Matrix job mode: process only specified year
+            if self.config.pesticide_year not in datasets["disaggregation"]:
+                self.log.warning(
+                    f"No disaggregation data found for year {self.config.pesticide_year}; "
+                    "skipping pesticide proximity for this matrix year"
+                )
+                self.log.info("🏁 Pesticide proximity analysis completed successfully!")
+                return
+
             years = [self.config.pesticide_year]
             self.log.info(f"🎯 Matrix job mode: Processing only year {self.config.pesticide_year}")
         else:

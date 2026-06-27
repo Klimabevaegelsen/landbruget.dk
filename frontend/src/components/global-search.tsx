@@ -56,12 +56,12 @@ export function GlobalSearch({
         data-testid="global-search-input"
       />
       {searchSuggestions && (
-        <div className="flex items-center justify-center gap-x-2">
+        <div className="hidden max-w-full flex-wrap items-center justify-center gap-2 sm:flex">
           {searchSuggestions.map((suggestion) => (
             <Button
               key={suggestion}
               variant="secondary"
-              className="bg-background/75 hover:bg-background/90"
+              className="bg-background/75 hover:bg-background/90 max-w-full text-xs sm:text-sm"
               onClick={() => {
                 setSearch(suggestion);
                 setOpen(true);
@@ -161,6 +161,8 @@ function SearchOverlay({
           {tabs.map((tab, i) => (
             <div
               key={tab}
+              role="tab"
+              aria-selected={activeTab === i}
               onClick={() => setActiveTab(i)}
               className={cn(
                 'flex-1 cursor-pointer px-4 py-4 text-center text-xs hover:font-semibold',
@@ -174,15 +176,16 @@ function SearchOverlay({
           ))}
         </div>
         <div
-          className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg"
-          data-testid="search-results-container"
+          className="search-results bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg"
+          data-testid="search-results"
+          role="listbox"
         >
           {isLoading && (
             <div
               className="flex items-center justify-center p-8"
               data-testid="search-loading"
             >
-              <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
+              <div className="border-muted border-t-primary h-8 w-8 animate-spin rounded-full border-2"></div>
               <span className="text-muted-foreground ml-3 text-sm">
                 Søger...
               </span>
@@ -262,7 +265,9 @@ function SearchResultCard({
     <Link
       href={`/virksomhed/${result.id}`}
       onClick={handleClick}
-      data-testid="search-result-card"
+      data-testid="search-result"
+      role="option"
+      aria-selected={false}
     >
       <div className="group hover:bg-muted/50 flex items-center justify-between gap-2 p-4">
         <div className="flex items-center gap-2">

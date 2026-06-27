@@ -17,12 +17,21 @@ const visualTestPages = [
 ];
 
 test.describe('Visual Mobile UX Audit', () => {
+  const skipUnsupportedMobileContext = (browserName: string) => {
+    test.skip(
+      browserName === 'firefox',
+      'Firefox does not support Playwright mobile emulation contexts'
+    );
+  };
+
   // Test 1: Check for wide headers/footers and layout overflow
   for (const device of visualTestDevices) {
     for (const page of visualTestPages) {
       test(`${page.name} on ${device.name} - Layout width and overflow check`, async ({
         browser,
+        browserName,
       }) => {
+        skipUnsupportedMobileContext(browserName);
         const context = await browser.newContext(device.config);
         const browserPage = await context.newPage();
 
@@ -105,7 +114,9 @@ test.describe('Visual Mobile UX Audit', () => {
   // Test 2: Map component mobile usability
   test('Field Analysis - Map component mobile interaction', async ({
     browser,
+    browserName,
   }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 
@@ -185,7 +196,9 @@ test.describe('Visual Mobile UX Audit', () => {
   // Test 3: Component spacing and sizing issues
   test('Homepage - Component spacing and visual hierarchy', async ({
     browser,
+    browserName,
   }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 
@@ -247,7 +260,11 @@ test.describe('Visual Mobile UX Audit', () => {
   });
 
   // Test 4: Text readability and sizing
-  test('Cross-page text readability audit', async ({ browser }) => {
+  test('Cross-page text readability audit', async ({
+    browser,
+    browserName,
+  }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 
@@ -335,7 +352,8 @@ test.describe('Visual Mobile UX Audit', () => {
   });
 
   // Test 5: Interactive element visual feedback
-  test('Button and link visual states', async ({ browser }) => {
+  test('Button and link visual states', async ({ browser, browserName }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 
@@ -383,7 +401,8 @@ test.describe('Visual Mobile UX Audit', () => {
   });
 
   // Test 6: Performance visual metrics
-  test('Visual performance metrics', async ({ browser }) => {
+  test('Visual performance metrics', async ({ browser, browserName }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 

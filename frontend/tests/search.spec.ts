@@ -4,7 +4,33 @@
  * Tests search input, results, tab switching, and filtering
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+
+const visibleSearchInputSelector = [
+  '[data-testid="global-search-input"]:visible',
+  '[data-testid="search-overlay-input"]:visible',
+  '[data-testid="search-input"]:visible',
+  'input[type="search"]:visible',
+  'input[placeholder*="Søg"]:visible',
+].join(', ');
+
+async function getVisibleSearchInput(page: Page): Promise<Locator> {
+  const visibleInput = page.locator(visibleSearchInputSelector).first();
+  if (await visibleInput.isVisible().catch(() => false)) {
+    return visibleInput;
+  }
+
+  const mobileSearchButton = page.getByTestId('mobile-search-button');
+  if (await mobileSearchButton.isVisible().catch(() => false)) {
+    await mobileSearchButton.click();
+    const overlayInput = page.getByTestId('search-overlay-input');
+    await expect(overlayInput).toBeVisible();
+    return overlayInput;
+  }
+
+  await expect(visibleInput).toBeVisible();
+  return visibleInput;
+}
 
 test.describe('Search Functionality', () => {
   test.beforeEach(async ({ page }) => {
@@ -12,20 +38,13 @@ test.describe('Search Functionality', () => {
   });
 
   test('should display search input on homepage', async ({ page }) => {
-    // Look for search input
-    const searchInput = page.locator(
-      '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-    );
+    const searchInput = await getVisibleSearchInput(page);
 
-    await expect(searchInput.first()).toBeVisible();
+    await expect(searchInput).toBeVisible();
   });
 
   test('should accept text input in search field', async ({ page }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     await searchInput.fill('Arla');
 
@@ -34,11 +53,7 @@ test.describe('Search Functionality', () => {
   });
 
   test('should show search results when typing', async ({ page }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     // Type search query
     await searchInput.fill('test');
@@ -62,11 +77,7 @@ test.describe('Search Functionality', () => {
   test('should navigate to company when clicking search result', async ({
     page,
   }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     await searchInput.fill('Arla');
     await page.waitForTimeout(500);
@@ -89,11 +100,7 @@ test.describe('Search Functionality', () => {
   });
 
   test('should clear search input with clear button', async ({ page }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     await searchInput.fill('test query');
 
@@ -111,11 +118,7 @@ test.describe('Search Functionality', () => {
   });
 
   test('should handle empty search gracefully', async ({ page }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     await searchInput.fill('');
     await searchInput.press('Enter');
@@ -134,11 +137,7 @@ test.describe('Search Functionality', () => {
       await route.continue();
     });
 
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     await searchInput.fill('test');
 
@@ -153,11 +152,7 @@ test.describe('Search Functionality', () => {
   });
 
   test('should filter results by category tabs', async ({ page }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     await searchInput.fill('test');
     await page.waitForTimeout(500);
@@ -185,11 +180,7 @@ test.describe('Search Functionality', () => {
   });
 
   test('should highlight search terms in results', async ({ page }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     const searchTerm = 'test';
     await searchInput.fill(searchTerm);
@@ -207,11 +198,7 @@ test.describe('Search Functionality', () => {
   });
 
   test('should show recent searches if available', async ({ page }) => {
-    const searchInput = page
-      .locator(
-        '[data-testid="search-input"], input[type="search"], input[placeholder*="Søg"]'
-      )
-      .first();
+    const searchInput = await getVisibleSearchInput(page);
 
     // Perform a search
     await searchInput.fill('test search');
@@ -225,7 +212,8 @@ test.describe('Search Functionality', () => {
 
       // Go back and open search again
       await page.goBack();
-      await searchInput.click();
+      const reopenedSearchInput = await getVisibleSearchInput(page);
+      await reopenedSearchInput.click();
 
       // Look for recent searches
       const recentSearches = page.locator(

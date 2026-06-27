@@ -37,7 +37,7 @@ ENDPOINTS = {
     "test": "https://wstest.fvst.dk/service/SvineflytningWS?wsdl",
 }
 
-DEFAULT_CLIENT_ID = os.getenv("FVM_CLIENT_ID", "LandbrugsData")
+DEFAULT_CLIENT_ID = "LandbrugsData"
 MAX_DATE_RANGE_DAYS = 3  # API limit: maximum 3 days per request
 VERIFY_SSL = os.getenv("FVM_VERIFY_SSL", "true").lower() == "true"
 
@@ -138,7 +138,7 @@ def fetch_movements(client: Client, start_date: date, end_date: date) -> dict[st
         # Create the request object with the correct structure
         request = {
             "GLRCHRWSInfoInbound": {
-                "KlientId": DEFAULT_CLIENT_ID,
+                "KlientId": os.getenv("FVM_CLIENT_ID") or DEFAULT_CLIENT_ID,
                 "BrugerNavn": os.getenv("FVM_USERNAME"),
                 "SessionId": "1",
                 "IPAdresse": "",
@@ -152,6 +152,7 @@ def fetch_movements(client: Client, start_date: date, end_date: date) -> dict[st
 
         response = client.service.listAlleFlytningerIPerioden(request)
         response_info = serialize_object(response)
+        _raise_for_non_ok_response(response_info)
 
         # Add metadata with dates in ISO format
         return {
@@ -170,6 +171,40 @@ def fetch_movements(client: Client, start_date: date, end_date: date) -> dict[st
     except Exception as e:
         logger.error(f"Unexpected error fetching movements: {e!s}")
         raise
+
+
+def _raise_for_non_ok_response(response_info: dict[str, Any]) -> None:
+    """Raise when GLRCHR returns a service-level error inside a SOAP 200 response."""
+    outbound = response_info.get("GLRCHRWSInfoOutbound") or {}
+    status = outbound.get("ReturSvar")
+    if not status or str(status).upper() == "OK":
+        return
+
+    messages = outbound.get("GLRCHRSvarMeddelelser") or {}
+    message_items = messages.get("Meddelelse") if isinstance(messages, dict) else None
+    if not message_items:
+        message_items = []
+    if not isinstance(message_items, list):
+        message_items = [message_items]
+
+    formatted_messages = []
+    for message in message_items:
+        if not isinstance(message, dict):
+            continue
+        parts = [
+            str(part)
+            for part in [
+                message.get("MeddelelseType"),
+                message.get("MeddelelseKode"),
+                message.get("MeddelelseTekst"),
+            ]
+            if part
+        ]
+        if parts:
+            formatted_messages.append(" ".join(parts))
+
+    details = f" ({'; '.join(formatted_messages)})" if formatted_messages else ""
+    raise RuntimeError(f"Svineflytning service returned non-OK status {status}{details}")
 
 
 def fetch_all_movements(

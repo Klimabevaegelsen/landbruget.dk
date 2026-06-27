@@ -702,6 +702,7 @@ class SFTPToGCSTransferWithProcessing:
                     ssh.connect(
                         hostname=host_ip, port=22, username=username, pkey=private_key,
                         timeout=30, banner_timeout=15, auth_timeout=15,
+                        disabled_algorithms={'pubkeys': [], 'kex': [], 'keys': [], 'ciphers': [], 'macs': []},
                         allow_agent=False, look_for_keys=False
                     )
                     logger.info("SSH connection established successfully.")

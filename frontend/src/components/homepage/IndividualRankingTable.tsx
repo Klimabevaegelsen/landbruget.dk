@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DynamicDataTable } from '@/components/table/dynamic-table';
 import { ColumnDef } from '@tanstack/react-table';
@@ -136,16 +135,19 @@ export function IndividualRankingTable({
 
   if (loading) {
     return (
-      <Card className="w-full" data-testid={testId}>
-        <CardHeader className="card-header">
-          <CardTitle
-            className="text-lg font-semibold"
-            data-testid="ranking-title"
-          >
+      <div
+        className="bg-background text-foreground w-full rounded-lg border shadow-sm"
+        data-testid={testId}
+      >
+        <div
+          className="flex flex-col space-y-1.5 p-6"
+          data-testid="ranking-card-header"
+        >
+          <h3 className="text-lg font-semibold" data-testid="ranking-title">
             {title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="card-content">
+          </h3>
+        </div>
+        <div className="p-6 pt-0" data-testid="ranking-card-content">
           <div className="border-border rounded border">
             <table className="w-full">
               <tbody>
@@ -163,23 +165,26 @@ export function IndividualRankingTable({
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Card className="w-full" data-testid={testId}>
-        <CardHeader className="card-header">
-          <CardTitle
-            className="text-lg font-semibold"
-            data-testid="ranking-title"
-          >
+      <div
+        className="bg-background text-foreground w-full rounded-lg border shadow-sm"
+        data-testid={testId}
+      >
+        <div
+          className="flex flex-col space-y-1.5 p-6"
+          data-testid="ranking-card-header"
+        >
+          <h3 className="text-lg font-semibold" data-testid="ranking-title">
             {title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="card-content">
+          </h3>
+        </div>
+        <div className="p-6 pt-0" data-testid="ranking-card-content">
           <div className="py-8 text-center">
             <div className="border-destructive/20 bg-destructive/10 rounded-lg border p-4">
               <p className="text-destructive font-medium">
@@ -188,35 +193,41 @@ export function IndividualRankingTable({
               <p className="text-destructive/80 mt-1 text-sm">{error}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="relative w-full" data-testid={testId}>
+    <div
+      className="bg-background text-foreground relative w-full rounded-lg border shadow-sm"
+      data-testid={testId}
+    >
       {isNavigating && (
         <div
           className="bg-background/80 absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm"
           data-testid="company-loading"
         >
-          <div className="bg-card flex items-center gap-3 rounded-full border px-4 py-2 shadow-sm">
+          <div className="bg-background flex items-center gap-3 rounded-full border px-4 py-2 shadow-sm">
             <div className="border-primary h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
             <span className="text-sm font-medium">Indlaeser virksomhed...</span>
           </div>
         </div>
       )}
 
-      <CardHeader className="card-header pb-3">
+      <div
+        className="flex flex-col space-y-1.5 p-6 pb-3"
+        data-testid="ranking-card-header"
+      >
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <CardTitle
+              <h3
                 className="text-foreground text-lg font-semibold"
                 data-testid="ranking-title"
               >
                 {title}
-              </CardTitle>
+              </h3>
               {companyCount > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {companyCount} virksomheder
@@ -237,9 +248,9 @@ export function IndividualRankingTable({
         >
           {description}
         </p>
-      </CardHeader>
+      </div>
 
-      <CardContent className="card-content p-0">
+      <div className="p-0" data-testid="ranking-card-content">
         {data.length > 0 ? (
           <div className="px-6 pb-6">
             <DynamicDataTable
@@ -255,7 +266,7 @@ export function IndividualRankingTable({
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
