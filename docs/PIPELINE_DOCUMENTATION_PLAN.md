@@ -90,7 +90,7 @@ This document outlines the comprehensive plan to create thorough, journalist-fri
 **Priority**: MEDIUM - Important for regulatory compliance data
 **Data Sources Include**:
 - Fertilizer usage reports (Gødning)
-- Pesticide application records (Pesticider) 
+- Pesticide use-allocation records (Pesticider)
 - Worker safety incidents (Arbejdssikkerhed)
 - Transportation accidents (Transportulykker)
 - Stable fires (Staldebrande)

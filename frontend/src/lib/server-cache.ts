@@ -13,6 +13,46 @@ type HomepageRanking = {
   [k: string]: unknown;
 };
 
+type PesticideSummary = {
+  total_applications?: number;
+  total_use_allocations?: number;
+  [k: string]: unknown;
+};
+
+type PesticideTopItem = {
+  application_count?: number;
+  use_allocation_count?: number;
+  [k: string]: unknown;
+};
+
+type PesticideAnalysisData = {
+  summary?: PesticideSummary;
+  top_pesticides?: PesticideTopItem[];
+  [k: string]: unknown;
+};
+
+type PesticideCompanyDetailsData = {
+  summary?: PesticideSummary;
+  applications?: unknown[];
+  use_allocations?: unknown[];
+  yearly_breakdown?: Array<{
+    total_applications?: number;
+    total_use_allocations?: number;
+    applications_by_product?: Array<{
+      applications?: number;
+      use_allocations?: number;
+      [k: string]: unknown;
+    }>;
+    use_allocations_by_product?: Array<{
+      applications?: number;
+      use_allocations?: number;
+      [k: string]: unknown;
+    }>;
+    [k: string]: unknown;
+  }>;
+  [k: string]: unknown;
+};
+
 async function fetchR2Json<T>(path: string): Promise<T> {
   const url = `${DATA_URL}${path}`;
   const response = await fetch(url);
@@ -20,6 +60,31 @@ async function fetchR2Json<T>(path: string): Promise<T> {
     throw new Error(`R2 fetch failed: ${url} (${response.status})`);
   }
   return response.json() as Promise<T>;
+}
+
+function normalizePesticideAnalysis(data: PesticideAnalysisData) {
+  if (data.summary) {
+    data.summary.total_use_allocations ??= data.summary.total_applications;
+  }
+  for (const item of data.top_pesticides ?? []) {
+    item.use_allocation_count ??= item.application_count;
+  }
+  return data;
+}
+
+function normalizePesticideCompanyDetails(data: PesticideCompanyDetailsData) {
+  if (data.summary) {
+    data.summary.total_use_allocations ??= data.summary.total_applications;
+  }
+  data.use_allocations ??= data.applications;
+  for (const year of data.yearly_breakdown ?? []) {
+    year.total_use_allocations ??= year.total_applications;
+    year.use_allocations_by_product ??= year.applications_by_product;
+    for (const product of year.use_allocations_by_product ?? []) {
+      product.use_allocations ??= product.applications;
+    }
+  }
+  return data;
 }
 
 export const getCachedHomepageStatistics = unstable_cache(
@@ -85,7 +150,7 @@ export const getCachedPesticideAnalysis = unstable_cache(
     const path = isNational
       ? '/pesticides/analysis/index.json'
       : `/pesticides/analysis/${encodeURIComponent(municipality)}.json`;
-    return fetchR2Json(path);
+    return normalizePesticideAnalysis(await fetchR2Json(path));
   },
   ['pesticide-analysis'],
   { revalidate: 604800, tags: ['pesticide-analysis'] }
@@ -95,7 +160,9 @@ export const getCachedPesticideCompanyDetails = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
     const cvr = searchParams.cvr;
     if (!cvr) throw new Error('CVR required');
-    return fetchR2Json(`/pesticides/companies/${cvr}.json`);
+    return normalizePesticideCompanyDetails(
+      await fetchR2Json(`/pesticides/companies/${cvr}.json`)
+    );
   },
   ['pesticide-company-details'],
   { revalidate: 604800, tags: ['pesticide-company-details'] }

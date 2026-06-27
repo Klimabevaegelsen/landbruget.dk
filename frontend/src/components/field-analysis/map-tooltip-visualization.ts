@@ -17,7 +17,7 @@ export function pushVisualizationData(
       });
     if (properties.total_pesticide_applications)
       data.push({
-        label: 'Antal pesticider',
+        label: 'Antal allokeringer',
         value: properties.total_pesticide_applications,
       });
   } else if (visualizationMode === 'pfas_belastning') {
@@ -35,7 +35,7 @@ export function pushVisualizationData(
       });
     if (properties.pfas_applications)
       data.push({
-        label: 'PFAS pesticider',
+        label: 'PFAS-allokeringer',
         value: properties.pfas_applications,
       });
   } else if (visualizationMode === 'diquat_belastning') {
@@ -47,7 +47,7 @@ export function pushVisualizationData(
       });
     if (properties.diquat_applications)
       data.push({
-        label: 'Diquat pesticider',
+        label: 'Diquat-allokeringer',
         value: properties.diquat_applications,
       });
   } else if (visualizationMode === 'glyphosate_belastning') {
@@ -65,13 +65,13 @@ export function pushVisualizationData(
       });
     if (properties.glyphosate_applications)
       data.push({
-        label: 'Glyphosate pesticider',
+        label: 'Glyphosate-allokeringer',
         value: properties.glyphosate_applications,
       });
   } else if (visualizationMode === 'applications_count') {
     if (properties.total_pesticide_applications)
       data.push({
-        label: 'Total pesticider',
+        label: 'Total allokeringer',
         value: properties.total_pesticide_applications,
       });
     if (properties.unique_pesticide_products)

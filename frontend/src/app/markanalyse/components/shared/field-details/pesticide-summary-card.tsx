@@ -56,7 +56,7 @@ export function PesticideSummaryCard({ field }: PesticideSummaryCardProps) {
               field.total_pesticide_applications > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-primary/80 text-xs lg:text-sm">
-                    Total pesticider
+                    Total allokeringer
                   </span>
                   <span className="text-primary text-xs font-medium lg:text-sm">
                     {field.total_pesticide_applications}

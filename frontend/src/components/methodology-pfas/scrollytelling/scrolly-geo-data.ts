@@ -2,7 +2,7 @@
  * Real geo data for PFAS scrollytelling.
  * Catchments from R2: silver/grukos.
  * Fields from R2: silver/fvm_marker_2023 joined with gold/pesticide_disaggregation_2022_2023.
- * Only fields WITHIN catchment boundaries with verified fluorinated pesticide applications.
+ * Only fields WITHIN catchment boundaries with verified fluorinated pesticide use allocations.
  * Coordinates: WGS84 [lng, lat]
  */
 
@@ -65,7 +65,7 @@ export const SONDER_FELDING_CATCHMENT = {
   ],
 } as const;
 
-/** Fields within Skrydstrup catchment with fluorinated pesticide applications */
+/** Fields within Skrydstrup catchment with fluorinated pesticide use allocations */
 export const SKRYDSTRUP_FIELDS: GeoJSON.FeatureCollection = {
   type: 'FeatureCollection',
   features: [
@@ -285,7 +285,7 @@ export const SKRYDSTRUP_FIELDS: GeoJSON.FeatureCollection = {
   ],
 };
 
-/** Fields within Søndre-Felding catchment with fluorinated pesticide applications */
+/** Fields within Søndre-Felding catchment with fluorinated pesticide use allocations */
 export const SONDER_FELDING_FIELDS: GeoJSON.FeatureCollection = {
   type: 'FeatureCollection',
   features: [
