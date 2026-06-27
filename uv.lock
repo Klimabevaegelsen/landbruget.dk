@@ -13,7 +13,7 @@ supported-markers = [
 ]
 
 [options]
-exclude-newer = "2026-06-20T12:33:25.879058Z"
+exclude-newer = "2026-06-20T14:02:26.549545Z"
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
@@ -777,7 +777,7 @@ requires-dist = [
     { name = "pdfplumber", specifier = ">=0.11.9" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pydantic" },
-    { name = "pypdf", specifier = ">=6.14.0" },
+    { name = "pypdf", specifier = ">=6.10.2" },
     { name = "pytesseract", specifier = ">=0.3.13" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "s3fs" },
@@ -2960,7 +2960,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "coverage", specifier = ">=7.14.2" },
+    { name = "coverage", specifier = ">=7.14.1" },
     { name = "geopandas", specifier = ">=1.1.3" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "pytest", specifier = ">=9.1.1" },

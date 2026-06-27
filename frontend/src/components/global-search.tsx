@@ -37,7 +37,7 @@ export function GlobalSearch({
   return (
     <div
       className={cn(
-        'overflow relative flex w-full flex-col items-center gap-y-4',
+        'relative flex w-full flex-col items-center gap-y-4 overflow-hidden',
         className,
         parentOpen === false && 'hidden'
       )}

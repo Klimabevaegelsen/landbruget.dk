@@ -8,6 +8,51 @@ import { unstable_cache } from 'next/cache';
 
 import { DATA_URL } from '@/lib/env';
 
+type HomepageRanking = {
+  items: { cvr_number: string; company_id?: string }[];
+  [k: string]: unknown;
+};
+
+type PesticideSummary = {
+  total_applications?: number;
+  total_use_allocations?: number;
+  [k: string]: unknown;
+};
+
+type PesticideTopItem = {
+  application_count?: number;
+  use_allocation_count?: number;
+  [k: string]: unknown;
+};
+
+type PesticideAnalysisData = {
+  summary?: PesticideSummary;
+  top_pesticides?: PesticideTopItem[];
+  [k: string]: unknown;
+};
+
+type PesticideCompanyDetailsData = {
+  summary?: PesticideSummary;
+  applications?: unknown[];
+  use_allocations?: unknown[];
+  yearly_breakdown?: Array<{
+    total_applications?: number;
+    total_use_allocations?: number;
+    applications_by_product?: Array<{
+      applications?: number;
+      use_allocations?: number;
+      [k: string]: unknown;
+    }>;
+    use_allocations_by_product?: Array<{
+      applications?: number;
+      use_allocations?: number;
+      [k: string]: unknown;
+    }>;
+    [k: string]: unknown;
+  }>;
+  [k: string]: unknown;
+};
+
 async function fetchR2Json<T>(path: string): Promise<T> {
   const url = `${DATA_URL}${path}`;
   const response = await fetch(url);
@@ -32,8 +77,8 @@ type PesticideAnalysisResponse = {
   page: number;
   limit: number;
   filters: PesticideAnalysisFilters;
-  summary?: Record<string, unknown>;
-  top_pesticides?: unknown[];
+  summary?: PesticideSummary & Record<string, unknown>;
+  top_pesticides?: PesticideTopItem[];
   metadata?: Record<string, unknown>;
 };
 
@@ -64,6 +109,15 @@ function yearsFromPeriod(period: unknown): number[] {
   return Array.from(new Set(years ?? [])).sort((a, b) => b - a);
 }
 
+function asPesticideTopItems(value: unknown): PesticideTopItem[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is PesticideTopItem =>
+          item !== null && typeof item === 'object' && !Array.isArray(item)
+      )
+    : [];
+}
+
 function normalizePesticideAnalysis(
   rawData: unknown,
   searchParams: Record<string, string>
@@ -71,8 +125,15 @@ function normalizePesticideAnalysis(
   const data = asRecord(rawData);
   const existingFilters = asRecord(data.filters);
   const companies = Array.isArray(data.companies) ? data.companies : [];
-  const summary = asRecord(data.summary);
+  const summary = asRecord(data.summary) as PesticideSummary &
+    Record<string, unknown>;
   const metadata = asRecord(data.metadata);
+  const topPesticides = asPesticideTopItems(data.top_pesticides);
+
+  summary.total_use_allocations ??= summary.total_applications;
+  for (const item of topPesticides) {
+    item.use_allocation_count ??= item.application_count;
+  }
 
   const filters: PesticideAnalysisFilters = {
     available_years: Array.isArray(existingFilters.available_years)
@@ -112,11 +173,24 @@ function normalizePesticideAnalysis(
     limit: parsePositiveInt(data.limit ?? searchParams.limit, 50),
     filters,
     summary,
-    top_pesticides: Array.isArray(data.top_pesticides)
-      ? data.top_pesticides
-      : [],
+    top_pesticides: topPesticides,
     metadata,
   };
+}
+
+function normalizePesticideCompanyDetails(data: PesticideCompanyDetailsData) {
+  if (data.summary) {
+    data.summary.total_use_allocations ??= data.summary.total_applications;
+  }
+  data.use_allocations ??= data.applications;
+  for (const year of data.yearly_breakdown ?? []) {
+    year.total_use_allocations ??= year.total_applications;
+    year.use_allocations_by_product ??= year.applications_by_product;
+    for (const product of year.use_allocations_by_product ?? []) {
+      product.use_allocations ??= product.applications;
+    }
+  }
+  return data;
 }
 
 export const getCachedHomepageStatistics = unstable_cache(
@@ -135,19 +209,20 @@ export const getCachedHomepageRankings = unstable_cache(
   ) => {
     // Pre-computed JSON per category; limit/rankingId filtering done client-side
     const data = await fetchR2Json<{
-      rankings: {
-        items: { cvr_number: string; company_id?: string }[];
-        [k: string]: unknown;
-      }[];
+      rankings: (HomepageRanking | null)[];
       [k: string]: unknown;
     }>(`/homepage/rankings/${category}.json`);
+    const rankings = (data.rankings ?? []).filter(
+      (ranking): ranking is HomepageRanking =>
+        ranking != null && Array.isArray(ranking.items)
+    );
     // Map cvr_number to company_id for frontend compatibility
-    for (const ranking of data.rankings ?? []) {
-      for (const item of ranking.items ?? []) {
+    for (const ranking of rankings) {
+      for (const item of ranking.items) {
         item.company_id = item.cvr_number;
       }
     }
-    return data;
+    return { ...data, rankings };
   },
   ['homepage-rankings'],
   { revalidate: 604800, tags: ['homepage-rankings'] }
@@ -182,7 +257,7 @@ export const getCachedPesticideAnalysis = unstable_cache(
     const path = !isNational
       ? `/pesticides/analysis/${encodeURIComponent(municipality)}.json`
       : '/pesticides/analysis/index.json';
-    const data = await fetchR2Json(path);
+    const data = await fetchR2Json<PesticideAnalysisData>(path);
     return normalizePesticideAnalysis(data, searchParams);
   },
   ['pesticide-analysis'],
@@ -193,7 +268,9 @@ export const getCachedPesticideCompanyDetails = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
     const cvr = searchParams.cvr;
     if (!cvr) throw new Error('CVR required');
-    return fetchR2Json(`/pesticides/companies/${cvr}.json`);
+    return normalizePesticideCompanyDetails(
+      await fetchR2Json(`/pesticides/companies/${cvr}.json`)
+    );
   },
   ['pesticide-company-details'],
   { revalidate: 604800, tags: ['pesticide-company-details'] }
