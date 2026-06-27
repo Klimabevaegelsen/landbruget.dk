@@ -37,7 +37,7 @@ export function GlobalSearch({
   return (
     <div
       className={cn(
-        'overflow relative flex w-full flex-col items-center gap-y-4',
+        'relative flex w-full flex-col items-center gap-y-4 overflow-hidden',
         className,
         parentOpen === false && 'hidden'
       )}
@@ -56,7 +56,7 @@ export function GlobalSearch({
         data-testid="global-search-input"
       />
       {searchSuggestions && (
-        <div className="flex items-center justify-center gap-x-2">
+        <div className="flex max-w-full flex-wrap items-center justify-center gap-2">
           {searchSuggestions.map((suggestion) => (
             <Button
               key={suggestion}
