@@ -2664,8 +2664,8 @@ class CompanyProfilesExporter(BaseExporter):
             "title": "Pesticidbelastning",
             "kpis": [
                 {
-                    "key": "applications",
-                    "label": "Antal Udspredninger",
+                    "key": "use_allocations",
+                    "label": "Antal allokeringer",
                     "value": data["total_applications"],
                 },
                 {
@@ -2721,17 +2721,17 @@ class CompanyProfilesExporter(BaseExporter):
             "kpis": [
                 {
                     "key": "pfas_applications",
-                    "label": "PFAS-applikationer",
+                    "label": "PFAS-allokeringer",
                     "value": pfas_applications,
                 },
                 {
                     "key": "glyphosate_applications",
-                    "label": "Glyphosat-applikationer",
+                    "label": "Glyphosat-allokeringer",
                     "value": glyphosate_applications,
                 },
                 {
                     "key": "diquat_applications",
-                    "label": "Diquat-applikationer",
+                    "label": "Diquat-allokeringer",
                     "value": diquat_applications,
                 },
                 {

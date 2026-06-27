@@ -77,7 +77,7 @@ function ProductsSummary({ fieldData }: { fieldData: FieldAnalysisData }) {
       {fieldData.total_pesticide_applications &&
         fieldData.total_pesticide_applications > 0 && (
           <div className="flex items-center justify-between">
-            <span className="text-primary/80 text-xs">Total pesticider</span>
+            <span className="text-primary/80 text-xs">Total allokeringer</span>
             <span className="text-primary text-xs font-medium">
               {fieldData.total_pesticide_applications}
             </span>

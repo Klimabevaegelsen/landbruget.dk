@@ -98,14 +98,17 @@ def test_per_company_writes_expected_json(tmp_path: Path) -> None:
     assert company_one["municipality"] == "Aarhus"
     assert company_one["summary"] == {
         "total_applications": 2,
+        "total_use_allocations": 2,
         "unique_pesticides": 2,
         "total_treated_area_ha": 18.0,
         "total_dosage": 3.5,
     }
     assert [entry["pesticide_name"] for entry in company_one["applications"]] == ["Alpha", "Beta"]
+    assert company_one["use_allocations"] == company_one["applications"]
 
     company_two = json.loads((tmp_path / "pesticides" / "companies" / "22222222.json").read_text())
     assert company_two["summary"]["total_applications"] == 1
+    assert company_two["summary"]["total_use_allocations"] == 1
     assert [entry["pesticide_name"] for entry in company_two["applications"]] == ["Gamma"]
 
 
@@ -127,8 +130,13 @@ def test_per_company_matches_legacy_query_shape(tmp_path: Path) -> None:
         assert written["cvr_number"] == legacy_payload["cvr_number"]
         assert written["company_name"] == legacy_payload["company_name"]
         assert written["municipality"] == legacy_payload["municipality"]
-        assert written["summary"] == legacy_payload["summary"]
+        expected_summary = {
+            **legacy_payload["summary"],
+            "total_use_allocations": legacy_payload["summary"]["total_applications"],
+        }
+        assert written["summary"] == expected_summary
         assert written["applications"] == legacy_payload["applications"]
+        assert written["use_allocations"] == legacy_payload["applications"]
         assert written["metadata"]["period"] == legacy_payload["metadata"]["period"]
         assert isinstance(written["metadata"]["generated_at"], str)
         assert written["metadata"]["generated_at"]

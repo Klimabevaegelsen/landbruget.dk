@@ -22,7 +22,7 @@ interface CompanyListViewProps {
   onCompanySelect: (company: CompanySummary) => void;
   onPageChange: (page: number) => void;
   selectedCompany: CompanySummary | null;
-  sortBy: 'belastning' | 'applications' | 'area';
+  sortBy: 'belastning' | 'applications' | 'area'; // Legacy query value for use-allocation count.
   sortOrder: 'asc' | 'desc';
   onSortChange: (
     sortBy: 'belastning' | 'applications' | 'area',
@@ -119,7 +119,7 @@ export function CompanyListView({
           onClick={() => handleSort('applications')}
           className="flex items-center gap-1"
         >
-          Anvendelser
+          Allokeringer
           {getSortIcon('applications')}
         </Button>
         <Button
@@ -169,7 +169,9 @@ export function CompanyListView({
             <div className="text-muted-foreground mb-2 flex items-center gap-4 text-xs">
               <div className="flex items-center gap-1">
                 <Beaker className="h-3 w-3" />
-                {company.total_applications} anvendelser
+                {company.total_use_allocations ??
+                  company.total_applications}{' '}
+                allokeringer
               </div>
               <div title="Behandlet areal for seneste år med data">
                 {company.total_treated_area_ha.toLocaleString('da-DK', {

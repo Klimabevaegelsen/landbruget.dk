@@ -40,7 +40,7 @@ export function VisualizationModeSelect({
             Total pesticidbelastning
           </SelectItem>
           <SelectItem value="organic_status">Økologisk status</SelectItem>
-          <SelectItem value="applications_count">Antal pesticider</SelectItem>
+          <SelectItem value="applications_count">Antal allokeringer</SelectItem>
         </SelectGroup>
         <SelectGroup>
           <SelectLabel>Avanceret</SelectLabel>
