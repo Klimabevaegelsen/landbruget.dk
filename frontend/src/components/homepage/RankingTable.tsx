@@ -1,6 +1,5 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -112,25 +111,28 @@ export function RankingTableEnhanced({
     <Button
       variant="ghost"
       size="sm"
-      className="h-8 font-medium"
+      className="h-8 px-1 text-xs font-medium sm:px-3 sm:text-sm"
       onClick={() => handleSort(field)}
     >
       {children}
-      <ArrowUpDown className="ml-2 h-4 w-4" />
+      <ArrowUpDown className="ml-1 hidden h-4 w-4 sm:block" />
     </Button>
   );
 
   return (
-    <Card className="w-full" data-testid={testId}>
-      <CardHeader className="card-header pb-4">
+    <div
+      className="bg-background text-foreground w-full max-w-full overflow-hidden rounded-lg border shadow-sm"
+      data-testid={testId}
+    >
+      <div
+        className="flex flex-col space-y-1.5 p-6 pb-4"
+        data-testid="ranking-card-header"
+      >
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <CardTitle
-              className="text-lg font-semibold"
-              data-testid="ranking-title"
-            >
+            <h3 className="text-lg font-semibold" data-testid="ranking-title">
               {title}
-            </CardTitle>
+            </h3>
             <Badge
               variant="outline"
               className={`text-xs ${getCategoryColor(category)}`}
@@ -145,9 +147,9 @@ export function RankingTableEnhanced({
         >
           {description}
         </p>
-      </CardHeader>
+      </div>
 
-      <CardContent className="card-content p-0">
+      <div className="p-0" data-testid="ranking-card-content">
         {items.length === 0 ? (
           <div className="px-6 py-8 text-center">
             <p className="text-muted-foreground text-sm">
@@ -156,19 +158,19 @@ export function RankingTableEnhanced({
           </div>
         ) : (
           <>
-            <Table>
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow className="border-b hover:bg-transparent">
-                  <TableHead className="w-16">
+                  <TableHead className="w-12 px-2 sm:w-16 sm:px-4">
                     <SortButton field="rank">Rang</SortButton>
                   </TableHead>
-                  <TableHead>
+                  <TableHead className="px-2 sm:px-4">
                     <SortButton field="company_name">Virksomhed</SortButton>
                   </TableHead>
                   <TableHead className="hidden md:table-cell">
                     <SortButton field="municipality">Kommune</SortButton>
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="w-24 px-2 text-right sm:w-32 sm:px-4">
                     <SortButton field="value">Værdi</SortButton>
                   </TableHead>
                 </TableRow>
@@ -187,28 +189,37 @@ export function RankingTableEnhanced({
                         navigateToCompany(item.company_id, item.company_name)
                       }
                     >
-                      <TableCell className="font-medium">
+                      <TableCell className="w-12 px-2 py-3 font-medium sm:w-16 sm:px-4">
                         <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">
                           {item.rank}
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-2">
+                      <TableCell className="min-w-0 px-2 py-3 whitespace-normal sm:px-4">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex min-w-0 items-center space-x-2">
                             <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-                            <span
-                              className="truncate font-medium"
+                            <a
+                              href={`/company/${item.company_id}`}
+                              className="min-w-0 truncate font-medium"
                               data-testid="company-link"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                navigateToCompany(
+                                  item.company_id,
+                                  item.company_name
+                                );
+                              }}
                             >
                               {item.company_name}
-                            </span>
-                            <ExternalLink className="text-muted-foreground h-3 w-3" />
+                            </a>
+                            <ExternalLink className="text-muted-foreground hidden h-3 w-3 flex-shrink-0 sm:block" />
                             {isCached && (
-                              <Database className="text-primary h-3 w-3" />
+                              <Database className="text-primary hidden h-3 w-3 flex-shrink-0 sm:block" />
                             )}
                           </div>
-                          <div className="text-muted-foreground font-mono text-xs">
+                          <div className="text-muted-foreground truncate font-mono text-xs">
                             CVR: {item.cvr_number}
                           </div>
                         </div>
@@ -223,9 +234,9 @@ export function RankingTableEnhanced({
                         )}
                       </TableCell>
 
-                      <TableCell className="text-right">
+                      <TableCell className="w-24 px-2 py-3 text-right whitespace-normal sm:w-32 sm:px-4">
                         <div className="space-y-1">
-                          <div className="font-semibold">
+                          <div className="text-sm font-semibold break-words sm:text-base">
                             {item.formatted_value}
                           </div>
                           {item.year && (
@@ -272,7 +283,7 @@ export function RankingTableEnhanced({
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

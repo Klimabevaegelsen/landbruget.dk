@@ -29,6 +29,20 @@ export interface PesticideAnalysisResponse {
   total_count: number;
   page: number;
   limit: number;
+  summary?: {
+    total_applications?: number;
+    total_companies?: number;
+    unique_pesticides?: number;
+    total_municipalities?: number;
+    total_treated_area_ha?: number;
+    total_dosage?: number;
+  };
+  top_pesticides?: Array<{
+    name?: string;
+    application_count?: number;
+    total_dosage?: number;
+    total_area_ha?: number;
+  }>;
   filters: {
     available_years: number[];
     available_municipalities: string[];

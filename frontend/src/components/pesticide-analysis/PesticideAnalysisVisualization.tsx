@@ -43,9 +43,9 @@ export function PesticideAnalysisVisualization() {
             <h2 className="text-foreground text-sm font-semibold">Filtre</h2>
             <CompanyFilterPanel
               filters={filters}
-              availableYears={data?.filters.available_years || []}
+              availableYears={data?.filters?.available_years || []}
               availableMunicipalities={
-                data?.filters.available_municipalities || []
+                data?.filters?.available_municipalities || []
               }
               onFiltersChange={updateFilters}
             />

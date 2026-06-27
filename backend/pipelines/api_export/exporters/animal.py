@@ -350,6 +350,50 @@ def create_company_transport_summaries(conn) -> bool:
 
     raw_queries: list[str] = []
 
+    cattle_transport_query = None
+    if "cattle_movements" in tables:
+        columns = _table_columns(conn, "cattle_movements")
+        sender_column = (
+            "reporting_herd_number"
+            if "reporting_herd_number" in columns
+            else "sender_chr_number"
+            if "sender_chr_number" in columns
+            else None
+        )
+        animal_column = (
+            "animal_count"
+            if "animal_count" in columns
+            else "total_animals"
+            if "total_animals" in columns
+            else None
+        )
+        year_expr = _movement_year_expr(columns, table_alias="m")
+        movement_type_filter = (
+            "LOWER(CAST(m.movement_type AS VARCHAR)) = 'outgoing'"
+            if "movement_type" in columns
+            else "TRUE"
+        )
+        if sender_column and animal_column and year_expr:
+            cattle_transport_query = f"""
+                SELECT
+                    ps.company_id AS cvr_number,
+                    c.company_name,
+                    {municipality_expr} AS municipality,
+                    '12' AS species_code,
+                    {year_expr} AS year,
+                    SUM(COALESCE(m.{animal_column}, 0)) AS transported_animals,
+                    'cattle_movements' AS source_dataset
+                FROM cattle_movements m
+                JOIN production_sites ps
+                  ON TRY_CAST(ps.chr AS BIGINT) = TRY_CAST(m.{sender_column} AS BIGINT)
+                JOIN companies c
+                  ON ps.company_id = c.cvr_number::VARCHAR
+                {municipality_join}
+                WHERE {year_expr} IS NOT NULL
+                  AND {movement_type_filter}
+                GROUP BY 1, 2, 3, 4, 5, 7
+            """
+
     if "transportation_analysis" in tables:
         columns = _table_columns(conn, "transportation_analysis")
         sender_column = (
@@ -379,7 +423,8 @@ def create_company_transport_summaries(conn) -> bool:
                     {municipality_expr} AS municipality,
                     CAST(t.{species_column} AS VARCHAR) AS species_code,
                     {year_expr} AS year,
-                    SUM(COALESCE(t.{animal_column}, 0)) AS transported_animals
+                    SUM(COALESCE(t.{animal_column}, 0)) AS transported_animals,
+                    'transportation_analysis' AS source_dataset
                 FROM transportation_analysis t
                 JOIN production_sites ps
                   ON TRY_CAST(ps.chr AS BIGINT) = TRY_CAST(t.{sender_column} AS BIGINT)
@@ -388,7 +433,7 @@ def create_company_transport_summaries(conn) -> bool:
                 {municipality_join}
                 WHERE {deleted_filter}
                   AND {year_expr} IS NOT NULL
-                GROUP BY 1, 2, 3, 4, 5
+                GROUP BY 1, 2, 3, 4, 5, 7
             """)
 
     if not raw_queries and "pig_movements" in tables:
@@ -406,7 +451,8 @@ def create_company_transport_summaries(conn) -> bool:
                         {municipality_expr} AS municipality,
                         '15' AS species_code,
                         {year_expr} AS year,
-                        SUM(COALESCE(m.total_animals, 0)) AS transported_animals
+                        SUM(COALESCE(m.total_animals, 0)) AS transported_animals,
+                        'pig_movements' AS source_dataset
                     FROM pig_movements m
                     JOIN production_sites ps
                       ON TRY_CAST(ps.chr AS BIGINT) = TRY_CAST(m.sender_chr_number AS BIGINT)
@@ -415,44 +461,11 @@ def create_company_transport_summaries(conn) -> bool:
                     {municipality_join}
                     WHERE {deleted_filter}
                       AND {year_expr} IS NOT NULL
-                    GROUP BY 1, 2, 3, 4, 5
+                    GROUP BY 1, 2, 3, 4, 5, 7
                 """)
 
-    if "transportation_analysis" not in tables and "cattle_movements" in tables:
-        columns = _table_columns(conn, "cattle_movements")
-        sender_column = (
-            "reporting_herd_number"
-            if "reporting_herd_number" in columns
-            else "sender_chr_number"
-            if "sender_chr_number" in columns
-            else None
-        )
-        animal_column = (
-            "animal_count"
-            if "animal_count" in columns
-            else "total_animals"
-            if "total_animals" in columns
-            else None
-        )
-        year_expr = _movement_year_expr(columns, table_alias="m")
-        if sender_column and animal_column and year_expr:
-            raw_queries.append(f"""
-                SELECT
-                    ps.company_id AS cvr_number,
-                    c.company_name,
-                    {municipality_expr} AS municipality,
-                    '12' AS species_code,
-                    {year_expr} AS year,
-                    SUM(COALESCE(m.{animal_column}, 0)) AS transported_animals
-                FROM cattle_movements m
-                JOIN production_sites ps
-                  ON TRY_CAST(ps.chr AS BIGINT) = TRY_CAST(m.{sender_column} AS BIGINT)
-                JOIN companies c
-                  ON ps.company_id = c.cvr_number::VARCHAR
-                {municipality_join}
-                WHERE {year_expr} IS NOT NULL
-                GROUP BY 1, 2, 3, 4, 5
-            """)
+    if cattle_transport_query:
+        raw_queries.append(cattle_transport_query)
 
     if not raw_queries:
         logger.warning("Skipping transport summaries — no compatible movement tables found")
@@ -461,16 +474,31 @@ def create_company_transport_summaries(conn) -> bool:
     union_sql = " UNION ALL ".join(raw_queries)
     conn.execute(f"""
         CREATE OR REPLACE TABLE company_transport_species_yearly AS
+        WITH raw AS ({union_sql}),
+        source_preference AS (
+            SELECT
+                species_code,
+                BOOL_OR(source_dataset = 'cattle_movements') AS has_cattle_movements
+            FROM raw
+            GROUP BY 1
+        )
         SELECT
-            cvr_number,
-            company_name,
-            municipality,
-            species_code,
-            year,
-            SUM(transported_animals) AS transported_animals
-        FROM ({union_sql}) raw
-        WHERE species_code IS NOT NULL
-          AND year IS NOT NULL
+            raw.cvr_number,
+            raw.company_name,
+            raw.municipality,
+            raw.species_code,
+            raw.year,
+            SUM(raw.transported_animals) AS transported_animals
+        FROM raw
+        JOIN source_preference sp
+          ON raw.species_code = sp.species_code
+        WHERE raw.species_code IS NOT NULL
+          AND raw.year IS NOT NULL
+          AND NOT (
+              raw.species_code = '12'
+              AND sp.has_cattle_movements
+              AND raw.source_dataset <> 'cattle_movements'
+          )
         GROUP BY 1, 2, 3, 4, 5
         ORDER BY 1, 4, 5
     """)

@@ -237,8 +237,7 @@ def test_homepage_export_writes_audited_statistics_and_all_categories(tmp_path: 
         """
         SELECT * FROM (
             VALUES
-                (1001, DATE '2024-03-15', 250, 15, false),
-                (1002, DATE '2024-04-20', 40, 12, false)
+                (1001, DATE '2024-03-15', 250, 15, false)
         ) AS t(sender_chr_number, movement_date, total_animals, species_code, is_deleted)
         """,
     )
@@ -246,6 +245,19 @@ def test_homepage_export_writes_audited_statistics_and_all_categories(tmp_path: 
         transports
     )
     path_map[("silver/svineflytning/*/movements*.parquet", "__match__")] = transports
+
+    cattle_movements = _write_parquet(
+        fixture_conn,
+        tmp_path / "cattle_movements.parquet",
+        """
+        SELECT * FROM (
+            VALUES
+                (1002, DATE '2024-04-20', 'outgoing', 40),
+                (1002, DATE '2024-04-21', 'incoming', 999)
+        ) AS t(reporting_herd_number, movement_date, movement_type, animal_count)
+        """,
+    )
+    path_map[("silver/chr/*/chr_dyr_movement_summaries*.parquet", "__match__")] = cattle_movements
 
     vet_events = _write_parquet(
         fixture_conn,

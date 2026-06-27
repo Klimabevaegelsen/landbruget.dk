@@ -33,7 +33,7 @@ const analyserLinks = [
 
 function DesktopNav() {
   return (
-    <nav className="relative flex items-center gap-4">
+    <nav className="relative hidden items-center gap-4 lg:flex">
       <Menu as="div" className="relative">
         <MenuButton className="text-foreground data-hover:bg-muted/50 flex items-center px-4 py-3 text-sm font-medium bg-blend-multiply transition-colors hover:underline">
           Analyser
@@ -78,13 +78,15 @@ function MobileNavButton() {
 
 function MobileNavSearch({ onClick }: { onClick: () => void }) {
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
       className="hover:bg-muted/50 flex size-12 cursor-pointer items-center justify-center self-center rounded-lg transition-colors lg:hidden"
       aria-label="Open search"
+      data-testid="mobile-search-button"
     >
       <MagnifyingGlassIcon className="text-foreground size-6" />
-    </div>
+    </button>
   );
 }
 

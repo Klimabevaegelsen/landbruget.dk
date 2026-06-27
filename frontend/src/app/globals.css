@@ -146,6 +146,57 @@
   }
 }
 
+.homepage-hero-bg {
+  background-position: center;
+  background-size: cover;
+}
+
+.homepage-hero-bg-light {
+  background-image: image-set(
+    url('/images/hero/hero-mobile.webp') type('image/webp'),
+    url('/images/hero/hero-mobile.jpg') type('image/jpeg')
+  );
+}
+
+.homepage-hero-bg-dark {
+  background-image: image-set(
+    url('/images/hero/hero-mobile-dark.webp') type('image/webp'),
+    url('/images/hero/hero-mobile-dark.jpg') type('image/jpeg')
+  );
+}
+
+@media (min-width: 768px) {
+  .homepage-hero-bg-light {
+    background-image: image-set(
+      url('/images/hero/hero-tablet.webp') type('image/webp'),
+      url('/images/hero/hero-tablet.jpg') type('image/jpeg')
+    );
+  }
+
+  .homepage-hero-bg-dark {
+    background-image: image-set(
+      url('/images/hero/hero-tablet-dark.webp') type('image/webp'),
+      url('/images/hero/hero-tablet-dark.jpg') type('image/jpeg')
+    );
+  }
+}
+
+@media (min-width: 1024px) {
+  .homepage-hero-bg-light {
+    background-image: image-set(
+      url('/images/hero/hero-desktop.webp') type('image/webp'),
+      url('/images/hero/hero-desktop.jpg') type('image/jpeg')
+    );
+  }
+
+  .homepage-hero-bg-dark {
+    background-image: image-set(
+      url('/images/hero/hero-desktop-dark.webp') type('image/webp'),
+      url('/images/hero/hero-desktop-dark.jpg') type('image/jpeg')
+    );
+  }
+}
+
 /* Unified Color System - Tailwind v4 with proper dark mode */
 @theme {
   /* Core Layout Colors */
@@ -391,7 +442,7 @@
     }
 
     /* Specific component overrides */
-    .hero-section,
+    .homepage-hero,
     .nav-banner,
     .navbar,
     .footer,
@@ -455,7 +506,7 @@
     }
 
     /* Specific fixes for hero and other layout images */
-    .hero-section img {
+    .homepage-hero img {
       width: 100% !important;
       height: 100% !important;
       object-fit: cover !important;
@@ -564,7 +615,7 @@
       position: relative;
     }
 
-    .hero-section {
+    .homepage-hero {
       z-index: 30;
       position: relative;
     }

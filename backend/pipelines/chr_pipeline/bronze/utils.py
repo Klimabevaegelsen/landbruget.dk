@@ -1,5 +1,6 @@
 """Shared utilities for CHR pipeline bronze layer."""
 
+import os
 from datetime import date, datetime
 from typing import Any
 
@@ -25,7 +26,8 @@ except ImportError:
 # Set up logging
 logger = get_pipeline_logger("backend.pipelines.chr_pipeline.bronze.utils")
 
-# Default Client ID for SOAP requests
+# Default Client ID for SOAP requests. FVM_CLIENT_ID can override this when FVST
+# assigns an account-specific GLR client id.
 DEFAULT_CLIENT_ID = "LandbrugsData"
 
 
@@ -47,7 +49,7 @@ def create_base_request(
 
     return {
         "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
+        "KlientId": os.getenv("FVM_CLIENT_ID") or DEFAULT_CLIENT_ID,
         "SessionId": session_id,
         "IPAdresse": "",
         "TrackID": deterministic_track_id,
