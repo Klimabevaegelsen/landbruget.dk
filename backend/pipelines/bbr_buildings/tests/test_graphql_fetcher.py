@@ -16,7 +16,7 @@ def fetcher(tmp_path, monkeypatch):
     monkeypatch.setattr(BulkGeoDanmarkGraphQLFetcher, "__init__", lambda self, api_key: None)
     f = BulkGeoDanmarkGraphQLFetcher.__new__(BulkGeoDanmarkGraphQLFetcher)
     f.api_key = "test"
-    f.endpoint = "https://example.com"
+    f.endpoint_base = "https://example.com"
     f.output_dir = tmp_path
     f.conn = duckdb.connect()
     f.conn.execute("INSTALL spatial")
@@ -73,8 +73,8 @@ class TestCombineIntermediateFiles:
             fetcher._combine_intermediate_files()
 
     def test_no_intermediate_files(self, fetcher):
-        # Should return without error
-        fetcher._combine_intermediate_files()
+        with pytest.raises(RuntimeError, match="No intermediate GeoDanmark files were produced"):
+            fetcher._combine_intermediate_files()
 
     def test_cleans_up_all_files_including_skipped(self, fetcher):
         _create_valid_parquet(fetcher, "geodanmark_buildings_batch_0000.geoparquet")
@@ -155,6 +155,37 @@ class TestSaveIntermediateResults:
 
         # Restore real conn so __del__ doesn't error
         fetcher.conn = original_conn
+
+
+class TestGraphQLRequest:
+    def test_http_error_does_not_expose_api_key(self):
+        fetcher = BulkGeoDanmarkGraphQLFetcher.__new__(BulkGeoDanmarkGraphQLFetcher)
+        sentinel = "sentinel-value-123"
+        fetcher.api_key = sentinel
+        fetcher.endpoint_base = "https://example.com/graphql"
+
+        class FakeResponse:
+            ok = False
+            status_code = 404
+
+            def json(self):
+                return {}
+
+        class FakeSession:
+            last_params = None
+
+            def post(self, *_args, **kwargs):
+                self.last_params = kwargs.get("params")
+                return FakeResponse()
+
+        session = FakeSession()
+        fetcher.session = session
+
+        with pytest.raises(RuntimeError, match="HTTP 404") as exc_info:
+            fetcher._graphql_query("{ __typename }")
+
+        assert session.last_params == {"apiKey": sentinel}
+        assert sentinel not in str(exc_info.value)
 
 
 class TestSchemaConsistency:

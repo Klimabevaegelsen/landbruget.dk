@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -65,23 +66,29 @@ class TippecanoeRunner:
                 "--detect-shared-borders",
                 "--extend-zooms-if-still-dropping",
                 "--force",  # Overwrite existing files
-                geojson_path,
+                "--quiet",
             ]
 
             # Add additional arguments if provided
             if additional_args:
                 cmd.extend(additional_args)
+            cmd.append(geojson_path)
 
             logger.info(f"Running tippecanoe: {' '.join(cmd)}")
 
-            # Run tippecanoe
+            # Run tippecanoe while draining output incrementally. Heavy PMTiles
+            # jobs can emit enough progress output to OOM a hosted runner if
+            # stdout/stderr are buffered until process completion.
             process = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
-            stdout, stderr = await process.communicate()
+            stdout_task = asyncio.create_task(self._collect_stream_tail(process.stdout))
+            stderr_task = asyncio.create_task(self._collect_stream_tail(process.stderr))
+            return_code = await process.wait()
+            stdout_tail, stderr_tail = await asyncio.gather(stdout_task, stderr_task)
 
-            if process.returncode == 0:
+            if return_code == 0:
                 logger.info(f"Successfully generated PMTiles: {output_path}")
 
                 # Log file size
@@ -90,14 +97,32 @@ class TippecanoeRunner:
                     logger.info(f"PMTiles file size: {size_mb:.1f} MB")
 
                 return True
-            logger.error(f"Tippecanoe failed with return code {process.returncode}")
-            logger.error(f"stdout: {stdout.decode()}")
-            logger.error(f"stderr: {stderr.decode()}")
+            logger.error(f"Tippecanoe failed with return code {return_code}")
+            if stdout_tail:
+                logger.error("stdout tail:\n" + "\n".join(stdout_tail))
+            if stderr_tail:
+                logger.error("stderr tail:\n" + "\n".join(stderr_tail))
             return False
 
         except Exception as e:
             logger.error(f"Error running tippecanoe: {e}")
             return False
+
+    @staticmethod
+    async def _collect_stream_tail(stream: asyncio.StreamReader | None) -> list[str]:
+        """Drain a subprocess stream and keep only the last lines for diagnostics."""
+        if stream is None:
+            return []
+
+        lines: deque[str] = deque(maxlen=80)
+        while True:
+            line = await stream.readline()
+            if not line:
+                break
+            text = line.decode(errors="replace").rstrip()
+            if text:
+                lines.append(text)
+        return list(lines)
 
     def check_tippecanoe_available(self) -> bool:
         """Check if tippecanoe is available on the system.
@@ -163,76 +188,89 @@ class GeoJSONWriter:
             if properties_columns is None:
                 properties_columns = [col for col in columns if col != geometry_col]
 
-            # Stream and build GeoJSON features
-            features = []
             geometry_col_idx = columns.index(geometry_col)
+            property_indices = [
+                (prop_col, columns.index(prop_col))
+                for prop_col in properties_columns
+                if prop_col in columns
+            ]
 
             skipped_count = 0
             geometry_errors = []
             row_count = 0
+            features_written = 0
+            first_feature = None
 
-            # Stream rows instead of loading all into memory
-            while True:
-                batch = result.fetchmany(10000)  # Process in batches of 10k
-                if not batch:
-                    break
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write('{"type":"FeatureCollection","features":[')
+                first = True
 
-                for row in batch:
-                    row_count += 1
-                    # Parse geometry (assuming WKT format)
-                    geometry_wkt = row[geometry_col_idx]
-                    if not geometry_wkt:
-                        skipped_count += 1
-                        continue
+                # Stream rows instead of loading all features into memory.
+                while True:
+                    batch = result.fetchmany(10000)  # Process in batches of 10k
+                    if not batch:
+                        break
 
-                    # Handle geometry - could be WKT, WKB, or already GeoJSON string
-                    if isinstance(geometry_wkt, str):
-                        try:
-                            # Try to parse as GeoJSON first (from ST_AsGeoJSON)
-                            geometry = json.loads(geometry_wkt)
-                        except json.JSONDecodeError:
-                            # Fall back to WKT parsing
-                            geometry = GeoJSONWriter._wkt_to_geojson_geometry(geometry_wkt)
+                    for row in batch:
+                        row_count += 1
+                        # Parse geometry (assuming WKT format)
+                        geometry_wkt = row[geometry_col_idx]
+                        if not geometry_wkt:
+                            skipped_count += 1
+                            continue
+
+                        # Handle geometry - could be WKT, WKB, or already GeoJSON string
+                        if isinstance(geometry_wkt, str):
+                            try:
+                                # Try to parse as GeoJSON first (from ST_AsGeoJSON)
+                                geometry = json.loads(geometry_wkt)
+                            except json.JSONDecodeError:
+                                # Fall back to WKT parsing
+                                geometry = GeoJSONWriter._wkt_to_geojson_geometry(geometry_wkt)
+                                if not geometry and len(geometry_errors) < 5:
+                                    geometry_errors.append(
+                                        f"Failed to parse WKT: {str(geometry_wkt)[:100]}..."
+                                    )
+                        else:
+                            # Handle WKB or other formats
+                            geometry = GeoJSONWriter._wkt_to_geojson_geometry(str(geometry_wkt))
                             if not geometry and len(geometry_errors) < 5:
                                 geometry_errors.append(
-                                    f"Failed to parse WKT: {str(geometry_wkt)[:100]}..."
+                                    f"Failed to parse non-string geometry: {type(geometry_wkt)}"
                                 )
-                    else:
-                        # Handle WKB or other formats
-                        geometry = GeoJSONWriter._wkt_to_geojson_geometry(str(geometry_wkt))
-                        if not geometry and len(geometry_errors) < 5:
-                            geometry_errors.append(
-                                f"Failed to parse non-string geometry: {type(geometry_wkt)}"
-                            )
 
-                    if not geometry:
-                        skipped_count += 1
-                        continue
+                        if not geometry:
+                            skipped_count += 1
+                            continue
 
-                    # Build properties
-                    properties = {}
-                    for prop_col in properties_columns:
-                        if prop_col in columns:
-                            col_idx = columns.index(prop_col)
-                            properties[prop_col] = row[col_idx]
+                        properties = {
+                            prop_col: row[col_idx] for prop_col, col_idx in property_indices
+                        }
+                        feature = {
+                            "type": "Feature",
+                            "geometry": geometry,
+                            "properties": properties,
+                        }
+                        if first_feature is None:
+                            first_feature = feature
 
-                    # Create feature
-                    feature = {"type": "Feature", "geometry": geometry, "properties": properties}
-                    features.append(feature)
+                        if not first:
+                            f.write(",")
+                        json.dump(feature, f, separators=(",", ":"), ensure_ascii=False)
+                        first = False
+                        features_written += 1
+
+                f.write("]}")
 
             # Check if we got any features
-            if not features:
+            if features_written == 0:
                 logger.warning(f"Query returned no valid features for {output_path}")
                 return False
 
-            # Create GeoJSON FeatureCollection
-            geojson = {"type": "FeatureCollection", "features": features}
-
             # DEBUG: Log coordinate bounds from actual GeoJSON
-            if features:
+            if first_feature:
                 try:
                     # Get first feature's first coordinate to check format
-                    first_feature = features[0]
                     first_coord = first_feature["geometry"]["coordinates"]
                     if first_feature["geometry"]["type"] == "MultiPolygon":
                         sample_coord = first_coord[0][0][0]  # [lon, lat]
@@ -252,11 +290,12 @@ class GeoJSONWriter:
                 except Exception as coord_debug_error:
                     logger.warning(f"Could not debug GeoJSON coordinates: {coord_debug_error}")
 
-            # Write to file
-            with open(output_path, "w") as f:
-                json.dump(geojson, f, separators=(",", ":"))  # Compact format
+            if skipped_count:
+                logger.info(f"Skipped {skipped_count:,} rows without valid geometry")
+            if geometry_errors:
+                logger.warning(f"Geometry parse errors: {geometry_errors}")
 
-            logger.info(f"Wrote {len(features)} features to {output_path}")
+            logger.info(f"Wrote {features_written:,} features to {output_path}")
             return True
 
         except Exception as e:

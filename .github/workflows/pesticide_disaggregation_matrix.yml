@@ -47,7 +47,7 @@ jobs:
       year_count: ${{ steps.discover.outputs.year_count }}
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     - name: Set up Python
       uses: actions/setup-python@v6
@@ -200,7 +200,7 @@ jobs:
       SAVE_LOCAL: false
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     - name: Set up Python
       uses: actions/setup-python@v6

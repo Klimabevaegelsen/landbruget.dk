@@ -22,6 +22,7 @@ The module consists of two main components:
 
 import asyncio
 import json
+import logging
 from typing import Any, ClassVar
 
 from common.geometry_validator import (
@@ -32,7 +33,12 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
-from unified_pipeline.util.fvm_wfs_year_discovery import discover_fvm_layer_years
+from unified_pipeline.util.fvm_wfs_year_discovery import (
+    FVMWFSYearDiscoveryError,
+    discover_fvm_layer_years,
+)
+
+logger = logging.getLogger(__name__)
 
 # CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
 USE_UTM_PROCESSING = True
@@ -264,7 +270,29 @@ class FVMWFSSilverConfig(BaseJobConfig):
         """
         Discover live year ranges from WFS capabilities and apply required layers.
         """
-        discovered_years = discover_fvm_layer_years(self.wfs_url)
+        fallback_years = {
+            "markblokke": list(self.markblokke_years),
+            "marker": list(self.marker_years),
+            "smaabiotoper": list(self.smaabiotoper_years),
+        }
+        try:
+            discovered_years = discover_fvm_layer_years(self.wfs_url)
+        except FVMWFSYearDiscoveryError as exc:
+            logger.warning(
+                "FVM WFS live year discovery failed for %s; using configured fallback years: %s",
+                self.wfs_url,
+                exc,
+            )
+            discovered_years = fallback_years
+        else:
+            for layer_name, fallback in fallback_years.items():
+                if not discovered_years[layer_name]:
+                    logger.warning(
+                        "FVM WFS live year discovery returned no %s years; "
+                        "using configured fallback years",
+                        layer_name,
+                    )
+                    discovered_years[layer_name] = fallback
 
         required_layers = {
             "markblokke": require_markblokke,
@@ -2180,6 +2208,26 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         self.log.warning(f"Insufficient data for {layer_type} {year} - skipping")
                         continue
 
+                    subsidy_columns = self._get_table_columns(f"temp_subsidy_{year}")
+                    marker_columns = self._get_table_columns(f"temp_marker_{year}")
+                    if "cvr_number" not in subsidy_columns:
+                        self.log.warning(
+                            f"Skipping {layer_type} field_uuid enrichment for {year}: "
+                            "subsidy table has no cvr_number column. Field_id-only matching is "
+                            "ambiguous and could assign the wrong field_uuid."
+                        )
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
+                        continue
+                    if "cvr_number" not in marker_columns:
+                        self.log.warning(
+                            f"Skipping {layer_type} field_uuid enrichment for {year}: "
+                            "marker table has no cvr_number column."
+                        )
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
+                        continue
+
                     # Pre-filter to remove NULL geometries for optimal performance.
                     # cvr_number is required because the spatial join keys on it (see below).
                     self.conn.execute(f"""
@@ -2282,6 +2330,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 f"Subsidy field UUID enrichment had {len(per_year_failures)} "
                 f"per-year failure(s): {failure_summary}"
             )
+
+    def _get_table_columns(self, table_name: str) -> set[str]:
+        """Return DuckDB column names for an internal temporary table."""
+        return {row[0] for row in self.conn.execute(f"DESCRIBE {table_name}").fetchall()}
 
     async def _extract_and_save_cvr_numbers(self) -> None:
         """

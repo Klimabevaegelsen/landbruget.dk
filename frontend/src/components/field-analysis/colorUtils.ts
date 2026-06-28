@@ -58,9 +58,9 @@ export const COLOR_SCHEMES = {
     description: 'Unified scale for total pesticide data',
   },
   applications: {
-    name: 'Applications',
+    name: 'Use allocations',
     colors: UNIFIED_PESTICIDE_COLORS,
-    description: 'Unified scale for pesticide applications',
+    description: 'Unified scale for pesticide use allocations',
   },
   organic: {
     name: 'Organic',
@@ -350,7 +350,7 @@ export function formatVisualizationValue(
 export function getUnitLabel(mode: VisualizationMode, unit: ColorUnit): string {
   if (mode === 'organic_status') return 'Status';
   if (mode === 'area_size') return 'Hektar';
-  if (unit === 'applications') return 'Applikationer';
+  if (unit === 'applications') return 'Allokeringer';
   if (unit === 'per_hectare') {
     if (mode.includes('grams')) return 'g/ha';
     return 'Belastning/ha';

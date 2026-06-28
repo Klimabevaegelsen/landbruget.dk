@@ -22,7 +22,7 @@ interface CompanyListViewProps {
   onCompanySelect: (company: CompanySummary) => void;
   onPageChange: (page: number) => void;
   selectedCompany: CompanySummary | null;
-  sortBy: 'belastning' | 'applications' | 'area';
+  sortBy: 'belastning' | 'applications' | 'area'; // Legacy query value for use-allocation count.
   sortOrder: 'asc' | 'desc';
   onSortChange: (
     sortBy: 'belastning' | 'applications' | 'area',
@@ -42,8 +42,8 @@ export function CompanyListView({
   sortOrder,
   onSortChange,
 }: CompanyListViewProps) {
-  const totalPages = Math.ceil(totalCount / limit);
-  const startResult = (currentPage - 1) * limit + 1;
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  const startResult = totalCount === 0 ? 0 : (currentPage - 1) * limit + 1;
   const endResult = Math.min(currentPage * limit, totalCount);
 
   const handleSort = (newSortBy: 'belastning' | 'applications' | 'area') => {
@@ -119,7 +119,7 @@ export function CompanyListView({
           onClick={() => handleSort('applications')}
           className="flex items-center gap-1"
         >
-          Anvendelser
+          Allokeringer
           {getSortIcon('applications')}
         </Button>
         <Button
@@ -135,98 +135,112 @@ export function CompanyListView({
 
       {/* Company List */}
       <div className="space-y-2">
-        {companies.map((company) => (
-          <div
-            key={company.cvr_number}
-            className={cn(
-              'cursor-pointer rounded-lg border p-4 transition-all hover:shadow-md',
-              selectedCompany?.cvr_number === company.cvr_number
-                ? 'border-primary bg-primary/10'
-                : 'border-border hover:border-border/80'
-            )}
-            onClick={() => onCompanySelect(company)}
-          >
-            <div className="mb-2 flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <Building2 className="text-muted-foreground h-4 w-4" />
-                <div>
-                  <h3 className="text-foreground text-sm font-semibold">
-                    {company.company_name || `Virksomhed ${company.cvr_number}`}
-                  </h3>
-                  <p className="text-muted-foreground text-xs">
-                    CVR: {company.cvr_number}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-primary text-lg font-bold">
-                  {formatBelastning(company.total_belastning)}
-                </div>
-                <div className="text-muted-foreground text-xs">Belastning</div>
-              </div>
-            </div>
-
-            <div className="text-muted-foreground mb-2 flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-1">
-                <Beaker className="h-3 w-3" />
-                {company.total_applications} anvendelser
-              </div>
-              <div title="Behandlet areal for seneste år med data">
-                {company.total_treated_area_ha.toLocaleString('da-DK', {
-                  maximumFractionDigits: 0,
-                })}{' '}
-                ha (seneste år)
-              </div>
-            </div>
-
-            {/* Chemical Badges */}
-            <div className="flex flex-wrap gap-1">
-              {getChemicalBadges(company)}
-            </div>
-
-            {/* Years Active */}
-            {company.years_active.length > 0 && (
-              <div className="text-muted-foreground mt-2 text-xs">
-                Aktiv: {company.years_active.sort((a, b) => b - a).join(', ')}
-              </div>
-            )}
+        {companies.length === 0 ? (
+          <div className="bg-muted/40 text-muted-foreground rounded-lg border px-4 py-8 text-center text-sm">
+            Den aktuelle eksport indeholder kun aggregerede pesticidtal for den
+            valgte geografi.
           </div>
-        ))}
+        ) : (
+          companies.map((company) => (
+            <div
+              key={company.cvr_number}
+              className={cn(
+                'cursor-pointer rounded-lg border p-4 transition-all hover:shadow-md',
+                selectedCompany?.cvr_number === company.cvr_number
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border hover:border-border/80'
+              )}
+              onClick={() => onCompanySelect(company)}
+            >
+              <div className="mb-2 flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="text-muted-foreground h-4 w-4" />
+                  <div>
+                    <h3 className="text-foreground text-sm font-semibold">
+                      {company.company_name ||
+                        `Virksomhed ${company.cvr_number}`}
+                    </h3>
+                    <p className="text-muted-foreground text-xs">
+                      CVR: {company.cvr_number}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-primary text-lg font-bold">
+                    {formatBelastning(company.total_belastning)}
+                  </div>
+                  <div className="text-muted-foreground text-xs">
+                    Belastning
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-muted-foreground mb-2 flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1">
+                  <Beaker className="h-3 w-3" />
+                  {company.total_use_allocations ??
+                    company.total_applications}{' '}
+                  allokeringer
+                </div>
+                <div title="Behandlet areal for seneste år med data">
+                  {company.total_treated_area_ha.toLocaleString('da-DK', {
+                    maximumFractionDigits: 0,
+                  })}{' '}
+                  ha (seneste år)
+                </div>
+              </div>
+
+              {/* Chemical Badges */}
+              <div className="flex flex-wrap gap-1">
+                {getChemicalBadges(company)}
+              </div>
+
+              {/* Years Active */}
+              {company.years_active.length > 0 && (
+                <div className="text-muted-foreground mt-2 text-xs">
+                  Aktiv: {company.years_active.sort((a, b) => b - a).join(', ')}
+                </div>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between border-t pt-4">
-        <div className="text-muted-foreground text-sm">
-          Viser {startResult}-{endResult} af {totalCount.toLocaleString()}{' '}
-          virksomheder
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between border-t pt-4">
+          <div className="text-muted-foreground text-sm">
+            Viser {startResult}-{endResult} af {totalCount.toLocaleString()}{' '}
+            virksomheder
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Forrige
+            </Button>
+
+            <span className="px-2 text-sm">
+              Side {currentPage} af {totalPages}
+            </span>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+            >
+              Næste
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onPageChange(currentPage - 1)}
-            disabled={currentPage <= 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Forrige
-          </Button>
-
-          <span className="px-2 text-sm">
-            Side {currentPage} af {totalPages}
-          </span>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage >= totalPages}
-          >
-            Næste
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

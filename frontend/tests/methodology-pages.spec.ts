@@ -6,6 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { expectResponsiveNavigation } from './helpers/navigation';
 
 const METHODOLOGY_PAGES = [
   {
@@ -56,7 +57,7 @@ for (const { path: pagePath, testId, heading } of METHODOLOGY_PAGES) {
 
     test('should have navigation visible', async ({ page }) => {
       await page.goto(pagePath);
-      await expect(page.locator('nav')).toBeVisible();
+      await expectResponsiveNavigation(page);
     });
 
     test('should have no critical console errors', async ({ page }) => {

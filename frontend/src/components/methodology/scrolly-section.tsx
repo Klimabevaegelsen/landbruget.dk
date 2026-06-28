@@ -54,9 +54,16 @@ export function ScrollySection({
               return (
                 <Step key={step.id} data={step.id}>
                   <div
-                    className="mb-48 min-h-[40dvh]"
+                    className="relative mb-48 min-h-[40dvh]"
                     data-testid={`scrolly-step-${step.id}`}
                   >
+                    {step.id === 'regneark' && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0"
+                        data-testid="scrolly-step-record"
+                      />
+                    )}
                     <motion.div
                       animate={{
                         opacity: isActive ? 1 : 0.15,

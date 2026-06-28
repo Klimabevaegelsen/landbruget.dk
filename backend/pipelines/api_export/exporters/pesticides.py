@@ -193,6 +193,7 @@ class PesticidesExporter(BaseExporter):
             """)
             if not summary:
                 return None
+            summary[0]["total_use_allocations"] = summary[0].get("total_applications")
 
             top_pesticides = self.query_to_dicts("""
                 SELECT
@@ -206,6 +207,8 @@ class PesticidesExporter(BaseExporter):
                 ORDER BY application_count DESC
                 LIMIT 20
             """)
+            for row in top_pesticides:
+                row["use_allocation_count"] = row.get("application_count")
 
             return {
                 "summary": summary[0],
@@ -264,6 +267,12 @@ class PesticidesExporter(BaseExporter):
                         "period": period,
                     },
                 }
+                if results[muni]["summary"]:
+                    results[muni]["summary"]["total_use_allocations"] = results[muni][
+                        "summary"
+                    ].get("total_applications")
+                for item in results[muni]["top_pesticides"]:
+                    item["use_allocation_count"] = item.get("application_count")
 
             logger.info(f"Generated {len(results)} municipality pesticide files")
         except Exception:
@@ -296,6 +305,7 @@ class PesticidesExporter(BaseExporter):
                     GROUP BY cvr_number
                 """):
                 cvr = str(row.pop("cvr_number"))
+                row["total_use_allocations"] = row.get("total_applications")
                 summaries[cvr] = row
             details_by_cvr: dict[str, list[dict]] = {}
             for row in self.query_to_dicts("""
@@ -316,13 +326,17 @@ class PesticidesExporter(BaseExporter):
             for comp in companies:
                 cvr = str(comp["cvr_number"])
 
+                use_allocations = details_by_cvr.get(cvr, [])
                 self.write_json(
                     {
                         "cvr_number": cvr,
                         "company_name": comp.get("company_name"),
                         "municipality": comp.get("municipality"),
                         "summary": summaries.get(cvr, {}),
-                        "applications": details_by_cvr.get(cvr, []),
+                        "use_allocations": use_allocations,
+                        # Backward-compatible legacy key. These rows are derived
+                        # cumulative-use allocations, not spray events.
+                        "applications": use_allocations,
                         "metadata": {
                             "generated_at": datetime.now(UTC).isoformat(),
                             "period": period,

@@ -2,6 +2,7 @@
 """CHR Pipeline for fetching and processing data."""
 
 import concurrent.futures
+import json
 import logging
 import os
 import time
@@ -11,8 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import click
+import s3fs
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
+from zeep.helpers import serialize_object
 
 from bronze.auth import (
     create_besaetning_client,
@@ -309,26 +312,176 @@ def fetch_stamdata(
     # Save the raw response to the export buffer
     save_raw_data(raw_response=response, data_type="stamdata_species_usage", identifier="all")
 
+    outbound_status = _chr_outbound_status(response)
+    outbound_messages = _chr_outbound_messages(response)
+    combinations = _parse_stamdata_combinations(response, test_species_codes)
+    if not combinations:
+        if outbound_status and outbound_status.upper() != "OK":
+            logger.error(
+                "Live Stamdata returned non-OK CHR status %s%s; not using cached fallback",
+                outbound_status,
+                f" ({'; '.join(outbound_messages)})" if outbound_messages else "",
+            )
+            return []
+
+        logger.warning(
+            "Live Stamdata returned %s with no species/usage combinations%s. "
+            "This response is not treated as proof of successful authorization; "
+            "trying latest cached R2 stamdata.",
+            outbound_status or "no CHR status",
+            f" ({'; '.join(outbound_messages)})" if outbound_messages else "",
+        )
+        combinations = _load_cached_stamdata_combinations(test_species_codes)
+
+    logger.info(f"Found {len(combinations)} valid combinations")
+    return combinations
+
+
+def _parse_stamdata_combinations(
+    raw_response: Any, test_species_codes: list[int] | None = None
+) -> list[dict]:
+    """Parse CHR stamdata from either a Zeep response or exported cached JSON."""
+    response_items = _stamdata_response_items(raw_response)
+    if not response_items:
+        return []
+
     combinations = []
-    for combo in response.Response if isinstance(response.Response, list) else [response.Response]:
+    for combo in response_items:
         try:
-            species_code = int(getattr(combo, "DyreArtKode", 0))
+            species_code = int(_stamdata_value(combo, "DyreArtKode", 0))
             if test_species_codes and species_code not in test_species_codes:
                 continue
 
             combinations.append(
                 {
                     "species_code": species_code,
-                    "usage_code": int(getattr(combo, "BrugsArtKode", 0)),
-                    "species_text": str(getattr(combo, "DyreArtTekst", "")),
-                    "usage_text": str(getattr(combo, "BrugsArtTekst", "")),
+                    "usage_code": int(_stamdata_value(combo, "BrugsArtKode", 0)),
+                    "species_text": str(_stamdata_value(combo, "DyreArtTekst", "")),
+                    "usage_text": str(_stamdata_value(combo, "BrugsArtTekst", "")),
                 }
             )
-        except (ValueError, AttributeError) as e:
+        except (ValueError, TypeError, AttributeError) as e:
             logger.warning(f"Skipping invalid combination: {e}")
 
-    logger.info(f"Found {len(combinations)} valid combinations")
     return combinations
+
+
+def _stamdata_response_items(raw_response: Any) -> list[Any]:
+    serialized = serialize_object(raw_response)
+
+    if isinstance(serialized, dict):
+        response_items = serialized.get("Response") or []
+    elif isinstance(serialized, list):
+        if len(serialized) == 1 and isinstance(serialized[0], dict) and "Response" in serialized[0]:
+            response_items = serialized[0].get("Response") or []
+        else:
+            response_items = serialized
+    else:
+        response_items = getattr(raw_response, "Response", [])
+
+    if not response_items:
+        return []
+    if isinstance(response_items, list):
+        return response_items
+    return [response_items]
+
+
+def _stamdata_value(combo: Any, key: str, default: Any) -> Any:
+    if isinstance(combo, dict):
+        return combo.get(key, default)
+    return getattr(combo, key, default)
+
+
+def _chr_outbound_status(raw_response: Any) -> str | None:
+    outbound = _chr_outbound(raw_response)
+    status = _outbound_value(outbound, "ReturSvar")
+    return str(status) if status is not None else None
+
+
+def _chr_outbound_messages(raw_response: Any) -> list[str]:
+    outbound = _chr_outbound(raw_response)
+    messages = _outbound_value(outbound, "GLRCHRSvarMeddelelser")
+    if not messages:
+        return []
+
+    serialized_messages = serialize_object(messages, dict)
+    if isinstance(serialized_messages, dict):
+        message_items = serialized_messages.get("Meddelelse") or []
+    else:
+        message_items = getattr(serialized_messages, "Meddelelse", [])
+
+    if not message_items:
+        return []
+    if not isinstance(message_items, list):
+        message_items = [message_items]
+
+    formatted = []
+    for message in message_items:
+        message_type = _outbound_value(message, "MeddelelseType")
+        message_code = _outbound_value(message, "MeddelelseKode")
+        message_text = _outbound_value(message, "MeddelelseTekst")
+        parts = [str(part) for part in [message_type, message_code, message_text] if part]
+        if parts:
+            formatted.append(" ".join(parts))
+    return formatted
+
+
+def _chr_outbound(raw_response: Any) -> Any | None:
+    serialized = serialize_object(raw_response, dict)
+
+    if isinstance(serialized, dict):
+        return serialized.get("GLRCHRWSInfoOutbound")
+    if isinstance(serialized, list):
+        for item in serialized:
+            if isinstance(item, dict) and "GLRCHRWSInfoOutbound" in item:
+                return item.get("GLRCHRWSInfoOutbound")
+    return getattr(serialized, "GLRCHRWSInfoOutbound", None)
+
+
+def _outbound_value(container: Any, key: str) -> Any:
+    if isinstance(container, dict):
+        return container.get(key)
+    return getattr(container, key, None)
+
+
+def _load_cached_stamdata_combinations(test_species_codes: list[int] | None = None) -> list[dict]:
+    """Load latest cached CHR species/usage combinations from R2.
+
+    The CHR stamdata endpoint can return OK with an empty Response array even when
+    authorization is not demonstrably accepted. The species/usage lookup is
+    slow-changing reference data, so the latest successful bronze export is a safer
+    fallback than failing all CHR jobs for this specific response shape.
+    """
+    access_key = os.getenv("R2_ACCESS_KEY_ID")
+    secret_key = os.getenv("R2_SECRET_ACCESS_KEY")
+    account_id = os.getenv("R2_ACCOUNT_ID")
+    bucket = os.getenv("R2_BUCKET") or os.getenv("STORAGE_BUCKET") or "landbruget-data"
+    if not (access_key and secret_key and account_id):
+        logger.warning("Cannot load cached Stamdata fallback - R2 credentials are missing")
+        return []
+
+    try:
+        fs = s3fs.S3FileSystem(
+            key=access_key,
+            secret=secret_key,
+            client_kwargs={"endpoint_url": f"https://{account_id}.r2.cloudflarestorage.com"},
+        )
+        matches = sorted(fs.glob(f"{bucket}/bronze/chr/*/stamdata_species_usage.json"))
+        if not matches:
+            logger.warning("Cannot load cached Stamdata fallback - no cached R2 objects found")
+            return []
+
+        latest_path = matches[-1]
+        with fs.open(latest_path) as f:
+            cached_response = json.load(f)
+        combinations = _parse_stamdata_combinations(cached_response, test_species_codes)
+        logger.warning(
+            f"Loaded {len(combinations)} species/usage combinations from cached {latest_path}"
+        )
+        return combinations
+    except Exception:
+        logger.exception("Failed to load cached Stamdata fallback from R2")
+        return []
 
 
 def fetch_herds(

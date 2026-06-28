@@ -2,6 +2,8 @@
 Tests for FVM WFS Silver layer.
 """
 
+from unittest.mock import Mock
+
 import duckdb
 import pytest
 
@@ -199,3 +201,51 @@ def test_subsidy_field_uuid_join_avoids_cross_cvr_collisions() -> None:
         )
     """).fetchone()[0]
     assert spurious == 2, "Test fixture is wrong — the spurious-match trap is not set up correctly"
+
+
+@pytest.mark.asyncio
+async def test_subsidy_enrichment_skips_legacy_tables_without_cvr(
+    fvm_wfs_silver: FVMWFSSilver,
+) -> None:
+    """Legacy subsidy tables without CVR must not get ambiguous field_id-only UUID matches."""
+    object.__setattr__(fvm_wfs_silver.config, "marker_years", [2012])
+    object.__setattr__(fvm_wfs_silver.config, "organic_subsidies_years", [])
+    object.__setattr__(fvm_wfs_silver.config, "grassland_subsidies_years", [])
+    object.__setattr__(fvm_wfs_silver.config, "environmental_subsidies_years", [2012])
+
+    def list_files(pattern: str) -> list[str]:
+        if "fvm_environmental_subsidies_2012" in pattern:
+            return ["landbruget-data/silver/fvm_environmental_subsidies_2012/ts/data.parquet"]
+        if "fvm_marker_2012" in pattern:
+            return ["landbruget-data/silver/fvm_marker_2012/ts/data.parquet"]
+        return []
+
+    def query_parquet_direct(_path: str, _query: str, table_name: str) -> None:
+        if table_name == "temp_subsidy_2012":
+            fvm_wfs_silver.conn.execute("""
+                CREATE OR REPLACE TABLE temp_subsidy_2012 AS
+                SELECT
+                    '4-0' AS field_id,
+                    ST_GeomFromText('POLYGON((1 1, 9 1, 9 9, 1 9, 1 1))') AS geometry
+            """)
+            return
+        if table_name == "temp_marker_2012":
+            fvm_wfs_silver.conn.execute("""
+                CREATE OR REPLACE TABLE temp_marker_2012 AS
+                SELECT
+                    '4-0' AS field_id,
+                    '12345678' AS cvr_number,
+                    'marker-uuid' AS field_uuid,
+                    ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))') AS geometry
+            """)
+            return
+        raise AssertionError(f"Unexpected table load: {table_name}")
+
+    fvm_wfs_silver.storage.list_files = Mock(side_effect=list_files)
+    fvm_wfs_silver.storage.query_parquet_direct = Mock(side_effect=query_parquet_direct)
+    fvm_wfs_silver._save_data = Mock()
+
+    await fvm_wfs_silver._enrich_subsidies_with_field_uuid()
+
+    fvm_wfs_silver._save_data.assert_not_called()
+    assert fvm_wfs_silver.storage.query_parquet_direct.call_count == 2

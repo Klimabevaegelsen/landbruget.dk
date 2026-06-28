@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectResponsiveNavigation } from './helpers/navigation';
 
 test.describe('Homepage', () => {
   test.beforeEach(async ({ page }) => {
@@ -10,7 +11,7 @@ test.describe('Homepage', () => {
     await expect(page.locator('h1')).toBeVisible();
 
     // Check if navigation is present
-    await expect(page.locator('nav')).toBeVisible();
+    await expectResponsiveNavigation(page);
   });
 
   test('should display ranking tables', async ({ page }) => {
@@ -24,8 +25,12 @@ test.describe('Homepage', () => {
     await expect(rankingTables.first()).toBeVisible();
 
     // Check table structure
-    await expect(rankingTables.first().locator('.card-header')).toBeVisible();
-    await expect(rankingTables.first().locator('.card-content')).toBeVisible();
+    await expect(
+      rankingTables.first().locator('[data-testid="ranking-card-header"]')
+    ).toBeVisible();
+    await expect(
+      rankingTables.first().locator('[data-testid="ranking-card-content"]')
+    ).toBeVisible();
   });
 
   test('should handle company navigation from ranking table', async ({
@@ -77,8 +82,12 @@ test.describe('Homepage', () => {
     // Check that page is still functional on mobile
     await expect(page.locator('body')).toBeVisible();
 
-    // Check if mobile menu is present or navigation adapts
-    const nav = page.locator('nav');
-    await expect(nav).toBeVisible();
+    // Check that mobile navigation controls are present.
+    await expect(
+      page.getByRole('button', { name: /open main menu/i })
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /open search/i })
+    ).toBeVisible();
   });
 });

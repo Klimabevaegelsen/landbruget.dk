@@ -181,7 +181,7 @@ jobs:
       id-token: "write"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -218,6 +218,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -233,6 +234,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
@@ -338,7 +340,7 @@ jobs:
       max-parallel: 2 # Limit concurrent jobs to reduce server load
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -387,6 +389,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -402,6 +405,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
@@ -522,7 +526,7 @@ jobs:
       max-parallel: 6 # Limit concurrent monthly jobs to prevent overwhelming the server
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -571,6 +575,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -586,6 +591,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
@@ -689,7 +695,7 @@ jobs:
       id-token: "write"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -738,6 +744,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -753,6 +760,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
@@ -828,7 +836,7 @@ jobs:
       max-parallel: 6 # Increased from 3 since individual jobs are now smaller
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -877,6 +885,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -892,6 +901,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
@@ -997,7 +1007,7 @@ jobs:
       id-token: "write"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1046,6 +1056,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -1061,6 +1072,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
@@ -1146,7 +1158,7 @@ jobs:
       max-parallel: 4 # Process all ejendom groups in parallel
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1195,6 +1207,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -1210,6 +1223,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
@@ -1331,7 +1345,7 @@ jobs:
       id-token: "write"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1507,7 +1521,7 @@ jobs:
       id-token: "write"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1720,7 +1734,7 @@ jobs:
       id-token: "write"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -1757,6 +1771,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
 
@@ -1772,6 +1787,7 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
 
           echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
