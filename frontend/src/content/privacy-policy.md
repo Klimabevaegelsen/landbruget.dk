@@ -1,23 +1,22 @@
 # Privatlivspolitik for Landbruget.dk
 
-_Sidst opdateret: 19. april 2026_
+_Sidst opdateret: 27. juni 2026_
 
 ---
 
-Denne privatlivspolitik forklarer, hvordan Landbruget.dk og underplatformen pesticidkortet.dk (begge drevet af Klimabevægelsen, en almennyttig forening) indsamler og behandler personoplysninger.
+Denne privatlivspolitik forklarer, hvordan Landbruget.dk og underplatformen pesticidkortet.dk (begge drevet af Bureau 10, en almennyttig forening) indsamler og behandler personoplysninger.
 
 ## 1. Dataansvarlig
 
 Den dataansvarlige for behandlingen af personoplysninger på Landbruget.dk og pesticidkortet.dk er:
 
-**Klimabevægelsen i Danmark**  
-Bragesgade 8 B, 2200 København N  
-CVR-nr.: 34364672  
-Email: kontakt@klimabev.dk
+**Bureau 10**  
+Nørre Søgade 37D, 1370 København K  
+Email: hej@bureau10.dk
 
 ## 2. Formål med og retsgrundlag for behandling af personoplysninger
 
-Landbruget.dk behandler personoplysninger med det overordnede almennyttige formål at fremme offentlig oplysning, transparens og en informeret demokratisk debat om den danske landbrugssektors miljø-, sundheds- og klimapåvirkning, samt at understøtte sektorens grønne omstilling. Projektet er non-profit og drives af en anerkendt NGO med fokus på klima og miljø.
+Landbruget.dk behandler personoplysninger med det overordnede almennyttige formål at fremme offentlig oplysning, transparens og en informeret offentlig debat om den danske landbrugssektor. Projektet er non-profit og drives af den almennyttige forening Bureau 10.
 
 ### Specifikt behandler vi oplysninger om:
 
@@ -60,7 +59,7 @@ Oplysningerne hentes udelukkende fra det adgangsniveau i Ejerfortegnelsen (typis
 
 Vi behandler som udgangspunkt ikke følsomme personoplysninger (som defineret i GDPR artikel 9). Skulle sådanne oplysninger undtagelsesvist og utilsigtet blive en del af de offentlige datasæt vi indsamler, vil de ikke blive aktivt brugt eller fremhævet, medmindre de på en åbenlys måde er gjort offentliggjort af den registrerede selv i en kontekst, der er direkte relevant for Landbruget.dk's almennyttige formål, og behandlingen er lovlig.
 
-For at opnå formålet med Landbruget.dk kan visse data på platformen være beregnede eller estimerede. Dette sker på baggrund af offentligt tilgængelige data og den bedste tilgængelige viden og anerkendte metoder. Når data er beregnet eller estimeret, vil dette blive tydeligt angivet sammen med information om den anvendte metode. Der må forventes en vis usikkerhed og potentielle afvigelser i forhold til de faktiske forhold for sådanne data. Vi opfordrer brugere, der mener at have mere præcise oplysninger eller forslag til forbedring af vores metoder, til at kontakte os via kontakt@klimabev.dk.
+For at opnå formålet med Landbruget.dk kan visse data på platformen være beregnede eller estimerede. Dette sker på baggrund af offentligt tilgængelige data og den bedste tilgængelige viden og anerkendte metoder. Når data er beregnet eller estimeret, vil dette blive tydeligt angivet sammen med information om den anvendte metode. Der må forventes en vis usikkerhed og potentielle afvigelser i forhold til de faktiske forhold for sådanne data. Vi opfordrer brugere, der mener at have mere præcise oplysninger eller forslag til forbedring af vores metoder, til at kontakte os via hej@bureau10.dk.
 
 ## 4. Kilder
 
@@ -114,7 +113,7 @@ Du har ret til at gøre indsigelse mod vores ellers lovlige behandling af dine p
 
 Denne rettighed gælder typisk ikke for behandling baseret på legitim interesse, men hvis relevant, har du ret til at modtage dine personoplysninger i et struktureret, almindeligt anvendt og maskinlæsbart format.
 
-Du kan læse mere om dine rettigheder i Datatilsynets vejledning om de registreredes rettigheder, som du finder på www.datatilsynet.dk. Hvis du ønsker at gøre brug af dine rettigheder, bedes du kontakte os på kontakt@klimabev.dk. Vi kan bede om yderligere information for at bekræfte din identitet.
+Du kan læse mere om dine rettigheder i Datatilsynets vejledning om de registreredes rettigheder, som du finder på www.datatilsynet.dk. Hvis du ønsker at gøre brug af dine rettigheder, bedes du kontakte os på hej@bureau10.dk. Vi kan bede om yderligere information for at bekræfte din identitet.
 
 ## 8. Datasikkerhed
 
@@ -128,7 +127,7 @@ Du har ret til at indgive en klage til Datatilsynet, hvis du er utilfreds med de
 
 Landbruget.dk indsamler, systematiserer og formidler offentligt tilgængelige data, herunder personoplysninger som beskrevet i denne privatlivspolitik. Vi tilstræber høj datakvalitet og en korrekt gengivelse af oplysninger fra vores kilder. Dine rettigheder i forhold til dine personoplysninger, herunder retten til berigtigelse, er også beskrevet i denne privatlivspolitik.
 
-Det er dog vigtigt at understrege, at al information og alle data på Landbruget.dk og pesticidkortet.dk leveres "som de er og forefindes". Klimabevægelsen kan ikke garantere for dataenes fuldstændighed, konstante ajourføring eller absolutte nøjagtighed, da disse ofte stammer fra eksterne, offentlige registre, hvis indhold vi ikke kontrollerer. Anvendelse af information fra platformen, herunder de personoplysninger der formidles, sker på brugerens eget ansvar.
+Det er dog vigtigt at understrege, at al information og alle data på Landbruget.dk og pesticidkortet.dk leveres "som de er og forefindes". Bureau 10 kan ikke garantere for dataenes fuldstændighed, konstante ajourføring eller absolutte nøjagtighed, da disse ofte stammer fra eksterne, offentlige registre, hvis indhold vi ikke kontrollerer. Anvendelse af information fra platformen, herunder de personoplysninger der formidles, sker på brugerens eget ansvar.
 
 På pesticidkortet.dk er mange af de viste tal desuden **modellerede estimater** (bl.a. fordeling af pesticidforbrug fra virksomhed til mark samt drift- og nærhedsberegninger). Faktisk sprøjtning på en konkret mark kan afvige fra det viste. Se den udførlige beskrivelse i Brugsvilkårenes afsnit 4 ("Særligt om pesticidkortet.dk") og afsnit 6 (Ansvarsfraskrivelse).
 

@@ -41,11 +41,11 @@ class Settings:
         # Datafordeleren GraphQL endpoints (replaces broken WFS)
         self.geodkv_graphql_endpoint = os.getenv(
             "GEODKV_GRAPHQL_ENDPOINT",
-            "https://graphql.datafordeler.dk/GEODKV/v1",
+            "https://graphql.datafordeler.dk/GEODKV/v2",
         )
         self.bbr_graphql_endpoint = os.getenv(
             "BBR_GRAPHQL_ENDPOINT",
-            "https://graphql.datafordeler.dk/BBR/v1",
+            "https://graphql.datafordeler.dk/BBR/v2",
         )
 
         # Cloud Storage

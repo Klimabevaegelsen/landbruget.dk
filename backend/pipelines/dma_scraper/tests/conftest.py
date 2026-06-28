@@ -10,17 +10,46 @@ import pytest
 # ``from main import main`` resolves to dma_scraper/main.py
 # (not chr_pipeline/main.py which is added by the root conftest).
 _dma_dir = str(Path(__file__).resolve().parent.parent)
+_dma_path = Path(_dma_dir)
+
+
+def _is_local_test(item) -> bool:
+    return Path(str(item.path)).resolve().is_relative_to(_dma_path)
+
+
+def _is_sibling_pipeline_module(module: object) -> bool:
+    path = getattr(module, "__file__", None)
+    return path is not None and not Path(path).resolve().is_relative_to(_dma_path)
+
+
+def _prefer_dma_imports() -> None:
+    """Put this pipeline first and clear cached sibling pipeline modules."""
+    for module_name, module in list(sys.modules.items()):
+        if (
+            module_name == "main"
+            or module_name == "silver"
+            or module_name.startswith("silver.")
+            or module_name == "bronze"
+            or module_name.startswith("bronze.")
+        ) and _is_sibling_pipeline_module(module):
+            del sys.modules[module_name]
+    if _dma_dir in sys.path:
+        sys.path.remove(_dma_dir)
+    sys.path.insert(0, _dma_dir)
+
+
+_prefer_dma_imports()
 
 
 def pytest_configure(config):
     """Ensure dma_scraper dir is first in sys.path before test collection."""
-    # Remove any cached 'main' module from other pipelines
-    if "main" in sys.modules:
-        del sys.modules["main"]
-    # Put dma_scraper dir at the front of sys.path
-    if _dma_dir in sys.path:
-        sys.path.remove(_dma_dir)
-    sys.path.insert(0, _dma_dir)
+    _prefer_dma_imports()
+
+
+def pytest_runtest_setup(item):
+    """Keep top-level bronze/silver imports pointed at DMA during DMA tests."""
+    if _is_local_test(item):
+        _prefer_dma_imports()
 
 
 @pytest.fixture(autouse=True)

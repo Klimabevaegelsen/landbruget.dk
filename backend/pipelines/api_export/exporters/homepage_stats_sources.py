@@ -32,7 +32,10 @@ HOMEPAGE_STATS_SOURCES: tuple[HomepageStatisticsSource, ...] = (
         resolver="glob",
         count_mode="parquet_footer_sum",
         object_glob="gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet",
-        note="All disaggregated field-level pesticide application parquet files.",
+        note=(
+            "All disaggregated field-level pesticide use-allocation parquet files; "
+            "rows are derived cumulative-use allocations, not spray events."
+        ),
     ),
     HomepageStatisticsSource(
         legacy_table="company_pesticide_applications",

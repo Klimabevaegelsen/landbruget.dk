@@ -25,6 +25,7 @@ pipelines:
       - silver/agricultural_fields
       - silver/fvm_marker_{year}
       - silver/bnbo_status_dissolved
+      - silver/skovrejsning_dissolved
       - silver/wetlands_dissolved
       - silver/water_projects_dissolved
       - silver/soil_types
@@ -271,7 +272,7 @@ pipelines:
     workflow: generate-pmtiles.yml
     description: "Map tiles from all gold layers for visualization"
     upstream:
-      - unified_pipeline # silver/fvm_marker, bnbo, wetlands, water_projects
+      - unified_pipeline # silver/fvm_marker, bnbo, wetlands, water_projects, skovrejsning
       - field_area_analysis # gold/field_environmental_analysis_fields
       - field_production # gold/field_production
       - pesticide_proximity # gold/pesticide_proximity

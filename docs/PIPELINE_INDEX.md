@@ -75,7 +75,7 @@ Specialized tracking system for pig movements, complementing the CHR system with
 ### 🧪 H3 PFAS Exposure Pipeline - Chemical Contamination Mapping
 **Status**: ✅ Excellent journalist-friendly documentation  
 **Priority**: 🟢 LOW - Already well documented  
-**Data Sources**: BMD pesticide database, field application records
+**Data Sources**: BMD pesticide database, derived field use-allocation records
 
 Maps PFAS "forever chemical" contamination from pesticide use across Danish agricultural areas using hexagonal grid analysis.
 
@@ -104,7 +104,7 @@ Processes regulatory compliance reports submitted by farms and agricultural busi
 
 **What it includes**:
 - Fertilizer usage reports
-- Pesticide application records
+- Pesticide use-allocation records
 - Worker safety incidents
 - Transportation accidents
 - Stable fires and equipment failures

@@ -8,6 +8,51 @@ import { unstable_cache } from 'next/cache';
 
 import { DATA_URL } from '@/lib/env';
 
+type HomepageRanking = {
+  items: { cvr_number: string; company_id?: string }[];
+  [k: string]: unknown;
+};
+
+type PesticideSummary = {
+  total_applications?: number;
+  total_use_allocations?: number;
+  [k: string]: unknown;
+};
+
+type PesticideTopItem = {
+  application_count?: number;
+  use_allocation_count?: number;
+  [k: string]: unknown;
+};
+
+type PesticideAnalysisData = {
+  summary?: PesticideSummary;
+  top_pesticides?: PesticideTopItem[];
+  [k: string]: unknown;
+};
+
+type PesticideCompanyDetailsData = {
+  summary?: PesticideSummary;
+  applications?: unknown[];
+  use_allocations?: unknown[];
+  yearly_breakdown?: Array<{
+    total_applications?: number;
+    total_use_allocations?: number;
+    applications_by_product?: Array<{
+      applications?: number;
+      use_allocations?: number;
+      [k: string]: unknown;
+    }>;
+    use_allocations_by_product?: Array<{
+      applications?: number;
+      use_allocations?: number;
+      [k: string]: unknown;
+    }>;
+    [k: string]: unknown;
+  }>;
+  [k: string]: unknown;
+};
+
 async function fetchR2Json<T>(path: string): Promise<T> {
   const url = `${DATA_URL}${path}`;
   const response = await fetch(url);
@@ -15,6 +60,137 @@ async function fetchR2Json<T>(path: string): Promise<T> {
     throw new Error(`R2 fetch failed: ${url} (${response.status})`);
   }
   return response.json() as Promise<T>;
+}
+
+type PesticideAnalysisFilters = {
+  available_years: number[];
+  available_municipalities: string[];
+  total_companies: number;
+  companies_with_pfas: number;
+  companies_with_diquat: number;
+  companies_with_glyphosate: number;
+};
+
+type PesticideAnalysisResponse = {
+  companies: unknown[];
+  total_count: number;
+  page: number;
+  limit: number;
+  filters: PesticideAnalysisFilters;
+  summary?: PesticideSummary & Record<string, unknown>;
+  top_pesticides?: PesticideTopItem[];
+  metadata?: Record<string, unknown>;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asFiniteNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function parsePositiveInt(value: unknown, fallback: number): number {
+  const parsed =
+    typeof value === 'string' || typeof value === 'number'
+      ? Number.parseInt(String(value), 10)
+      : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function yearsFromPeriod(period: unknown): number[] {
+  if (typeof period !== 'string') return [];
+  const years = period
+    .match(/\b20\d{2}\b/g)
+    ?.map((year) => Number.parseInt(year, 10))
+    .filter((year) => Number.isFinite(year));
+  return Array.from(new Set(years ?? [])).sort((a, b) => b - a);
+}
+
+function asPesticideTopItems(value: unknown): PesticideTopItem[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is PesticideTopItem =>
+          item !== null && typeof item === 'object' && !Array.isArray(item)
+      )
+    : [];
+}
+
+function normalizePesticideAnalysis(
+  rawData: unknown,
+  searchParams: Record<string, string>
+): PesticideAnalysisResponse {
+  const data = asRecord(rawData);
+  const existingFilters = asRecord(data.filters);
+  const companies = Array.isArray(data.companies) ? data.companies : [];
+  const summary = asRecord(data.summary) as PesticideSummary &
+    Record<string, unknown>;
+  const metadata = asRecord(data.metadata);
+  const topPesticides = asPesticideTopItems(data.top_pesticides);
+
+  summary.total_use_allocations ??= summary.total_applications;
+  for (const item of topPesticides) {
+    item.use_allocation_count ??= item.application_count;
+  }
+
+  const filters: PesticideAnalysisFilters = {
+    available_years: Array.isArray(existingFilters.available_years)
+      ? existingFilters.available_years.filter(
+          (year): year is number =>
+            typeof year === 'number' && Number.isFinite(year)
+        )
+      : yearsFromPeriod(metadata.period),
+    available_municipalities: Array.isArray(
+      existingFilters.available_municipalities
+    )
+      ? existingFilters.available_municipalities.filter(
+          (municipality): municipality is string =>
+            typeof municipality === 'string'
+        )
+      : typeof data.municipality === 'string'
+        ? [data.municipality]
+        : [],
+    total_companies: asFiniteNumber(
+      existingFilters.total_companies,
+      asFiniteNumber(summary.total_companies, companies.length)
+    ),
+    companies_with_pfas: asFiniteNumber(existingFilters.companies_with_pfas),
+    companies_with_diquat: asFiniteNumber(
+      existingFilters.companies_with_diquat
+    ),
+    companies_with_glyphosate: asFiniteNumber(
+      existingFilters.companies_with_glyphosate
+    ),
+  };
+
+  return {
+    ...data,
+    companies,
+    total_count: asFiniteNumber(data.total_count, companies.length),
+    page: parsePositiveInt(data.page ?? searchParams.page, 1),
+    limit: parsePositiveInt(data.limit ?? searchParams.limit, 50),
+    filters,
+    summary,
+    top_pesticides: topPesticides,
+    metadata,
+  };
+}
+
+function normalizePesticideCompanyDetails(data: PesticideCompanyDetailsData) {
+  if (data.summary) {
+    data.summary.total_use_allocations ??= data.summary.total_applications;
+  }
+  data.use_allocations ??= data.applications;
+  for (const year of data.yearly_breakdown ?? []) {
+    year.total_use_allocations ??= year.total_applications;
+    year.use_allocations_by_product ??= year.applications_by_product;
+    for (const product of year.use_allocations_by_product ?? []) {
+      product.use_allocations ??= product.applications;
+    }
+  }
+  return data;
 }
 
 export const getCachedHomepageStatistics = unstable_cache(
@@ -33,19 +209,20 @@ export const getCachedHomepageRankings = unstable_cache(
   ) => {
     // Pre-computed JSON per category; limit/rankingId filtering done client-side
     const data = await fetchR2Json<{
-      rankings: {
-        items: { cvr_number: string; company_id?: string }[];
-        [k: string]: unknown;
-      }[];
+      rankings: (HomepageRanking | null)[];
       [k: string]: unknown;
     }>(`/homepage/rankings/${category}.json`);
+    const rankings = (data.rankings ?? []).filter(
+      (ranking): ranking is HomepageRanking =>
+        ranking != null && Array.isArray(ranking.items)
+    );
     // Map cvr_number to company_id for frontend compatibility
-    for (const ranking of data.rankings ?? []) {
-      for (const item of ranking.items ?? []) {
+    for (const ranking of rankings) {
+      for (const item of ranking.items) {
         item.company_id = item.cvr_number;
       }
     }
-    return data;
+    return { ...data, rankings };
   },
   ['homepage-rankings'],
   { revalidate: 604800, tags: ['homepage-rankings'] }
@@ -75,10 +252,13 @@ export const getCachedMunicipalityDetails = unstable_cache(
 export const getCachedPesticideAnalysis = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
     const municipality = searchParams.geography;
-    const path = municipality
+    const isNational =
+      !municipality || municipality === 'country' || municipality === 'all';
+    const path = !isNational
       ? `/pesticides/analysis/${encodeURIComponent(municipality)}.json`
       : '/pesticides/analysis/index.json';
-    return fetchR2Json(path);
+    const data = await fetchR2Json<PesticideAnalysisData>(path);
+    return normalizePesticideAnalysis(data, searchParams);
   },
   ['pesticide-analysis'],
   { revalidate: 604800, tags: ['pesticide-analysis'] }
@@ -88,7 +268,9 @@ export const getCachedPesticideCompanyDetails = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
     const cvr = searchParams.cvr;
     if (!cvr) throw new Error('CVR required');
-    return fetchR2Json(`/pesticides/companies/${cvr}.json`);
+    return normalizePesticideCompanyDetails(
+      await fetchR2Json(`/pesticides/companies/${cvr}.json`)
+    );
   },
   ['pesticide-company-details'],
   { revalidate: 604800, tags: ['pesticide-company-details'] }

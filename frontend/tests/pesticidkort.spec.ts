@@ -10,12 +10,13 @@ test.describe('Pesticidkort', () => {
         new Date().toISOString()
       );
     });
-    await page.goto('/pesticidkort');
   });
 
   test('should load landing page with heading, address input, and explore button', async ({
     page,
   }) => {
+    await page.goto('/pesticidkort');
+
     await expect(page.locator('h1')).toBeVisible();
 
     await expect(
@@ -30,6 +31,8 @@ test.describe('Pesticidkort', () => {
   test('should navigate to explore map mode and back to landing', async ({
     page,
   }) => {
+    await page.goto('/pesticidkort');
+
     const exploreButton = page.locator('[data-testid="explore-map-button"]');
     await expect(exploreButton).toBeVisible();
     await exploreButton.click();
@@ -66,6 +69,8 @@ test.describe('Pesticidkort', () => {
   test('should show chemical filter pills in explore mode', async ({
     page,
   }) => {
+    await page.goto('/pesticidkort');
+
     const exploreButton = page.locator('[data-testid="explore-map-button"]');
     await exploreButton.click();
 
@@ -90,6 +95,7 @@ test.describe('Pesticidkort', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/pesticidkort');
 
     const exploreButton = page.locator('[data-testid="explore-map-button"]');
     await exploreButton.click();
@@ -113,6 +119,7 @@ test.describe('Pesticidkort', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/pesticidkort');
 
     const exploreButton = page.locator('[data-testid="explore-map-button"]');
     await exploreButton.click();
@@ -140,6 +147,8 @@ test.describe('Pesticidkort', () => {
   test('should render pesticidkort overlays with dark-safe contrast in dark mode', async ({
     page,
   }) => {
+    await page.goto('/pesticidkort');
+
     await page.evaluate(() => {
       window.localStorage.setItem('landbruget-theme', 'dark');
     });
@@ -202,6 +211,7 @@ test.describe('Pesticidkort', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/pesticidkort');
 
     const footer = page.locator(
       '[data-testid="pesticidkort-disclaimer-footer"]'
@@ -259,6 +269,7 @@ test.describe('Pesticidkort', () => {
 
   test('should adapt landing page to mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/pesticidkort');
 
     await expect(page.locator('h1')).toBeVisible();
 
@@ -277,6 +288,8 @@ test.describe('Pesticidkort', () => {
   });
 
   test('should have address input visible and focusable', async ({ page }) => {
+    await page.goto('/pesticidkort');
+
     const input = page.locator('[data-testid="landing-address-input"]');
     await expect(input).toBeVisible();
     await input.focus();
@@ -288,6 +301,8 @@ test.describe('Pesticidkort', () => {
   });
 
   test('should have correct page title', async ({ page }) => {
+    await page.goto('/pesticidkort');
+
     const title = await page.title();
     expect(title.toLowerCase()).toContain('pesticid');
   });

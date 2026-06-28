@@ -5,6 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { expectResponsiveNavigation } from './helpers/navigation';
 import { mockApiResponse } from './utils/test-helpers';
 
 const MOCK_RANKINGS_RESPONSE = {
@@ -123,6 +124,6 @@ test.describe('Kommune Rankings Page', () => {
     );
 
     await page.goto('/kommuner');
-    await expect(page.locator('nav')).toBeVisible();
+    await expectResponsiveNavigation(page);
   });
 });

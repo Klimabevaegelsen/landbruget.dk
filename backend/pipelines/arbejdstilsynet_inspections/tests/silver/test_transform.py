@@ -9,7 +9,6 @@ This module tests all data transformations including:
 - Null handling
 """
 
-# Import the silver pipeline
 import sys
 import tempfile
 from pathlib import Path
@@ -19,7 +18,6 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from silver.transform import SilverPipeline
 
 
 @pytest.fixture
@@ -57,6 +55,8 @@ def temp_bronze_data(sample_raw_data):
 @pytest.fixture
 def pipeline(temp_bronze_data):
     """Create a SilverPipeline instance for testing."""
+    from silver.transform import SilverPipeline
+
     temp_dir, _ = temp_bronze_data
     pipeline = SilverPipeline(log_level="ERROR")
     pipeline.pipeline_root = temp_dir

@@ -104,6 +104,9 @@ class PMTilesGeneratorConfig(BaseJobConfig):
     bnbo_status_path: str = Field(
         default="silver/bnbo_status_dissolved/", description="BNBO status dissolved path"
     )
+    skovrejsning_path: str = Field(
+        default="silver/skovrejsning_dissolved/", description="Skovrejsning dissolved path"
+    )
     wetlands_path: str = Field(
         default="silver/wetlands_dissolved/", description="Wetlands dissolved path"
     )

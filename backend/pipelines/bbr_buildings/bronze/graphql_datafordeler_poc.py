@@ -23,7 +23,7 @@ BBR_Bygning (94 fields):
   - Full list: see .context/BBR_schema.graphql
 
 API details:
-  - Endpoints: https://graphql.datafordeler.dk/{GEODKV,BBR}/v1?apiKey=<key>
+  - Endpoints: https://graphql.datafordeler.dk/{GEODKV,BBR}/v2?apiKey=<key>
   - Auth: API key + IP whitelisting required
   - Pagination: cursor-based, first (max 1000) + after
   - Bitemporal: registreringstid required (or id_lokalId filter)
@@ -46,8 +46,8 @@ if not API_KEY and __name__ == "__main__":
     print("ERROR: Set DATAFORDELER_GRAPHQL_API_KEY environment variable")
     sys.exit(1)
 
-GEODKV_URL = f"https://graphql.datafordeler.dk/GEODKV/v1?apiKey={API_KEY}"
-BBR_URL = f"https://graphql.datafordeler.dk/BBR/v1?apiKey={API_KEY}"
+GEODKV_URL = f"https://graphql.datafordeler.dk/GEODKV/v2?apiKey={API_KEY}"
+BBR_URL = f"https://graphql.datafordeler.dk/BBR/v2?apiKey={API_KEY}"
 
 NOW = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 

@@ -219,6 +219,12 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         datasets = await self._load_datasets()
 
         if self.config.pesticide_year:
+            if self.config.pesticide_year not in datasets["disaggregation"]:
+                self.log.warning(
+                    "No disaggregation data found for year "
+                    f"{self.config.pesticide_year}; skipping pesticide drift exposure"
+                )
+                return
             years = [self.config.pesticide_year]
             self.log.info(f"Matrix job mode: processing year {self.config.pesticide_year}")
         else:

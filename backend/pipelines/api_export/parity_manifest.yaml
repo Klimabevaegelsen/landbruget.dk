@@ -134,6 +134,17 @@
       "runtime_owner": "R2 static JSON"
     },
     {
+      "contract_id": "pesticide-field-use-allocations-bulk",
+      "consumer": "research-public",
+      "public_path_or_table": "datasets/pesticide-field-use-allocations/v1",
+      "old_supabase_source": "derived pesticide_disaggregation gold parquet; not a raw Supabase dump",
+      "current_r2_or_service_source": "datasets/pesticide-field-use-allocations/v1/use_allocations/year=*/part-000.parquet + fields/products/quality metadata",
+      "status": "covered",
+      "replacement_strategy": "served from opt-in PesticideBulkDatasetExporter with no public CVR and explicit cumulative-use allocation caveats",
+      "owner_exporter": "pesticide_bulk",
+      "runtime_owner": "R2 static Parquet dataset"
+    },
+    {
       "contract_id": "drift-exposure",
       "consumer": "frontend",
       "public_path_or_table": "/api/drift-exposure",

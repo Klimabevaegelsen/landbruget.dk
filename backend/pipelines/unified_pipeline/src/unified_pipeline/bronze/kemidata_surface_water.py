@@ -234,6 +234,8 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         cloud_file: Any,
         batch_idx: int,
         attempt: int,
+        *,
+        skip_header: bool,
     ) -> int:
         """Download a single batch of parameters as CSV, appending to cloud_file."""
         async with session.post(
@@ -252,7 +254,7 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
             is_first_line = True
             async for chunk in resp.content.iter_chunked(8 * 1024 * 1024):
                 # Skip CSV header line for batches after the first
-                if batch_idx > 1 and is_first_line:
+                if skip_header and is_first_line:
                     newline_pos = chunk.find(b"\n")
                     if newline_pos >= 0:
                         chunk = chunk[newline_pos + 1 :]
@@ -273,12 +275,19 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         cloud_file: Any,
         batch_counter: int,
         max_retries: int,
+        *,
+        skip_header: bool,
     ) -> int:
         """Try downloading a batch with retries on transient errors."""
         for attempt in range(1, max_retries + 1):
             try:
                 return await self._download_single_batch(
-                    session, body, cloud_file, batch_counter, attempt
+                    session,
+                    body,
+                    cloud_file,
+                    batch_counter,
+                    attempt,
+                    skip_header=skip_header,
                 )
             except Exception:
                 if attempt == max_retries:
@@ -291,6 +300,17 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                 await asyncio.sleep(wait)
         return 0  # unreachable, but satisfies type checker
 
+    def _should_split_download_error(self, exc: Exception) -> bool:
+        """Return true when a failed Kemidata download may succeed in smaller slices."""
+        text = str(exc).lower()
+        return (
+            "200000 records" in text
+            or "http 500" in text
+            or "request timed out" in text
+            or "timed out" in text
+            or "timeout" in text
+        )
+
     async def _download_by_date_range(
         self,
         session: aiohttp.ClientSession,
@@ -298,6 +318,8 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
         params: list[dict],
         cloud_file: Any,
         batch_counter: int,
+        *,
+        has_existing_content: bool,
     ) -> int:
         """
         Download a parameter that exceeds 200k records by splitting into yearly date ranges.
@@ -315,6 +337,7 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
             start = end + 1
 
         total_bytes = 0
+        has_written_content = has_existing_content
         for win_idx, (from_date, to_date) in enumerate(windows, 1):
             self.log.info(f"      Date range {win_idx}/{len(windows)}: {from_date} to {to_date}")
             body = self._build_download_body(session_id, params)
@@ -325,15 +348,22 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
             }
             try:
                 win_bytes = await self._download_batch_with_retry(
-                    session, body, cloud_file, batch_counter + win_idx, 3
+                    session,
+                    body,
+                    cloud_file,
+                    batch_counter + win_idx,
+                    3,
+                    skip_header=has_written_content,
                 )
                 total_bytes += win_bytes
+                if win_bytes > 0:
+                    has_written_content = True
             except Exception as win_exc:
-                if "200000 records" not in str(win_exc):
+                if not self._should_split_download_error(win_exc):
                     raise
-                # Even 5-year window too big — split into individual years
+                # Even 5-year window too big or timed out — split into individual years
                 self.log.warning(
-                    f"      Window {from_date}–{to_date} still exceeds 200k, "
+                    f"      Window {from_date}–{to_date} failed for a splittable reason, "
                     f"splitting into individual years..."
                 )
                 y_start = int(from_date[:4])
@@ -347,9 +377,16 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                     }
                     self.log.info(f"        Year {year}")
                     yr_bytes = await self._download_batch_with_retry(
-                        session, yr_body, cloud_file, batch_counter + year, 3
+                        session,
+                        yr_body,
+                        cloud_file,
+                        batch_counter + year,
+                        3,
+                        skip_header=has_written_content,
                     )
                     total_bytes += yr_bytes
+                    if yr_bytes > 0:
+                        has_written_content = True
 
         return total_bytes
 
@@ -403,25 +440,36 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
 
                     try:
                         batch_bytes = await self._download_batch_with_retry(
-                            session, body, tmp, batch_counter, max_retries
+                            session,
+                            body,
+                            tmp,
+                            batch_counter,
+                            max_retries,
+                            skip_header=total_bytes > 0,
                         )
                         total_bytes += batch_bytes
                     except Exception as exc:
-                        if "200000 records" not in str(exc):
+                        if not self._should_split_download_error(exc):
                             raise
                         if len(batch) <= 1:
-                            # Single param exceeds 200k — split by date range
+                            # Single param exceeds 200k or times out — split by date range
                             self.log.warning(
-                                "  Single parameter exceeds 200k limit, splitting by date range..."
+                                "  Single parameter failed for a splittable reason, "
+                                "splitting by date range..."
                             )
                             sub_bytes = await self._download_by_date_range(
-                                session, session_id, batch, tmp, batch_counter
+                                session,
+                                session_id,
+                                batch,
+                                tmp,
+                                batch_counter,
+                                has_existing_content=total_bytes > 0,
                             )
                             total_bytes += sub_bytes
                         else:
-                            # Batch exceeds 200k — split into individual params
+                            # Batch exceeds 200k or times out — split into individual params
                             self.log.warning(
-                                f"  Batch {idx} exceeds 200k record limit, "
+                                f"  Batch {idx} failed for a splittable reason, "
                                 f"splitting {len(batch)} params into individual downloads..."
                             )
                             for sub_idx, param in enumerate(batch, 1):
@@ -433,18 +481,29 @@ class KemidataSurfaceWaterBronze(BaseSource[KemidataSurfaceWaterBronzeConfig], B
                                 )
                                 try:
                                     sub_bytes = await self._download_batch_with_retry(
-                                        session, sub_body, tmp, batch_counter, max_retries
+                                        session,
+                                        sub_body,
+                                        tmp,
+                                        batch_counter,
+                                        max_retries,
+                                        skip_header=total_bytes > 0,
                                     )
                                     total_bytes += sub_bytes
                                 except Exception as sub_exc:
-                                    if "200000 records" not in str(sub_exc):
+                                    if not self._should_split_download_error(sub_exc):
                                         raise
                                     self.log.warning(
                                         f"    Single param {param.get('name', 'unknown')} "
-                                        f"exceeds 200k, splitting by date range..."
+                                        f"failed for a splittable reason, "
+                                        f"splitting by date range..."
                                     )
                                     dr_bytes = await self._download_by_date_range(
-                                        session, session_id, [param], tmp, batch_counter
+                                        session,
+                                        session_id,
+                                        [param],
+                                        tmp,
+                                        batch_counter,
+                                        has_existing_content=total_bytes > 0,
                                     )
                                     total_bytes += dr_bytes
 

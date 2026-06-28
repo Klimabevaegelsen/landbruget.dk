@@ -107,7 +107,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Free up disk space for memory-intensive jobs
         if: matrix.source == 'fvm_wfs' || matrix.source == 'cadastral' || matrix.source == 'kemidata_surface_water_pesticides'
@@ -351,7 +351,7 @@ jobs:
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Free up disk space for memory-intensive jobs
         if: contains(fromJson('["property_cadastral_merge","field_area_analysis"]'), matrix.source)

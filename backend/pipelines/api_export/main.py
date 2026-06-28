@@ -35,6 +35,7 @@ from exporters.company_profiles import CompanyProfilesExporter
 from exporters.drift_exposure import DriftExposureExporter
 from exporters.homepage import HomepageExporter
 from exporters.municipalities import MunicipalitiesExporter
+from exporters.pesticide_bulk_dataset import PesticideBulkDatasetExporter
 from exporters.pesticides import PesticidesExporter
 from exporters.search_index import SearchIndexExporter
 
@@ -49,6 +50,7 @@ EXPORTERS = {
     "municipalities": MunicipalitiesExporter,
     "drift_exposure": DriftExposureExporter,
     "pesticides": PesticidesExporter,
+    "pesticide_bulk": PesticideBulkDatasetExporter,
     "companies": CompanyProfilesExporter,
 }
 

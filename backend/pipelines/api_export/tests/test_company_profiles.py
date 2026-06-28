@@ -503,7 +503,7 @@ def test_company_profiles_export_extended_parity_sections(tmp_path: Path) -> Non
     pesticide_load_kpis = {
         item["key"]: item["value"] for item in blocks["environment-pesticide-load"]["kpis"]
     }
-    assert pesticide_load_kpis["applications"] == 2
+    assert pesticide_load_kpis["use_allocations"] == 2
     assert pesticide_load_kpis["pesticides"] == 2
     assert pesticide_load_kpis["area"] == 80.0
     assert pesticide_load_kpis["dosage"] == 8.0

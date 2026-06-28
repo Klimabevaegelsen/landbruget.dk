@@ -18,7 +18,7 @@ export function MethodologyHero() {
       </p>
 
       <h1 className="font-display text-foreground text-[30px] leading-[1.08] font-semibold tracking-tight sm:text-[36px] lg:text-[44px]">
-        Fordeling af pesticidforbrug
+        Metode: Fordeling af pesticidforbrug
         <br />
         <span className="text-primary">fra bedrift til mark</span>
       </h1>

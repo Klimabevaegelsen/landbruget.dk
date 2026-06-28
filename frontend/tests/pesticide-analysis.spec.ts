@@ -5,10 +5,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { expectResponsiveNavigation } from './helpers/navigation';
 
 test.describe('Pesticide Analysis Page', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/pesticidanalyse');
+    await page.goto('/pesticidanalyse', { waitUntil: 'domcontentloaded' });
   });
 
   test('should load and display heading', async ({ page }) => {
@@ -34,7 +35,7 @@ test.describe('Pesticide Analysis Page', () => {
   });
 
   test('should have navigation visible', async ({ page }) => {
-    await expect(page.locator('nav')).toBeVisible();
+    await expectResponsiveNavigation(page);
   });
 
   test('should have no critical console errors', async ({ page }) => {
@@ -45,15 +46,18 @@ test.describe('Pesticide Analysis Page', () => {
       }
     });
 
-    await page.goto('/pesticidanalyse');
-    await page.waitForLoadState('networkidle', { timeout: 15000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page
+      .waitForLoadState('networkidle', { timeout: 15000 })
+      .catch(() => undefined);
 
     const criticalErrors = consoleErrors.filter(
       (err) =>
         !err.includes('favicon') &&
         !err.includes('third-party cookie') &&
         !err.includes('DevTools') &&
-        !err.includes('Failed to fetch') // API may not be available in test
+        !err.includes('Failed to fetch') && // API may not be available in test
+        !err.includes('Load failed')
     );
 
     expect(criticalErrors).toEqual([]);

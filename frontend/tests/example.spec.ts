@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectResponsiveNavigation } from './helpers/navigation';
 
 test.describe('Smoke Tests', () => {
   test('homepage loads without errors', async ({ page }) => {
@@ -32,21 +33,13 @@ test.describe('Smoke Tests', () => {
     await page.goto('/');
 
     // Check if navigation elements exist
-    const nav = page.locator('nav').first();
-    if ((await nav.count()) > 0) {
-      await expect(nav).toBeVisible();
-    }
+    await expectResponsiveNavigation(page);
 
-    // Test that we can navigate (if links exist)
-    const links = page.locator('a[href^="/"]');
-    if ((await links.count()) > 0) {
-      const firstLink = links.first();
-      const href = await firstLink.getAttribute('href');
-      if (href && href !== '/') {
-        await firstLink.click();
-        await page.waitForLoadState('networkidle');
-        await expect(page).toHaveURL(new RegExp(href));
-      }
-    }
+    const aboutLink = page.locator('a[href="/om-os"]').first();
+    await expect(aboutLink).toHaveAttribute('href', '/om-os');
+
+    await page.goto('/om-os', { waitUntil: 'commit' });
+    await expect(page).toHaveURL(/\/om-os$/);
+    await expect(page.getByRole('heading', { name: 'Om os' })).toBeVisible();
   });
 });

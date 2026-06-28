@@ -37,6 +37,7 @@ from unified_pipeline.bronze.kemidata_surface_water import (
     KemidataSurfaceWaterBronze,
     KemidataSurfaceWaterBronzeConfig,
 )
+from unified_pipeline.bronze.skovrejsning import SkovrejsningBronze, SkovrejsningBronzeConfig
 from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeConfig
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
@@ -150,6 +151,7 @@ from unified_pipeline.silver.kemidata_surface_water import (
     KemidataSurfaceWaterSilver,
     KemidataSurfaceWaterSilverConfig,
 )
+from unified_pipeline.silver.skovrejsning import SkovrejsningSilver, SkovrejsningSilverConfig
 from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverConfig
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTypologySilverConfig
@@ -429,6 +431,14 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             cli_models.Stage.all: [
                 (BNBOStatusBronze, BNBOStatusBronzeConfig),
                 (BNBOStatusSilver, BNBOStatusSilverConfig),
+            ],
+        },
+        cli_models.Source.skovrejsning: {
+            cli_models.Stage.bronze: [(SkovrejsningBronze, SkovrejsningBronzeConfig)],
+            cli_models.Stage.silver: [(SkovrejsningSilver, SkovrejsningSilverConfig)],
+            cli_models.Stage.all: [
+                (SkovrejsningBronze, SkovrejsningBronzeConfig),
+                (SkovrejsningSilver, SkovrejsningSilverConfig),
             ],
         },
         cli_models.Source.agricultural_fields: {

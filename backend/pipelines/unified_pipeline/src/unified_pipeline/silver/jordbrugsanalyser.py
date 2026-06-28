@@ -364,6 +364,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
         """
         try:
             # Read data with support for in-memory passing
+            use_storage = bronze_data is None
             if bronze_data is not None:
                 self.log.info(
                     f"Using bronze data from memory for year {year} (in-memory data passing)"
@@ -371,21 +372,34 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                 # Bronze data is a dict mapping year to list of raw WFS responses
                 if isinstance(bronze_data, dict) and str(year) in bronze_data:
                     raw_responses = bronze_data[str(year)]
-                    # ✅ MIGRATION: Create table with DuckDB instead of
-                    temp_conn = duckdb.connect()
-                    temp_conn.execute("CREATE OR REPLACE TABLE temp_responses (payload VARCHAR)")
+                    if all(
+                        isinstance(resp, str) and resp.startswith("saved_to_storage_")
+                        for resp in raw_responses
+                    ):
+                        self.log.info(
+                            f"Bronze year {year} was saved to storage; reading from storage"
+                        )
+                        use_storage = True
+                    else:
+                        # ✅ MIGRATION: Create table with DuckDB instead of
+                        temp_conn = duckdb.connect()
+                        temp_conn.execute(
+                            "CREATE OR REPLACE TABLE temp_responses (payload VARCHAR)"
+                        )
 
-                    # Insert responses directly into table
-                    for resp in raw_responses:
-                        temp_conn.execute("INSERT INTO temp_responses VALUES (?)", [resp])
+                        # Insert responses directly into table
+                        for resp in raw_responses:
+                            temp_conn.execute("INSERT INTO temp_responses VALUES (?)", [resp])
 
-                    # Keep as table name for processing
-                    bronze_table = "temp_responses"
-                    bronze_conn = temp_conn
+                        # Keep as table name for processing
+                        bronze_table = "temp_responses"
+                        bronze_conn = temp_conn
+                        use_storage = False
                 else:
                     self.log.warning(f"No in-memory data found for year {year}")
                     return None
-            else:
+
+            if use_storage:
                 # Fallback to reading from storage
                 self.log.info(f"Reading bronze data from storage for year {year} (fallback)")
                 bronze_dataset_name = f"{self.config.bronze_dataset}_{year}"

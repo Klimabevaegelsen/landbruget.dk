@@ -30,6 +30,15 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Municipality rankings API error:', error);
 
+    if (error instanceof Error && error.message.includes('(404)')) {
+      return NextResponse.json(
+        { rankings: [] },
+        {
+          headers: CACHE_HEADERS,
+        }
+      );
+    }
+
     return NextResponse.json(
       {
         error: 'Internal server error',

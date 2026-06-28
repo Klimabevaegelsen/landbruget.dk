@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime
 
 import requests
@@ -34,6 +35,9 @@ OptimizedStorageAccess = _get_optimized_storage_access()
 
 
 class BMDScraper:
+    REQUEST_TIMEOUT = (30, 180)
+    REQUEST_RETRIES = 3
+
     def __init__(self, base_url="https://bmd.mst.dk", output_dir="data"):
         self.base_url = base_url
         self.output_dir = output_dir
@@ -43,6 +47,31 @@ class BMDScraper:
 
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
+
+    def _request_with_retries(self, method, url, **kwargs):
+        """Run a BMD HTTP request with bounded timeout and retry on transient failures."""
+        kwargs.setdefault("timeout", self.REQUEST_TIMEOUT)
+        last_error = None
+        for attempt in range(1, self.REQUEST_RETRIES + 1):
+            try:
+                response = self.session.request(method, url, **kwargs)
+                if response.status_code in {500, 502, 503, 504}:
+                    response.raise_for_status()
+                return response
+            except (requests.ConnectionError, requests.HTTPError, requests.Timeout) as exc:
+                last_error = exc
+                if attempt == self.REQUEST_RETRIES:
+                    break
+                sleep_seconds = 5 * attempt
+                logging.warning(
+                    "BMD request failed on attempt %s/%s (%s); retrying in %ss",
+                    attempt,
+                    self.REQUEST_RETRIES,
+                    exc,
+                    sleep_seconds,
+                )
+                time.sleep(sleep_seconds)
+        raise RuntimeError("BMD request failed without an exception") from last_error
 
     def get_verification_token(self) -> str | None:
         """Get the __RequestVerificationToken from the export dialog."""
@@ -68,7 +97,7 @@ class BMDScraper:
         }
 
         logging.info("Requesting export dialog to get verification token...")
-        response = self.session.get(url, params=params)
+        response = self._request_with_retries("GET", url, params=params)
 
         if response.status_code != 200:
             logging.error(f"Failed to get export dialog: {response.status_code}")
@@ -114,7 +143,7 @@ class BMDScraper:
         }
 
         logging.info("Requesting document generation...")
-        response = self.session.post(url, data=form_data)
+        response = self._request_with_retries("POST", url, data=form_data)
 
         if response.status_code != 200:
             logging.error(f"Failed to generate document: {response.status_code}")
@@ -142,7 +171,7 @@ class BMDScraper:
         full_url = f"{self.base_url}{download_url}"
 
         logging.info(f"Downloading file from {full_url}...")
-        response = self.session.get(full_url, stream=True)
+        response = self._request_with_retries("GET", full_url, stream=True)
 
         if response.status_code != 200:
             logging.error(f"Failed to download file: {response.status_code}")

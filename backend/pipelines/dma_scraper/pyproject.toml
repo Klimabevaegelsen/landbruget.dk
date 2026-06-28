@@ -10,14 +10,14 @@ authors = [
 ]
 dependencies = [
     "requests>=2.34.2",
-    "beautifulsoup4>=4.14.3",
+    "beautifulsoup4>=4.15.0",
     "certifi",
     "click>=8.4.1",
     "python-dotenv>=1.0.0",
     "pandas>=3.0.3",
     "pyarrow>=24.0.0",
     "duckdb",
-    "aiohttp>=3.13.5",
+    "aiohttp>=3.14.1",
     "nest_asyncio>=1.6.0",
     "ipywidgets>=8.1.8",
     "s3fs",
@@ -38,7 +38,7 @@ packages = ["bronze", "silver"]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-cov>=4.0.0",
     "ruff",
     "ty",

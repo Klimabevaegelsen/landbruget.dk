@@ -134,8 +134,8 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
       case 'applications_count':
         const appColors = COLOR_SCHEMES.applications.colors;
         return {
-          title: 'Antal Applikationer',
-          unit: 'Applikationer',
+          title: 'Antal Allokeringer',
+          unit: 'Allokeringer',
           colors:
             filterState.useDecileColoring && breakpoints
               ? [

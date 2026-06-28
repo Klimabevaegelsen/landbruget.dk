@@ -9,6 +9,7 @@ import { ExploreMapView } from '@/components/pesticidkort/ExploreMapView';
 import { DisclaimerFooter } from '@/components/pesticidkort/DisclaimerFooter';
 import { DisclaimerModal } from '@/components/pesticidkort/DisclaimerModal';
 import type { AddressResult } from '@/components/pesticidkort/types';
+import { DEFAULT_EXPOSURE_RADIUS_M } from '@/components/pesticidkort/exposure-utils';
 
 interface SearchState {
   address: string;
@@ -100,7 +101,7 @@ export function PesticidkortApp() {
               address={search.address}
               lat={search.lat}
               lng={search.lng}
-              radiusM={1000}
+              radiusM={DEFAULT_EXPOSURE_RADIUS_M}
               year={year}
               onYearChange={setYear}
               onBack={handleBack}

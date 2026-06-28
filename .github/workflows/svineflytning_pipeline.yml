@@ -78,7 +78,7 @@ jobs:
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -124,6 +124,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          FVM_CLIENT_ID: ${{ secrets.FVM_CLIENT_ID }}
         run: | # pragma: allowlist secret
           # Set processing mode for incremental processing
            echo "SVINEFLYTNING_PROCESSING_MODE=${{ inputs.processing_mode || 'incremental' }}" >> $GITHUB_ENV  # pragma: allowlist secret
@@ -134,6 +135,7 @@ jobs:
           echo "R2_BUCKET=$R2_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "FVM_CLIENT_ID=$FVM_CLIENT_ID" >> .env
           echo "SVINEFLYTNING_OUTPUT_DIR=/tmp/data/raw/svineflytning" >> .env
           echo "SVINEFLYTNING_SILVER_OUTPUT_DIR=/tmp/data/silver/svineflytning" >> .env
 

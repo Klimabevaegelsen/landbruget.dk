@@ -121,6 +121,20 @@ def load_herd_list(
             identifier=f"{species_code}_{usage_code}_{start_herd_number or 0}",
         )
 
+        outbound_status = _chr_outbound_status(serialized_response)
+        if outbound_status and outbound_status.upper() != "OK":
+            outbound_messages = _chr_outbound_messages(serialized_response)
+            logger.error(
+                "CHR_besaetning listBesaetningerMedBrugsart returned non-OK status "
+                "%s for species %s, usage %s, start %s%s",
+                outbound_status,
+                species_code,
+                usage_code,
+                start_herd_number,
+                f" ({'; '.join(outbound_messages)})" if outbound_messages else "",
+            )
+            return [], False, None
+
         # --- Start Parsing Logic ---
         herd_list = []
         has_more = False
@@ -185,6 +199,51 @@ def load_herd_list(
         return [], False, None
 
 
+def _chr_outbound_status(serialized_response: Any) -> str | None:
+    outbound = _chr_outbound(serialized_response)
+    status = _outbound_value(outbound, "ReturSvar")
+    return str(status) if status is not None else None
+
+
+def _chr_outbound_messages(serialized_response: Any) -> list[str]:
+    outbound = _chr_outbound(serialized_response)
+    messages = _outbound_value(outbound, "GLRCHRSvarMeddelelser")
+    if not messages:
+        return []
+
+    if isinstance(messages, dict):
+        message_items = messages.get("Meddelelse") or []
+    else:
+        message_items = getattr(messages, "Meddelelse", [])
+
+    if not message_items:
+        return []
+    if not isinstance(message_items, list):
+        message_items = [message_items]
+
+    formatted = []
+    for message in message_items:
+        message_type = _outbound_value(message, "MeddelelseType")
+        message_code = _outbound_value(message, "MeddelelseKode")
+        message_text = _outbound_value(message, "MeddelelseTekst")
+        parts = [str(part) for part in [message_type, message_code, message_text] if part]
+        if parts:
+            formatted.append(" ".join(parts))
+    return formatted
+
+
+def _chr_outbound(serialized_response: Any) -> Any | None:
+    if isinstance(serialized_response, dict):
+        return serialized_response.get("GLRCHRWSInfoOutbound")
+    return getattr(serialized_response, "GLRCHRWSInfoOutbound", None)
+
+
+def _outbound_value(container: Any, key: str) -> Any:
+    if isinstance(container, dict):
+        return container.get(key)
+    return getattr(container, key, None)
+
+
 def load_herd_details(
     client: Client, username: str, herd_number: int, species_code: int
 ) -> Any | None:
@@ -227,12 +286,28 @@ def load_herd_details(
                 f"No response received for {operation_name} (Herd: {herd_number}, Species: {species_code})"
             )
             return None  # Return None if no response
+
         # Save the raw response using the updated function call signature
         save_raw_data(
             raw_response=response,  # Pass the raw Zeep object
             data_type="besaetning_details",
             identifier=f"{herd_number}_{species_code}",
         )
+
+        serialized_response = serialize_object(response, dict)
+        outbound_status = _chr_outbound_status(serialized_response)
+        if outbound_status and outbound_status.upper() != "OK":
+            outbound_messages = _chr_outbound_messages(serialized_response)
+            logger.error(
+                "%s returned non-OK CHR status %s for herd %s, species %s%s",
+                operation_name,
+                outbound_status,
+                herd_number,
+                species_code,
+                f" ({'; '.join(outbound_messages)})" if outbound_messages else "",
+            )
+            return None
+
         return response  # Return the raw Zeep response object
 
     except Fault as f:

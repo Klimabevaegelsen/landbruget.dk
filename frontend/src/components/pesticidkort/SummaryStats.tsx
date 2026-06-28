@@ -2,20 +2,20 @@
 
 import { cn } from '@/lib/utils';
 import { useCountUp } from '@/components/pesticidkort/useCountUp';
-import { formatBurden } from '@/components/pesticidkort/field-utils';
+import {
+  formatBurden,
+  getBurdenLevel,
+} from '@/components/pesticidkort/field-utils';
 import { EstimatedBadge } from '@/components/pesticidkort/EstimatedBadge';
+import {
+  DEFAULT_EXPOSURE_RADIUS_M,
+  formatRadiusLabel,
+} from '@/components/pesticidkort/exposure-utils';
 
 interface SummaryStatsProps {
   fieldsCount: number;
   avgBurden: number;
   nearestFieldM: number;
-}
-
-function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1).replace('.', ',')} km`;
-  }
-  return `${Math.round(meters)} m`;
 }
 
 export function SummaryStats({
@@ -25,6 +25,9 @@ export function SummaryStats({
 }: SummaryStatsProps) {
   const fieldsCountDisplay = useCountUp(fieldsCount);
   const nearestFieldDisplay = useCountUp(nearestFieldM);
+  const burdenLevel = getBurdenLevel(avgBurden);
+  const isHighBurden = burdenLevel.key === 'high';
+  const isElevatedBurden = burdenLevel.key === 'midHigh';
 
   return (
     <div data-testid="summary-stats" aria-live="polite" className="space-y-3">
@@ -40,23 +43,24 @@ export function SummaryStats({
             {Math.round(fieldsCountDisplay)}
           </span>
           <p className="text-muted-foreground mt-0.5 text-xs">
-            sprøjtede marker inden for 1 km
+            sprøjtede marker inden for{' '}
+            {formatRadiusLabel(DEFAULT_EXPOSURE_RADIUS_M)}
           </p>
         </div>
 
         <div
           className={cn(
             'rounded-lg px-3 py-2 -mx-3 -my-2',
-            avgBurden >= 8 && 'bg-destructive/8',
-            avgBurden >= 4 && avgBurden < 8 && 'bg-warning/8'
+            isHighBurden && 'bg-destructive/8',
+            isElevatedBurden && 'bg-warning/8'
           )}
         >
           <span
             className={cn(
               'text-3xl font-bold tabular-nums',
-              avgBurden >= 8
+              isHighBurden
                 ? 'text-destructive'
-                : avgBurden >= 4
+                : isElevatedBurden
                   ? 'text-warning'
                   : 'text-foreground'
             )}
@@ -66,9 +70,9 @@ export function SummaryStats({
           <p
             className={cn(
               'mt-0.5 text-xs',
-              avgBurden >= 8
+              isHighBurden
                 ? 'text-destructive font-semibold'
-                : avgBurden >= 4
+                : isElevatedBurden
                   ? 'text-warning font-semibold'
                   : 'text-muted-foreground'
             )}
@@ -79,7 +83,7 @@ export function SummaryStats({
 
         <div>
           <span className="text-foreground text-3xl font-bold tabular-nums">
-            {formatDistance(nearestFieldDisplay)}
+            {formatRadiusLabel(nearestFieldDisplay)}
           </span>
           <p className="text-muted-foreground mt-0.5 text-xs">
             til nærmeste mark

@@ -22,7 +22,7 @@ source /opt/transfer-env/bin/activate
 pip3 install uv
 
 # Install required Python packages
-uv pip install --system google-cloud-storage google-cloud-secret-manager paramiko
+uv pip install --system google-cloud-storage google-cloud-secret-manager "paramiko<4"
 
 # Create the transfer script
 cat > /opt/transfer_script.py << 'EOF'
