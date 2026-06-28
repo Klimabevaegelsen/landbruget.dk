@@ -18,7 +18,10 @@ _initialized = False
 _ENV_TO_SECRET = {
     "FVM_USERNAME": "fvm_username",
     "FVM_PASSWORD": "fvm_password",  # pragma: allowlist secret
+    "FVM_CLIENT_ID": "fvm_client_id",
+    "VETSTAT_CERTIFICATE": "vetstat-certificate",
     "VETSTAT_CERTIFICATE_PASSWORD": "vetstat-certificate-password",  # pragma: allowlist secret
+    "LANDBRUGSDATA_UUID_NAMESPACE": "landbrugsdata-uuid-namespace",
     "DATAFORDELER_SFTP_HOST": "datafordeler-sftp-host",
     "DATAFORDELER_SFTP_USERNAME": "datafordeler-sftp-username",
     "DATAFORDELER_GRAPHQL_API_KEY": "datafordeler-graphql-api-key",  # pragma: allowlist secret

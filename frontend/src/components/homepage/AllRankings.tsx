@@ -204,8 +204,7 @@ export function AllRankings() {
       {/* Footer */}
       <div className="border-border border-t pt-8 text-center">
         <p className="text-muted-foreground text-xs">
-          Data opdateret: {new Date().toLocaleDateString('da-DK')} • 26
-          ranglister baseret på officielle data fra 2024-2025
+          26 ranglister baseret på officielle data fra 2024-2025
         </p>
       </div>
     </div>

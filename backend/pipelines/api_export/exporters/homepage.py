@@ -29,6 +29,7 @@ from common.logging_utils import get_pipeline_logger
 
 from exporters.animal import (
     create_company_animal_summary,
+    create_company_municipality_lookup,
     create_company_transport_summaries,
     create_production_sites,
     site_yearly_summary_count_query,
@@ -93,6 +94,33 @@ class HomepageExporter(BaseExporter):
         return stats
 
     def _wrap_rankings(self, rankings: list[dict]) -> dict:
+        invalid_rankings = []
+        empty_ranking_ids = []
+
+        for index, ranking in enumerate(rankings):
+            ranking_id = ranking.get("id") if isinstance(ranking, dict) else None
+            if not isinstance(ranking, dict) or not isinstance(ranking.get("items"), list):
+                label = f"index {index}"
+                if ranking_id:
+                    label = f"{label} ({ranking_id})"
+                invalid_rankings.append(label)
+                continue
+
+            if not ranking["items"] or ranking.get("status") in {"missing", "empty", "error"}:
+                empty_ranking_ids.append(ranking.get("id", f"index {index}"))
+
+        if invalid_rankings:
+            raise ValueError(
+                "Homepage export received invalid rankings: " + ", ".join(invalid_rankings)
+            )
+
+        if empty_ranking_ids:
+            logger.warning(
+                "Homepage export: %s rankings have no data: %s",
+                len(empty_ranking_ids),
+                empty_ranking_ids,
+            )
+
         return {
             "rankings": rankings,
             "metadata": {
@@ -790,21 +818,21 @@ class HomepageExporter(BaseExporter):
                 "Højest PFAS-forbrug",
                 "Virksomheder med det højeste forbrug af PFAS-holdige pesticider i 2024",
                 "B/ha",
-                "PFAS ranking requires BMD product classifications joined to pesticide applications.",
+                "PFAS ranking requires BMD product classifications joined to pesticide use allocations.",
             ),
             (
                 "most_glyphosate_usage",
                 "Højest Glyphosatforbrug",
                 "Virksomheder med det højeste glyphosatforbrug i 2024",
                 "B/ha",
-                "Glyphosate ranking requires BMD product classifications joined to pesticide applications.",
+                "Glyphosate ranking requires BMD product classifications joined to pesticide use allocations.",
             ),
             (
                 "most_diquat_usage",
                 "Højest Diquatforbrug",
                 "Virksomheder med det højeste diquatforbrug i 2024",
                 "B/ha",
-                "Diquat ranking requires BMD product classifications joined to pesticide applications.",
+                "Diquat ranking requires BMD product classifications joined to pesticide use allocations.",
             ),
             (
                 "most_bnbo_not_dealt_with",
@@ -1584,8 +1612,30 @@ class HomepageExporter(BaseExporter):
         if "company_id" not in production_columns:
             return False
 
+        if not self._table_exists("company_municipality"):
+            create_company_municipality_lookup(self.conn)
+
+        combined_municipality_join = ""
+        site_municipality_join = ""
+        combined_municipality_expr = (
+            "COALESCE(NULLIF(TRIM(c.current_municipality_name), ''), 'Ukendt kommune')"
+        )
+        site_municipality_expr = combined_municipality_expr
+        if self._table_exists("company_municipality"):
+            combined_municipality_join = (
+                "LEFT JOIN company_municipality cm ON cm.cvr_number = combined.cvr_number"
+            )
+            site_municipality_join = (
+                "LEFT JOIN company_municipality cm ON cm.cvr_number = ps.company_id"
+            )
+            combined_municipality_expr = (
+                "COALESCE(NULLIF(TRIM(c.current_municipality_name), ''), "
+                "cm.municipality, 'Ukendt kommune')"
+            )
+            site_municipality_expr = combined_municipality_expr
+
         if self._table_exists("herd_sizes") and "main_species_code" in production_columns:
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE animal_species_summary AS
                 WITH site_capacity AS (
                     SELECT
@@ -1623,7 +1673,7 @@ class HomepageExporter(BaseExporter):
                 SELECT
                     combined.cvr_number,
                     c.company_name,
-                    c.current_municipality_name AS municipality,
+                    {combined_municipality_expr} AS municipality,
                     combined.species_code,
                     combined.site_capacity,
                     combined.registered_animals,
@@ -1634,16 +1684,17 @@ class HomepageExporter(BaseExporter):
                 FROM combined
                 JOIN companies c
                   ON combined.cvr_number = c.cvr_number::VARCHAR
+                {combined_municipality_join}
             """)
             return True
 
         if "main_species_code" in production_columns:
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE animal_species_summary AS
                 SELECT
                     ps.company_id AS cvr_number,
                     c.company_name,
-                    c.current_municipality_name AS municipality,
+                    {site_municipality_expr} AS municipality,
                     CAST(ps.main_species_code AS VARCHAR) AS species_code,
                     SUM(COALESCE(ps.capacity, 0)) AS site_capacity,
                     0 AS registered_animals,
@@ -1651,6 +1702,7 @@ class HomepageExporter(BaseExporter):
                 FROM production_sites ps
                 JOIN companies c
                   ON ps.company_id = c.cvr_number::VARCHAR
+                {site_municipality_join}
                 WHERE ps.main_species_code IS NOT NULL
                 GROUP BY 1, 2, 3, 4
             """)
@@ -1668,12 +1720,19 @@ class HomepageExporter(BaseExporter):
         description: str,
         unit: str,
         format_fn: Callable,
-    ) -> dict | None:
+    ) -> dict:
         """Generate a ranking from SQL that returns cvr_number, company_name, municipality, value."""
         try:
             rows = self.query_to_dicts(sql)
             if not rows:
-                return None
+                return self._empty_ranking(
+                    id=id,
+                    title=title,
+                    category=category,
+                    description=description,
+                    unit=unit,
+                    note="No rows returned for this ranking.",
+                )
             total = self.conn.execute(count_sql).fetchone()[0]
             return {
                 "id": id,
@@ -1696,7 +1755,14 @@ class HomepageExporter(BaseExporter):
             }
         except Exception:
             logger.exception(f"Failed to generate ranking: {id}")
-            return None
+            return self._empty_ranking(
+                id=id,
+                title=title,
+                category=category,
+                description=description,
+                unit=unit,
+                note="Ranking query failed.",
+            )
 
     def _empty_ranking(
         self,

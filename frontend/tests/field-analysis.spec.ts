@@ -17,7 +17,9 @@ test.describe('Field Analysis Page', () => {
     await page.waitForTimeout(2000);
   });
 
-  test('should display layer control panel', async ({ page }) => {
+  test('should display layer control panel', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop layer controls are hidden on mobile.');
+
     // Wait for layer control panel to load
     await page.waitForSelector('[data-testid="layer-control-panel"]', {
       timeout: 10000,
@@ -27,7 +29,9 @@ test.describe('Field Analysis Page', () => {
     await expect(layerPanel).toBeVisible();
   });
 
-  test('should toggle layer visibility', async ({ page }) => {
+  test('should toggle layer visibility', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop layer controls are hidden on mobile.');
+
     // Wait for layer controls to be available
     await page.waitForSelector('[data-testid="layer-toggle"]', {
       timeout: 10000,
@@ -54,7 +58,12 @@ test.describe('Field Analysis Page', () => {
     }
   });
 
-  test('should display layer information correctly', async ({ page }) => {
+  test('should display layer information correctly', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'Desktop layer controls are hidden on mobile.');
+
     // Wait for layer items to load
     await page.waitForSelector('[data-testid="layer-item"]', {
       timeout: 10000,
@@ -80,7 +89,9 @@ test.describe('Field Analysis Page', () => {
     }
   });
 
-  test('should handle filter changes', async ({ page }) => {
+  test('should handle filter changes', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop filter controls are hidden on mobile.');
+
     // Wait for filter controls
     await page.waitForSelector('[data-testid="filter-control"]', {
       timeout: 10000,
@@ -144,7 +155,9 @@ test.describe('Field Analysis Page', () => {
     }
   });
 
-  test('should handle layer icons and colors', async ({ page }) => {
+  test('should handle layer icons and colors', async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Desktop layer controls are hidden on mobile.');
+
     // Wait for layer items
     await page.waitForSelector('[data-testid="layer-item"]', {
       timeout: 10000,

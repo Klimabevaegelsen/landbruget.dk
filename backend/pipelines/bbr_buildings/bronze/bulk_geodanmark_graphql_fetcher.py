@@ -8,7 +8,7 @@ Replaces the WFS-based BulkGeoDanmarkFetcher since the WFS endpoint
 (wfs.datafordeler.dk/GeoDanmarkVektor/...) is no longer working.
 
 GraphQL API details:
-  - Endpoint: https://graphql.datafordeler.dk/GEODKV/v1?apiKey=<key>
+  - Endpoint: https://graphql.datafordeler.dk/GEODKV/v2?apiKey=<key>
   - Entity: GEODKV_Bygning (37 fields)
   - Geometry: SpatialPolygonZEpsg25832Type → { wkt } returns WKT POLYGON Z(...)
   - Pagination: cursor-based, first (max 1000) + after
@@ -85,9 +85,13 @@ _COMBINE_COLUMNS = [c for c in BUILDING_COLUMNS if c != "geometri_wkt"]
 
 
 class BulkGeoDanmarkGraphQLFetcher:
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, endpoint_base: str | None = None) -> None:
         self.api_key = api_key
-        self.endpoint = f"https://graphql.datafordeler.dk/GEODKV/v1?apiKey={api_key}"
+        self.endpoint_base = (
+            endpoint_base
+            or os.getenv("GEODKV_GRAPHQL_ENDPOINT")
+            or "https://graphql.datafordeler.dk/GEODKV/v2"
+        )
         self.session = self._create_session()
         self.output_dir = Path("data")
         self.output_dir.mkdir(exist_ok=True)
@@ -113,12 +117,14 @@ class BulkGeoDanmarkGraphQLFetcher:
     def _graphql_query(self, query: str) -> dict:
         """Execute a GraphQL query with error handling."""
         resp = self.session.post(
-            self.endpoint,
+            self.endpoint_base,
+            params={"apiKey": self.api_key},
             headers={"Content-Type": "application/json; charset=utf-8"},
             json={"query": query},
             timeout=120,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(f"GraphQL request failed: HTTP {resp.status_code}")
         data = resp.json()
         if "errors" in data:
             error_msgs = [e.get("message", "?") for e in data["errors"]]
@@ -224,19 +230,35 @@ class BulkGeoDanmarkGraphQLFetcher:
             while True:
                 progress_bar.set_description(f"Page {page_num + 1} (total: {total_buildings:,})")
 
-                try:
-                    nodes, has_next, end_cursor = self.fetch_buildings_page(cursor)
-                except Exception as e:
-                    logger.error(f"Failed to fetch page {page_num + 1}: {e}")
-                    # Retry once after a pause
-                    time.sleep(5)
+                max_page_retries = 5
+                last_fetch_error = None
+                for attempt in range(1, max_page_retries + 1):
                     try:
                         nodes, has_next, end_cursor = self.fetch_buildings_page(cursor)
-                    except Exception as e2:
-                        logger.error(f"Retry also failed: {e2}, stopping")
+                        last_fetch_error = None
                         break
+                    except Exception as e:
+                        last_fetch_error = e
+                        if attempt == max_page_retries:
+                            break
+                        wait = min(60, 5 * attempt)
+                        logger.warning(
+                            f"Failed to fetch page {page_num + 1} "
+                            f"(attempt {attempt}/{max_page_retries}): {e}. "
+                            f"Retrying in {wait}s..."
+                        )
+                        time.sleep(wait)
+                else:
+                    nodes, has_next, end_cursor = [], False, None
+
+                if last_fetch_error is not None:
+                    raise RuntimeError(
+                        f"Failed to fetch page {page_num + 1} after {max_page_retries} attempts"
+                    ) from last_fetch_error
 
                 if not nodes:
+                    if page_num == 0 and total_buildings == 0:
+                        raise RuntimeError("GraphQL API returned no buildings on the first page")
                     logger.info("No more buildings — reached end of dataset")
                     break
 
@@ -339,8 +361,7 @@ class BulkGeoDanmarkGraphQLFetcher:
         intermediate_files = sorted(self.output_dir.glob("geodanmark_buildings_batch_*.geoparquet"))
 
         if not intermediate_files:
-            logger.warning("No intermediate files found")
-            return
+            raise RuntimeError("No intermediate GeoDanmark files were produced")
 
         logger.info(f"Validating {len(intermediate_files)} intermediate files")
 

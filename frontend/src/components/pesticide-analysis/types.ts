@@ -5,7 +5,7 @@ export interface PesticideAnalysisFilters {
   cvr: string;
   page: number;
   limit: number;
-  sortBy: 'belastning' | 'applications' | 'area';
+  sortBy: 'belastning' | 'applications' | 'area'; // Legacy query value; UI labels this as use allocations.
   sortOrder: 'asc' | 'desc';
 }
 
@@ -18,6 +18,7 @@ export interface CompanySummary {
   diquat_belastning: number;
   glyphosate_belastning: number;
   total_applications: number;
+  total_use_allocations?: number;
   unique_products: number;
   total_treated_area_ha: number;
   years_active: number[];
@@ -28,6 +29,20 @@ export interface PesticideAnalysisResponse {
   total_count: number;
   page: number;
   limit: number;
+  summary?: {
+    total_applications?: number;
+    total_companies?: number;
+    unique_pesticides?: number;
+    total_municipalities?: number;
+    total_treated_area_ha?: number;
+    total_dosage?: number;
+  };
+  top_pesticides?: Array<{
+    name?: string;
+    application_count?: number;
+    total_dosage?: number;
+    total_area_ha?: number;
+  }>;
   filters: {
     available_years: number[];
     available_municipalities: string[];
@@ -47,10 +62,22 @@ export interface CompanyDetailsResponse {
     diquat_belastning: number;
     glyphosate_belastning: number;
     total_applications: number;
+    total_use_allocations?: number;
     applications_by_product: Array<{
       product_name: string;
       registration_number: string;
-      applications: number;
+      applications?: number;
+      use_allocations?: number;
+      total_belastning: number;
+      contains_pfas: boolean;
+      contains_diquat: boolean;
+      contains_glyphosate: boolean;
+    }>;
+    use_allocations_by_product?: Array<{
+      product_name: string;
+      registration_number: string;
+      applications?: number;
+      use_allocations: number;
       total_belastning: number;
       contains_pfas: boolean;
       contains_diquat: boolean;
@@ -68,7 +95,8 @@ export interface CompanyDetailsResponse {
 export interface PesticideProduct {
   product_name: string;
   registration_number: string;
-  applications: number;
+  applications?: number;
+  use_allocations?: number;
   total_belastning: number;
   contains_pfas: boolean;
   contains_diquat: boolean;

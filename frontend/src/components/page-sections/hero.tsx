@@ -104,74 +104,21 @@ export function Hero() {
       : '--';
 
   return (
-    <div className="hero-section relative isolate overflow-hidden px-6 pt-14 lg:px-8">
-      {/* Background Image */}
+    <div className="homepage-hero relative isolate overflow-hidden px-4 pt-8 sm:px-6 sm:pt-14 lg:px-8">
       <div className="absolute inset-0 -z-10">
-        <picture>
-          <source
-            media="(min-width: 1024px)"
-            srcSet={
-              isDark
-                ? '/images/hero/hero-desktop-dark.webp'
-                : '/images/hero/hero-desktop.webp'
-            }
-            type="image/webp"
-          />
-          <source
-            media="(min-width: 1024px)"
-            srcSet={
-              isDark
-                ? '/images/hero/hero-desktop-dark.jpg'
-                : '/images/hero/hero-desktop.jpg'
-            }
-            type="image/jpeg"
-          />
-          <source
-            media="(min-width: 768px)"
-            srcSet={
-              isDark
-                ? '/images/hero/hero-tablet-dark.webp'
-                : '/images/hero/hero-tablet.webp'
-            }
-            type="image/webp"
-          />
-          <source
-            media="(min-width: 768px)"
-            srcSet={
-              isDark
-                ? '/images/hero/hero-tablet-dark.jpg'
-                : '/images/hero/hero-tablet.jpg'
-            }
-            type="image/jpeg"
-          />
-          <source
-            srcSet={
-              isDark
-                ? '/images/hero/hero-mobile-dark.webp'
-                : '/images/hero/hero-mobile.webp'
-            }
-            type="image/webp"
-          />
-          <img
-            src={
-              isDark
-                ? '/images/hero/hero-mobile-dark.jpg'
-                : '/images/hero/hero-mobile.jpg'
-            }
-            alt="Danish agricultural landscape"
-            className="aspect-video h-full w-full max-w-full object-cover object-center"
-            loading="eager"
-            decoding="async"
-          />
-        </picture>
-        {/* Overlay for better text readability - adjust opacity for dark mode */}
+        <div
+          aria-hidden="true"
+          className={`homepage-hero-bg absolute inset-0 ${
+            isDark ? 'homepage-hero-bg-dark' : 'homepage-hero-bg-light'
+          }`}
+        />
         <div
           className={`absolute inset-0 ${isDark ? 'bg-background/60' : 'bg-background/40'}`}
         ></div>
       </div>
-      <div className="mx-auto max-w-4xl py-18 sm:py-28 lg:py-40">
-        <div className="flex flex-col gap-6 text-center">
-          <h1 className="text-primary-foreground text-5xl font-bold tracking-tight text-balance sm:text-5xl">
+      <div className="mx-auto max-w-4xl py-8 sm:py-24 lg:py-40">
+        <div className="flex flex-col gap-4 text-center sm:gap-6">
+          <h1 className="text-primary-foreground text-4xl font-bold tracking-tight text-balance sm:text-5xl">
             Dansk landbrugsdata - samlet ét sted
           </h1>
           <div className="md:mx-auto">

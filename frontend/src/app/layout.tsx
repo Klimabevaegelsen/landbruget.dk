@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="da" suppressHydrationWarning>
       <body
-        className={`${plusJakartaSans.variable} ${fraunces.variable} antialiased`}
+        className={`${plusJakartaSans.variable} ${fraunces.variable} overflow-x-hidden antialiased`}
       >
         <ThemeProvider defaultTheme="system" storageKey="landbruget-theme">
           {children}

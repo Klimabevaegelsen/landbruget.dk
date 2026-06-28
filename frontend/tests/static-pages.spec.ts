@@ -6,6 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { expectResponsiveNavigation } from './helpers/navigation';
 
 const STATIC_PAGES = [
   { path: '/kilder', heading: 'Kilder' },
@@ -52,7 +53,7 @@ for (const { path: pagePath, heading } of STATIC_PAGES) {
 
     test('should have navigation visible', async ({ page }) => {
       await page.goto(pagePath);
-      await expect(page.locator('nav')).toBeVisible();
+      await expectResponsiveNavigation(page);
     });
   });
 }

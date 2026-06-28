@@ -16,12 +16,21 @@ const testPages = [
 ];
 
 test.describe('Mobile Ugliness Detection Tests', () => {
+  const skipUnsupportedMobileContext = (browserName: string) => {
+    test.skip(
+      browserName === 'firefox',
+      'Firefox does not support Playwright mobile emulation contexts'
+    );
+  };
+
   // Test 1: Text wrapping and overflow detection
   for (const device of uglinessTestDevices) {
     for (const page of testPages) {
       test(`${page.name} on ${device.name} - Text wrapping and overflow`, async ({
         browser,
+        browserName,
       }) => {
+        skipUnsupportedMobileContext(browserName);
         const context = await browser.newContext(device.config);
         const browserPage = await context.newPage();
 
@@ -94,7 +103,9 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   // Test 2: Element overlap detection
   test('Homepage - Element overlap and collision detection', async ({
     browser,
+    browserName,
   }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone SE']); // Test on smallest screen
     const page = await context.newPage();
 
@@ -175,7 +186,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   // Test 3: Button and form element cramping detection
   for (const device of uglinessTestDevices.slice(0, 2)) {
     // Test on 2 devices
-    test(`Button cramming detection on ${device.name}`, async ({ browser }) => {
+    test(`Button cramming detection on ${device.name}`, async ({
+      browser,
+      browserName,
+    }) => {
+      skipUnsupportedMobileContext(browserName);
       const context = await browser.newContext(device.config);
       const page = await context.newPage();
 
@@ -225,7 +240,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   }
 
   // Test 4: Image scaling and aspect ratio issues
-  test('Image scaling and proportion issues', async ({ browser }) => {
+  test('Image scaling and proportion issues', async ({
+    browser,
+    browserName,
+  }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone SE']);
     const page = await context.newPage();
 
@@ -279,7 +298,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   });
 
   // Test 5: Inconsistent spacing detection
-  test('Inconsistent spacing and alignment detection', async ({ browser }) => {
+  test('Inconsistent spacing and alignment detection', async ({
+    browser,
+    browserName,
+  }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 
@@ -331,7 +354,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   });
 
   // Test 6: Typography hierarchy and readability issues
-  test('Typography hierarchy and readability issues', async ({ browser }) => {
+  test('Typography hierarchy and readability issues', async ({
+    browser,
+    browserName,
+  }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone SE']);
     const page = await context.newPage();
 
@@ -399,7 +426,8 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   });
 
   // Test 7: Form field alignment and spacing issues
-  test('Form field ugliness detection', async ({ browser }) => {
+  test('Form field ugliness detection', async ({ browser, browserName }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 
@@ -408,7 +436,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
 
     for (const formPage of formPages.slice(0, 2)) {
       try {
-        await page.goto(formPage, { waitUntil: 'networkidle', timeout: 30000 });
+        await page.goto(formPage, {
+          waitUntil: 'domcontentloaded',
+          timeout: 15000,
+        });
+        await expect(page.locator('body')).toBeVisible();
 
         const formElements = await page
           .locator('input, textarea, select, button[type="submit"]')
@@ -482,7 +514,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   });
 
   // Test 8: Color contrast and visual accessibility ugliness
-  test('Visual accessibility and contrast issues', async ({ browser }) => {
+  test('Visual accessibility and contrast issues', async ({
+    browser,
+    browserName,
+  }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 
@@ -537,7 +573,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   });
 
   // Test 9: Navigation and menu ugliness
-  test('Navigation menu layout and spacing issues', async ({ browser }) => {
+  test('Navigation menu layout and spacing issues', async ({
+    browser,
+    browserName,
+  }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone SE']);
     const page = await context.newPage();
 
@@ -599,7 +639,11 @@ test.describe('Mobile Ugliness Detection Tests', () => {
   });
 
   // Test 10: Performance-related visual ugliness (layout shifts, slow loading)
-  test('Performance-related visual issues', async ({ browser }) => {
+  test('Performance-related visual issues', async ({
+    browser,
+    browserName,
+  }) => {
+    skipUnsupportedMobileContext(browserName);
     const context = await browser.newContext(devices['iPhone 12']);
     const page = await context.newPage();
 

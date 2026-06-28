@@ -19,7 +19,12 @@ embedded as "x, y" strings in the station data. The silver layer:
 6. Saves as parquet to cloud storage
 """
 
+import shutil
+import struct
+import tempfile
+import zlib
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from common.crs_utils import DENMARK_BOUNDS_UTM
@@ -98,22 +103,45 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
         """
         Load the Kemidata CSV export from storage directly into a DuckDB table.
 
-        Uses DuckDB's registered cloud filesystem (configured by StorageAccess)
-        to read the CSV without temp files or in-memory buffering.
+        The bronze stage stores CSV exports via StorageAccess. Download to a
+        temporary local file first because DuckDB cannot resolve the bare
+        bucket/object path returned by the manifest.
 
         Returns the table name.
         """
         storage_uri = f"{self.config.bucket}/{csv_path}"
         self.log.info(f"Loading CSV from {storage_uri}")
 
-        self.conn.execute(f"""
-            CREATE OR REPLACE TABLE raw_kemidata AS
-            SELECT * FROM read_csv_auto('{storage_uri}',
-                header=true,
-                all_varchar=true,
-                ignore_errors=true
-            )
-        """)
+        tmp_paths: list[str] = []
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+                tmp_paths.append(tmp.name)
+                with self.storage.fs.open(storage_uri, "rb") as src:
+                    shutil.copyfileobj(src, tmp)
+
+            csv_read_path = tmp_paths[0]
+            if self._is_zip_file(csv_read_path):
+                csv_read_path = self._extract_first_zip_member(csv_read_path)
+                tmp_paths.append(csv_read_path)
+
+            escaped_tmp_path = csv_read_path.replace("'", "''")
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE raw_kemidata AS
+                SELECT * FROM read_csv_auto('{escaped_tmp_path}',
+                    header=true,
+                    all_varchar=true,
+                    delim=';',
+                    strict_mode=false,
+                    null_padding=true,
+                    ignore_errors=true
+                )
+            """)
+        finally:
+            for tmp_path in tmp_paths:
+                try:
+                    Path(tmp_path).unlink(missing_ok=True)
+                except OSError as e:
+                    self.log.warning(f"Could not remove temporary CSV {tmp_path}: {e}")
 
         row_count = self.conn.execute("SELECT COUNT(*) FROM raw_kemidata").fetchone()[0]
         columns = [col[0] for col in self.conn.execute("DESCRIBE raw_kemidata").fetchall()]
@@ -122,6 +150,78 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
         self.log.info(f"Columns: {columns}")
 
         return "raw_kemidata"
+
+    @staticmethod
+    def _is_zip_file(path: str) -> bool:
+        with Path(path).open("rb") as f:
+            return f.read(4) == b"PK\x03\x04"
+
+    def _extract_first_zip_member(self, zip_path: str) -> str:
+        """Extract the first local ZIP member without trusting the central directory."""
+        with Path(zip_path).open("rb") as src:
+            header = src.read(30)
+            if len(header) != 30:
+                raise ValueError("Kemidata ZIP payload is missing a local file header")
+
+            (
+                signature,
+                _version,
+                _flag_bits,
+                compression_method,
+                _modified_time,
+                _modified_date,
+                _crc32,
+                compressed_size,
+                _uncompressed_size,
+                file_name_length,
+                extra_field_length,
+            ) = struct.unpack("<IHHHHHIIIHH", header)
+
+            if signature != 0x04034B50:
+                raise ValueError("Kemidata ZIP payload has an invalid local file header")
+
+            member_name = src.read(file_name_length).decode("utf-8", errors="replace")
+            src.read(extra_field_length)
+            self.log.info(f"Extracting Kemidata ZIP member {member_name}")
+
+            extracted_path = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+                    extracted_path = tmp.name
+                    if compression_method == 8:  # deflate
+                        decompressor = zlib.decompressobj(-zlib.MAX_WBITS)
+                        while True:
+                            chunk = src.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            data = decompressor.decompress(chunk)
+                            if data:
+                                tmp.write(data)
+                            if decompressor.eof:
+                                break
+                        tail = decompressor.flush()
+                        if tail:
+                            tmp.write(tail)
+                        if not decompressor.eof:
+                            raise ValueError("Kemidata ZIP deflate stream ended before EOF")
+                    elif compression_method == 0 and compressed_size > 0:  # stored
+                        remaining = compressed_size
+                        while remaining > 0:
+                            chunk = src.read(min(1024 * 1024, remaining))
+                            if not chunk:
+                                raise ValueError("Kemidata ZIP stored member ended before EOF")
+                            tmp.write(chunk)
+                            remaining -= len(chunk)
+                    else:
+                        raise ValueError(
+                            f"Unsupported Kemidata ZIP compression method {compression_method}"
+                        )
+            except Exception:
+                if extracted_path is not None:
+                    Path(extracted_path).unlink(missing_ok=True)
+                raise
+
+        return extracted_path
 
     @timed(name="Transforming Kemidata")
     def _transform_data(self, stations: list[dict]) -> str:
@@ -167,6 +267,8 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
         # Detect the right join column from the CSV
         station_col = None
         for candidate in [
+            "Stedtekst",
+            "Målested navn",
             "Lokalitetsnavn",
             "StationsNavn",
             "Stationsnavn",
@@ -180,6 +282,7 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
 
         station_id_col = None
         for candidate in [
+            "StedID",
             "Lokalitetsnummer",
             "StationsNummer",
             "Stationsnummer",
@@ -192,33 +295,99 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
 
         self.log.info(f"Detected station column: {station_col}, ID column: {station_id_col}")
 
-        # Build the actual transform with the detected columns
+        x_col = self._find_column(
+            columns,
+            col_lower,
+            ["x-koordinat", "Målested, x-koordinat", "x_coord", "x"],
+        )
+        y_col = self._find_column(
+            columns,
+            col_lower,
+            ["y-koordinat", "Målested, y-koordinat", "y_coord", "y"],
+        )
+        media_col = self._find_column(columns, col_lower, ["Medie", "media_name", "Media"])
+
+        # Build the actual transform with the detected columns.
+        # The CSV carries coordinates, so prefer those to avoid duplicate rows
+        # from non-unique station names in the metadata search result.
         if station_col:
             join_clause = f'r."{station_col}" = s.station_name'
         elif station_id_col:
             join_clause = f'r."{station_id_col}" = s.station_id'
         else:
-            # No join possible — just include all data without geometry
+            # No join possible — direct CSV coordinates may still provide geometry.
             self.log.warning(
                 "Could not detect station column for geometry join. "
-                "Data will be saved without geometry."
+                "Falling back to CSV coordinates only."
             )
             join_clause = "1=0"  # No match, all NULLs for station columns
+
+        if x_col and y_col:
+            csv_x_expr = f"TRY_CAST(REPLACE(NULLIF(TRIM(r.\"{x_col}\"), ''), ',', '.') AS DOUBLE)"
+            csv_y_expr = f"TRY_CAST(REPLACE(NULLIF(TRIM(r.\"{y_col}\"), ''), ',', '.') AS DOUBLE)"
+            x_expr = f"COALESCE({csv_x_expr}, s.x)"
+            y_expr = f"COALESCE({csv_y_expr}, s.y)"
+        else:
+            x_expr = "s.x"
+            y_expr = "s.y"
+
+        if media_col:
+            media_expr = f"COALESCE(NULLIF(TRIM(r.\"{media_col}\"), ''), s.media_name)"
+        else:
+            media_expr = "s.media_name"
+
+        if station_col:
+            station_lookup_query = """
+                CREATE OR REPLACE TABLE station_lookup AS
+                SELECT
+                    ANY_VALUE(station_id) AS station_id,
+                    station_name,
+                    ANY_VALUE(media_name) AS media_name,
+                    ANY_VALUE(x) AS x,
+                    ANY_VALUE(y) AS y
+                FROM stations
+                GROUP BY station_name
+            """
+        elif station_id_col:
+            station_lookup_query = """
+                CREATE OR REPLACE TABLE station_lookup AS
+                SELECT
+                    station_id,
+                    ANY_VALUE(station_name) AS station_name,
+                    ANY_VALUE(media_name) AS media_name,
+                    ANY_VALUE(x) AS x,
+                    ANY_VALUE(y) AS y
+                FROM stations
+                GROUP BY station_id
+            """
+        else:
+            station_lookup_query = """
+                CREATE OR REPLACE TABLE station_lookup AS
+                SELECT
+                    NULL::VARCHAR AS station_id,
+                    NULL::VARCHAR AS station_name,
+                    NULL::VARCHAR AS media_name,
+                    NULL::DOUBLE AS x,
+                    NULL::DOUBLE AS y
+                WHERE FALSE
+            """
+
+        self.conn.execute(station_lookup_query)
 
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE kemidata_transformed AS
             SELECT
                 r.*,
-                s.x AS x_coord,
-                s.y AS y_coord,
-                s.media_name AS media_type,
+                {x_expr} AS x_coord,
+                {y_expr} AS y_coord,
+                {media_expr} AS media_type,
                 CASE
-                    WHEN s.x IS NOT NULL AND s.y IS NOT NULL
-                    THEN ST_Point(s.x, s.y)
+                    WHEN {x_expr} IS NOT NULL AND {y_expr} IS NOT NULL
+                    THEN ST_Point({x_expr}, {y_expr})
                     ELSE NULL
                 END AS geometry
             FROM raw_kemidata r
-            LEFT JOIN stations s ON {join_clause}
+            LEFT JOIN station_lookup s ON {join_clause}
         """)
 
         # Filter to surface water only where possible
@@ -260,6 +429,15 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
         self.log.info(f"Transformed: {total:,} rows, {with_geom:,} with geometry")
 
         return "kemidata_transformed"
+
+    @staticmethod
+    def _find_column(
+        columns: list[str], col_lower: dict[str, str], candidates: list[str]
+    ) -> str | None:
+        for candidate in candidates:
+            if candidate in columns or candidate.lower() in col_lower:
+                return col_lower.get(candidate.lower(), candidate)
+        return None
 
     @timed(name="Validating geometries")
     def _validate_geometries(self, table_name: str) -> None:
@@ -322,11 +500,28 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
                         self.log.error("No manifest files found. Run bronze stage first.")
                         return None
 
-                    latest = sorted(manifest_files, reverse=True)[0]
-                    self.log.info(f"Reading manifest from {latest}")
-                    manifest = self.storage.download_json(latest)
-                    csv_path = manifest.get("csv_path")
-                    stations_path = manifest.get("stations_path")
+                    for manifest_file in sorted(manifest_files, reverse=True):
+                        self.log.info(f"Reading manifest from {manifest_file}")
+                        manifest = self.storage.download_json(manifest_file)
+                        candidate_csv_path = manifest.get("csv_path")
+                        if not candidate_csv_path:
+                            self.log.warning(f"Manifest {manifest_file} has no csv_path; skipping")
+                            continue
+
+                        candidate_storage_uri = f"{self.config.bucket}/{candidate_csv_path}"
+                        if not self.storage.file_exists(candidate_storage_uri):
+                            self.log.warning(
+                                f"Manifest {manifest_file} points to missing CSV "
+                                f"{candidate_storage_uri}; trying older manifest"
+                            )
+                            continue
+
+                        csv_path = candidate_csv_path
+                        stations_path = manifest.get("stations_path")
+                        break
+                    else:
+                        self.log.error("No manifest with an existing CSV export found.")
+                        return None
 
                 if not csv_path:
                     self.log.error("Missing csv_path in manifest")

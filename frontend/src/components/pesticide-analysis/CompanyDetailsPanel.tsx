@@ -85,8 +85,11 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
 
   const getTopProducts = (yearData: {
     applications_by_product: PesticideProduct[];
+    use_allocations_by_product?: PesticideProduct[];
   }) => {
-    return yearData.applications_by_product
+    return (
+      yearData.use_allocations_by_product ?? yearData.applications_by_product
+    )
       .slice(0, 5)
       .map((product: PesticideProduct) => (
         <div
@@ -120,7 +123,7 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
               {formatBelastning(product.total_belastning)}
             </div>
             <div className="text-muted-foreground text-xs">
-              {product.applications} anvendelser
+              {product.use_allocations ?? product.applications} allokeringer
             </div>
           </div>
         </div>
@@ -182,9 +185,13 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
             </div>
           </div>
           <div className="bg-muted rounded p-2">
-            <div className="text-muted-foreground font-medium">Anvendelser</div>
+            <div className="text-muted-foreground font-medium">
+              Allokeringer
+            </div>
             <div className="text-foreground text-lg font-bold">
-              {company.total_applications.toLocaleString()}
+              {(
+                company.total_use_allocations ?? company.total_applications
+              ).toLocaleString()}
             </div>
           </div>
           <div className="bg-accent/10 rounded p-2">
@@ -248,9 +255,11 @@ export function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
           </div>
         </div>
         <div className="bg-muted rounded p-2">
-          <div className="text-muted-foreground font-medium">Anvendelser</div>
+          <div className="text-muted-foreground font-medium">Allokeringer</div>
           <div className="text-foreground text-lg font-bold">
-            {company.total_applications.toLocaleString()}
+            {(
+              company.total_use_allocations ?? company.total_applications
+            ).toLocaleString()}
           </div>
         </div>
         <div className="bg-accent/10 rounded p-2">

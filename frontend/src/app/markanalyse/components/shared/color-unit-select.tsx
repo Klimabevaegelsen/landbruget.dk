@@ -40,7 +40,7 @@ const UNIT_LABELS: Record<ColorUnit, string> = {
   total: 'Total mængde (kg/L)',
   per_hectare: 'Per hektar',
   belastning: 'Belastning (anbefalet)',
-  applications: 'Antal pesticider',
+  applications: 'Antal allokeringer',
 };
 
 export function ColorUnitSelect({
