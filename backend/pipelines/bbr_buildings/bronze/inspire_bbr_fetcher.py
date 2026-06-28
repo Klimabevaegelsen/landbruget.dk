@@ -547,10 +547,7 @@ class InspireBBRFetcher:
         """
         Query GraphQL API to get BBR usage codes for building UUIDs using proper batch queries.
         """
-        graphql_url = (
-            f"https://graphql.datafordeler.dk/BBR/v1?"
-            f"apikey={self.settings.datafordeler_graphql_api_key}"
-        )
+        graphql_url = self.settings.bbr_graphql_endpoint
 
         all_results = []
         total_batches = (len(uuids) + batch_size - 1) // batch_size
@@ -602,6 +599,7 @@ class InspireBBRFetcher:
                 try:
                     response = requests.post(
                         graphql_url,
+                        params={"apiKey": self.settings.datafordeler_graphql_api_key},
                         headers={"Content-Type": "application/json"},
                         json={"query": batch_query},
                         timeout=60,  # Longer timeout for batch queries
@@ -750,13 +748,13 @@ class InspireBBRFetcher:
         """
         self.logger.info(f"Parsing FTP page: {self.settings.sdfe_ftp_base_url}")
 
-        max_retries = 3
-        retry_delays = [10, 30, 60]
+        max_retries = 5
+        retry_delays = [10, 30, 60, 120]
         last_error = None
 
         for attempt in range(max_retries):
             try:
-                response = self.session.get(self.settings.sdfe_ftp_base_url, timeout=60)
+                response = self.session.get(self.settings.sdfe_ftp_base_url, timeout=180)
                 response.raise_for_status()
                 break
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
@@ -887,48 +885,64 @@ class InspireBBRFetcher:
         self.logger.info(f"Downloading file from {url} to {output_path}")
 
         try:
-            with self.session.get(url, stream=True, timeout=60) as response:
-                response.raise_for_status()
-
-                # Get file size from headers if available
-                content_length = response.headers.get("content-length")
-                if content_length:
-                    file_size = int(content_length)
-                    self.logger.info(f"File size: {file_size / (1024**2):.2f} MB")
-
-                    # Validate against expected size if provided
-                    if expected_size and abs(file_size - expected_size) > (
-                        expected_size * 0.05
-                    ):  # 5% tolerance
-                        self.logger.warning(
-                            f"File size mismatch: expected {expected_size}, got {file_size}"
-                        )
-                else:
-                    file_size = None
-
-                # Initialize tqdm progress bar
-                progress_bar = tqdm(
-                    total=file_size,
-                    unit="B",
-                    unit_scale=True,
-                    unit_divisor=1024,
-                    desc="Downloading INSPIRE BBR",
-                    ncols=80,
-                    disable=False,  # Always show progress for downloads
-                )
-
-                downloaded = 0
+            max_retries = 5
+            retry_delays = [10, 30, 60, 120]
+            for attempt in range(max_retries):
                 try:
-                    with open(output_path, "wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                progress_bar.update(len(chunk))
-                finally:
-                    progress_bar.close()
+                    with self.session.get(url, stream=True, timeout=180) as response:
+                        response.raise_for_status()
 
-                self.logger.info(f"Download completed: {downloaded / (1024**2):.2f} MB")
+                        # Get file size from headers if available
+                        content_length = response.headers.get("content-length")
+                        if content_length:
+                            file_size = int(content_length)
+                            self.logger.info(f"File size: {file_size / (1024**2):.2f} MB")
+
+                            # Validate against expected size if provided
+                            if expected_size and abs(file_size - expected_size) > (
+                                expected_size * 0.05
+                            ):  # 5% tolerance
+                                self.logger.warning(
+                                    f"File size mismatch: expected {expected_size}, got {file_size}"
+                                )
+                        else:
+                            file_size = None
+
+                        # Initialize tqdm progress bar
+                        progress_bar = tqdm(
+                            total=file_size,
+                            unit="B",
+                            unit_scale=True,
+                            unit_divisor=1024,
+                            desc="Downloading INSPIRE BBR",
+                            ncols=80,
+                            disable=False,  # Always show progress for downloads
+                        )
+
+                        downloaded = 0
+                        try:
+                            with open(output_path, "wb") as f:
+                                for chunk in response.iter_content(chunk_size=8192):
+                                    if chunk:
+                                        f.write(chunk)
+                                        downloaded += len(chunk)
+                                        progress_bar.update(len(chunk))
+                        finally:
+                            progress_bar.close()
+
+                        self.logger.info(f"Download completed: {downloaded / (1024**2):.2f} MB")
+                        return
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                    if output_path.exists():
+                        output_path.unlink()
+                    if attempt == max_retries - 1:
+                        raise
+                    delay = retry_delays[attempt]
+                    self.logger.warning(
+                        f"Download attempt {attempt + 1}/{max_retries} failed: {e}. "
+                        f"Retrying in {delay}s..."
+                    )
+                    time.sleep(delay)
 
         except Exception as e:
             if output_path.exists():

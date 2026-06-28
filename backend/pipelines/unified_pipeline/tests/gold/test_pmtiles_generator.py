@@ -130,7 +130,21 @@ class TestDataSourceYearDetector:
         available_years = {"fvm_marker": [2020, 2021, 2022]}
 
         years = detector.get_years_to_process(available_years)
-        assert years == [2021, 2022]
+        assert years == [2021]
+
+    @pytest.mark.asyncio
+    async def test_get_years_to_process_requires_next_year_boundaries(
+        self, test_config, mock_storage_access
+    ):
+        """Auto-detected PMTiles years require FVM marker data for year + 1."""
+        test_config.target_years = None
+        test_config.exclude_years = []
+
+        detector = DataSourceYearDetector(test_config, mock_storage_access)
+        available_years = {"fvm_marker": [2024, 2025, 2026]}
+
+        years = detector.get_years_to_process(available_years)
+        assert years == [2024, 2025]
 
 
 class TestPMTilesDataLoader:

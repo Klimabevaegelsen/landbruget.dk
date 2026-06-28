@@ -322,11 +322,28 @@ class KemidataSurfaceWaterSilver(BaseSource[KemidataSurfaceWaterSilverConfig], S
                         self.log.error("No manifest files found. Run bronze stage first.")
                         return None
 
-                    latest = sorted(manifest_files, reverse=True)[0]
-                    self.log.info(f"Reading manifest from {latest}")
-                    manifest = self.storage.download_json(latest)
-                    csv_path = manifest.get("csv_path")
-                    stations_path = manifest.get("stations_path")
+                    for manifest_file in sorted(manifest_files, reverse=True):
+                        self.log.info(f"Reading manifest from {manifest_file}")
+                        manifest = self.storage.download_json(manifest_file)
+                        candidate_csv_path = manifest.get("csv_path")
+                        if not candidate_csv_path:
+                            self.log.warning(f"Manifest {manifest_file} has no csv_path; skipping")
+                            continue
+
+                        candidate_storage_uri = f"{self.config.bucket}/{candidate_csv_path}"
+                        if not self.storage.file_exists(candidate_storage_uri):
+                            self.log.warning(
+                                f"Manifest {manifest_file} points to missing CSV "
+                                f"{candidate_storage_uri}; trying older manifest"
+                            )
+                            continue
+
+                        csv_path = candidate_csv_path
+                        stations_path = manifest.get("stations_path")
+                        break
+                    else:
+                        self.log.error("No manifest with an existing CSV export found.")
+                        return None
 
                 if not csv_path:
                     self.log.error("Missing csv_path in manifest")
