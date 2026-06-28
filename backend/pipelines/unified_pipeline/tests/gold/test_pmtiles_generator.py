@@ -1,5 +1,6 @@
 """Integration tests for PMTiles Generator."""
 
+import json
 import os
 import shutil
 import tempfile
@@ -16,6 +17,7 @@ from unified_pipeline.gold.pmtiles_generator.field_analysis_generator import (
 )
 from unified_pipeline.gold.pmtiles_generator.main import PMTilesGeneratorPipeline
 from unified_pipeline.gold.pmtiles_generator.uploader import CloudflareR2Uploader
+from unified_pipeline.gold.pmtiles_generator.utils import GeoJSONWriter
 from unified_pipeline.gold.pmtiles_generator.year_detector import DataSourceYearDetector
 
 
@@ -786,6 +788,43 @@ class TestPMTilesGeneratorPipeline:
         # Clear environment variables
         with patch.dict(os.environ, {}, clear=True):
             assert pipeline._should_upload() is False
+
+
+class TestGeoJSONWriter:
+    """Tests for GeoJSON export utility."""
+
+    @pytest.mark.asyncio
+    async def test_write_geojson_from_query_writes_valid_feature_collection(
+        self, duckdb_conn, tmp_path
+    ):
+        duckdb_conn.execute("""
+            CREATE TABLE geojson_rows AS
+            SELECT
+                'field-1' AS field_uuid,
+                2024 AS field_year,
+                '{"type":"Point","coordinates":[10.0,55.0]}' AS geometry
+            UNION ALL
+            SELECT
+                'field-2' AS field_uuid,
+                2024 AS field_year,
+                '{"type":"Point","coordinates":[11.0,56.0]}' AS geometry
+        """)
+        output_path = tmp_path / "fields.geojson"
+
+        success = await GeoJSONWriter.write_geojson_from_query(
+            duckdb_conn,
+            "SELECT field_uuid, field_year, geometry FROM geojson_rows ORDER BY field_uuid",
+            str(output_path),
+        )
+
+        assert success is True
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+        assert data["type"] == "FeatureCollection"
+        assert [feature["properties"]["field_uuid"] for feature in data["features"]] == [
+            "field-1",
+            "field-2",
+        ]
+        assert data["features"][0]["geometry"]["coordinates"] == [10.0, 55.0]
 
 
 @pytest.mark.integration

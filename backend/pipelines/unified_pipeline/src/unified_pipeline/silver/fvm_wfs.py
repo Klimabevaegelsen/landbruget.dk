@@ -2208,6 +2208,26 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         self.log.warning(f"Insufficient data for {layer_type} {year} - skipping")
                         continue
 
+                    subsidy_columns = self._get_table_columns(f"temp_subsidy_{year}")
+                    marker_columns = self._get_table_columns(f"temp_marker_{year}")
+                    if "cvr_number" not in subsidy_columns:
+                        self.log.warning(
+                            f"Skipping {layer_type} field_uuid enrichment for {year}: "
+                            "subsidy table has no cvr_number column. Field_id-only matching is "
+                            "ambiguous and could assign the wrong field_uuid."
+                        )
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
+                        continue
+                    if "cvr_number" not in marker_columns:
+                        self.log.warning(
+                            f"Skipping {layer_type} field_uuid enrichment for {year}: "
+                            "marker table has no cvr_number column."
+                        )
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
+                        self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
+                        continue
+
                     # Pre-filter to remove NULL geometries for optimal performance.
                     # cvr_number is required because the spatial join keys on it (see below).
                     self.conn.execute(f"""
@@ -2310,6 +2330,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 f"Subsidy field UUID enrichment had {len(per_year_failures)} "
                 f"per-year failure(s): {failure_summary}"
             )
+
+    def _get_table_columns(self, table_name: str) -> set[str]:
+        """Return DuckDB column names for an internal temporary table."""
+        return {row[0] for row in self.conn.execute(f"DESCRIBE {table_name}").fetchall()}
 
     async def _extract_and_save_cvr_numbers(self) -> None:
         """
