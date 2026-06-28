@@ -84,28 +84,39 @@ jobs:
           capabilities_url = (
               f"{wfs_url}?service=WFS&version=2.0.0&request=GetCapabilities"
           )
+          fallback_dynamic_years = {
+              "markblokke": list(range(2005, 2027)),
+              "marker": list(range(2008, 2027)),
+              "smaabiotoper": [2023, 2024, 2025, 2026],
+          }
           try:
               with urllib.request.urlopen(capabilities_url, timeout=30) as response:
                   capabilities_xml = response.read().decode("utf-8", errors="ignore")
           except Exception as exc:  # noqa: BLE001
-              raise SystemExit(f"Failed to fetch WFS capabilities from {wfs_url}: {exc}") from exc
-
-          dynamic_years = {
-              "markblokke": sorted(
-                  {int(year) for year in re.findall(r"\bMarkblokke:Markblokke_(\d{4})\b", capabilities_xml)}
-              ),
-              "marker": sorted(
-                  {int(year) for year in re.findall(r"\bMarker:Marker_(\d{4})\b", capabilities_xml)}
-              ),
-              "smaabiotoper": sorted(
-                  {int(year) for year in re.findall(r"\bMarker:Smaabiotoper_(\d{4})\b", capabilities_xml)}
-              ),
-          }
-          for layer_name in ("markblokke", "marker", "smaabiotoper"):
-              if layer_name in layer_types and not dynamic_years[layer_name]:
-                  raise SystemExit(
-                      f"Live year discovery failed for required layer '{layer_name}' from {wfs_url}"
-                  )
+              print(
+                  f"Warning: failed to fetch WFS capabilities from {wfs_url}; "
+                  f"using configured fallback years: {exc}"
+              )
+              dynamic_years = fallback_dynamic_years
+          else:
+              dynamic_years = {
+                  "markblokke": sorted(
+                      {int(year) for year in re.findall(r"\bMarkblokke:Markblokke_(\d{4})\b", capabilities_xml)}
+                  ),
+                  "marker": sorted(
+                      {int(year) for year in re.findall(r"\bMarker:Marker_(\d{4})\b", capabilities_xml)}
+                  ),
+                  "smaabiotoper": sorted(
+                      {int(year) for year in re.findall(r"\bMarker:Smaabiotoper_(\d{4})\b", capabilities_xml)}
+                  ),
+              }
+              for layer_name in ("markblokke", "marker", "smaabiotoper"):
+                  if layer_name in layer_types and not dynamic_years[layer_name]:
+                      print(
+                          f"Warning: live year discovery returned no {layer_name} years; "
+                          "using configured fallback years"
+                      )
+                      dynamic_years[layer_name] = fallback_dynamic_years[layer_name]
 
           print("Discovered dynamic year ranges:")
           for layer_name, years in dynamic_years.items():

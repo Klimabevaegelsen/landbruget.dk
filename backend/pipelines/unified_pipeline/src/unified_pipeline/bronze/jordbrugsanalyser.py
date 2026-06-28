@@ -186,6 +186,40 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
 
         return params
 
+    def _decode_response_content(self, content_bytes: bytes) -> str:
+        """Decode WFS response bytes while preserving Danish characters."""
+        try:
+            return content_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return content_bytes.decode("latin-1")
+
+    def _parse_valid_wfs_response(
+        self, content: str, layer_name: str, request_description: str
+    ) -> ET.Element:
+        """Parse and validate a WFS XML response before storing it."""
+        try:
+            root = ET.fromstring(content)
+        except ET.ParseError as exc:
+            snippet = content[:300].replace("\n", " ")
+            raise ValueError(
+                f"Invalid XML response for {layer_name} ({request_description}): {snippet}"
+            ) from exc
+
+        if root.tag.endswith("ExceptionReport"):
+            exception_text = " ".join(root.itertext()).strip()
+            raise ValueError(
+                f"WFS exception for {layer_name} ({request_description}): {exception_text[:500]}"
+            )
+
+        if not root.tag.endswith("FeatureCollection"):
+            snippet = content[:300].replace("\n", " ")
+            raise ValueError(
+                f"Unexpected WFS response root {root.tag!r} for {layer_name} "
+                f"({request_description}): {snippet}"
+            )
+
+        return root
+
     async def _get_total_count(self, session: aiohttp.ClientSession, layer_name: str) -> int:
         """
         Get total number of features available for a specific layer.
@@ -214,12 +248,8 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 if response.status == 200:
                     # Handle Danish characters properly by reading as bytes first
                     content_bytes = await response.read()
-                    try:
-                        content = content_bytes.decode("utf-8")
-                    except UnicodeDecodeError:
-                        # Fallback to latin-1 for Danish characters
-                        content = content_bytes.decode("latin-1")
-                    root = ET.fromstring(content)
+                    content = self._decode_response_content(content_bytes)
+                    root = self._parse_valid_wfs_response(content, layer_name, "count request")
 
                     # Parse numberMatched from WFS response
                     number_matched = root.get("numberMatched", "0")
@@ -293,17 +323,8 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 if response.status == 200:
                     # Handle Danish characters properly by reading as bytes first
                     content_bytes = await response.read()
-                    try:
-                        content = content_bytes.decode("utf-8")
-                    except UnicodeDecodeError:
-                        # Fallback to latin-1 for Danish characters
-                        content = content_bytes.decode("latin-1")
-
-                    # Basic validation - check if we got a valid WFS response
-                    if "wfs:FeatureCollection" not in content:
-                        raise Exception(
-                            f"Invalid WFS response for {layer_name} ({request_type.lower()})"
-                        )
+                    content = self._decode_response_content(content_bytes)
+                    self._parse_valid_wfs_response(content, layer_name, request_type.lower())
 
                     return content
                 # Handle encoding for error messages too

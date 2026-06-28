@@ -301,15 +301,18 @@ class DataSourceYearDetector:
             # Only FVM marker is required; other data sources are optional enhancements
             production_years = set(available_years.get("field_production", []))
 
-            # Use FVM years as the base (production is optional)
-            target_years = fvm_years
+            # A PMTiles target year uses next-year field boundaries (Y+1 pattern).
+            # Do not include the newest boundary year until the following year exists.
+            target_years = {year for year in fvm_years if year + 1 in fvm_years}
             logger.info(f"FVM marker years: {sorted(fvm_years)}")
             if production_years:
                 logger.info(f"Field production years: {sorted(production_years)}")
                 logger.info(f"Years with production data: {sorted(fvm_years & production_years)}")
             else:
                 logger.info("Field production data not found (optional)")
-            logger.info(f"Auto-detected years (based on FVM marker): {sorted(target_years)}")
+            logger.info(
+                f"Auto-detected years (requiring next-year FVM boundaries): {sorted(target_years)}"
+            )
 
         # Apply exclusions
         if self.config.exclude_years:

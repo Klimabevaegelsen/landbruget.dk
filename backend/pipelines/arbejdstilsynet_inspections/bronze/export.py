@@ -21,6 +21,7 @@ except ImportError:
     logging.warning("⚠️  Pipeline metadata system not available - continuing without metadata")
     MetadataManager = None
     METADATA_AVAILABLE = False
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 # Load environment variables from .env file
@@ -271,7 +272,13 @@ class BronzePipeline:
                 page.on("crash", lambda: logging.error("Browser page crashed"))
                 page.on("pageerror", lambda error: logging.error(f"Page error: {error}"))
 
-                await page.goto(self.source_url, wait_until="networkidle", timeout=120000)
+                await page.goto(self.source_url, wait_until="domcontentloaded", timeout=120000)
+                try:
+                    await page.wait_for_load_state("load", timeout=60000)
+                except PlaywrightTimeoutError:
+                    logging.warning(
+                        "PowerBI page did not reach load state; continuing after DOM load"
+                    )
                 await page.wait_for_timeout(5000)
 
                 await page.wait_for_selector(

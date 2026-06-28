@@ -4,6 +4,8 @@ Tests the Rautmann drift curve, wind direction weighting, meteorological
 region assignment, and end-to-end drift dose calculations.
 """
 
+from unittest.mock import AsyncMock, Mock
+
 import pytest
 
 from unified_pipeline.gold.pesticide_drift_exposure import (
@@ -11,12 +13,37 @@ from unified_pipeline.gold.pesticide_drift_exposure import (
     MIN_DISTANCE_M,
     RAUTMANN_A,
     RAUTMANN_B,
+    PesticideDriftExposureGold,
+    PesticideDriftExposureGoldConfig,
     _build_direction_frequency_table,
     _load_data_file,
     nearest_region_id,
     rautmann_drift_pct,
     wind_direction_weight,
 )
+
+
+@pytest.mark.asyncio
+async def test_matrix_year_without_disaggregation_data_is_skipped():
+    processor = object.__new__(PesticideDriftExposureGold)
+    processor.config = PesticideDriftExposureGoldConfig(pesticide_year=2014)
+    processor.log = Mock()
+    processor._setup_duckdb = AsyncMock()
+    processor._load_wind_data = Mock()
+    processor._load_datasets = AsyncMock(return_value={"disaggregation": {2015: "path.parquet"}})
+    processor._load_year_data = AsyncMock()
+    processor._compute_drift_exposure = AsyncMock()
+    processor._save_year_results = AsyncMock()
+
+    await processor.run()
+
+    processor._setup_duckdb.assert_awaited_once()
+    processor._load_wind_data.assert_called_once()
+    processor._load_datasets.assert_awaited_once()
+    processor._load_year_data.assert_not_awaited()
+    processor._compute_drift_exposure.assert_not_awaited()
+    processor._save_year_results.assert_not_awaited()
+    processor.log.warning.assert_called_once()
 
 
 class TestRautmannDriftFunction:
