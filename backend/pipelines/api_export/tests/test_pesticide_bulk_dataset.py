@@ -167,12 +167,20 @@ def test_metadata_uses_allocation_language_and_documents_limits(tmp_path: Path) 
 
     readme = (tmp_path / "out" / DATASET_PREFIX / "README.md").read_text()
     datapackage = json.loads((tmp_path / "out" / DATASET_PREFIX / "datapackage.json").read_text())
+    sql = (tmp_path / "out" / DATASET_PREFIX / "examples" / "duckdb.sql").read_text()
     checksums = (tmp_path / "out" / DATASET_PREFIX / "checksums.txt").read_text()
 
     assert "Rows are not individual spray events" in readme
     assert "No row contains the number of times or passes" in readme
+    assert "CC-BY-4.0" in readme
+    assert "Geodatastyrelsen" in readme
+    assert "Miljøstyrelsen" in readme
     assert "exclude raw CVR numbers" in datapackage["description"]
+    assert datapackage["licenses"][0]["name"] == "CC-BY-4.0"
     assert datapackage["resources"][0]["name"] == "use_allocations"
+    assert "data.landbruget.dk" not in sql
+    assert "use_allocations/year=*/part-000.parquet" in sql
     assert "use_allocations/year=2023/part-000.parquet" in checksums
     assert "applications/" not in readme
     assert "application_date" not in readme
+    assert "application date" not in readme

@@ -476,19 +476,33 @@ class PesticideBulkDatasetExporter(BaseExporter):
 
 Generated: {generated_at}
 
+License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/).
+
 This dataset publishes field-level allocations of cumulative reported pesticide product use for
 Denmark. Rows are not individual spray events. The source SJI reports are summarized by reporting
 unit, crop, product, quantity, and cumulative treated area for an agricultural planning period.
 
 Important interpretation limits:
 
-- No row contains an application date.
+- No row contains timing for individual spray events.
 - No row contains the number of times or passes a product was applied.
 - `average_reported_rate_per_treated_ha` is total allocated quantity divided by cumulative
   allocated treated area, not a per-pass dose.
 - Field assignment is derived from CVR/crop/area matching in the internal method, but public files
   exclude raw CVR numbers.
 - Field-level amounts are allocations, not observed field measurements.
+
+## Credit (required attribution)
+
+This dataset is derived from Danish public-sector data and is published under CC-BY-4.0. When reusing
+it you must credit the upstream sources:
+
+- Miljøstyrelsen (Danish EPA): SJI spray-journal reporting data and the pesticide product database
+  (Bekæmpelsesmiddeldatabasen, BMD).
+- Landbrugsstyrelsen / Geodatastyrelsen: field geodata ("frie geografiske data") — "Indeholder data
+  fra Geodatastyrelsen".
+
+Data retrieved/generated: {generated_at}.
 
 Resources:
 
@@ -534,8 +548,9 @@ Source and method references:
             ],
             "licenses": [
                 {
-                    "name": "custom",
-                    "title": "Reuse terms must be confirmed against upstream SJI, FVM, and BMD terms",
+                    "name": "CC-BY-4.0",
+                    "title": "Creative Commons Attribution 4.0 International",
+                    "path": "https://creativecommons.org/licenses/by/4.0/",
                 }
             ],
             "resources": [
@@ -568,14 +583,14 @@ Source and method references:
         }
 
     def _duckdb_example(self) -> str:
-        return f"""-- Query public pesticide field-use allocations directly with DuckDB.
+        return """-- Run from inside the unpacked dataset directory with DuckDB.
 SELECT
   year,
   pesticide_name,
   SUM(allocated_quantity) AS total_allocated_quantity,
   SUM(allocated_cumulative_treated_area_ha) AS cumulative_treated_area_ha
 FROM read_parquet(
-  'https://data.landbruget.dk/{DATASET_PREFIX}/use_allocations/year=*/part-000.parquet',
+  'use_allocations/year=*/part-000.parquet',
   hive_partitioning = true
 )
 GROUP BY year, pesticide_name
@@ -593,5 +608,5 @@ ORDER BY year, total_allocated_quantity DESC;
   dct:issued "{generated_at}"^^xsd:dateTime ;
   dct:description "Field-level allocations of cumulative reported pesticide product use. Rows are not individual spray events and public files exclude raw CVR numbers." ;
   dcat:keyword "Denmark", "pesticides", "agriculture", "geospatial", "field boundaries" ;
-  dcat:distribution <https://data.landbruget.dk/{DATASET_PREFIX}/datapackage.json> .
+  dcat:distribution <datapackage.json> .
 """

@@ -65,7 +65,13 @@ def create_connection() -> duckdb.DuckDBPyConnection:
     conn.execute("INSTALL spatial")
     conn.execute("LOAD spatial")
 
-    if not setup_duckdb_cloud_auth(conn):
+    if setup_duckdb_cloud_auth(conn):
+        # Large geometry parquet (e.g. silver/fvm_marker_*) can take longer than the
+        # 30s httpfs default to stream from R2; raise the timeout and retries so a
+        # transient stall on one file doesn't abort an otherwise-complete run.
+        conn.execute("SET http_timeout = 600")
+        conn.execute("SET http_retries = 8")
+    else:
         logger.warning("No cloud auth configured — will only work with local files")
 
     return conn

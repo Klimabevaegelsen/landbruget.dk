@@ -21,7 +21,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -226,7 +226,8 @@ class HttpClient:
         *,
         headers: dict[str, str] | None = None,
         json_body: Any | None = None,
-        data: bytes | None = None,
+        data: bytes | BinaryIO | None = None,
+        timeout: float = 120,
     ) -> tuple[int, dict[str, str], Any]:
         request_headers = headers.copy() if headers else {}
         body = data
@@ -236,7 +237,7 @@ class HttpClient:
 
         request = Request(url, data=body, headers=request_headers, method=method.upper())
         try:
-            with urlopen(request, timeout=120) as response:
+            with urlopen(request, timeout=timeout) as response:
                 response_body = response.read()
                 return (
                     response.status,
@@ -262,7 +263,15 @@ class HttpClient:
     ) -> tuple[int, dict[str, str], Any]:
         request_headers = headers.copy() if headers else {}
         request_headers.setdefault("Content-Type", content_type)
-        return self.request(method, url, headers=request_headers, data=path.read_bytes())
+        request_headers["Content-Length"] = str(path.stat().st_size)
+        with path.open("rb") as handle:
+            return self.request(
+                method,
+                url,
+                headers=request_headers,
+                data=handle,
+                timeout=1800,
+            )
 
     def multipart(
         self,
@@ -548,7 +557,13 @@ def upload_figshare_file(
         for part in parts_response["parts"]:
             handle.seek(int(part["startOffset"]))
             data = handle.read(int(part["endOffset"]) - int(part["startOffset"]) + 1)
-            client.request("PUT", f"{upload_url}/{part['partNo']}", headers=headers, data=data)
+            client.request(
+                "PUT",
+                f"{upload_url}/{part['partNo']}",
+                headers=headers,
+                data=data,
+                timeout=600,
+            )
     client.request(
         "POST", f"{base_url}/account/articles/{article_id}/files/{file_id}", headers=headers
     )
