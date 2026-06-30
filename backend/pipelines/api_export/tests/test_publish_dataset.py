@@ -3,10 +3,12 @@ import hashlib
 import json
 import zipfile
 from pathlib import Path
+from typing import ClassVar
 
 import duckdb
 import pytest
 
+import publish_dataset
 from publish_dataset import (
     DatasetBundle,
     HttpClient,
@@ -134,7 +136,8 @@ class RecordingClient(HttpClient):
         *,
         headers: dict[str, str] | None = None,
         json_body: object | None = None,
-        data: bytes | None = None,
+        data: object | None = None,
+        timeout: float = 120,
     ) -> tuple[int, dict[str, str], object]:
         self.requests.append((method, url, json_body if json_body is not None else data))
         if method == "POST" and url.endswith("/api/deposit/depositions"):
@@ -166,6 +169,51 @@ class RecordingClient(HttpClient):
                 },
             )
         raise AssertionError(f"unexpected request: {method} {url}")
+
+
+def test_upload_file_streams_body_with_content_length_and_long_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    upload_path = tmp_path / "archive.zip"
+    upload_path.write_bytes(b"streamed archive body")
+    captured: dict[str, object] = {}
+
+    class Response:
+        status = 200
+        headers: ClassVar[dict[str, str]] = {}
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    def fake_urlopen(request: object, *, timeout: float) -> Response:
+        captured["request"] = request
+        captured["timeout"] = timeout
+        body = request.data
+        assert not isinstance(body, bytes)
+        assert body.read() == b"streamed archive body"
+        return Response()
+
+    monkeypatch.setattr(publish_dataset, "urlopen", fake_urlopen)
+
+    HttpClient().upload_file(
+        "PUT",
+        "https://zenodo.example/api/files/bucket/archive.zip",
+        upload_path,
+        headers={"Authorization": "Bearer token"},
+    )
+
+    request = captured["request"]
+    assert captured["timeout"] == 1800
+    assert request.get_header("Content-length") == str(upload_path.stat().st_size)
+    assert request.get_header("Content-type") == "application/octet-stream"
+    assert request.get_header("Authorization") == "Bearer token"
 
 
 def test_zenodo_publish_sequence_with_confirm(
