@@ -12,7 +12,7 @@ dependencies = [
     "pyarrow>=24.0.0",
     "pyproj>=3.7.2",
     "shapely>=2.0.0",
-    "ijson>=3.5.0",
+    "ijson>=3.5.1",
     "s3fs",
     "google-cloud-secret-manager>=2.29.0",
     "google-cloud-storage>=2.10.0",
