@@ -11,6 +11,8 @@ repos:
         args: ["--unsafe"]
       - id: check-added-large-files
         args: ["--maxkb=1000"]
+        # Archived research data snapshot (not pipeline output) — see its README.
+        exclude: ^docs/research/biogas-glycerine-2026-06/scripts/
       - id: check-merge-conflict
       - id: debug-statements
         language_version: python3

@@ -14,14 +14,15 @@ may be incomplete, outdated, or wrong. Do not cite, publish, or act on this
 content as-is. Landbruget.dk takes no responsibility for its accuracy. Each
 report carries the same disclaimer inline.
 
-**PII check.** The `scripts/` CSV panels (`herd_panel_2015_2023.csv`,
-`afsat_panel.csv`, and their derived outputs) key only on CVR number — no
-farmer or company officer names. The reports themselves name no private
-individuals connected to the investigation; the only personal names present
-are standard academic-citation surnames (e.g. "Olesen et al.", "Viana, M. B.")
-and one named public official quoted from a public EU workshop (Florence
-School of Regulation, cited in the GO/biomethane legal analysis) — all public
-figures cited for published work, not investigation subjects.
+**PII check.** All CSVs under `scripts/` key on CVR number or registered
+company/plant name (e.g. "Nørgård Biogas ApS") — standard Danish business
+register data already used elsewhere in this project, no natural-person
+names. The reports themselves name no private individuals connected to the
+investigation; the only personal names present are standard academic-citation
+surnames (e.g. "Olesen et al.", "Viana, M. B.") and one named public official
+quoted from a public EU workshop (Florence School of Regulation, cited in the
+GO/biomethane legal analysis) — all public figures cited for published work,
+not investigation subjects.
 
 ## Contents
 
@@ -31,21 +32,31 @@ figures cited for published work, not investigation subjects.
   `sources.json` bibliography for the GO/biomethane legal analysis.
 - `scripts/` — the two scripts behind the manure-disposition figures cited in
   `research_report_20260609_danish_farm_biogas_manure_dependency.md`, plus
-  their small aggregate outputs:
+  every input/output CSV they need to actually run:
   - `manure_disposition.py`, `disposition_over_time.py`
-  - `disposition_over_time.csv`, `manure_disposition_2023.csv` (national/
-    quartile-level aggregates, no CVR-level data)
+  - `herd_panel_2015_2023.csv`, `afsat_panel.csv` — CVR-level panels (both
+    scripts' main input)
+  - `plant_cvr_resolved.csv`, `biogas_plants_2023.csv` — plant/CVR crosswalk
+    (`manure_disposition.py` input)
+  - `disposition_over_time.csv`, `manure_disposition_2023.csv` — national/
+    quartile-level aggregate outputs (small; already cited directly in the
+    manure-dependency report)
 
-The CVR-level input panels these scripts read (`herd_panel_2015_2023.csv`,
-`afsat_panel.csv`, plus `plant_cvr_resolved.csv`, `biogas_plants_2023.csv` for
-`manure_disposition.py`) are **not** archived here — they exceed this repo's
-1000KB pre-commit file-size limit and duplicate data already derivable from
-the project's own pipelines. Regenerate them from `.context/manure_transfer/`
-(if that ephemeral workspace still exists) or from the underlying CHR/
-Gødningsregnskab pipeline data if the analysis needs to be re-run.
+`herd_panel_2015_2023.csv` and `afsat_panel.csv` exceed this repo's 1000KB
+pre-commit file-size limit; `.pre-commit-config.yaml` carries a scoped
+`exclude` for this one `scripts/` directory so the archive commit can include
+them without weakening the check anywhere else in the repo.
 
 Some citations in the manure-dependency report (e.g. `INVESTIGATION_BRIEF.md`,
 `ownership_findings.md`, `exclusivity_findings.md`) point to other files that
 were still in the ephemeral `.context/manure_transfer/` workspace and were
-**not** migrated here — only the two scripts/CSVs actually needed to
-regenerate the cited figures were pulled in.
+**not** migrated here — only the scripts/CSVs actually needed to regenerate
+the cited figures were pulled in.
+
+## Before merging to main
+
+Consider whether `herd_panel_2015_2023.csv` and `afsat_panel.csv` (the raw
+CVR-level panels, ~6MB combined) should ship as static files on `main`, or be
+dropped from the PR in favor of regenerating them from pipeline data — and
+whether the `.pre-commit-config.yaml` exclude should be narrowed/removed at
+that point.
