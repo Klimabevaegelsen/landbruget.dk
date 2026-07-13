@@ -19,7 +19,7 @@ dependencies = [
     "pyarrow>=24.0.0",
     "s3fs",
     "lxml>=6.1.1,<6.2",
-    "tqdm>=4.68.3",
+    "tqdm>=4.68.4",
     "landbruget-common",
 ]
 
