@@ -20,8 +20,9 @@ export function SectionDisaggregation() {
       <p>
         Pesticidindberetninger rapporteres på virksomhedsniveau (CVR), men
         analysen kræver data på markniveau. Vi anvender en trinvis sammenkøring
-        med fire strategier, der samlet set opnår en dækning på mindst{' '}
-        <mark>92 %</mark>.
+        med fire strategier. I den senest kontrollerede produktionskørsel (1.
+        juli 2026) blev <mark>83,6–93,0 % af de relevante indberetninger</mark>{' '}
+        sammenkørt for landbrugsårene 2015–2024, afhængigt af årets data.
       </p>
 
       <DisaggregationScrolly />
@@ -34,10 +35,15 @@ export function SectionDisaggregation() {
       <p>
         Et centralt designvalg er vores tidsforskydning: Pesticiddata fra
         landbrugsår <em>Y</em> sammenkøres med markgrænser fra kalenderår{' '}
-        <em>Y+1</em>. Grunden er, at de endelige markblokke først fastlægges{' '}
-        <em>efter</em> vækstsæsonen. Eksempelvis bruges markgrænserne fra 2022
-        til at placere pesticider sprøjtet i landbrugsåret 2021/22. Uden denne
-        forskydning falder dækningen fra over 90 % til blot 6–9 %.
+        <em>Y+1</em>. Eksempelvis bruges markgrænserne fra 2022 til at placere
+        pesticider rapporteret for landbrugsåret 2021/22.
+      </p>
+      <p>
+        Kortets polygon viser derfor marken i år <em>Y+1</em>, ikke på samme
+        tidspunkt som pesticidforbruget. Metoden følger ikke særskilt ændringer
+        i markgrænser, mark-ID eller driftsansvar mellem årene; sådanne
+        ændringer indgår alene i den efterfølgende kontrol af CVR, afgrøde og
+        areal.
       </p>
 
       <SubsectionHeader
@@ -47,8 +53,8 @@ export function SectionDisaggregation() {
       />
       <p>
         For hver kombination af CVR-nummer og afgrødekode sammenlignes
-        markarealet med det indberettede areal. Vi accepterer et match, hvis
-        forskellen ligger inden for en tolerance på &plusmn;2,0 %:
+        markarealet med det indberettede areal. Vi accepterer en sammenkøring,
+        hvis forskellen ligger inden for en tolerance på &plusmn;2,0 %:
       </p>
 
       <p className="border-primary/20 bg-primary/[0.03] text-foreground/80 my-6 rounded-md border px-5 py-4 font-mono text-[15px] leading-relaxed">
@@ -59,9 +65,10 @@ export function SectionDisaggregation() {
       <p>Vi anvender fire strategier:</p>
       <ol className="list-decimal space-y-3 pl-6">
         <li>
-          <strong>Bedste match (blandet drift):</strong> For bedrifter med både
-          økologiske og konventionelle marker afprøver systemet kombinationer
-          (med og uden økologi) for at finde den laveste afvigelse.
+          <strong>Bedste sammenkøring (blandet drift):</strong> For bedrifter
+          med både økologiske og konventionelle marker afprøver systemet
+          kombinationer (med og uden økologi) for at finde den laveste
+          afvigelse.
         </li>
         <li>
           <strong>Proportional fordeling:</strong> For rent konventionelle

@@ -12,7 +12,7 @@ export function SectionDataSources() {
       <p>
         Analysen bygger på tre primære datakilder fra de danske myndigheder,
         suppleret med bygningsdata til afstandsanalyser. Alle data hentes i
-        maskinlæsbart format, valideres og kobles på markniveau.
+        maskinlæsbart format, kontrolleres og sammenkøres på markniveau.
       </p>
 
       <SubsectionHeader id="data-fvm" number="1.1" title="Markdata (FVM)" />
@@ -34,12 +34,14 @@ export function SectionDataSources() {
         Miljøstyrelsens Sprøjtejournalindberetning (SJI). Data opsummeres per
         CVR-nummer, afgrødtype og behandlet areal. Indberetningen indeholder
         produktnavn, registreringsnummer, dosering (liter eller kg) og behandlet
-        areal (ha) for det pågældende landbrugsår (august–juli). Bemærk, at
-        landmandens egen fysiske sprøjtejournal indeholder specifikke datoer og
-        marknumre, men disse detaljer overføres ikke til SJI-indberetningen. Det
-        er netop dette tab af detaljegrad, der gør vores fordelingsmetode
-        nødvendig (se afsnit 5.9). Bedrifter under 10 ha er fritaget for
-        indberetningspligt.
+        areal (ha) for det pågældende landbrugsår (august–juli). Årsvariablen
+        angiver landbrugsårets første kalenderår: <code>2015</code> betyder
+        derfor perioden 1. august 2015 til 31. juli 2016 — ikke kalenderåret
+        2015 og heller ikke året for markdeklarationen. Bemærk, at landmandens
+        egen fysiske sprøjtejournal indeholder specifikke datoer og marknumre,
+        men disse detaljer overføres ikke til SJI-indberetningen. Det er netop
+        dette tab af detaljegrad, der gør vores fordelingsmetode nødvendig (se
+        afsnit 5.9). Bedrifter under 10 ha er fritaget for indberetningspligt.
       </p>
 
       <SubsectionHeader

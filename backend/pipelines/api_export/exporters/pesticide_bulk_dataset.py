@@ -482,15 +482,27 @@ This dataset publishes field-level allocations of cumulative reported pesticide 
 Denmark. Rows are not individual spray events. The source SJI reports are summarized by reporting
 unit, crop, product, quantity, and cumulative treated area for an agricultural planning period.
 
+The `year` column denotes the first year of that planning period: `year = YYYY` always means
+1 August YYYY–31 July YYYY+1. For every allocation partition, the exact period is given by
+`plan_period_start` and `plan_period_end`. It is not a calendar-year application measure or a
+field-declaration year.
+
 Important interpretation limits:
 
 - No row contains timing for individual spray events.
 - No row contains the number of times or passes a product was applied.
 - `average_reported_rate_per_treated_ha` is total allocated quantity divided by cumulative
   allocated treated area, not a per-pass dose.
-- Field assignment is derived from CVR/crop/area matching in the internal method, but public files
-  exclude raw CVR numbers.
+- Field assignment requires an exact normalized CVR and crop-code match plus an eligible area match;
+  it does not use a broader-crop, geographic, or cross-year fallback. For matching records, quantity
+  and cumulative treated area are divided between fields in proportion to field area.
+- A `year = YYYY` allocation uses FVM field data from year YYYY+1. The allocation does not
+  separately reconstruct field-boundary, identifier, or operator changes between the two years.
+- Public files exclude raw CVR numbers.
 - Field-level amounts are allocations, not observed field measurements.
+- The `quality/` resources describe published allocation rows and methods. They do not provide a
+  quantity-weighted allocation-coverage measure against all original SJI quantity, nor an
+  unmatched-quantity breakdown by crop or company.
 
 ## Credit (required attribution)
 
@@ -507,7 +519,7 @@ Data retrieved/generated: {generated_at}.
 Resources:
 
 - `use_allocations/year=YYYY/part-000.parquet`: public field-use allocation rows.
-- `fields/year=YYYY/part-000.parquet`: public field geometries, without CVR.
+- `fields/year=YYYY/part-000.parquet`: public field geometries from FVM year YYYY+1, without CVR.
 - `products/products.parquet`: pesticide product metadata when available.
 - `quality/`: row counts, coverage metadata, checksums, and method caveats.
 

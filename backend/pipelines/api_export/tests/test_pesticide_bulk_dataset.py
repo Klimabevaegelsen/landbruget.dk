@@ -171,7 +171,10 @@ def test_metadata_uses_allocation_language_and_documents_limits(tmp_path: Path) 
     checksums = (tmp_path / "out" / DATASET_PREFIX / "checksums.txt").read_text()
 
     assert "Rows are not individual spray events" in readme
+    assert "1 August YYYY–31 July YYYY+1" in readme
     assert "No row contains the number of times or passes" in readme
+    assert "exact normalized CVR and crop-code match" in readme
+    assert "do not provide a quantity-weighted allocation-coverage measure" in readme
     assert "CC-BY-4.0" in readme
     assert "Geodatastyrelsen" in readme
     assert "Miljøstyrelsen" in readme
