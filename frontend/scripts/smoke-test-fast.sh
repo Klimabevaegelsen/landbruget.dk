@@ -5,11 +5,20 @@
 
 set -e
 
-if lsof -ti:3000 >/dev/null 2>&1; then
-    echo "🚀 Dev server found, running smoke tests..."
-    npx playwright test tests/example.spec.ts --config=playwright.smoke.config.ts
+project_server=""
+for pid in $(lsof -ti:3000 2>/dev/null); do
+    cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+    if [[ "$cwd" == "$PWD" || "$cwd" == "$PWD"/* ]]; then
+        project_server="$pid"
+        break
+    fi
+done
+
+if [ -n "$project_server" ]; then
+    echo "🚀 Frontend dev server found, running smoke tests..."
+    node node_modules/@playwright/test/cli.js test tests/example.spec.ts --config=playwright.smoke.config.ts
     echo "✅ Smoke tests completed successfully!"
 else
-    echo "⚡ No dev server running - skipping smoke tests (run 'npm test' for full suite)"
+    echo "⚡ No frontend dev server running - skipping smoke tests (run 'npm test' for full suite)"
     exit 0
 fi

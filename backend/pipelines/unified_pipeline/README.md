@@ -70,7 +70,7 @@ Analysis-ready products that join multiple datasets:
 | `field_area_analysis` | Field area calculations with soil/water/property intersections |
 | `field_production` | Crop production analysis |
 | `pesticide_compliance` | Regulatory compliance analysis |
-| `pesticide_disaggregation` | Pesticide distribution by field |
+| [`pesticide_disaggregation`](src/unified_pipeline/gold/README.md) | Pesticide allocation by field |
 | `pesticide_proximity` | Proximity-based pesticide exposure |
 | `pesticide_unit_sanitization` | Pesticide unit standardization |
 | `cvr_enrichment` | Multi-step CVR company enrichment (geocoding, financial docs, P-numbers) |

@@ -19,13 +19,22 @@ export function SectionCoverageAccuracy() {
         title="Dækning versus fordelingsnøjagtighed"
       />
       <p>
-        Det er vigtigt at skelne mellem, hvor meget data vi kan <em>koble</em>,
-        og hvor præcist det kan <em>fordeles</em>. Selvom vi kobler 92 % af
-        dataene, er det kun ca. 19,6 % af indberetningerne, der kan knyttes til
-        én specifik mark. De resterende 80,4 % fordeles proportionalt over flere
-        marker (medianen er tre marker per kobling). Det betyder, at kortet
-        viser en <em>udjævnet</em> fordeling: for nogle marker vil det viste
-        forbrug være højere end det reelle, for andre lavere.
+        Det er vigtigt at skelne mellem, hvor meget data vi kan{' '}
+        <em>sammenkøre</em>, og hvor præcist det kan <em>fordeles</em>. Selvom
+        vi sammenkører 92 % af dataene, er det kun ca. 19,6 % af
+        indberetningerne, der kan knyttes til én specifik mark. De resterende
+        80,4 % fordeles proportionalt over flere marker (medianen er tre marker
+        pr. sammenkøring). Det betyder, at kortet viser en <em>udjævnet</em>{' '}
+        fordeling: for nogle marker vil det viste forbrug være højere end det
+        reelle, for andre lavere.
+      </p>
+      <p>
+        Dækningstallet er andelen af SJI-indberetninger, der opfylder kravene
+        til CVR, afgrøde og areal. Det er ikke en andel af den oprindeligt
+        indberettede mængde i kg eller liter. De offentlige kvalitetsfiler
+        oplyser endnu ikke en mængdevægtet dækningsgrad eller ufordelte mængder
+        fordelt på afgrøde og virksomhed. Derfor kan antallet af publicerede
+        fordelingsrækker ikke bruges som et mål for den samlede datadækning.
       </p>
 
       <div
