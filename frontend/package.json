@@ -30,7 +30,7 @@
     "@number-flow/react": "^0.6.1",
     "@observablehq/plot": "^0.6.17",
     "@playwright/test": "^1.61.1",
-    "@radix-ui/react-accordion": "^1.2.14",
+    "@radix-ui/react-accordion": "^1.2.16",
     "@radix-ui/react-alert-dialog": "^1.1.18",
     "@radix-ui/react-aspect-ratio": "^1.1.11",
     "@radix-ui/react-avatar": "^1.2.0",
