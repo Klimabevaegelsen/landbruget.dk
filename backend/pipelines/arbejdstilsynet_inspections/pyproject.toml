@@ -11,7 +11,7 @@ authors = [
 dependencies = [
     "python-dotenv>=1.0.0",
     "s3fs",
-    "pyarrow>=24.0.0",
+    "pyarrow>=25.0.0",
     "loguru>=0.7.3",
     "playwright>=1.60.0",
     "pydantic",
