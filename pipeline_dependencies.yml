@@ -36,7 +36,9 @@ pipelines:
       - silver/dst_fro
       - silver/dst_halm1
       - silver/dmi
-      - silver/jordbrugsanalyser
+      - silver/jordbrugsanalyser  # NOTE: must run BEFORE fvm_wfs enrichment — the EjerNr CVR bridge
+                                   # (_backfill_cvr_via_ejernr) reads silver/jordbrugsanalyser_markers_{year}
+                                   # to fill gap-year (2015) marker CVRs.
       - silver/kemidata_surface_water_pesticides
       - cvr_collections/agricultural_fields
 
