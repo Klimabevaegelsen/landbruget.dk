@@ -1,21 +1,23 @@
 'use client';
 
-import { DefaultTooltipContentProps, TooltipProps } from 'recharts';
-import {
+import { TooltipProps } from 'recharts';
+import type {
   NameType,
+  Payload as TooltipPayload,
   ValueType,
 } from 'recharts/types/component/DefaultTooltipContent';
 import { StatusIndicator } from './animated-number';
 
 interface EnhancedTooltipProps extends TooltipProps<ValueType, NameType> {
+  active?: boolean;
+  payload?: TooltipPayload<ValueType, NameType>[];
+  label?: string | number;
   unit?: string;
   chartType?: string;
   showComparison?: boolean;
 }
 
-type TooltipEntry = NonNullable<
-  DefaultTooltipContentProps<ValueType, NameType>['payload']
->[number];
+type TooltipEntry = TooltipPayload<ValueType, NameType>;
 
 export function EnhancedTooltip({
   active,
