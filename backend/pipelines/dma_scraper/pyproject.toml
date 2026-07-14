@@ -15,7 +15,7 @@ dependencies = [
     "click>=8.4.2",
     "python-dotenv>=1.0.0",
     "pandas>=3.0.3",
-    "pyarrow>=24.0.0",
+    "pyarrow>=25.0.0",
     "duckdb",
     "aiohttp>=3.14.1",
     "nest_asyncio>=1.6.0",
