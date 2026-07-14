@@ -129,6 +129,9 @@ const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   TooltipProps<ValueType, NameType> &
     React.ComponentProps<'div'> & {
+      active?: boolean;
+      payload?: TooltipPayload<ValueType, NameType>[];
+      label?: string | number;
       hideLabel?: boolean;
       hideIndicator?: boolean;
       indicator?: 'line' | 'dot' | 'dashed';
@@ -218,7 +221,7 @@ const ChartTooltipContent = React.forwardRef<
 
               return (
                 <div
-                  key={item.dataKey}
+                  key={item.dataKey as React.Key}
                   className={cn(
                     '[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5',
                     indicator === 'dot' && 'items-center'

@@ -29,7 +29,7 @@ from common.geometry_validator import (
     validate_and_normalize_to_utm,
     validate_and_transform_geometries_duckdb,
 )
-from pydantic import ConfigDict
+from pydantic import ConfigDict, Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
@@ -128,6 +128,20 @@ class FVMWFSSilverConfig(BaseJobConfig):
     kommune_boundaries_dataset: str = "dagi_kommuner"
     include_municipality_assignment: bool = True
     municipality_assignment_method: str = "spatial_with_fallback"  # or "spatial_only"
+
+    # Accuracy-first CVR backfill for gap years with missing native/fields/GKEA coverage
+    cvr_backfill_gap_years: list[int] = Field(default_factory=lambda: [2015])
+    cvr_backfill_overlap_threshold: float = 0.7
+    cvr_backfill_prev_offset: int = 1
+    cvr_backfill_next_offset: int = 1
+
+    # EjerNr bridge CVR backfill for gap/truncated marker years
+    cvr_ejernr_backfill_enabled: bool = True
+    cvr_ejernr_jordbrug_dataset: str = "jordbrugsanalyser_markers"
+    cvr_ejernr_target_years: list[int] = Field(default_factory=lambda: [2015])
+    cvr_ejernr_reference_years: list[int] = Field(default_factory=lambda: [2013, 2014, 2016, 2017])
+    cvr_ejernr_attach_overlap_threshold: float = 0.9
+    cvr_ejernr_dominance_threshold: float = 0.8
 
     # Year ranges based on FVM WFS capabilities.
     # markblokke/marker/smaabiotoper are refreshed from live capabilities in apply_cli_filters.
@@ -2073,6 +2087,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         # Enrich marker fields with organic information
         await self._enrich_marker_with_organic_data()
 
+        # Identify missing CVRs using GKEA agricultural pattern matching
+        await self._identify_missing_cvrs_with_gkea()
+
+        # Backfill gap-year CVRs via EjerNr bridge before adjacent-year fallback
+        await self._backfill_cvr_via_ejernr()
+
+        # Backfill remaining gap-year CVRs only when adjacent years independently agree
+        await self._backfill_cvr_from_adjacent_years()
+
         # Enrich subsidy fields with field UUIDs from matching FVM marker fields
         await self._enrich_subsidies_with_field_uuid()
 
@@ -2334,6 +2357,728 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     def _get_table_columns(self, table_name: str) -> set[str]:
         """Return DuckDB column names for an internal temporary table."""
         return {row[0] for row in self.conn.execute(f"DESCRIBE {table_name}").fetchall()}
+
+    def _table_exists(self, table_name: str) -> bool:
+        """Return whether a DuckDB table exists in the current connection."""
+        existing_tables = [row[0] for row in self.conn.execute("SHOW TABLES").fetchall()]
+        return table_name in existing_tables
+
+    async def _resolve_marker_table_for_cvr_backfill(
+        self, year: int, loaded_tables: set[str]
+    ) -> str | None:
+        """Resolve an in-memory marker table or load the latest silver marker table."""
+        for table_name in (
+            f"fvm_marker_{year}",
+            f"final_processed_marker_{year}",
+            f"silver_marker_{year}",
+        ):
+            if self._table_exists(table_name):
+                return table_name
+
+        marker_table = f"fvm_marker_{year}"
+        marker_pattern = f"{self.config.bucket}/silver/{marker_table}/*/data.parquet"
+
+        try:
+            marker_files = self.storage.list_files(marker_pattern)
+            if not marker_files:
+                raise FileNotFoundError(f"No files found matching pattern: {marker_pattern}")
+
+            latest_marker_file = sorted(marker_files)[-1]
+            self.storage.query_parquet_direct(latest_marker_file, "SELECT *", marker_table)
+            loaded_tables.add(marker_table)
+
+            marker_count = self.conn.execute(f"SELECT COUNT(*) FROM {marker_table}").fetchone()[0]
+            self.log.info(
+                f"Loaded {marker_count:,} marker fields for {year} from {latest_marker_file}"
+            )
+            return marker_table
+
+        except Exception as e:
+            self.log.warning(f"Could not load marker data for CVR backfill year {year}: {e}")
+            return None
+
+    async def _resolve_jordbrug_table_for_ejernr_backfill(
+        self, year: int, loaded_tables: set[str]
+    ) -> str | None:
+        """Resolve or load the latest jordbrugsanalyser marker table for an EjerNr year."""
+        jordbrug_table = f"{self.config.cvr_ejernr_jordbrug_dataset}_{year}"
+        if self._table_exists(jordbrug_table):
+            return jordbrug_table
+
+        jordbrug_pattern = f"{self.config.bucket}/silver/{jordbrug_table}/*/data.parquet"
+
+        try:
+            jordbrug_files = self.storage.list_files(jordbrug_pattern)
+            if not jordbrug_files:
+                raise FileNotFoundError(f"No files found matching pattern: {jordbrug_pattern}")
+
+            latest_jordbrug_file = sorted(jordbrug_files)[-1]
+            self.storage.query_parquet_direct(latest_jordbrug_file, "SELECT *", jordbrug_table)
+            loaded_tables.add(jordbrug_table)
+
+            jordbrug_count = self.conn.execute(f"SELECT COUNT(*) FROM {jordbrug_table}").fetchone()[
+                0
+            ]
+            self.log.info(
+                f"Loaded {jordbrug_count:,} jordbrugsanalyser markers for {year} "
+                f"from {latest_jordbrug_file}"
+            )
+            return jordbrug_table
+
+        except Exception as e:
+            self.log.warning(f"Could not load EjerNr source data for {year}: {e}")
+            return None
+
+    async def _backfill_cvr_via_ejernr(self) -> None:
+        """
+        Backfill marker CVRs by bridging same-year EjerNr to reference-year CVRs.
+
+        EjerNr is attached to FVM marker rows from jordbrugsanalyser markers by exact
+        Markblok/Marknr where possible, then by same-year high-overlap geometry. Trusted
+        EjerNr→CVR mappings are learned from configured reference years and applied only to
+        configured target years that still lack a full CVR.
+        """
+        if not self.config.cvr_ejernr_backfill_enabled:
+            return
+
+        loaded_tables: set[str] = set()
+        temp_tables: set[str] = set()
+
+        try:
+            self.log.info("🔗 Starting EjerNr bridge CVR backfill...")
+
+            with contextlib.suppress(Exception):
+                self.conn.execute("LOAD spatial")
+
+            years = sorted(
+                set(self.config.cvr_ejernr_target_years)
+                | set(self.config.cvr_ejernr_reference_years)
+            )
+            attach_tables: dict[int, tuple[str, str]] = {}
+
+            for year in years:
+                marker_table = await self._resolve_marker_table_for_cvr_backfill(
+                    year, loaded_tables
+                )
+                jordbrug_table = await self._resolve_jordbrug_table_for_ejernr_backfill(
+                    year, loaded_tables
+                )
+                if not marker_table or not jordbrug_table:
+                    self.log.warning(
+                        f"Missing marker or EjerNr source table for {year} - "
+                        "skipping EjerNr attachment"
+                    )
+                    continue
+
+                marker_columns = self._get_table_columns(marker_table)
+                jordbrug_columns = self._get_table_columns(jordbrug_table)
+                required_marker_cols = {"field_id", "block_id", "geometry"}
+                required_jordbrug_cols = {
+                    "owner_number",
+                    "field_block",
+                    "field_number",
+                    "geometry",
+                }
+                missing_marker_cols = required_marker_cols - marker_columns
+                missing_jordbrug_cols = required_jordbrug_cols - jordbrug_columns
+                if missing_marker_cols or missing_jordbrug_cols:
+                    self.log.warning(
+                        f"Missing columns for EjerNr attachment in {year}: "
+                        f"marker={sorted(missing_marker_cols)}, "
+                        f"jordbrug={sorted(missing_jordbrug_cols)}. Skipping."
+                    )
+                    continue
+
+                exact_matches = f"temp_ejernr_exact_{year}"
+                geom_candidates = f"temp_ejernr_geom_candidates_{year}"
+                geom_ref = f"temp_ejernr_geom_ref_{year}"
+                geom_matches = f"temp_ejernr_geom_{year}"
+                attach_table = f"temp_ejernr_attach_{year}"
+                temp_tables.update(
+                    {exact_matches, geom_candidates, geom_ref, geom_matches, attach_table}
+                )
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {exact_matches} AS
+                    SELECT field_rowid, ejernr
+                    FROM (
+                        SELECT
+                            f.rowid AS field_rowid,
+                            CAST(j.owner_number AS VARCHAR) AS ejernr,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY f.rowid
+                                ORDER BY CAST(j.owner_number AS VARCHAR)
+                            ) AS rn
+                        FROM {marker_table} f
+                        INNER JOIN {jordbrug_table} j
+                            ON CAST(f.block_id AS VARCHAR) = CAST(j.field_block AS VARCHAR)
+                           AND CAST(f.field_id AS VARCHAR) = CAST(j.field_number AS VARCHAR)
+                        WHERE j.owner_number IS NOT NULL
+                    ) ranked
+                    WHERE rn = 1
+                """)
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {geom_candidates} AS
+                    SELECT
+                        f.rowid AS field_rowid,
+                        f.geometry,
+                        TRY(ST_Area(f.geometry)) AS field_area,
+                        TRY(ST_XMin(f.geometry)) AS xmin,
+                        TRY(ST_XMax(f.geometry)) AS xmax,
+                        TRY(ST_YMin(f.geometry)) AS ymin,
+                        TRY(ST_YMax(f.geometry)) AS ymax
+                    FROM {marker_table} f
+                    LEFT JOIN {exact_matches} e ON f.rowid = e.field_rowid
+                    WHERE e.field_rowid IS NULL
+                      AND f.geometry IS NOT NULL
+                """)
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {geom_ref} AS
+                    SELECT
+                        CAST(owner_number AS VARCHAR) AS ejernr,
+                        geometry,
+                        TRY(ST_XMin(geometry)) AS xmin,
+                        TRY(ST_XMax(geometry)) AS xmax,
+                        TRY(ST_YMin(geometry)) AS ymin,
+                        TRY(ST_YMax(geometry)) AS ymax
+                    FROM {jordbrug_table}
+                    WHERE owner_number IS NOT NULL
+                      AND geometry IS NOT NULL
+                """)
+
+                threshold = self.config.cvr_ejernr_attach_overlap_threshold
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {geom_matches} AS
+                    SELECT field_rowid, ejernr
+                    FROM (
+                        SELECT
+                            field_rowid,
+                            ejernr,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY field_rowid
+                                ORDER BY overlap_ratio DESC, inter_area DESC
+                            ) AS rn
+                        FROM (
+                            SELECT
+                                f.field_rowid,
+                                j.ejernr,
+                                TRY(ST_Area(ST_Intersection(f.geometry, j.geometry))) AS inter_area,
+                                TRY(ST_Area(ST_Intersection(f.geometry, j.geometry)))
+                                    / NULLIF(f.field_area, 0) AS overlap_ratio
+                            FROM {geom_candidates} f
+                            INNER JOIN {geom_ref} j
+                                ON f.xmax >= j.xmin
+                               AND f.xmin <= j.xmax
+                               AND f.ymax >= j.ymin
+                               AND f.ymin <= j.ymax
+                               AND TRY(ST_Intersects(f.geometry, j.geometry)) = true
+                        ) candidates
+                        WHERE overlap_ratio >= {threshold}
+                    ) ranked
+                    WHERE rn = 1
+                """)
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {attach_table} AS
+                    SELECT field_rowid, ejernr FROM {exact_matches}
+                    UNION ALL
+                    SELECT field_rowid, ejernr FROM {geom_matches}
+                """)
+
+                total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {marker_table}").fetchone()[0]
+                attached_rows = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {attach_table}"
+                ).fetchone()[0]
+                attach_pct = attached_rows / total_rows * 100 if total_rows else 0
+                self.log.info(
+                    f"🔗 EjerNr attachment for {year}: {attached_rows:,}/{total_rows:,} "
+                    f"fields ({attach_pct:.1f}%)"
+                )
+
+                attach_tables[year] = (marker_table, attach_table)
+
+                for temp_table in (exact_matches, geom_candidates, geom_ref, geom_matches):
+                    self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                    temp_tables.discard(temp_table)
+
+            observations = "temp_ejernr_cvr_observations"
+            ejer_cvr = "temp_ejernr_cvr"
+            temp_tables.update({observations, ejer_cvr})
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {observations} (
+                    ejernr VARCHAR,
+                    cvr_number VARCHAR
+                )
+            """)
+
+            for ref_year in self.config.cvr_ejernr_reference_years:
+                ref_entry = attach_tables.get(ref_year)
+                if not ref_entry:
+                    continue
+                marker_table, attach_table = ref_entry
+                if "cvr_number" not in self._get_table_columns(marker_table):
+                    self.log.warning(
+                        f"Missing cvr_number in {marker_table}; skipping EjerNr CVR learning "
+                        f"for {ref_year}"
+                    )
+                    continue
+
+                self.conn.execute(f"""
+                    INSERT INTO {observations}
+                    SELECT a.ejernr, CAST(m.cvr_number AS VARCHAR) AS cvr_number
+                    FROM {marker_table} m
+                    INNER JOIN {attach_table} a ON m.rowid = a.field_rowid
+                    WHERE m.cvr_number IS NOT NULL
+                      AND CAST(m.cvr_number AS VARCHAR) != ''
+                      AND CAST(m.cvr_number AS VARCHAR) != '0'
+                      AND LENGTH(CAST(m.cvr_number AS VARCHAR)) = 8
+                """)
+
+            dominance_threshold = self.config.cvr_ejernr_dominance_threshold
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {ejer_cvr} AS
+                WITH counts AS (
+                    SELECT ejernr, cvr_number, COUNT(*) AS cvr_count
+                    FROM {observations}
+                    GROUP BY ejernr, cvr_number
+                ),
+                totals AS (
+                    SELECT ejernr, SUM(cvr_count) AS total_count
+                    FROM counts
+                    GROUP BY ejernr
+                ),
+                ranked AS (
+                    SELECT
+                        c.ejernr,
+                        c.cvr_number AS cvr,
+                        c.cvr_count,
+                        t.total_count,
+                        c.cvr_count::DOUBLE / NULLIF(t.total_count, 0) AS dominance,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY c.ejernr
+                            ORDER BY c.cvr_count DESC, c.cvr_number
+                        ) AS rn
+                    FROM counts c
+                    INNER JOIN totals t USING (ejernr)
+                )
+                SELECT ejernr, cvr
+                FROM ranked
+                WHERE rn = 1
+                  AND dominance >= {dominance_threshold}
+            """)
+
+            trusted_ejernr_count = self.conn.execute(f"SELECT COUNT(*) FROM {ejer_cvr}").fetchone()[
+                0
+            ]
+            self.log.info(
+                f"🔗 Learned {trusted_ejernr_count:,} trusted EjerNr→CVR mappings "
+                "from reference years"
+            )
+
+            missing_cvr_predicate = """
+                cvr_number IS NULL
+                OR CAST(cvr_number AS VARCHAR) = ''
+                OR CAST(cvr_number AS VARCHAR) = '0'
+                OR LENGTH(CAST(cvr_number AS VARCHAR)) < 8
+            """
+            missing_cvr_predicate_m = """
+                m.cvr_number IS NULL
+                OR CAST(m.cvr_number AS VARCHAR) = ''
+                OR CAST(m.cvr_number AS VARCHAR) = '0'
+                OR LENGTH(CAST(m.cvr_number AS VARCHAR)) < 8
+            """
+
+            for target_year in self.config.cvr_ejernr_target_years:
+                target_entry = attach_tables.get(target_year)
+                if not target_entry:
+                    self.log.warning(
+                        f"Missing EjerNr attachment for target year {target_year}; skipping fill"
+                    )
+                    continue
+
+                marker_table, attach_table = target_entry
+                marker_columns = self._get_table_columns(marker_table)
+                if "cvr_number" not in marker_columns:
+                    self.log.warning(
+                        f"Missing cvr_number in {marker_table}; skipping EjerNr CVR fill "
+                        f"for {target_year}"
+                    )
+                    continue
+                if "cvr_source" not in marker_columns:
+                    self.conn.execute(f"ALTER TABLE {marker_table} ADD COLUMN cvr_source VARCHAR")
+
+                total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {marker_table}").fetchone()[0]
+                incomplete_rows = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {marker_table}
+                    WHERE {missing_cvr_predicate}
+                """).fetchone()[0]
+                attached_incomplete_rows = self.conn.execute(f"""
+                    SELECT COUNT(*)
+                    FROM {marker_table} m
+                    INNER JOIN {attach_table} a ON m.rowid = a.field_rowid
+                    WHERE {missing_cvr_predicate_m}
+                """).fetchone()[0]
+
+                self.conn.execute(f"""
+                    UPDATE {marker_table}
+                    SET
+                        cvr_number = ec.cvr,
+                        cvr_source = 'ejernr_bridge'
+                    FROM {attach_table} a
+                    INNER JOIN {ejer_cvr} ec USING (ejernr)
+                    WHERE {marker_table}.rowid = a.field_rowid
+                      AND ({missing_cvr_predicate})
+                """)
+
+                filled_rows = self.conn.execute(f"""
+                    SELECT COUNT(*)
+                    FROM {marker_table}
+                    WHERE cvr_source = 'ejernr_bridge'
+                """).fetchone()[0]
+                complete_cvr_count = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {marker_table}
+                    WHERE cvr_number IS NOT NULL
+                      AND CAST(cvr_number AS VARCHAR) != ''
+                      AND CAST(cvr_number AS VARCHAR) != '0'
+                      AND LENGTH(CAST(cvr_number AS VARCHAR)) = 8
+                """).fetchone()[0]
+                complete_pct = complete_cvr_count / total_rows * 100 if total_rows else 0
+
+                self.log.info(
+                    f"✅ EjerNr bridge CVR backfill completed for {target_year}: "
+                    f"{total_rows:,} total rows; {incomplete_rows:,} lacking full CVR; "
+                    f"{attached_incomplete_rows:,} lacking rows had EjerNr; "
+                    f"{filled_rows:,} filled; "
+                    f"{complete_cvr_count:,}/{total_rows:,} ({complete_pct:.1f}%) "
+                    "now have complete CVR numbers"
+                )
+
+                self._save_data(
+                    marker_table,
+                    f"{self.config.dataset_marker}_{target_year}",
+                    self.config.bucket,
+                    "silver",
+                    conn=self.conn,
+                    crs="EPSG:25832" if USE_UTM_PROCESSING else None,
+                )
+
+        except Exception as e:
+            self.log.error(f"Error during EjerNr bridge CVR backfill: {e}")
+            # Don't fail the entire pipeline if the bridge fails.
+            pass
+        finally:
+            for temp_table in temp_tables | loaded_tables:
+                with contextlib.suppress(Exception):
+                    self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+
+    async def _backfill_cvr_from_adjacent_years(self) -> None:
+        """
+        Backfill gap-year marker CVRs only when adjacent years independently agree.
+
+        This intentionally prioritizes accuracy over coverage: a missing CVR is filled only
+        when the best overlapping field from the previous neighbour and the best overlapping
+        field from the next neighbour both exceed the overlap threshold and carry the same
+        full 8-digit CVR number.
+        """
+        loaded_tables: set[str] = set()
+        temp_tables: set[str] = set()
+
+        try:
+            self.log.info("🔍 Starting adjacent-year agreement CVR backfill...")
+
+            with contextlib.suppress(Exception):
+                self.conn.execute("LOAD spatial")
+
+            for gap_year in self.config.cvr_backfill_gap_years:
+                prev_year = gap_year - self.config.cvr_backfill_prev_offset
+                next_year = gap_year + self.config.cvr_backfill_next_offset
+
+                gap_table = await self._resolve_marker_table_for_cvr_backfill(
+                    gap_year, loaded_tables
+                )
+                prev_table = await self._resolve_marker_table_for_cvr_backfill(
+                    prev_year, loaded_tables
+                )
+                next_table = await self._resolve_marker_table_for_cvr_backfill(
+                    next_year, loaded_tables
+                )
+
+                if not gap_table:
+                    self.log.warning(
+                        f"Missing gap-year marker table for {gap_year} - skipping CVR backfill"
+                    )
+                    continue
+
+                if not prev_table or not next_table:
+                    self.log.warning(
+                        f"Missing adjacent marker table(s) for {gap_year} "
+                        f"({prev_year}: {bool(prev_table)}, {next_year}: {bool(next_table)}) - "
+                        "skipping CVR backfill"
+                    )
+                    continue
+
+                gap_columns = self._get_table_columns(gap_table)
+                required_gap_cols = {"field_id", "cvr_number", "geometry"}
+                missing_gap_cols = required_gap_cols - gap_columns
+                if missing_gap_cols:
+                    self.log.warning(
+                        f"Missing required columns for adjacent-year CVR backfill in {gap_table}: "
+                        f"{sorted(missing_gap_cols)}. Skipping {gap_year}."
+                    )
+                    continue
+
+                missing_ref_schema = False
+                for ref_table in (prev_table, next_table):
+                    ref_columns = self._get_table_columns(ref_table)
+                    required_ref_cols = {"cvr_number", "geometry"}
+                    missing_ref_cols = required_ref_cols - ref_columns
+                    if missing_ref_cols:
+                        missing_ref_schema = True
+                        self.log.warning(
+                            f"Missing required columns for adjacent-year CVR backfill in "
+                            f"{ref_table}: {sorted(missing_ref_cols)}. Skipping {gap_year}."
+                        )
+                if missing_ref_schema:
+                    continue
+
+                if "cvr_source" not in gap_columns:
+                    self.conn.execute(f"ALTER TABLE {gap_table} ADD COLUMN cvr_source VARCHAR")
+
+                total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {gap_table}").fetchone()[0]
+                incomplete_rows = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {gap_table}
+                    WHERE cvr_number IS NULL
+                       OR CAST(cvr_number AS VARCHAR) = ''
+                       OR CAST(cvr_number AS VARCHAR) = '0'
+                       OR LENGTH(CAST(cvr_number AS VARCHAR)) < 8
+                """).fetchone()[0]
+
+                if incomplete_rows == 0:
+                    self.log.info(
+                        f"All CVR numbers are complete for {gap_year}, "
+                        "skipping adjacent-year backfill"
+                    )
+                    continue
+
+                distinct_field_ids, null_field_ids = self.conn.execute(f"""
+                    SELECT
+                        COUNT(DISTINCT field_id),
+                        COUNT(*) FILTER (WHERE field_id IS NULL)
+                    FROM {gap_table}
+                """).fetchone()
+                partition_key = (
+                    "g.field_id"
+                    if distinct_field_ids == total_rows and null_field_ids == 0
+                    else "g.gap_rowid"
+                )
+                if partition_key == "g.gap_rowid":
+                    self.log.info(
+                        f"Using rowid for {gap_year} CVR backfill matching because field_id is "
+                        "not unique"
+                    )
+
+                gap_candidates = f"temp_cvr_backfill_gap_{gap_year}"
+                prev_ref = f"temp_cvr_backfill_ref_prev_{gap_year}"
+                next_ref = f"temp_cvr_backfill_ref_next_{gap_year}"
+                prev_matches = f"temp_cvr_backfill_prev_{gap_year}"
+                next_matches = f"temp_cvr_backfill_next_{gap_year}"
+                decisions = f"temp_cvr_backfill_decisions_{gap_year}"
+                temp_tables.update(
+                    {
+                        gap_candidates,
+                        prev_ref,
+                        next_ref,
+                        prev_matches,
+                        next_matches,
+                        decisions,
+                    }
+                )
+
+                threshold = self.config.cvr_backfill_overlap_threshold
+                missing_cvr_predicate = """
+                    cvr_number IS NULL
+                    OR CAST(cvr_number AS VARCHAR) = ''
+                    OR CAST(cvr_number AS VARCHAR) = '0'
+                    OR LENGTH(CAST(cvr_number AS VARCHAR)) < 8
+                """
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {gap_candidates} AS
+                    SELECT
+                        rowid AS gap_rowid,
+                        field_id,
+                        geometry,
+                        TRY(ST_Area(geometry)) AS gap_area,
+                        TRY(ST_XMin(geometry)) AS xmin,
+                        TRY(ST_XMax(geometry)) AS xmax,
+                        TRY(ST_YMin(geometry)) AS ymin,
+                        TRY(ST_YMax(geometry)) AS ymax
+                    FROM {gap_table}
+                    WHERE ({missing_cvr_predicate})
+                      AND geometry IS NOT NULL
+                """)
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {prev_ref} AS
+                    SELECT
+                        CAST(cvr_number AS VARCHAR) AS cvr_number,
+                        geometry,
+                        TRY(ST_XMin(geometry)) AS xmin,
+                        TRY(ST_XMax(geometry)) AS xmax,
+                        TRY(ST_YMin(geometry)) AS ymin,
+                        TRY(ST_YMax(geometry)) AS ymax
+                    FROM {prev_table}
+                    WHERE LENGTH(CAST(cvr_number AS VARCHAR)) = 8
+                      AND geometry IS NOT NULL
+                """)
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {next_ref} AS
+                    SELECT
+                        CAST(cvr_number AS VARCHAR) AS cvr_number,
+                        geometry,
+                        TRY(ST_XMin(geometry)) AS xmin,
+                        TRY(ST_XMax(geometry)) AS xmax,
+                        TRY(ST_YMin(geometry)) AS ymin,
+                        TRY(ST_YMax(geometry)) AS ymax
+                    FROM {next_table}
+                    WHERE LENGTH(CAST(cvr_number AS VARCHAR)) = 8
+                      AND geometry IS NOT NULL
+                """)
+
+                for ref_table, match_table, cvr_alias in (
+                    (prev_ref, prev_matches, "cvr_prev"),
+                    (next_ref, next_matches, "cvr_next"),
+                ):
+                    # DuckDB does not currently use RTREE for this TRY(ST_Intersects) join,
+                    # so bbox overlap reduces candidates before the exact spatial predicates.
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {match_table} AS
+                        SELECT gap_rowid, cvr_number AS {cvr_alias}
+                        FROM (
+                            SELECT
+                                gap_rowid,
+                                cvr_number,
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY gap_key
+                                    ORDER BY inter_area DESC
+                                ) AS rn
+                            FROM (
+                                SELECT
+                                    g.gap_rowid,
+                                    {partition_key} AS gap_key,
+                                    r.cvr_number,
+                                    TRY(ST_Area(ST_Intersection(g.geometry, r.geometry))) AS inter_area,
+                                    g.gap_area
+                                FROM {gap_candidates} g
+                                INNER JOIN {ref_table} r
+                                    ON g.xmax >= r.xmin
+                                   AND g.xmin <= r.xmax
+                                   AND g.ymax >= r.ymin
+                                   AND g.ymin <= r.ymax
+                                   AND TRY(ST_Intersects(g.geometry, r.geometry)) = true
+                            ) candidates
+                            WHERE inter_area / NULLIF(gap_area, 0) >= {threshold}
+                        ) ranked
+                        WHERE rn = 1
+                    """)
+
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {decisions} AS
+                    SELECT
+                        COALESCE(p.gap_rowid, n.gap_rowid) AS gap_rowid,
+                        p.cvr_prev,
+                        n.cvr_next
+                    FROM {prev_matches} p
+                    FULL OUTER JOIN {next_matches} n USING (gap_rowid)
+                """)
+
+                matched_prev = self.conn.execute(f"SELECT COUNT(*) FROM {prev_matches}").fetchone()[
+                    0
+                ]
+                matched_next = self.conn.execute(f"SELECT COUNT(*) FROM {next_matches}").fetchone()[
+                    0
+                ]
+                agreed_count = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {decisions}
+                    WHERE cvr_prev IS NOT NULL
+                      AND cvr_next IS NOT NULL
+                      AND cvr_prev = cvr_next
+                """).fetchone()[0]
+                disagreed_count = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {decisions}
+                    WHERE cvr_prev IS NOT NULL
+                      AND cvr_next IS NOT NULL
+                      AND cvr_prev != cvr_next
+                """).fetchone()[0]
+                single_neighbor_count = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {decisions}
+                    WHERE (cvr_prev IS NULL AND cvr_next IS NOT NULL)
+                       OR (cvr_prev IS NOT NULL AND cvr_next IS NULL)
+                """).fetchone()[0]
+
+                self.conn.execute(f"""
+                    UPDATE {gap_table}
+                    SET
+                        cvr_number = d.cvr_prev,
+                        cvr_source = 'adjacent_year_agreement'
+                    FROM {decisions} d
+                    WHERE {gap_table}.rowid = d.gap_rowid
+                      AND d.cvr_prev IS NOT NULL
+                      AND d.cvr_next IS NOT NULL
+                      AND d.cvr_prev = d.cvr_next
+                """)
+
+                complete_cvr_count = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {gap_table}
+                    WHERE cvr_number IS NOT NULL
+                      AND CAST(cvr_number AS VARCHAR) != ''
+                      AND CAST(cvr_number AS VARCHAR) != '0'
+                      AND LENGTH(CAST(cvr_number AS VARCHAR)) = 8
+                """).fetchone()[0]
+                filled_pct = complete_cvr_count / total_rows * 100 if total_rows else 0
+
+                self.log.info(
+                    f"✅ Adjacent-year CVR backfill completed for {gap_year}: "
+                    f"{total_rows:,} total rows; {incomplete_rows:,} lacking full CVR; "
+                    f"{matched_prev:,} matched in {prev_year}; "
+                    f"{matched_next:,} matched in {next_year}; "
+                    f"{agreed_count:,} agreed→filled; "
+                    f"{disagreed_count:,} disagreed→skipped; "
+                    f"{single_neighbor_count:,} single-neighbour-only→skipped; "
+                    f"{complete_cvr_count:,}/{total_rows:,} ({filled_pct:.1f}%) "
+                    "now have complete CVR numbers"
+                )
+
+                self._save_data(
+                    gap_table,
+                    f"{self.config.dataset_marker}_{gap_year}",
+                    self.config.bucket,
+                    "silver",
+                    conn=self.conn,
+                    crs="EPSG:25832" if USE_UTM_PROCESSING else None,
+                )
+
+                for temp_table in (
+                    gap_candidates,
+                    prev_ref,
+                    next_ref,
+                    prev_matches,
+                    next_matches,
+                    decisions,
+                ):
+                    self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                    temp_tables.discard(temp_table)
+
+        except Exception as e:
+            self.log.error(f"Error during adjacent-year CVR backfill: {e}")
+            # Don't fail the entire pipeline if backfill fails
+            pass
+        finally:
+            for temp_table in temp_tables | loaded_tables:
+                with contextlib.suppress(Exception):
+                    self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
 
     async def _extract_and_save_cvr_numbers(self) -> None:
         """
@@ -2991,6 +3736,12 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Identify missing CVRs using GKEA agricultural pattern matching
             await self._identify_missing_cvrs_with_gkea()
+
+            # Backfill gap-year CVRs via EjerNr bridge before adjacent-year fallback
+            await self._backfill_cvr_via_ejernr()
+
+            # Backfill remaining gap-year CVRs only when adjacent years independently agree
+            await self._backfill_cvr_from_adjacent_years()
 
             # Enrich subsidy fields with field UUIDs from matching FVM marker fields
             await self._enrich_subsidies_with_field_uuid()

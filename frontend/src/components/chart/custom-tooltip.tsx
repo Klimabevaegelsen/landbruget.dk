@@ -1,16 +1,18 @@
-import { DefaultTooltipContentProps, TooltipProps } from 'recharts';
-import {
+import { TooltipProps } from 'recharts';
+import type {
   NameType,
+  Payload as TooltipPayload,
   ValueType,
 } from 'recharts/types/component/DefaultTooltipContent';
 
 interface CustomTooltipProps extends TooltipProps<ValueType, NameType> {
+  active?: boolean;
+  payload?: TooltipPayload<ValueType, NameType>[];
+  label?: string | number;
   unit?: string;
 }
 
-type TooltipEntry = NonNullable<
-  DefaultTooltipContentProps<ValueType, NameType>['payload']
->[number];
+type TooltipEntry = TooltipPayload<ValueType, NameType>;
 
 export function CustomTooltip({
   active,
