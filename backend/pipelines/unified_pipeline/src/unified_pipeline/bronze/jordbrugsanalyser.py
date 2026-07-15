@@ -17,13 +17,18 @@ with proper error handling and retry logic for robustness.
 import asyncio
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
+from unified_pipeline.util.jordbrugsanalyser_gml import (
+    FIELD_MAPPING,
+    NAMESPACES,
+    parse_wfs_response,
+)
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -84,11 +89,8 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     request_semaphore: Semaphore = Semaphore(max_concurrent)
 
     # WFS namespaces for parsing responses
-    namespaces: ClassVar[dict[str, str]] = {
-        "wfs": "http://www.opengis.net/wfs/2.0",
-        "gml": "http://www.opengis.net/gml/3.2",
-        "Jordbrugsanalyser": "Jordbrugsanalyser",
-    }
+    namespaces: ClassVar[dict[str, str]] = NAMESPACES
+    field_mapping: ClassVar[dict[str, tuple[str, Any]]] = FIELD_MAPPING
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -344,22 +346,135 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 self.log.error(err_msg)
                 raise Exception(err_msg)
 
-    async def _process_year_data(self, session: aiohttp.ClientSession, year: int) -> list[str]:
+    def _parse_wfs_response(self, xml_content: str, year: int) -> list[dict[str, Any]]:
+        """Parse a WFS FeatureCollection into compact structured feature rows."""
+        return parse_wfs_response(xml_content, year, self.log)
+
+    def _create_structured_bronze_table(self, raw_responses: list[str], year: int) -> str | None:
+        """Create compact structured bronze table from paginated WFS GML responses."""
+        all_features: list[dict[str, Any]] = []
+        for response in raw_responses:
+            if response:
+                all_features.extend(self._parse_wfs_response(response, year))
+
+        if not all_features:
+            self.log.warning(f"No features parsed for year {year}")
+            return None
+
+        try:
+            self.conn.execute("INSTALL spatial")
+            self.conn.execute("LOAD spatial")
+        except Exception:
+            pass
+
+        temp_table = f"temp_jordbrugsanalyser_features_{year}"
+        table_name = f"jordbrugsanalyser_bronze_{year}"
+        self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        self.conn.execute(f"""
+            CREATE TABLE {temp_table} (
+                owner_number BIGINT,
+                field_block VARCHAR,
+                field_number VARCHAR,
+                crop_category VARCHAR,
+                crop_name VARCHAR,
+                crop_code INTEGER,
+                area_ha DOUBLE,
+                total_area_ha DOUBLE,
+                centroid_x DOUBLE,
+                centroid_y DOUBLE,
+                geometry_wkt VARCHAR,
+                year INTEGER
+            )
+        """)
+
+        insert_sql = f"""
+            INSERT INTO {temp_table} (
+                owner_number,
+                field_block,
+                field_number,
+                crop_category,
+                crop_name,
+                crop_code,
+                area_ha,
+                total_area_ha,
+                centroid_x,
+                centroid_y,
+                geometry_wkt,
+                year
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        Process data for a specific year and return raw WFS responses.
+        for feature in all_features:
+            self.conn.execute(
+                insert_sql,
+                [
+                    feature.get("owner_number"),
+                    feature.get("field_block"),
+                    feature.get("field_number"),
+                    feature.get("crop_category"),
+                    feature.get("crop_name"),
+                    feature.get("crop_code"),
+                    feature.get("area_ha"),
+                    feature.get("total_area_ha"),
+                    feature.get("centroid_x"),
+                    feature.get("centroid_y"),
+                    feature.get("geometry_wkt"),
+                    feature.get("year"),
+                ],
+            )
+
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE {table_name} AS
+            SELECT
+                owner_number,
+                field_block,
+                field_number,
+                crop_category,
+                crop_name,
+                crop_code,
+                area_ha,
+                total_area_ha,
+                centroid_x,
+                centroid_y,
+                geometry,
+                year
+            FROM (
+                SELECT
+                    *,
+                    TRY(ST_GeomFromText(geometry_wkt)) AS geometry
+                FROM {temp_table}
+                WHERE geometry_wkt IS NOT NULL
+            )
+            WHERE geometry IS NOT NULL
+              AND TRY(ST_IsValid(geometry)) = true
+        """)
+        self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+
+        feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.log.info(f"Year {year}: Created {feature_count:,} compact bronze features")
+        if feature_count == 0:
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            return None
+
+        return table_name
+
+    async def _process_year_data(self, session: aiohttp.ClientSession, year: int) -> str | None:
+        """
+        Process data for a specific year and return a compact structured table.
 
         This method orchestrates the data retrieval workflow for a specific year:
         1. Gets the layer name for the year (e.g., Marker12 for 2012)
         2. Gets the total count of available features from the WFS service
         3. Fetches data either as full dataset or in chunks based on configuration
-        4. Returns list of raw WFS responses for storage
+        4. Parses the GML responses and returns a structured DuckDB table
 
         Args:
             session (aiohttp.ClientSession): HTTP session for making requests
             year (int): Year to process (e.g., 2012)
 
         Returns:
-            List[str]: List of raw WFS response strings
+            str | None: DuckDB table name containing structured bronze rows
 
         Raises:
             Exception: If there are issues with data fetching or processing
@@ -373,16 +488,15 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
 
                 if total_count == 0:
                     self.log.warning(f"No data found for year {year}")
-                    return []
+                    return None
 
                 # If batch_size is 0, download entire dataset in one request
                 if self.config.batch_size == 0:
                     self.log.info(f"Year {year}: Downloading full dataset in single request")
                     raw_response = await self._fetch_chunk(session, layer_name, 0)
                     if raw_response:
-                        # 🧹 CLEANUP: Return single response immediately, don't hold in memory
-                        return [raw_response]
-                    return []
+                        return self._create_structured_bronze_table([raw_response], year)
+                    return None
 
                 # Otherwise, use chunked downloading
                 tasks = [
@@ -401,7 +515,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                 raw_responses.clear()
                 raw_responses = None
 
-                return valid_responses
+                return self._create_structured_bronze_table(valid_responses, year)
 
             except Exception as e:
                 self.log.error(f"Error processing year {year}: {e!s}")
@@ -414,12 +528,12 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
         This method orchestrates the entire data retrieval process:
         1. Processes marker data for each year from 2012 to 2024
         2. For each year, fetches all available marker features
-        3. Saves raw WFS responses to cloud storage
+        3. Saves compact structured marker rows to cloud storage
         4. Tracks overall execution time for performance monitoring
         Returns the raw data for in-memory passing to silver stage.
 
         Returns:
-            Optional[Dict[str, List[str]]]: Dictionary mapping year to list of raw WFS responses,
+            Optional[Dict[str, List[str]]]: Dictionary mapping year to storage references,
                                            or None if processing fails
 
         Note:
@@ -445,44 +559,32 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                                 f"({memory_info['system']['percent']:.1f}%)"
                             )
 
-                        raw_responses = await self._process_year_data(session, year)
+                        structured_table = await self._process_year_data(session, year)
 
-                        if raw_responses:
+                        if structured_table:
                             # Save data with year suffix for easy identification using
                             # new unified method
                             dataset_name = f"{self.config.dataset}_{year}"
-                            self.log.info(f"Saving {len(raw_responses)} responses for year {year}")
+                            feature_count = self.conn.execute(
+                                f"SELECT COUNT(*) FROM {structured_table}"
+                            ).fetchone()[0]
+                            self.log.info(
+                                f"Saving {feature_count:,} compact features for year {year}"
+                            )
                             self._save_data(
-                                raw_responses, dataset_name, self.config.bucket, stage="bronze"
+                                structured_table,
+                                dataset_name,
+                                self.config.bucket,
+                                stage="bronze",
+                                crs="EPSG:25832",
                             )
                             self.log.info(f"Year {year}: Data saved successfully")
 
-                            # 🧹 CLEANUP: Only store data for in-memory passing if
-                            # save_local is True
-                            # On GitHub runners, we don't need to accumulate all data in memory
-                            if self.config.save_local:
-                                # Store data for in-memory passing (local development)
-                                all_year_data[str(year)] = raw_responses
-                            else:
-                                # 🧹 CLEANUP: For GitHub runners, immediately clear
-                                # raw_responses to free memory
-                                self.log.info(
-                                    f"Year {year}: Clearing raw responses from memory "
-                                    f"(GitHub runner optimization)"
-                                )
-                                raw_responses.clear()
-                                raw_responses = None
-
-                                # 🧹 CLEANUP: Force garbage collection to free memory immediately
-                                import gc
-
-                                gc.collect()
-
-                                # Store minimal reference for in-memory passing (just the year)
-                                all_year_data[str(year)] = [f"saved_to_storage_{dataset_name}"]
+                            all_year_data[str(year)] = [f"saved_to_storage_{dataset_name}"]
 
                             # 🧹 CLEANUP: Clean up any temporary tables and force memory
                             # cleanup after each year
+                            self.conn.execute(f"DROP TABLE IF EXISTS {structured_table}")
                             self.cleanup_resources()
 
                             # 🧹 CLEANUP: Log memory usage after cleanup
