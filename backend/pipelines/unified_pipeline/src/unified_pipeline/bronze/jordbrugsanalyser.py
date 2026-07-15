@@ -59,7 +59,7 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
         batch_size (int): Features per request (0 = unlimited, downloads full dataset)
         max_concurrent (int): Maximum concurrent requests (1 for full downloads)
         timeout_config (aiohttp.ClientTimeout): Request timeout configuration
-        request_semaphore (Semaphore): Semaphore to limit concurrent requests
+        max_concurrent (int): Max concurrent page requests per year
     """
 
     name: str = "Danish Jordbrugsanalyser Markers"
@@ -79,14 +79,16 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     # (~300s) for the large layers (575k+ features), returning truncated/invalid
     # GML that fails parsing (ValueError) and leaves corrupt bronze. Paginate
     # instead: chunked STARTINDEX/COUNT requests complete fast and reliably.
-    batch_size: int = 25000  # features per WFS page (0 would download full dataset)
-    max_concurrent: int = 1  # Process one year at a time for stability
+    batch_size: int = 50000  # features per WFS page (0 would download full dataset)
+    # Pages within a year are fetched concurrently up to this limit (years stay
+    # sequential to bound memory). The semaphore is built per-instance in
+    # JordbrugsanalyserBronze.__init__ so this value actually takes effect.
+    max_concurrent: int = 6
     request_timeout: int = 600  # Increased timeout for full dataset downloads
 
     timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=request_timeout
     )
-    request_semaphore: Semaphore = Semaphore(max_concurrent)
 
     # WFS namespaces for parsing responses
     namespaces: ClassVar[dict[str, str]] = NAMESPACES
@@ -122,6 +124,10 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
         Args:
             config (JordbrugsanalyserBronzeConfig): Configuration for the data source"""
         super().__init__(config)
+        # Build the request semaphore here (not as a frozen class-level default,
+        # which would evaluate to Semaphore(1) at class-definition time and force
+        # sequential fetches) so config.max_concurrent actually limits concurrency.
+        self._request_semaphore = Semaphore(config.max_concurrent)
 
     def _get_layer_name(self, year: int) -> str:
         """
@@ -320,7 +326,7 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
         )
 
         async with (
-            self.config.request_semaphore,
+            self._request_semaphore,
             AsyncTimer(f"{request_type} request for {layer_name}"),
         ):
             self.log.debug(f"Fetching {layer_name} {request_type.lower()}")
