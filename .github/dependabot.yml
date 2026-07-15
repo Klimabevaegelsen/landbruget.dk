@@ -12,6 +12,12 @@ updates:
       - "*"
     multi-ecosystem-group: "weekly-dependencies"
     open-pull-requests-limit: 5
+    ignore:
+      # typescript 7.x is the native Go port (tsgo), not the classic Node
+      # package Next.js's build-time type integration needs. Stay on 6.x
+      # until Next.js supports it.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "uv"
     directories:
