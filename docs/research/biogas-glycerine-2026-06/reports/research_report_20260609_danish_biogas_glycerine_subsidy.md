@@ -1,9 +1,11 @@
-# The Scarce Molecule: Glycerine, Advanced-Biofuel Subsidies, and the Danish Biogas Feedstock Squeeze
+# The Scarce Molecule: Glycerine, Advanced-Biofuel Classification, and the Danish Biogas Feedstock Squeeze
 
 > **⚠️ Unverified draft — work in progress.** This report was produced by an AI-assisted research pipeline and has not been fact-checked, edited, or reviewed by a journalist or editor. Claims, figures, and sourcing may be incomplete, outdated, or wrong. Do not cite, publish, or act on this content as-is. Landbruget.dk takes no responsibility for its accuracy.
 
 
 **Research mode:** UltraDeep · **Date:** 2026-06-09 · **Analyst:** Deep Research pipeline (8-phase)
+
+**Update -- 15 July 2026:** Current Danish rules and the EU/Dutch certificate material require a narrower conclusion. Crude glycerine remains an Annex IX Part A residue and may affect yield and GHG calculations, but Annex IX status does not automatically create a current 2× Danish transport credit. Denmark's cited live regime is a GHG-displacement mandate that treats subsidised biogas as natural-gas-equivalent; GO disclosure and PoS compliance must be analysed separately [42][43][44].
 
 ---
 
@@ -13,13 +15,13 @@ The tip decodes cleanly. The "ingredient or chemical" that unlocks the most valu
 
 - **It is a literal chemical that boosts gas yield.** Glycerol has a theoretical methane potential of **0.426 m³ CH₄/kg** [14]. Adding just a few percent to manure raises biogas output dramatically — published boosts span **+14% to +400%** depending on dose, with **3–3.6× methane** reported for cattle/pig slurry co-digestion [13][17][19]. It works because it is a concentrated, readily biodegradable, high-COD carbon source [13].
 
-- **You "need it" because it carries premium subsidy status.** Crude glycerine is named in **Annex IX, Part A, item (i)** of the EU Renewable Energy Directive [1], which makes any biomethane derived from it a legally **"advanced biofuel"** that **double-counts** toward transport renewable-energy obligations [1][11] and counts toward a dedicated advanced sub-target [12]. Denmark transposed this verbatim — *"i) Råglycerin"* sits in Bilag 1, Del A of Danish law [3][4] — and residue-derived gas is additionally assigned **zero upstream emissions** under the Danish CO₂e-displacement mandate [6], while sitting **outside the energy-crop cap** that throttles maize and grass [7].
+- **It is a legally privileged feedstock, but not an automatic Danish 2× credit.** Crude glycerine is named in **Annex IX, Part A, item (i)** of the Renewable Energy Directive [1]. That makes fuel made from it an "advanced biofuel" for schemes that apply the relevant Annex IX rules; it does not itself guarantee a multiplier in every Member State. Denmark transposed the feedstock list — *"i) Råglycerin"* sits in Bilag 1, Del A [3][4] — but its current CO₂e-displacement rule has no general multiple-count clause and treats subsidised biogas as natural-gas-equivalent [6][7]. Glycerine may still matter for allocation, GHG intensity and foreign compliance schemes, while sitting outside the energy-crop cap [7].
 
 - **There genuinely isn't enough of it.** Crude glycerine exists only as a **~10%-by-mass by-product of FAME biodiesel** [21]; its supply is capped by biodiesel volume and bid away by higher-value pharma/cosmetic/oleochemical buyers [21][23]. The decisive structural squeeze: the industry shift from FAME biodiesel to **HVO/renewable diesel — which produces no glycerine at all** [24][25] — is shrinking supply even as fuel demand grows. In Denmark, essentially one producer (Daka ecoMotion) routes ~**5,000–6,000 t/yr** of glycerine to biogas [26][27], against an expanding plant fleet competing for every energy-rich residue [30][31].
 
-**Primary recommendation:** Treat "glycerine" as shorthand for the whole **Annex IX Part A lipid/residue family**; the subsidy lever is the advanced-biofuel double-count, and the binding constraint is biodiesel by-product volume.
+**Primary recommendation:** Treat "glycerine" as shorthand for the whole **Annex IX Part A lipid/residue family**; investigate its yield, GHG and certificate-allocation value, but do not describe it as necessary for the Danish production subsidy or as a current Danish 2× credit. The binding physical constraint remains biodiesel by-product volume.
 
-**Confidence:** High on the identification and the subsidy mechanism (primary law + peer-reviewed yields + named Danish supplier); Medium on exact current Danish multiplier wording and national glycerine tonnages.
+**Confidence:** High on the identification, feedstock classification and peer-reviewed yields; Medium on certificate-value and national glycerine tonnages; low-to-medium on any current Danish multiplier because the live rule does not establish one.
 
 ---
 
@@ -29,7 +31,7 @@ The tip decodes cleanly. The "ingredient or chemical" that unlocks the most valu
 
 A source told the user that **"to get subsidies for biogas in Denmark, you need to use an ingredient or a chemical, and the biogas producers don't use it as much as they should because not enough of it is being produced."** The user later added a "vague memory" that it might be **glycerin or similar**. This report identifies the substance, the exact subsidy mechanism that makes it valuable, and the supply constraint behind the shortage.
 
-Why it matters: the user runs a public-transparency project on Danish agriculture and is already investigating biogas subsidy mechanics (manure "double-subsidy", biomethane Guarantees-of-Origin arbitrage). A feedstock whose chief value is a regulatory double-count, but whose supply is physically capped by an unrelated industry, is exactly the kind of structural distortion that investigation targets.
+Why it matters: the user runs a public-transparency project on Danish agriculture and is already investigating biogas subsidy mechanics and biomethane certificate arbitrage. A feedstock whose value may depend on yield, GHG allocation and destination-specific advanced-fuel rules, but whose supply is physically capped by an unrelated industry, is exactly the kind of structural distortion that investigation targets.
 
 ### Scope & Methodology
 
@@ -39,10 +41,10 @@ Roughly **45 sources** were consulted and triangulated: EU and Danish primary la
 
 ### Key Assumptions
 
-- **Assumption 1 — "biogas subsidies" includes the transport advanced-biofuel mandate.** Glycerine's distinctive value flows mainly through the transport CO₂e-displacement/advanced-biofuel route, not the base production *pristillæg*. The tip's "subsidies" is read broadly to include this. (Validated below.)
+- **Assumption 1 — "biogas subsidies" may include transport and certificate value.** Glycerine's distinctive value does not arise from the feedstock-blind base production *pristillæg* alone. The investigation therefore separates the current Danish GHG-displacement route from historical or foreign advanced-fuel and certificate value. The tip's "subsidies" is read broadly, but this is a hypothesis rather than a validated current Danish multiplier.
 - **Assumption 2 — "glycerin or similar" denotes a family.** The cleanest single answer is crude glycerine, but the same logic covers UCO and animal fats; the report treats them together.
 - **Assumption 3 — the tip-giver was a non-specialist** paraphrasing a real mechanism, so loose wording ("ingredient or chemical", "not enough being produced") is mapped to the nearest rigorous concept rather than taken literally.
-- **Assumption 4 — current regime.** Danish rules changed from volumetric blending to a GHG-displacement mandate (in force 2025); the report describes the live regime and flags where older double-counting text still governs the underlying law.
+- **Assumption 4 — current regime.** Danish rules changed from volumetric blending to a GHG-displacement mandate; the report distinguishes the live regime from older double-counting text and from the proposed 2030 advanced/RFNBO sub-requirement.
 
 ---
 
@@ -50,7 +52,7 @@ Roughly **45 sources** were consulted and triangulated: EU and Danish primary la
 
 ### Finding 1: The substance is crude glycerine (*råglycerin*) — a biodiesel by-product, not a manufactured additive
 
-The answer to the tip is **crude glycerine** — in Danish *råglycerin* or *teknisk glycerin* (glycerol, C₃H₈O₃, "glycerin that is not refined") — and, by extension, the family of energy-dense lipid residues it sits alongside: used cooking oil (UCO), animal fats, fatty-acid distillates, and "fat, oil and grease" (FOG). This is the single substance that satisfies all three clauses of the tip simultaneously: it is a literal *chemical*; using it is the route to the most valuable biogas *subsidies*; and it is chronically scarce because *not enough is being produced*.
+The answer to the tip is **crude glycerine** — in Danish *råglycerin* or *teknisk glycerin* (glycerol, C₃H₈O₃, "glycerin that is not refined") — and, by extension, the family of energy-dense lipid residues it sits alongside: used cooking oil (UCO), animal fats, fatty-acid distillates, and "fat, oil and grease" (FOG). This is the substance that best fits the tip's chemical and scarcity clues. Its regulatory value is conditional: the feedstock can affect yield, GHG intensity and eligibility for advanced-fuel or certificate schemes, but it is not necessary for the feedstock-blind Danish production subsidy.
 
 Crucially, glycerine is **not made for the digester**. It is an unavoidable co-product of conventional (FAME) biodiesel: transesterifying vegetable oils or animal fats with methanol yields biodiesel plus glycerol, at roughly **10% glycerine by volume/mass** — about 1.05 lb of glycerol per gallon of biodiesel [21][22]. Biodiesel accounts for roughly **60% of global glycerine supply** [21]. This by-product nature is the hinge of the whole story: a digester operator cannot simply order more glycerine into existence; its availability is a downstream function of how much biodiesel the world makes — and of *how* that biodiesel is made (Finding 4).
 
@@ -68,18 +70,18 @@ The yield effect of adding a *small* amount to a manure base is large and well-r
 
 But the same studies define a hard ceiling. Optimal dosing is **small — commonly 3–6%, and at most ~6–8% v/v** of the feedstock [13][15]. Above that, the digester is **inhibited or fails**: organic overload drives volatile-fatty-acid (VFA) accumulation that poisons the methanogens. One study saw methane content hold above 60% only up to ~8% v/v crude glycerol, with a 5.8-day methanogenesis-inhibition crash at higher loadings [15]; adding just 4% crude glycerol to sewage sludge caused outright "failure of the AcoD system" [13]. So even with unlimited glycerine, a plant could only push a few percent of its feed through this lever. This is the *technical* sense in which operators "don't use as much as they should" — the molecule is so potent that the safe window is narrow. The *economic* sense (scarcity) follows in Finding 4.
 
-### Finding 3: The subsidy lever — Annex IX Part A makes glycerine-derived gas an "advanced biofuel" that double-counts
+### Finding 3: Annex IX makes glycerine-derived fuel "advanced" — but does not guarantee a current Danish 2× credit
 
-This is the heart of the tip's "you need it to get subsidies." Crude glycerine is one of a privileged set of feedstocks named in **Annex IX, Part A, item (i)** of the EU Renewable Energy Directive (RED II, Directive 2018/2001): the list reads *"...(h) Tall oil pitch; (i) Crude glycerine; (j) Bagasse..."* [1], independently confirmed against a second legal text [2]. The placement in **Part A** (not the capped Part B) is decisive and confers a stack of advantages:
+This is the heart of the feedstock-value hypothesis, but it should not be phrased as a current Danish subsidy guarantee. Crude glycerine is one of the feedstocks named in **Annex IX, Part A, item (i)** of RED II: *"...(h) Tall oil pitch; (i) Crude glycerine; (j) Bagasse..."* [1][2]. Part A classification can affect advanced-fuel eligibility and GHG accounting, subject to the implementing scheme:
 
 1. **Legal "advanced biofuel" status.** RED II Art. 2(34): *"'advanced biofuels' means biofuels that are produced from the feedstock listed in Part A of Annex IX"* [1]. Glycerine-derived fuel is, by definition, advanced.
-2. **Double-counting.** The energy content of fuel/biogas from Annex IX feedstocks "may be considered to be twice their energy content" toward the transport target [1]. Operationally this is realised as **2× tradable credits** — e.g. in the Dutch system, "registered deliveries of biofuel produced from listed feedstocks result in twice the number of HBEs being credited" [11]. One physical unit of glycerine-methane discharges two units of obligation, roughly doubling its market value versus a conventional biofuel.
-3. **A dedicated advanced sub-target.** Part A feedstocks satisfy a ring-fenced quota — RED II's advanced share rising to **3.5% by 2030**, and RED III's combined advanced-plus-RFNBO sub-target of **5.5% by 2030** — whereas Part B (used cooking oil, animal fats Cat. 1/2) is **capped at 1.7%** [12]. Part A is where the scarce, premium demand lives.
+2. **Historical or national multiplier.** RED II allows Member States to count Annex IX energy at twice its energy content toward the transport target [1], but the wording is permissive and national implementation controls the result. The historical Dutch HBE example is not evidence of a current Danish 2× credit. The current Danish rule is a GHG-displacement mandate without a general multiple-count clause [7][8].
+3. **Advanced sub-target eligibility.** Part A feedstocks can satisfy the relevant advanced-fuel share under EU and national rules, while Part B is subject to its own cap [12]. The exact current Danish counting route must be checked against the live rule and proposed 2030 sub-requirement rather than inferred from the historic multiplier.
 4. **Zero upstream emissions.** Processing residues "including crude glycerine ... shall be considered" to carry zero life-cycle GHG up to the point of collection [1], maximising the GHG saving — and therefore the value under any carbon-intensity-based mandate.
 
-Denmark transposed all of this almost verbatim. National law carries a **Bilag 1, Del A** that lists *"i) Råglycerin"* in the identical position [3][4]; defines *"Avancerede biobrændstoffer"* as fuels made from Del A feedstocks [3][4]; and historically applied explicit double-counting — *"bidrag fra råprodukter og brændstoffer anført i bilag 1, del A og B, [anses] for at være dobbelt så store som bidrag fra andre biobrændstoffer"* [3]. Denmark also runs a **0.9% advanced-biofuel sub-mandate** in road transport (since 2016) [3], and under the current **CO₂e-displacement mandate** (5.2% in 2025–27, 6% in 2028–29, 7% from 2030), "biobrændstoffer og biogas, som består af affald eller restprodukter, kan sættes til at have drivhusgasemissioner på nul" — waste/residue gas at zero upstream emissions — with advanced biofuels explicitly eligible [5][6]. Energistyrelsen has even published a dedicated analysis on *promoting* advanced biofuels [9], underlining the policy hunger for exactly these Part A feedstocks.
+Denmark retains the **Bilag 1, Del A** list, including *"i) Råglycerin"*, and defines advanced biofuels by reference to Part A feedstocks [3][4]. Older Danish law contains explicit double-counting wording, but the current BEK 978/2025 regime is a GHG-displacement mandate and treats subsidised biogas as having the same lifecycle emissions as natural gas for that mandate [7]. The former standalone 0.9% advanced-biofuel sub-requirement is repealed; the proposed/relevant advanced and RFNBO requirements from 2030 must be analysed separately [7][8]. Residue status may still matter to GHG calculations, but it does not make subsidised Danish gas an automatic advanced transport credit.
 
-There is a **second, separate subsidy channel** on the production side: the biogas *pristillæg* caps energy crops (grass/maize) by weight — historically 25% → 12%, then tightened to **4% in 2024 with maize banned from 2025** [4][7]. Glycerine is a **residue, not an energy crop**, so it sits *outside* this cap [4]. As crops are squeezed out of the subsidised feedstock mix, an energy-dense, cap-exempt yield-booster like glycerine becomes the obvious way to keep gas output (and the per-GJ subsidy) up. So glycerine helps on **both** fronts: it earns the advanced-biofuel double-count in transport, and it lifts subsidised output without breaching the crop cap.
+There is a **separate production-support question**: the biogas *pristillæg* limits energy crops by weight [4][7]. Glycerine is a residue rather than an energy crop and may sit outside that cap, but the base production subsidy is principally paid per GJ and is not conditional on glycerine. Its potential advantage is therefore yield and feedstock allocation, not an automatic extra Danish subsidy or transport multiplier.
 
 ### Finding 4: "Not enough is being produced" — supply is capped by biodiesel, and the HVO shift is shrinking it
 
@@ -111,13 +113,13 @@ The investigation explicitly tested three rival readings before the glycerine hi
 
 ### Patterns Identified
 
-**Pattern 1 — The most subsidy-valuable molecule is the scarcest.** The three findings on value (2, 3) and scarcity (4, 5) describe a single inverted incentive. Policy deliberately concentrates the richest rewards — double-counting, advanced sub-targets, zero upstream emissions, crop-cap exemption — on a narrow set of "residue" feedstocks, with crude glycerine a flagship example. But those same residues are, by definition, by-products whose volume no one can scale on demand. The regulation creates demand for a thing whose supply is fixed elsewhere. That mismatch *is* the tip: producers would use more if they could, but there is not enough.
+**Pattern 1 — The most certificate-sensitive molecule may be the scarcest.** Glycerine combines high methane yield, Annex IX classification, possible GHG-accounting value and a by-product supply ceiling. Historical multiplier policies added value in some markets, but Denmark's current transport rule does not establish a domestic 2× credit. The policy and market question is therefore where a current GO or PoS can be used, not whether every Danish producer receives an automatic multiplier.
 
 **Pattern 2 — Two independent ceilings reinforce each other.** Glycerine is throttled twice over: a **biological** ceiling (a few percent of feed before VFA inhibition, Finding 2) and a **market** ceiling (by-product supply contested by pharma and erased by HVO, Finding 4). Either alone would limit use; together they guarantee glycerine stays a minor, premium garnish rather than a bulk feedstock — which is exactly why the subsidy value per tonne stays high.
 
 ### Novel Insights
 
-**Insight 1 — The tip is really about the *transport mandate*, not the production grant.** A lay description collapses "biogas subsidies" into one thing, but glycerine's special value is overwhelmingly a **transport advanced-biofuel** phenomenon (Annex IX double-count), layered on top of a production-side crop-cap exemption. The base production *pristillæg* pays per GJ largely regardless of feedstock. The actionable correction to the tip: it is not that you *cannot get a biogas subsidy* without glycerine — it is that glycerine-class residues unlock the **highest-value, double-counted, advanced tier** of renewable-fuel revenue. This distinction matters for anyone trying to quantify the money involved.
+**Insight 1 — The tip is about marginal certificate and GHG value, not a prerequisite for the production grant.** A lay description collapses "biogas subsidies" into one thing. The base production *pristillæg* pays per GJ largely regardless of feedstock, while glycerine-class residues may affect yield, GHG intensity and advanced-fuel eligibility. Any multiplier or premium must be tied to a current destination scheme.
 
 **Insight 2 — "Glycerine or similar" is the correct framing, and the family is policed for fraud.** Because Part A/B status is what creates the premium, there is strong incentive to *claim* residue status. The same Annex IX list that elevates crude glycerine also covers UCO and animal fats, and these markets are notorious for mislabeling (virgin oil sold as "used", or refined glycerine round-tripped as "crude"). A transparency investigation should treat the glycerine premium as one node in a broader, fraud-prone "advanced/residue" certificate economy — adjacent to the Guarantees-of-Origin and double-counting issues the user is already mapping.
 
@@ -125,9 +127,9 @@ The investigation explicitly tested three rival readings before the glycerine hi
 
 ### Implications
 
-**For the user's investigation:** glycerine is a clean, concrete illustration of subsidy-driven feedstock distortion — a named molecule, a named Danish supplier (Daka ecoMotion), a precise legal hook (Bilag 1, Del A, item (i)), and a quantifiable double-count. It connects the manure "double-subsidy" thread (the bulk base) to the GoO/advanced-certificate thread (the premium tier) via the feedstock layer.
+**For the user's investigation:** glycerine is a clean, concrete illustration of feedstock allocation and certificate-value questions — a named molecule, a named Danish supplier (Daka ecoMotion), a precise legal hook (Bilag 1, Del A, item (i)), and a historical/current-rule distinction. It connects the manure production-support thread to the GO/PoS and advanced-certificate thread via the feedstock layer.
 
-**Broader implication:** any jurisdiction that rewards "advanced/residue" fuels by double-counting imports a structural shortage of exactly those residues, inflating their price and the temptation to game classification.
+**Broader implication:** any jurisdiction that rewards "advanced/residue" fuels or low-carbon intensity can import demand for scarce residues and increase the temptation to game classification; the exact reward depends on the current scheme.
 
 **Second-order effect:** as crop caps tighten toward 2030 and HVO scales, expect the glycerine/UCO/fat premium to rise, more imports of contested residues, and growing pressure on the integrity of Annex IX certification.
 
@@ -137,15 +139,15 @@ The investigation explicitly tested three rival readings before the glycerine hi
 
 ### Counterevidence Register
 
-**Contradictory finding 1 — Glycerine is a *minor* feedstock by volume.** At ~5–6 kt/yr nationally [26][27] and capped at a few percent of any digester's feed [13][15], glycerine is quantitatively small next to millions of tonnes of manure. *Resolution:* this does not weaken the answer — the tip is precisely about a high-value, low-volume "ingredient" that is under-used because it is scarce, not about the bulk base. Its importance is per-tonne (yield + advanced premium), not tonnage. *Impact on conclusions: minimal.*
+**Contradictory finding 1 — Glycerine is a *minor* feedstock by volume.** At ~5–6 kt/yr nationally [26][27] and capped at a few percent of any digester's feed [13][15], glycerine is quantitatively small next to millions of tonnes of manure. *Resolution:* this is consistent with a high-yield, low-volume ingredient, but does not prove a current premium or multiplier. Its importance is per-tonne yield and potential certificate/GHG value, not tonnage. *Impact on conclusions: moderate.*
 
-**Contradictory finding 2 — The base production subsidy is feedstock-agnostic.** The *pristillæg* paid a per-GJ premium over a 20-year period largely irrespective of feedstock [10], so in a narrow sense you do *not* "need" glycerine to be subsidised. *Resolution:* the tip is about the *marginal/premium* subsidy value (advanced double-count + crop-cap headroom), which is genuinely feedstock-dependent. Stated as "the highest-value subsidies," the tip holds. *Impact: moderate — it refines, rather than refutes, the claim.*
+**Contradictory finding 2 — The base production subsidy is feedstock-agnostic.** The *pristillæg* paid a per-GJ premium over a 20-year period largely irrespective of feedstock [10], so you do not need glycerine to receive the production subsidy. *Resolution:* glycerine may affect marginal yield, GHG and destination-specific certificate value; the current Danish transport rule does not establish a domestic 2× premium. *Impact: high — it changes the legal framing.*
 
 **Contradictory finding 3 — Green hydrogen fits two clauses well.** Hydrogen methanation is a real, scarce, output-boosting chemical [39][40]. *Resolution:* it is excluded only because it is not a *condition of the biogas subsidy*; it earns separate PtX support. If the tip-giver conflated PtX with biogas, hydrogen would be the answer — but the user's "glycerin" memory and the subsidy-condition wording point firmly to glycerine. *Impact: moderate; flagged as the main alternative.*
 
 ### Known Gaps
 
-**Gap 1 — Exact current multiplier wording.** Denmark's 2025 move from volumetric blending to a CO₂e-displacement mandate changes *how* advanced fuels are rewarded. The explicit "dobbelt så store" double-counting text [3] sits in the underlying biofuel law; how it is expressed as a multiplier (or replaced by pure carbon-intensity accounting plus the advanced sub-target) under the live *bekendtgørelse* [5][6] was not pinned to a verbatim current clause. The *direction* (advanced/residue gas is favoured) is certain; the exact arithmetic should be confirmed against the live Energistyrelsen handbook before any quantitative claim.
+**Gap 1 — Current destination-specific value.** Denmark's 2025 move from volumetric blending to a CO₂e-displacement mandate changes how advanced fuels are rewarded. The live cited rule has no general Danish multiple-count clause and treats subsidised biogas as natural-gas-equivalent [7]. Any current premium must be tested against the destination scheme, UDB/PoS and contract rather than inferred from older "dobbelt så store" wording [3].
 
 **Gap 2 — National glycerine-to-biogas tonnage.** The ~5,000–6,000 t/yr figure rests mainly on Daka ecoMotion's own statements and one trade article [26][27]; imports of glycerine/UCO/fats for Danish digesters were not quantified. The true volume entering Danish biogas could be higher via imports.
 
@@ -153,7 +155,7 @@ The investigation explicitly tested three rival readings before the glycerine hi
 
 ### Areas of Uncertainty
 
-The boundary between "you need it for the subsidy" and "it maximises the subsidy you can earn" is the chief interpretive uncertainty; this report lands on the latter as the rigorous reading. There is also mild uncertainty about whether the tip referred to glycerine as the *direct biogas-plant additive* (well-evidenced) or as a *transport-fuel pathway* — both are true and mutually reinforcing, so the distinction does not change the identification.
+The boundary between "you need it for the subsidy" and "it may maximise yield or certificate value" is the chief interpretive uncertainty; this report lands on the latter as the rigorous reading. There is also uncertainty about whether the tip referred to glycerine as the *direct biogas-plant additive* or as a *transport-fuel pathway*. The additive use is well evidenced; the current Danish 2× transport conclusion is not.
 
 ---
 
@@ -161,15 +163,15 @@ The boundary between "you need it for the subsidy" and "it maximises the subsidy
 
 ### Immediate Actions
 
-1. **Adopt the precise claim.** State it as: *"In Denmark, biomethane made from Annex IX Part A residues — crude glycerine being the textbook chemical example — qualifies as an 'advanced biofuel' that double-counts toward the transport mandate and sidesteps the energy-crop cap; but glycerine is a biodiesel by-product in structurally short supply, so plants can only use a little."* This is defensible against expert scrutiny.
+1. **Adopt the precise claim.** State it as: *"Crude glycerine is an Annex IX Part A residue and a high-yield, structurally scarce co-substrate. It may affect GHG and certificate value, but Denmark's current GHG-displacement rule does not make it an automatic 2× transport credit or a prerequisite for the production subsidy."*
 
-2. **Verify the live multiplier.** Pull the current Energistyrelsen *CO₂e-fortrængningskrav* handbook and the *bekendtgørelse* [5][6] to confirm exactly how advanced/residue gas is multiplied or carbon-credited today, closing Gap 1 before publishing any DKK figure.
+2. **Verify current eligibility.** Pull the current Energistyrelsen *CO₂e-fortrængningskrav* handbook and the *bekendtgørelse* [5][6] to confirm how advanced/residue gas, subsidised gas, GOs and PoS are treated today before publishing any DKK figure.
 
 3. **Anchor the Danish example on Daka ecoMotion** [26][27] as the named, finite domestic glycerine source, and connect it to the slaughterhouse/rendering supply chain the user already tracks.
 
 ### Next Steps
 
-1. **Map the residue-certificate economy.** Treat glycerine as one node alongside UCO and animal fats; request the Danish double-counting/advanced-biofuel volumes by feedstock from Energistyrelsen to size the premium tier.
+1. **Map the residue-certificate economy.** Treat glycerine as one node alongside UCO and animal fats; request current advanced-fuel, GO and PoS volumes by feedstock and destination from Energistyrelsen and relevant registries.
 
 2. **Quantify the HVO crowding-out.** Track Danish/EU HVO build-out against glycerine and UCO availability to evidence the structural squeeze (Finding 4) with numbers.
 
@@ -178,7 +180,7 @@ The boundary between "you need it for the subsidy" and "it maximises the subsidy
 ### Further Research Needs
 
 1. **Imports:** how much glycerine/UCO/fat Danish digesters import, and from where — to test whether domestic scarcity is met by (possibly higher-risk) imports.
-2. **Money:** the per-GJ value uplift a plant captures by routing glycerine-methane into the advanced/double-counted transport tier versus the base grid *pristillæg*.
+2. **Money:** the current per-GJ value uplift, if any, from routing glycerine-methane into an eligible advanced-fuel or PoS pathway versus the base grid *pristillæg*; model historical multipliers separately.
 3. **Mass balance:** a national feedstock mass-balance for Danish biogas, separating gas-poor bulk (manure) from gas-rich premium residues (fats/glycerine), to show how thin the premium layer really is.
 
 ---
@@ -267,6 +269,12 @@ The boundary between "you need it for the subsidy" and "it maximises the subsidy
 
 [41] International Energy Agency (IEA). "Power-to-X tender" (Denmark), Policies database. https://www.iea.org/policies/15185-power-to-x-tender (Retrieved 2026-06-09)
 
+[42] European Commission. "Union Database for liquid and gaseous renewable and recycled carbon fuels." Current UDB scope and Transfer Gas PoS movements. https://energy.ec.europa.eu/topics/renewable-energy/bioenergy/biofuels/union-database-liquid-and-gaseous-renewable-and-recycled-carbon-fuels_en (Retrieved 2026-07-15)
+
+[43] Netherlands. "Conceptregeling bijmengverplichting groen gas." Draft implementing order and explanatory materials, public consultation July 2026. https://www.internetconsultatie.nl/bijmengverplichtinggroengasamvb/document/15871 (Retrieved 2026-07-15)
+
+[44] European Commission. "TRIS notification 25868, message 116103." Commission comments on the Netherlands' amended green-gas blending proposal, 26 June 2026. https://technical-regulation-information-system.ec.europa.eu/en/notification/25868/message/116103/EN (Retrieved 2026-07-15)
+
 ---
 
 ## Appendix: Methodology
@@ -289,11 +297,11 @@ The boundary between "you need it for the subsidy" and "it maximises the subsidy
 
 ### Sources Consulted
 
-**Total cited:** 41 (of ~45 reviewed). **Types:** EU/Danish primary law & regulators (~12: EUR-Lex/RED, retsinformation, Lovtidende, Energistyrelsen, European Commission, NEa); peer-reviewed AD studies (8: MDPI, Taylor & Francis, ScienceDirect ×4, PMC ×2); market analysts (4: Chemtradeasia ×2, ChemAnalyst, Expert Market Research); Danish trade press / industry / NGO (Daka ecoMotion, LandbrugsAvisen, Teknologisk Institut, Biogas Danmark, Information, Klimamonitor, Greenpeace/Ea, ICOEL, Nordic Green Engineering, Aktuel Naturvidenskab); plus T&E, IEA, Ingeniøren, Nature Energy/Andel, Wikipedia (HVO). **Geographic skew:** Denmark + EU. **Temporal:** mostly 2018–2026; foundational AD studies 2010–2012.
+**Total cited:** 44 (of ~48 reviewed). **Types:** EU/Danish primary law & regulators (~15: EUR-Lex/RED, retsinformation, Lovtidende, Energistyrelsen, European Commission, NEa, Dutch TRIS/AMvB); peer-reviewed AD studies (8: MDPI, Taylor & Francis, ScienceDirect ×4, PMC ×2); market analysts (4: Chemtradeasia ×2, ChemAnalyst, Expert Market Research); Danish trade press / industry / NGO (Daka ecoMotion, LandbrugsAvisen, Teknologisk Institut, Biogas Danmark, Information, Klimamonitor, Greenpeace/Ea, ICOEL, Nordic Green Engineering, Aktuel Naturvidenskab); plus T&E, IEA, Ingeniøren, Nature Energy/Andel, Wikipedia (HVO). **Geographic skew:** Denmark + EU. **Temporal:** mostly 2018–2026; foundational AD studies 2010–2012.
 
 ### Verification Approach
 
-**Triangulation:** The crux claim — crude glycerine = Annex IX **Part A** — was verified against the RED II text [1], an independent legal mirror [2], and the Danish transposition [3][4]. Double-counting verified across [1], [11], [3]. Yield figures corroborated across five peer-reviewed studies [13][14][15][16][17][19]. The by-product/HVO supply mechanism across [21][22][25][24][32].
+**Triangulation:** The crux claim — crude glycerine = Annex IX **Part A** — was verified against the RED II text [1], an independent legal mirror [2], and the Danish transposition [3][4]. Historical double-counting language was identified across [1], [11] and [3], but the current Danish 2× conclusion was not inferred from those older provisions; the live rule was checked separately [7][8]. Yield figures were corroborated across five peer-reviewed studies [13][14][15][16][17][19]. The by-product/HVO supply mechanism was checked across [21][22][25][24][32].
 
 **Credibility:** High weight on primary law and peer-reviewed sources; market-analyst price figures (medium credibility) used only for supply/price direction, not load-bearing legal claims. Estimated average source credibility ≈ 82/100 (UltraDeep threshold ≥75 met).
 
@@ -304,7 +312,7 @@ The boundary between "you need it for the subsidy" and "it maximises the subsidy
 | ID | Major claim | Evidence type | Sources | Confidence |
 |----|-------------|---------------|---------|------------|
 | C1 | Crude glycerine is listed in RED II Annex IX **Part A** (item i) | Primary law (×2) + DK transposition | [1][2][3][4] | High |
-| C2 | Part A status ⇒ "advanced biofuel" + double-counting toward transport target | Primary law + regulator | [1][11][3] | High |
+| C2 | Part A status ⇒ "advanced biofuel"; any multiplier is scheme- and country-dependent | Primary law + current Danish rule | [1][7][8][11] | High for status; Medium for current premium |
 | C3 | Part A feeds a ring-fenced advanced sub-target (3.5%/5.5%); Part B capped 1.7% | Directive + RED III factsheet | [1][12] | High |
 | C4 | Glycerol is a high-yield AD co-substrate (~0.42 m³ CH₄/kg; +14–400% boost) | Peer-reviewed (×5) | [13][14][17][19][16] | High |
 | C5 | Effective dose is small (3–8% v/v); overload inhibits/fails the digester | Peer-reviewed | [13][15] | High |
@@ -321,4 +329,4 @@ The boundary between "you need it for the subsidy" and "it maximises the subsidy
 
 ## Report Metadata
 
-**Research Mode:** UltraDeep · **Total Sources Cited:** 41 (≈45 reviewed) · **Approx. Word Count:** ~5,400 · **Generated:** 2026-06-09 · **Lead hypothesis confirmed:** crude glycerine (*råglycerin*) / Annex IX Part A lipid-residue family · **Validation Status:** self-validated (every in-text citation has a bibliography entry; no placeholders).
+**Research Mode:** UltraDeep · **Total Sources Cited:** 44 (≈48 reviewed) · **Approx. Word Count:** ~5,500 · **Generated:** 2026-06-09, updated 2026-07-15 · **Lead hypothesis:** crude glycerine (*råglycerin*) / Annex IX Part A lipid-residue family; current multiplier remains scheme-dependent · **Validation Status:** self-validated (every in-text citation has a bibliography entry; no placeholders).

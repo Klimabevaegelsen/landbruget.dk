@@ -1,21 +1,23 @@
-# Research Report: Arla Foods' Biogas Green Credits — Cross-Border Double Counting Between Denmark and Germany
+# Research Report: Arla Foods' Biogas Green Credits — Certificate Overlap and Unresolved Cross-Border Claims
 
 > **⚠️ Unverified draft — work in progress.** This report was produced by an AI-assisted research pipeline and has not been fact-checked, edited, or reviewed by a journalist or editor. Claims, figures, and sourcing may be incomplete, outdated, or wrong. Do not cite, publish, or act on this content as-is. Landbruget.dk takes no responsibility for its accuracy.
+
+**Update -- 15 July 2026:** The Commission's current UDB documentation, the latest Dutch TRIS exchange and the Dutch draft implementing order show that GO disclosure transfers and PoS compliance claims are governed differently. This update treats cross-border overlap as a risk requiring chain-level evidence, not as proof that Arla or a particular MWh has been double-counted.
 
 
 ## Executive Summary
 
-This investigation examined whether Arla Foods' green credits from biogas plants are simultaneously counted in Denmark and Germany — once in Danish renewable energy statistics from physical gas injection, and again in Germany to classify their gas-driven trucks as running on green fuel. The evidence reveals a structurally enabled double counting mechanism, though specific proof that Arla deliberately exploits it remains circumstantial.
+This investigation examined whether Arla Foods' green credits from biogas plants are simultaneously represented in Danish physical-production statistics and German or corporate certificate claims. The evidence shows a structural risk of overlapping claims, not proof that Arla deliberately or unlawfully double-counts a particular gas volume.
 
-- **Structural double counting is real**: Over 80% of Danish biomethane Guarantees of Origin (GOs) are exported to Germany and Sweden while the physical gas remains in Denmark, meaning the same biomethane is counted in Denmark's energy statistics (physical production) AND used by German companies and fuel suppliers for compliance claims (via certificates) [1][2]. Denmark transferred 2 TWh of biomethane certificates to Germany in 2024 alone [3].
+- **Structural overlap is documented**: Over 80% of Danish biomethane Guarantees of Origin (GOs) are exported to Germany and Sweden while the physical gas remains in Denmark [1][2]. Denmark transferred approximately 2 TWh of biomethane certificates to Germany in 2024 [3]. That establishes a cross-border certificate flow; it does not, by itself, prove that the same MWh was also used for German transport compliance or that Arla benefited from it.
 
-- **The regulatory gap is officially acknowledged**: Germany's own dena (the agency operating the Biogasregister) admits that "double marketing via state verification databases cannot be ruled out with certainty due to a lack of legal requirements" [4]. GOs and transport compliance certificates (THG-Quoten) are separate systems — the same MWh of biomethane can generate both a GO (for corporate disclosure) and a Proof of Sustainability (for transport mandate compliance), and these should be "bundled" but enforcement is weak [5][6].
+- **The integrity risk is officially acknowledged**: Germany's dena documentation says that double marketing cannot be ruled out with certainty [4]. GOs and transport compliance certificates (THG-Quoten) are distinct systems, but current UDB and national rules require the relevant PoS and mass-balance chain for compliance use. The dena caveat demonstrates an integrity gap or uncertainty; it does not prove that any identified MWh was marketed twice [5][6][66].
 
-- **Arla operates across the boundary**: Arla runs 80 biogas trucks across Denmark, Sweden, Finland, Germany, and the UK [7]. In Denmark, Bigadan supplies physical compressed biogas from Arla farmers' manure [8]. In the UK, Gasrec supplies RTFO-certificated biomethane via a mass balance system — not physical biogas, but certificates redeemed against grid gas [9]. For Germany, no public documentation specifies how Arla sources its "green" gas, creating an accountability black hole.
+- **Arla operates across different accounting regimes**: Arla runs biogas trucks across Denmark, Sweden, Finland, Germany, and the UK [7]. In Denmark, Bigadan supplies physical compressed biogas from Arla farmers' manure [8]. In the UK, Gasrec documents an RTFO mass-balance arrangement [9]. For Germany, no public documentation located in this investigation specifies how Arla sources or accounts for its gas.
 
 - **GHG Protocol vacuum enables grey-zone accounting**: The GHG Protocol explicitly withdrew draft guidance that would have prohibited using biomethane certificates for Scope 1 emissions reductions, leaving no authoritative standard for how companies should account for certificate-based green gas claims [10]. Over 230 organizations (including Shell, BP, TotalEnergies — but not Arla) are lobbying to allow market-based Scope 1 reporting for gas [11].
 
-- **Arla claims 86% of its transport decarbonization will come from biogas** by 2030, targeting a 63% cut in Scope 1+2 emissions [12]. If any portion of this relies on certificates rather than physical supply — particularly in Germany — the same green attributes from Danish biogas production may be counted in Arla's consolidated reporting while also appearing in Denmark's national energy statistics and Germany's THG compliance records.
+- **Arla claims 86% of its transport decarbonization will come from biogas** by 2030, targeting a 63% cut in Scope 1+2 emissions [12]. If any portion relies on certificates rather than physical supply, the relevant question is whether the same environmental attribute is allocated consistently across Arla reporting, Danish production claims and any receiving-country compliance record. The public record does not currently answer that question.
 
 **Primary Recommendation:** Arla should publicly disclose, by country, what share of its biogas fleet runs on physically delivered biomethane versus certificate-backed claims, and whether any certificates originate from the same production chain that Denmark counts in its national renewable energy statistics.
 
@@ -29,7 +31,7 @@ This investigation examined whether Arla Foods' green credits from biogas plants
 
 Are Arla Foods' green credits from their biogas plants being counted both in Denmark (in national renewable energy statistics from physical biogas production) and in Germany (to classify their gas-powered truck fleet as running on green fuel)? If so, what is the mechanism, and does it constitute double counting?
 
-This question matters because Arla is Europe's largest dairy cooperative, claiming to transform its logistics toward climate neutrality with biogas from its own farmers' manure. If the same green attributes are counted in multiple jurisdictions and reporting frameworks simultaneously, the actual climate benefit is overstated — and the same structural arbitrage documented in the Shell/Nature Energy certificate-export story applies to Arla's supply chain.
+This question matters because Arla is Europe's largest dairy cooperative, claiming to transform its logistics toward climate neutrality with biogas from its own farmers' manure. If the same green attributes are allocated to multiple jurisdictions or reporting frameworks without reconciliation, the climate benefit could be overstated. The Shell/Nature Energy certificate-export story provides a structural comparison, not proof about Arla's supply chain.
 
 ### Scope and Methodology
 
@@ -58,39 +60,39 @@ The volumes are substantial. In Q1 2025, ERGaR's Certificate of Origin Scheme pr
 
 Under RED II Article 19, Guarantees of Origin explicitly "shall have no function in terms of a Member State's compliance" with renewable energy targets [13]. This means GOs are not supposed to affect national renewable energy statistics. Denmark's renewable energy share is calculated from physical production, not certificates. But the practical effect is that the same MWh of green gas is claimed by Denmark (physical production, counted in national statistics, supported by Danish subsidies) and by German companies (certificate-based claims for corporate reporting and regulatory compliance).
 
-Denmark's domestic CO2 tax regime reinforces this export dynamic. Biomethane delivered through the gas grid is subject to the same CO2 tax as natural gas, with no distinction between fossil and renewable gases [2]. This makes it economically irrational to use GOs domestically when they can be sold for EUR 60–140/MWh to German THG quota buyers [14]. The result is a structural incentive to produce biogas in Denmark, count it as Danish green energy, and simultaneously sell the green attributes to Germany.
+Denmark's domestic CO2 tax regime reinforces this export dynamic. Biomethane delivered through the gas grid is subject to the same CO2 tax as natural gas, with no distinction between fossil and renewable gases [2]. This can create an incentive to sell disclosure or compliance attributes abroad, but the cited market price does not prove that a particular producer sold the same attribute to a German THG buyer [14].
 
 ---
 
-### Finding 2: The GO and Transport Compliance Systems Are Separate — Enabling Dual Claims from the Same Gas
+### Finding 2: The GO and Transport Compliance Systems Are Separate — With a Required Linkage for Compliance Claims
 
-The EU biomethane certificate landscape is split into two parallel systems that can both draw on the same physical gas production. Understanding this split is essential to assessing the double counting claim.
+The EU biomethane certificate landscape distinguishes disclosure GOs from compliance PoS. Understanding this split is essential to assessing the double-counting risk.
 
 **Guarantees of Origin (GOs)** are issued under RED II Article 19 for disclosure purposes — proving to an end consumer that their gas comes from renewable sources. One GO equals 1 MWh of biomethane. They operate on a "book and claim" principle: the buyer need not physically receive the gas; only the certificate changes hands [15]. When used, a GO is cancelled in a national registry (Energinet in Denmark, dena in Germany) to prevent the same GO from being sold twice.
 
-**Transport compliance certificates** are a separate national instrument. Germany's THG-Quote (Treibhausgasminderungsquote) requires fuel suppliers to reduce the lifecycle carbon intensity of transport fuels. Biomethane qualifies, and until 2026, waste-derived biomethane could be "double counted" — each MWh counted as two toward the quota [16]. The UK's RTFO (Renewable Transport Fuel Obligation) operates similarly via RTFCs. These compliance certificates require a Proof of Sustainability (PoS), not just a GO.
+**Transport compliance certificates** are separate national instruments. Germany's THG-Quote (Treibhausgasminderungsquote) requires fuel suppliers to reduce the lifecycle carbon intensity of transport fuels. Biomethane qualifies subject to the applicable rules; the pre-2026 treatment of waste-derived fuel also involved a double-crediting multiplier [16]. The UK's RTFO operates similarly via RTFCs. These compliance systems require a Proof of Sustainability (PoS), not just a GO.
 
-The critical question is whether the same MWh of biomethane can generate both a GO and a PoS. The evidence suggests yes: dena's own documentation states that GO and PoS certificates are "complementary" and both can be issued for the same gas consignment, provided they are "bundled" and not sold separately to different companies [5]. But enforcement of this bundling requirement relies on self-declaration. As dena acknowledges, "double marketing via state verification databases cannot be ruled out with certainty due to a lack of legal requirements" [4].
+The critical question is whether a GO and a PoS can coexist for the same certified consignment. They can be complementary, but the compliance claim requires the PoS and its mass-balance chain; it cannot be inferred from the GO alone. The Commission's current UDB documentation describes verified injection volumes and Transfer Gas PoS movements within the integrated gas grid [66]. The Dutch draft implementing order goes further for its proposed GGE obligation by requiring the same qualifying delivery to carry both a GO and a PoS [67]. Energy Traders Europe's chain-of-custody paper argues that physical gas trade should be a prerequisite for PoS transfer; that is an industry position, not binding law, but it underlines the evidentiary point [68]. Dena's caveat that double marketing cannot be ruled out proves an integrity concern, not that a particular MWh was sold twice [4].
 
-Italy's regulatory framework offers a contrast: there, GOs are explicitly distinguished between transport and non-transport use and "can be cancelled exclusively in the sector of use identified at the time of issuance" [17]. Denmark and Germany have no such sector-specific restriction on GO cancellation, leaving the system more vulnerable to cross-sector counting.
+Italy's regulatory framework offers a contrast: there, GOs are explicitly distinguished between transport and non-transport use and "can be cancelled exclusively in the sector of use identified at the time of issuance" [17]. The comparison is useful, but different national cancellation rules do not establish that Danish GOs were used for German transport compliance without the corresponding PoS and registry evidence.
 
 ---
 
 ### Finding 3: Arla's Biogas Supply Chain Spans Multiple Countries with Different Accounting Rules
 
-Arla operates biogas-powered trucks across at least five countries, each with a different biomethane accounting framework. This creates opportunities for the same green attributes to be counted under different national systems.
+Arla operates biogas-powered trucks across at least five countries, each with a different biomethane accounting framework. This creates opportunities for inconsistent allocation of physical fuel, GOs and PoS, but the opportunity is not proof of an actual duplicate claim.
 
 **Denmark**: Bigadan supplies physical compressed biogas to Arla's truck fleet, produced partly from the manure of approximately 500,000 cows on Arla farms [8]. The biogas is produced at Bigadan plants, and a refueling station near Arla's distribution center provides CNG directly to trucks. This appears to be genuine physical supply — not certificate-based. However, when this biogas is produced from feedstock entering Bigadan's plants, it generates GOs through Energinet. Whether those GOs are retained by Arla/Bigadan or sold (exported) to Germany is not publicly disclosed.
 
-**United Kingdom**: Arla works with Gasrec, using RTFO-certificated biomethane through a mass balance system. Gasrec's model explicitly separates physical gas from green attributes: they "take the volume of biomethane Arla is feeding into the national grid through anaerobic digestion, and pump the same amount of bio-LNG back into their trucks, directly from our forecourt" [9]. This is a textbook book-and-claim arrangement — the trucks physically burn grid gas (which is mostly fossil), but the renewable attributes from anaerobic digestion elsewhere are credited to them via RTFO certificates.
+**United Kingdom**: Arla works with Gasrec, using RTFO-certificated biomethane through a mass-balance system. Gasrec describes a separation between physical gas and the renewable attribute [9]. This is evidence of a certificate-backed compliance arrangement; it does not establish that the physical fuel was fossil or that the same attribute was claimed elsewhere.
 
-**Germany**: Arla's operations include the Upahl and Prenzlau facilities. Arla has stated that Germany is included in their 2030 fossil-free logistics target [12]. However, no public documentation specifies how Arla sources biomethane for its German fleet — whether through physical supply, German-origin certificates, or imported certificates from Denmark. Given that Germany is the primary destination for Danish biomethane GOs (95% of ERGaR transfers [3]), and that Arla's parent supply chain produces biogas in Denmark that generates GOs, the structural conditions for cross-border certificate use are present.
+**Germany**: Arla's operations include the Upahl and Prenzlau facilities. Arla has stated that Germany is included in its 2030 fossil-free logistics target [12]. However, no public documentation located here specifies how Arla sources or accounts for biomethane for its German fleet — whether through physical supply, German-origin certificates, or imported certificates from Denmark. Germany's importance as a destination for Danish certificates shows that a cross-border route exists, but does not connect Arla to that route.
 
 **Sweden**: Arla has expanded its biogas partnership with Gasum, a Finnish gas company that supplies biomethane for Arla's Swedish heavy-duty vehicle fleet [18]. Gasum operates in the Nordic biomethane market and may source certificates cross-border.
 
 **Finland**: Arla has operated biogas trucks since 2019, also supplied by Gasum [7].
 
-The consolidated picture: Arla claims Scope 1 emissions reductions from biogas across all these operations, and 86% of its transport decarbonization pathway depends on biogas [12]. If even a portion of the non-Danish fleet runs on certificate-backed rather than physically delivered biomethane, the same Danish biogas production is being counted in Denmark's energy statistics (physical gas), in Arla's corporate Scope 1 claims (certificate-based), and potentially in receiving countries' compliance systems (THG/RTFO).
+The consolidated picture: Arla claims Scope 1 emissions reductions from biogas across these operations, and 86% of its transport decarbonization pathway depends on biogas [12]. If a non-Danish fleet uses certificate-backed biomethane, the investigation must identify the underlying PoS, mass-balance chain and allocation of the GO before concluding that Danish production is also being claimed in Arla's reporting or a receiving country's compliance system.
 
 ---
 
@@ -116,7 +118,7 @@ Under the prior system, advanced biofuels from Annex IX Part A feedstocks (inclu
 
 The reform also strengthens requirements for imported biomethane: it "will only qualify if connected to an EU gas grid and registered by the regulatory deadline" [19]. Additionally, "renewable fuels...only accepted when certification systems allow physical inspection" [19]. These changes tighten the link between physical supply and compliance credit, but they apply only to the THG quota system — not to corporate voluntary claims (which are governed by the absent GHG Protocol guidance) or to the broader GO market.
 
-A European Parliament question (E-001494/2025) explicitly raised the double counting concern for biomethane in maritime transport (FuelEU Maritime), asking whether "already subsidised options" for meeting sustainability criteria create "a risk that the same CO2 is counted twice: once in the country of origin through national support programmes such as feed-in tariffs, and again in calculations relating to the regulation's obligations" [20]. The Commission's July 2025 response confirmed that subsidised biomethane IS eligible under FuelEU Maritime — effectively endorsing the dual-claim structure rather than restricting it [20].
+A European Parliament question (E-001494/2025) explicitly raised the double counting concern for biomethane in maritime transport (FuelEU Maritime), asking whether "already subsidised options" for meeting sustainability criteria create "a risk that the same CO2 is counted twice" [20]. The Commission's response addressed eligibility under FuelEU Maritime, but eligibility does not by itself resolve allocation between national support, certificates and corporate claims [20].
 
 ---
 
@@ -136,9 +138,9 @@ The report notes that Arla has "previously come under fire for its use of" carbo
 
 The evidence reveals that "double counting" is not a single phenomenon but operates at three distinct levels:
 
-**Layer 1 — National Statistics**: Denmark counts the physical biomethane production in its national energy statistics. Germany does not formally count imported GOs toward its national renewable energy targets (per RED II Article 19). At this level, there is no formal double counting in the regulatory sense. However, Denmark's claim of "25% biomethane in the gas grid" and German companies' claims of "using green gas" both draw on the same physical production, creating an aggregate overstatement of green gas consumption across both countries.
+**Layer 1 — National Statistics**: Denmark counts physical biomethane production in its national energy statistics. Germany does not formally count imported GOs toward its national renewable energy targets (per RED II Article 19). At this level, there is no formal double counting in the regulatory sense. Danish production statistics and German companies' voluntary claims may refer to the same production base, but an aggregate overstatement requires matching the underlying certificates and accounting boundaries.
 
-**Layer 2 — Transport Compliance**: When Danish GOs are imported into Germany's dena Biogasregister and used for THG quota compliance, the same gas that Denmark counts as part of its energy transition is also credited toward Germany's transport decarbonization obligations. The EP question E-001494/2025 directly addresses this. This is the most concrete form of double counting, and Germany's 2026 reform partially addresses it by tightening import requirements.
+**Layer 2 — Potential transport compliance overlap**: A Danish GO export alone is not evidence that German THG compliance used the same gas. The investigation would need the associated Nabisy/dena/PoS records and the relevant UDB or physical mass-balance evidence. The EP question E-001494/2025 shows that the policy concern is recognized, while Germany's 2026 reform reportedly tightens import requirements.
 
 **Layer 3 — Corporate Reporting**: When a company like Arla reports consolidated Scope 1 emissions reductions from biogas across multiple countries, it may aggregate physical supply (Denmark) with certificate-based claims (UK, potentially Germany). Without the GHG Protocol providing clear rules, there is no way to distinguish real fuel switching from paper certificate offsets. This is where the Arla-specific double counting risk is highest — not between Denmark and Germany's national accounts, but within Arla's own corporate emissions reporting.
 
@@ -146,11 +148,11 @@ The evidence reveals that "double counting" is not a single phenomenon but opera
 
 Based on the evidence gathered, the user's claim is partially supported but requires significant nuance:
 
-**What is structurally true**: The biomethane certificate system allows Danish-produced green attributes to be sold and used in Germany. Arla participates on both sides of this system — producing biogas feedstock (manure) in Denmark, operating trucks in both countries, and targeting 86% transport decarbonization from biogas. The conditions for double counting at the corporate level are present.
+**What is structurally true**: The biomethane certificate system allows Danish-produced GOs to be sold across borders, and qualifying PoS may move through a documented mass-balance chain. Arla participates on both sides of the broader system — producing biogas feedstock (manure) in Denmark, operating trucks in both countries, and targeting 86% transport decarbonization from biogas. These facts establish an investigative lead, not the conditions as proof of double counting.
 
 **What is not proven**: No public evidence shows Arla deliberately purchasing Danish-origin biomethane certificates for its German trucks. Arla is not a signatory of the "Let Green Gas Count" lobby, and its Denmark operations appear to use physical compressed biogas from Bigadan rather than certificate-backed grid gas. The specific mechanism of "counted in Denmark AND Germany" is not documented for Arla specifically.
 
-**What is most likely**: Arla's cross-country biogas accounting operates in a regulatory grey zone where: (a) Danish biogas production generates both physical gas (counted nationally) and exportable certificates, (b) Arla's non-Danish truck fleets likely rely at least partly on certificate-backed biomethane (as explicitly documented for the UK via Gasrec), and (c) Arla's consolidated Scope 1 reporting aggregates all of this without distinguishing physical supply from certificate claims. The result is a corporate emissions narrative that is technically defensible under the current (absent) GHG Protocol rules but overstates actual climate impact.
+**What remains plausible but unproven**: Arla's cross-country biogas accounting may combine physical fuel with certificate-backed arrangements, as explicitly documented for the UK via Gasrec. The German sourcing and the treatment of any Danish-origin certificates remain unknown. It is therefore premature to conclude that Arla's consolidated Scope 1 reporting overstates climate impact.
 
 ---
 
@@ -198,7 +200,7 @@ Based on the evidence gathered, the user's claim is partially supported but requ
 
 2. **Investigate the Bigadan certificate flow**: Bigadan is owned by a consortium of Danish farmers and produces biogas from manure. As a major GO source, tracing its certificate exports would reveal whether Arla-farm-origin GOs end up in the German THG compliance system.
 
-3. **Quantify the aggregate national overstatement**: Calculate the total "claimed green gas" across Denmark (physical statistics) and Germany (imported certificates + THG compliance) and compare to actual biomethane production — the gap is the structural double count.
+3. **Quantify potential overlap**: Calculate the total physical production, GO cancellations/exports, PoS transfers and transport-compliance credits, then test whether the same environmental attribute is allocated more than once. Do not label the difference a double count until the matching registry and accounting evidence is obtained.
 
 ---
 
@@ -294,7 +296,7 @@ This investigation followed an ultradeep 8-phase pipeline: scoping the double co
 |-------|--------------|---------|------------|
 | 80%+ of Danish biomethane GOs exported | Industry/registry data | [1][2][3] | High |
 | dena cannot rule out double marketing | Regulatory admission | [4] | High |
-| GO+PoS can issue for same MWh | Industry/regulatory | [5][6][15] | High |
+| GO+PoS may coexist for one certified consignment, subject to linkage rules | Industry/regulatory | [5][6][15][66][67] | High for coexistence; Medium for transfer/use in a particular compliance scheme |
 | Arla uses physical biogas in Denmark | Company/industry | [8] | High |
 | Arla uses certificate-based biogas in UK | Company publication | [9] | High |
 | Arla's German fleet sourcing is undisclosed | Absence of evidence | multiple | Medium |
@@ -305,15 +307,15 @@ This investigation followed an ultradeep 8-phase pipeline: scoping the double co
 ---
 
 **Research Mode:** UltraDeep
-**Total Sources:** 30 (initial) + 15 (deep dive) + 10 (quadruple counting) + 10 (CONCITO/stacking) = 65
+**Total Sources:** 30 (initial) + 15 (deep dive) + 10 (allocation analysis) + 10 (CONCITO/stacking) = 65
 **Word Count:** ~16,000
-**Generated:** 2026-06-05, updated same day with deep dive + quadruple counting + CONCITO stacking analysis
+**Generated:** 2026-06-05, updated 2026-07-15 with deep dive, allocation analysis, CONCITO stacking analysis and current EU/Dutch certificate rules
 
 ---
 
-## Deep Dive Addendum: The Ownership Chain, Certificate Stacking, and Triple-Counting Mechanism
+## Deep Dive Addendum: The Ownership Chain, Certificate Stacking, and Potential Overlap
 
-The initial investigation identified the structural conditions for double counting. This addendum traces the specific ownership and certificate chain from Arla farm manure to German transport compliance, revealing a more complex picture involving **three separate entities claiming green attributes from the same biogas production**.
+The initial investigation identified a structural risk of overlapping claims. This addendum traces the ownership and certificate infrastructure from Arla farm manure toward possible German transport compliance. It does not establish that three separate entities claimed the same biogas production.
 
 ---
 
@@ -335,7 +337,7 @@ Arla's public communications make no distinction between these two very differen
 
 Bigadan, the company supplying compressed biogas to Arla's Danish truck fleet, is **not a farmer cooperative or Arla affiliate**. It is majority-owned by **Arjun Infrastructure Partners**, a UK-based infrastructure investment fund, which acquired a 49.9% stake in 2021 and increased to majority ownership in October 2025 [36]. Bigadan operates 9 biogas plants producing approximately 1.3 TWh annually, with targets to exceed 2 TWh by 2027 [36].
 
-Bigadan's business model is built around **certificate revenue as a distinct product line**. Their website's "Gas certificates" section explicitly lists their certificate offerings [37]:
+Bigadan's business model includes **certificates as a distinct product line**. Its website lists certificate offerings and customer segments [37]:
 - **GoO** (Guarantees of Origin, issued by Energinet)
 - **PoS** (Proof of Sustainability, via REDCert/ISCC)
 - **Nabisy** (German Federal biofuels database for THG quota compliance)
@@ -343,14 +345,9 @@ Bigadan's business model is built around **certificate revenue as a distinct pro
 
 Their customer segments include "EU ETS participants, transport sector (blending requirements), ESG reporting companies, construction sector, and maritime sector" [37]. The Nabisy product is specifically described as enabling certificates "to meet mandatory blending requirements in the transport sector" [37] — i.e., the German THG quota.
 
-This means Bigadan simultaneously:
-1. **Sells physical compressed biogas** to Arla's Danish trucks
-2. **Sells GOs** from the same production to disclosure/ESG buyers
-3. **Sells Nabisy/PoS transport certificates** from the same production to German THG quota buyers
+The website establishes that Bigadan offers physical gas and certificate products, including GOs and PoS/Nabisy-related services. It does not establish that the certificates sold to any German buyer came from the same production used for Arla's deliveries, or that Bigadan sold the same attribute to more than one party. That requires plant-level production, allocation and registry records.
 
-When Arla's trucks fill up with Bigadan's compressed biogas, **the green attributes of that gas may already have been sold to someone else** via GOs or Nabisy certificates. Arla's trucks physically burn biogas, but the "greenness" — the certified renewable attribute — belongs to whoever purchased the certificates.
-
-Under current GHG Protocol guidance (which is nonexistent for this scenario [10]), Arla can still claim "our trucks run on biogas" in marketing materials and even in Scope 1 reporting. But from a carbon accounting perspective, if the GOs have been sold, the gas Arla burns should be counted at grid-average emissions — because the renewable attribute is gone.
+Under the current GHG Protocol position, companies should consult auditors and relevant target-setting rules in the absence of definitive biomethane certificate guidance [10]. Whether Arla can use a certificate-backed claim, and how it should account for physical gas after a GO or PoS transfer, cannot be determined from Bigadan's product page alone.
 
 ---
 
@@ -368,22 +365,22 @@ Arla's 500,000 dairy cows generate approximately 10 million tonnes of manure ann
 
 ---
 
-### Finding 10: Triple Counting — Three Parties, One Gas, Three Green Claims
+### Finding 10: Potential Multi-Layer Counting — Three Possible Claimants, One Production Chain
 
-The deep dive reveals not double counting but potential **triple counting** from a single biogas production event:
+The deep dive identifies a possible **three-layer allocation problem**, but not a proven triple count from a single production event:
 
 **Party 1 — Denmark (national statistics):** When biomethane is injected into the Danish gas grid, it counts toward Denmark's renewable energy statistics. Biomethane now represents approximately 25% of Danish gas grid consumption [3]. This is based on physical production, not certificates.
 
-**Party 2 — Bigadan's certificate buyers (German THG market):** Bigadan sells Nabisy certificates from the same production to German fuel suppliers, who use them to meet their THG quota obligations. Germany counts these toward its transport decarbonization targets.
+**Party 2 — Potential certificate buyers (German THG market):** Bigadan advertises Nabisy/PoS-related products, and Danish intermediaries document routes into Germany. The investigation has not matched a Bigadan production batch to a German buyer or shown that a batch was also allocated to Arla.
 
-**Party 3 — Arla (corporate Scope 1 reporting):** Arla claims its trucks "run on biogas" and reports reduced Scope 1 emissions. But if Bigadan has already sold the GOs and PoS certificates from that production, Arla is physically burning biogas whose green attributes belong to someone else.
+**Party 3 — Arla (corporate Scope 1 reporting):** Arla claims its trucks "run on biogas" and reports reduced Scope 1 emissions. Whether its reporting uses physical fuel, certificates, or both, and whether those attributes were allocated elsewhere, is not public.
 
 The theoretical prevention mechanism — that certificates must be "bundled" and GOs and PoS cannot be sold to different parties [5] — applies only within the certificate market. It does NOT prevent:
 - Denmark counting the physical gas in national statistics while certificates are exported
 - Arla claiming "biogas trucks" in Scope 1 while the certificates have been sold
 - A German fuel supplier using the Nabisy certificate for THG while Denmark counts the gas
 
-Each claim occurs in a different regulatory/reporting framework, and no single authority has oversight across all three.
+Each potential claim occurs in a different regulatory/reporting framework. The absence of a single cross-framework ledger is an evidence gap, not proof that all three claims were made for the same gas.
 
 ---
 
@@ -428,43 +425,43 @@ Arla is not a signatory of the "Let Green Gas Count" letter [11], which lobbies 
 
 ### Revised Assessment
 
-The deep dive substantially strengthens the structural case for multi-level counting, while adding new nuance:
+The deep dive strengthens the case for investigating multi-level allocation, while adding important limits:
 
 **What is now established:**
-1. Bigadan — Arla's truck fuel supplier — is an investment fund that explicitly sells GOs AND Nabisy transport certificates from the same biogas production that fuels Arla's trucks
+1. Bigadan — a supplier to Arla's Danish truck operation — advertises GOs and Nabisy/PoS-related products; the public evidence does not link a specific certificate batch to Arla's fuel
 2. The Videbæk flagship plant is Shell-owned, not Arla-owned; the green attributes are controlled by Shell
-3. Manure-derived certificates are exceptionally valuable in Germany (EUR 60-140/MWh, double-counted until 2026), creating a strong incentive to sell rather than retain them
+3. Manure-derived certificates were commercially valuable in Germany, with pre-2026 double-crediting rules reported in the sources, creating an incentive to sell them
 4. Arla's Scope 1 rose 10% from 2019-2023 despite biogas claims
-5. Three separate parties (Denmark, German THG buyers, Arla) can and likely do claim green attributes from the same production
+5. Denmark, German THG buyers and Arla are potential claimants in separate systems, but the same-production link is not established
 
 **What remains unknown:**
 1. Whether Bigadan retains GOs for Arla's compressed gas deliveries or sells them separately
 2. How Arla accounts for biogas in its Scope 1 — physical combustion or certificate-based claims
 3. The specific green gas sourcing for Arla's German truck fleet
 
-**The most plausible scenario:** Bigadan sells both physical gas to Arla AND certificates (GOs/Nabisy) to third parties, because the economics strongly favor certificate monetization. Arla claims "biogas trucks" in its Scope 1 based on the physical fuel, not the certificates. German THG quota buyers use the certificates for transport compliance. Denmark counts the physical production in its energy statistics. Three parties, one gas, three green claims.
+**A testable scenario:** Bigadan may sell physical gas to Arla and certificate products to third parties, while Denmark counts physical biomethane in national statistics. To conclude that this creates three claims for one gas, investigators must match plant production, GO/PoS allocation, German compliance records and Arla's accounting treatment.
 
 ---
 
 ---
 
-### Finding 13: Quadruple Counting — Arla Credits Farmers for the Same Avoided Methane That Generates Certificates
+### Finding 13: Potential Overlap Between Farm Accounting and Certificate Allocation
 
-The user's question — whether Arla also uses manure delivery to biogas for CO2 reductions at the farm level — reveals a **fourth dimension of counting** from the same physical event.
+The user's question — whether Arla also uses manure delivery to biogas for CO2 reductions at the farm level — raises a potential additional accounting layer. The public sources do not establish that Arla's farm credit and a certificate buyer's PoS claim are allocated to the same consignment or emissions boundary.
 
 **The mechanism:**
 
-Arla's FarmAhead Climate Check tool calculates each farm's carbon footprint per kg of raw milk, accounting for "over 200 farm inputs, including cow feed, fertiliser use, cattle breeds, manure treatment technologies such as biogas, and energy and fuel consumption" [46]. Critically, Arla's own UK page confirms: "Manure used for biogas production reduces emissions and produces renewable energy" [47]. The tool thus credits the farmer with **lower per-kg emissions** when they deliver manure to an external biogas plant like Bigadan.
+Arla's FarmAhead Climate Check tool calculates each farm's carbon footprint per kg of raw milk, accounting for "over 200 farm inputs, including cow feed, fertiliser use, cattle breeds, manure treatment technologies such as biogas, and energy and fuel consumption" [46]. Critically, Arla's own UK page confirms: "Manure used for biogas production reduces emissions and produces renewable energy" [47]. The public descriptions indicate that manure treatment can affect the farm footprint when manure is delivered to biogas. The precise allocation rule and whether it transfers any certificate-related environmental attribute are not public.
 
 Currently, 11% of Arla's ~8,000 farmers "have a biogas generator on the farm or are delivering manure for external biogas production" [48]. Arla estimates the aggregate emissions reduction from biogas at 2.6% per kg milk, with a theoretical maximum of 15% if all manure were used [22].
 
 This farm-level carbon footprint reduction feeds directly into Arla's **Scope 3 target**: a 30.3% reduction of CO2e per kg milk by 2030 from a 2020 baseline [49]. When Arla reports progress toward this target, the emissions avoided by farmers delivering manure to biogas count as improvement.
 
-**The double-crediting problem:**
+**The potential double-crediting problem:**
 
-The avoided methane that reduces the farmer's per-kg footprint is the **same avoided methane** that generates the "manure bonus" in biomethane certificates. Under EU RED II, manure-based biomethane receives a default GHG emission reduction value of **-100 g CO2eq/MJ** [38] — a negative number that exists precisely because the process avoids methane emissions from conventional manure storage. When Bigadan generates a Nabisy certificate and sells it to a German THG quota buyer, that certificate's value is built on the same avoided methane that the farmer already got credit for in the FarmAhead tool.
+The farm footprint and a biomethane certificate can be based on the same underlying manure-treatment intervention, but that is not automatically an impermissible double count: system boundaries, allocation rules and the certificate's intended use determine who may claim which benefit. Manure-based biomethane may receive a negative default GHG value under the relevant methodology [38]. To show duplicate attribution, the investigation must compare the FarmAhead methodology, the plant's PoS calculation and the contract allocating environmental attributes.
 
-The IDF (International Dairy Federation) Common Carbon Footprint Approach recommends "system expansion" for biogas exports [50] — meaning the emissions credit should go to whoever uses the gas, not be double-counted at both the farm and the fuel end. But Arla's FarmAhead tool includes manure-to-biogas as a factor in the farm's footprint, and the certificate system independently credits the biogas processor for the same avoided methane.
+The IDF (International Dairy Federation) Common Carbon Footprint Approach recommends "system expansion" for biogas exports [50]. Arla's FarmAhead tool includes manure-to-biogas as a factor in the farm footprint, while the certificate system can credit a biogas consignment. Whether those credits are reconciled is an open allocation question.
 
 Academic research on California's Low Carbon Fuel Standard has documented this exact problem: "When LCAs include avoided emissions, they can create distortions in other markets with far-reaching implications" [51]. The Union of Concerned Scientists has called manure biomethane crediting an "accounting gimmick" because it rewards the farm for not polluting while simultaneously generating tradeable credits from the same non-pollution [52].
 
@@ -477,23 +474,23 @@ Academic research on California's Low Carbon Fuel Standard has documented this e
 | 3. Transport / Scope 1 | Physical biogas in trucks | Arla (reduced transport emissions) | Arla Scope 1 reporting |
 | 4. National statistics | Physical gas injection | Denmark (renewable energy share) | Energinet / Danish Energy Agency |
 
-All four layers draw on a single physical event: manure enters a Bigadan digester instead of a storage lagoon. The avoided methane is the same molecule of CH4 that would have been emitted. It is counted four times across four different reporting systems, with no single authority having visibility across all four.
+All four layers may draw on a single physical event: manure enters a digester instead of a storage lagoon. That common physical basis creates a reconciliation question, but it is not evidence that the benefit is counted four times. No public record located here links all four layers to the same production batch and claimant.
 
 **Financial incentives reinforce the stacking:**
 
-Arla's Sustainability Incentive model pays farmers up to 3 eurocent/kg milk for sustainability activities, with "manure delivery to biogas" as one of 19 point-generating levers [53]. Total incentive pool: up to €500 million annually [54]. Farmers are thus paid by Arla to deliver manure to Bigadan, where the avoided methane generates certificates worth EUR 60-140/MWh sold to Germany, while Arla simultaneously claims the farm-level credit (Scope 3) AND the truck fuel credit (Scope 1).
+Arla's Sustainability Incentive model pays farmers for sustainability activities, with manure delivery to biogas listed as one lever [53]. The existence of the incentive does not establish that the same manure's certificates were sold to Germany or that Arla simultaneously claimed the same environmental attribute in Scope 1 and Scope 3.
 
-**Arla effectively monetizes the same environmental benefit four ways:**
+**Potential allocation pathways to test:**
 1. Lower per-kg milk footprint → marketing advantage ("our milk has lower carbon footprint")
 2. Scope 1 reduction from biogas trucks → progress toward 63% SBTi target
 3. Certificate revenue (if Arla retains any GOs) or cheaper fuel (if Bigadan discounts gas after selling certificates)
-4. Farmer loyalty → incentive payments lock in manure supply for Bigadan
+4. Farmer incentive → payment for a sustainability activity and manure supply
 
 ---
 
-### Finding 14: The Danish Numbers Dwarf the Global "11%" — Nearly the Entire Arla Dairy Herd Is Implicated
+### Finding 14: Danish Participation Data Is Incomplete — Avoid Inferring Arla-Wide Coverage
 
-Arla's global claim that "11% of Arla farmers have a biogas generator on the farm or are delivering manure for external biogas production" [48] dramatically understates the Danish reality. Cross-referencing national data with Arla's market position reveals an almost total overlap between Arla's Danish farmer base and the biogas supplier network.
+Arla's global claim that "11% of Arla farmers have a biogas generator on the farm or are delivering manure for external biogas production" [48] is not directly comparable with national farm and manure-supplier datasets. Those datasets do not identify Arla membership and cannot establish an almost total overlap.
 
 **The national picture:**
 - Denmark has **2,218 dairy farms** delivering milk (2023, Danish Dairy Board [56])
@@ -507,19 +504,16 @@ Arla's global claim that "11% of Arla farmers have a biogas generator on the far
 - These 2,202 farms are the beneficiaries of **2.34 bn kr/yr in biogas subsidies** and hold **1.31 bn kr in CAP support** [58]
 
 **The Arla overlap:**
-Given that Arla has ~2,100 Danish dairy farm members and there are 2,202 biogas supplier farms (many of which are dairy), the overlap is structurally massive. While we cannot confirm exact membership without Arla's internal member list, the math implies:
-- Most of the ~2,100 Arla Danish members either supply manure to biogas directly or are neighbors of farms that do
-- Bigadan's "500,000 Arla farm cows" claim suggests the manure from essentially the entire Arla Danish herd enters the biogas system
-- Arla owns one biogas plant directly: **Maabjerg Energy Center** (CVR 32266266, via Arla Foods Energy A/S) — which receives manure from 67 supplier farms [58]
+These figures do not support an Arla-wide inference. Without a membership-linked dataset, we cannot determine how many Arla farms supply biogas, how many cows are represented, or which plants receive their manure. Bigadan's "500,000 Arla farm cows" statement is a supplier claim that requires clarification of scope and date. Maabjerg's ownership and supplier relationships are separate facts and do not establish certificate allocation for the broader Arla network [58].
 
-**What this means for the quadruple counting:**
-The FarmAhead Climate Check's farm-level biogas credit isn't a marginal initiative affecting 11% of farms. In Denmark, it potentially covers the vast majority of Arla's ~2,100 dairy farms. Every one of those farms whose manure enters a Bigadan or Nature Energy digester generates:
+**What this means for the accounting investigation:**
+The FarmAhead Climate Check may cover more than the globally reported 11% in Denmark, but that cannot be quantified from the available data. For any identified farm whose manure enters a digester, investigators should separately test:
 1. A lower per-kg footprint in the FarmAhead tool (Arla Scope 3)
 2. GOs/Nabisy certificates sold by the plant owner (German THG market)
 3. Physical compressed biogas for Arla trucks (Arla Scope 1)
 4. A contribution to Denmark's grid-level renewable energy statistics
 
-The "11%" figure mixes on-farm generators and external delivery across ALL seven Arla countries. In Denmark specifically, Arla's own Danish-language pages confirm: **"approximately 30% send their manure to an external biogas facility"** and **"1% of Arla's farmers have their own biogas plant on the farm"** [59] — meaning roughly **~605 of 1,950 Danish Arla farms** (31%) are connected to biogas, not 11%.
+The "11%" figure mixes on-farm generators and external delivery across all seven Arla countries. Arla's Danish-language pages report approximately 30% sending manure to an external facility and 1% having an on-farm plant [59], but the report should not convert those percentages into a definitive count of Danish Arla farms without confirming the denominator and date.
 
 ---
 
@@ -531,17 +525,17 @@ The most direct evidence that the double counting is recognized as a problem com
 
 And critically: **"As long as biogas plants also want to sell the climate effect from the farm to other companies," farmers cannot simultaneously claim these values in Arla's sustainability model.**
 
-Andersen urges parties to "agree on accounting, allocation, and payment for climate values between supplier and biogas facility" and cites Nature Energy (Shell) as having a formal contractual framework for this. His warning implies that **most biogas supplier relationships lack such contracts** — meaning the climate effect is being claimed by multiple parties without formal allocation.
+Andersen urges parties to "agree on accounting, allocation, and payment for climate values between supplier and biogas facility" and cites Nature Energy (Shell) as having a formal contractual framework for this. His warning shows that allocation contracts are an identified governance issue. It does not establish that most supplier relationships lack contracts or that multiple parties are currently claiming the same attribute.
 
 The financial stakes are concrete: Arla's 2023 sustainability bonus offers approximately 0.9 øre/kg milk (~2.5 kr/tonne manure processed) for biogas-related activities [60]. For a large dairy farm delivering 5,000+ tonnes of manure annually, this is a meaningful payment — but only if the farmer can actually claim the climate credit. If the biogas plant has already sold the green attributes as a GO or Nabisy certificate to a German fuel supplier, the farmer's claim is competing with a certificate that has already been monetized.
 
-This is the closest thing to a smoking gun in this investigation: a Danish agricultural insider explicitly identifying the same double-counting mechanism this report has traced — and confirming it is unresolved in practice.
+This is useful evidence that allocation disputes exist in practice, but it is not proof of Arla-specific double counting. It supports requesting the relevant contracts and methodology.
 
 ---
 
 ---
 
-### Finding 16: CONCITO's "Grågrøn Gas" Report Confirms the Climate Benefit Is Overstated by Design
+### Finding 16: CONCITO's "Grågrøn Gas" Report Questions the Net Climate Benefit
 
 CONCITO — Denmark's leading independent climate think tank — published "Grågrøn gas: Sådan sikrer vi maksimal klimagevinst af dansk biogas" (Grey-green gas: How to ensure maximum climate benefit from Danish biogas) in June 2026 [61]. The report directly addresses the stacking and overstatement issues at the heart of this investigation.
 
@@ -559,24 +553,24 @@ CONCITO — Denmark's leading independent climate think tank — published "Grå
 
 ---
 
-### Finding 17: The Danish Government Officially Confirms the Double Count — Only 18% of Certificates Stay in Denmark
+### Finding 17: Danish Sources Confirm Certificate Exports While Physical Gas Remains in the Network
 
-A ministerial answer to the Danish Parliament (Altinget, question 72666) provides official confirmation of the double counting at the national level [62]:
+A ministerial answer to the Danish Parliament (Altinget, question 72666) confirms that certificates can be exported while physical gas remains in the Danish network [62]:
 
 - **Only 18% of Danish biogas certificates were cancelled domestically** in 2020; the majority were sold to Sweden and Germany
 - **4.2 million certificates (= 4.2 TWh)** were issued in 2020, each representing 1 MWh of gas
 - The minister explicitly states: **"The physical biogas supplied to Denmark's network is unaffected by certificate trading"** — Denmark counts the full climate effect regardless of where certificates are sold
 - The minister claims certificates show "Danish support was provided" and that "biogas represented cannot count toward other nations' renewable targets"
 
-The last claim is technically correct per RED II Article 19 (GOs don't count toward national renewable targets) but **misses the actual double count**: German companies use the certificates for corporate Scope 1 claims AND German fuel suppliers use Nabisy/PoS certificates from the same production for THG quota compliance. Neither of these is a "national renewable target" — they are corporate and regulatory compliance instruments that the Danish framework doesn't track or prevent.
+The last claim is technically correct per RED II Article 19: GOs do not count toward another Member State's renewable target. It does not resolve whether a GO and a PoS were allocated to different parties or whether corporate claims were made against the same production. Those questions require certificate-level and accounting evidence.
 
-By 2024, the export share has increased further: over **80% of Danish biomethane GOs are now exported** [1], with the vast majority going to Germany. The physical gas stays and is counted in Denmark; the green attributes are sold and counted in Germany. The Danish government treats this as legitimate because the two counting systems are technically separate. But the aggregate effect is that the same tonne of CO2 reduction is claimed in both countries.
+By 2024, the export share had increased further: over **80% of Danish biomethane GOs were reported as exported** [1], with the majority going to Germany. The physical gas stays in the Danish network while the disclosure attributes move abroad. That is permitted for GO purposes; whether the same environmental attribute is also used in a German compliance or corporate claim remains a separate evidentiary question.
 
 ---
 
-### Finding 18: The Full Revenue Stack — How the Same Gas Earns Five Times
+### Finding 18: The Potential Revenue and Accounting Stack
 
-Combining the CONCITO data, the ownership analysis, and the certificate flow data, the full revenue stack for a single tonne of manure entering a Danish biogas plant can now be quantified:
+Combining the CONCITO data, ownership analysis and certificate-flow data, the report can map potential revenue and accounting streams. The table should not be read as proof that every stream attaches to the same tonne of manure or gas volume:
 
 | Revenue stream | Amount | Who receives | Who pays |
 |---------------|--------|-------------|---------|
@@ -586,14 +580,14 @@ Combining the CONCITO data, the ownership analysis, and the certificate flow dat
 | **4. THG/Nabisy transport certificate** | EUR 60-140/MWh (manure bonus) | Plant owner or certificate trader | German fuel suppliers (THG quota) |
 | **5. Arla Sustainability Incentive** | ~0.9 øre/kg milk (~2.5 kr/ton manure) | Arla farmer | Arla (from milk price) |
 
-And the same gas simultaneously generates **climate accounting credits** for:
+Potentially related accounting claims include:
 - **Denmark** (national climate accounts — physical production)
 - **German fuel supplier** (THG quota compliance — certificate)
 - **Arla farmer** (FarmAhead per-kg footprint — avoided methane)
 - **Arla corporate** (Scope 1 transport — physical biogas in trucks)
 - **German/EU company** (Scope 1/2 disclosure — GO cancellation)
 
-The CONCITO finding that certificates are "up to 35% of company revenue" means the certificate stack is not marginal — it's a **load-bearing pillar of the biogas business model**. Biogas Danmark's own lobbying confirms this: certificates are expected to reduce the state's subsidy cost by 25-50% for future tenders [63], meaning the government is effectively counting on German transport compliance buyers to co-finance Denmark's climate policy.
+The CONCITO finding that certificates can represent up to 35% of company revenue indicates that certificate income is commercially material. It does not prove that the same environmental attribute was claimed by every party listed above. Biogas Danmark's lobbying indicates that certificate income is expected to help reduce future subsidy costs [63].
 
 ---
 
@@ -612,7 +606,7 @@ Maabjerg receives manure from 67 supplier farms (2.13 million kg N) and receives
 
 ### Revised Quantitative Summary
 
-The investigation, starting from a simple question about double counting between Denmark and Germany, has uncovered a five-layer revenue and accounting stack:
+The investigation has identified a five-layer revenue and accounting model to test:
 
 | Layer | Type | Value | Confirmed? |
 |-------|------|-------|-----------|
@@ -622,7 +616,7 @@ The investigation, starting from a simple question about double counting between
 | Farm-level FarmAhead credit | Accounting | 2.6% per-kg reduction (up to 15%) | Yes — Arla, CONCITO |
 | Arla Scope 1 truck credit | Accounting | Part of 63% Scope 1+2 target | Yes — Arla climate roadmap |
 
-The net climate effect is 78% of what's claimed (CONCITO), the certificates are 80%+ exported (ministerial answer), and the same avoided methane is credited in at least four separate accounting systems (FarmAhead, Nabisy/THG, Scope 1, national statistics) — none of which has visibility into the others.
+CONCITO's estimate of the net climate effect and the reported export share are relevant context, but they do not prove that the same avoided methane is credited in all four systems. The remaining task is to match FarmAhead methodology, PoS/Nabisy records, Arla Scope 1 treatment and national accounting boundaries.
 
 [56] Danish Dairy Board (2024). "The Danish dairy industry in numbers." Danish Dairy Board. https://danishdairyboard.dk/danish-dairy-industry/statistics/ (Retrieved: 2026-06-05)
 
@@ -638,13 +632,13 @@ The net climate effect is 78% of what's claimed (CONCITO), the certificates are 
 
 ### Revised Final Assessment
 
-The investigation began with a question about double counting between Denmark and Germany. It has revealed **quadruple counting**: the same manure-to-biogas event generates credits in four separate accounting systems. This is not a conspiracy — it's a structural feature of overlapping regulatory frameworks that were never designed to interact. But it means Arla's climate narrative — "our farmers reduce emissions, our trucks run on biogas, and we're on track for net zero" — significantly overstates the actual climate benefit by counting the same environmental improvement multiple times.
+The investigation began with a question about double counting between Denmark and Germany. It has identified a potential multi-layer overlap involving physical production, GO/PoS certificates, farm incentives and corporate reporting. The public record does not establish that Arla's same manure-to-biogas event is counted in all of these systems, nor that Arla's climate narrative therefore overstates its impact.
 
-The most actionable data point: **the FarmAhead tool's treatment of biogas**. If the tool credits farmers with avoided methane emissions for external biogas delivery, AND Bigadan's certificates also credit the same avoided methane (via the manure bonus), this is a documented double credit within the LCA methodology — not a regulatory grey zone, but a methodological error that can be tested empirically.
+The most actionable data point remains **the FarmAhead tool's treatment of biogas**. If the tool credits farmers with avoided methane emissions for external biogas delivery and a certificate scheme attributes the same avoided methane to another claimant, that may be a double credit within the LCA methodology. It should be tested against the tool's allocation rules and the plant's certificate records before being described as an error.
 
 ---
 
-### Additional Bibliography (Deep Dive + Quadruple Counting)
+### Additional Bibliography (Deep Dive + Multi-Layer Allocation)
 
 [31] Proff.dk (2025). "Nature Energy Videbæk A/S — CVR-nr 34211493." Proff.dk. https://www.proff.dk/firma/nature-energy-videb%C3%A6k-as/videb%C3%A6k/gasproduktion/GTQOLNI10NM (Retrieved: 2026-06-05)
 
@@ -705,3 +699,9 @@ The most actionable data point: **the FarmAhead tool's treatment of biogas**. If
 [64] Vestforsyning (2025). "Leverandørforeningen har nu købt Maabjerg Energy Centers biogasanlæg." Vestforsyning. https://www.vestforsyning.dk/nyheder/nyheder/leverandoerforeningen-har-nu-koebt-maabjerg-energy-centers-biogasanlaeg/ (Retrieved: 2026-06-05)
 
 [65] Energy Supply (2023). "Maabjerg Bioenergy bytter biogas for valle." Energy-supply.dk. https://www.energy-supply.dk/article/view/144445/maabjerg_bioenergy_bytter_biogas_for_valle (Retrieved: 2026-06-05)
+
+[66] European Commission. "Union Database for liquid and gaseous renewable and recycled carbon fuels." Current UDB scope, verified gas injection volumes and Transfer Gas PoS movements. https://energy.ec.europa.eu/topics/renewable-energy/bioenergy/biofuels/union-database-liquid-and-gaseous-renewable-and-recycled-carbon-fuels_en (Retrieved: 2026-07-15)
+
+[67] Netherlands. "Conceptregeling bijmengverplichting groen gas." Draft implementing order and explanatory materials, public consultation July 2026. https://www.internetconsultatie.nl/bijmengverplichtinggroengasamvb/document/15871 (Retrieved: 2026-07-15)
+
+[68] Energy Traders Europe. "Rules for the Chain of Custody and Applicability to third countries." Position paper, May 2025. Local PDF reviewed: `/Users/martincollignon/Downloads/shell eu/Energy Traders Europe Position Paper Rules for the Chain of Custody and Applicability to third countries.pdf`.

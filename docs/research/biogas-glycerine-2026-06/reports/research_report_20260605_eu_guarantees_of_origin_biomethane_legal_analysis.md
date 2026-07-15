@@ -1,4 +1,4 @@
-# EU Guarantees of Origin for Biomethane: Legal Framework for Decoupling Certificates from Physical Gas
+# EU Biomethane Certificates: Guarantees of Origin, Proofs of Sustainability, and Mass Balance
 
 > **⚠️ Unverified draft — work in progress.** This report was produced by an AI-assisted research pipeline and has not been fact-checked, edited, or reviewed by a journalist or editor. Claims, figures, and sourcing may be incomplete, outdated, or wrong. Do not cite, publish, or act on this content as-is. Landbruget.dk takes no responsibility for its accuracy.
 
@@ -6,11 +6,15 @@
 **Research Report -- 5 June 2026**
 **Mode: Deep (8-phase pipeline)**
 
+**Update -- 15 July 2026:** Reviewed the European Commission access-to-documents release, the Commission's current Union Database documentation, the Dutch TRIS exchange, and the current Dutch draft implementing order. This update separates disclosure GOs from compliance PoS and corrects the report's earlier overstatement of the legal certainty of applying a biomethane PoS to fossil LNG.
+
 ---
 
 ## Executive Summary
 
-European Union law explicitly permits Guarantees of Origin (GOs) for biomethane to be traded independently of the physical gas molecules they certify. The foundational provision is Recital 53 of the Renewable Energy Directive II (Directive 2018/2001), which states that "a guarantee of origin can be transferred, independently of the energy to which it relates, from one holder to another" [1]. Article 19 of that same directive operationalises this principle by allowing transfers of GOs "separately or together with the physical transfer of energy" [2]. A parallel regulatory pillar -- Commission Implementing Regulation (EU) 2022/996 -- treats the entire EU interconnected gas grid, including LNG terminals, as "one single mass balancing system," enabling the administrative transfer of sustainability attributes from biomethane injected at one point to fossil gas withdrawn at another, including as LNG [3]. The 2024 Gas and Hydrogen Package (Directive 2024/1788 and Regulation 2024/1789) extends this framework to low-carbon gases and mandates that low-carbon gas GOs follow the same rules as renewable gas GOs [4]. Together, these instruments create a documented legal pathway by which a company can purchase fossil gas or LNG and, by acquiring and cancelling a biomethane GO, claim the consumption of "green gas" without any renewable molecule having physically reached the consumer. Critical analysis from academic institutions, industry bodies, and investigative reporting increasingly questions whether this system constitutes legalised greenwashing, a concern amplified by the CJEU's ruling in Alands Vindkraft (C-573/12) that GOs serve only a disclosure function and cannot verify actual renewable consumption [5].
+EU law clearly permits biomethane Guarantees of Origin (GOs) to be transferred independently of the physical energy for disclosure purposes. Recital 53 of the Renewable Energy Directive II (Directive 2018/2001) states that a GO can be transferred independently of the energy to which it relates, and Article 19 allows transfers separately from physical energy [1][2]. That rule must be distinguished from Proofs of Sustainability (PoS), which support compliance with sustainability and greenhouse-gas criteria under Commission Implementing Regulation (EU) 2022/996. PoS operate through a mass-balance chain, not as an unrestricted book-and-claim certificate.
+
+The EU interconnected gas grid is treated as one mass-balancing system, and the definition of interconnected infrastructure includes pipelines, LNG terminals and storage facilities [3]. That can allow sustainability characteristics to be reassigned within a qualifying integrated infrastructure, but it does not by itself establish that any fossil LNG purchase may be labelled compliant bio-LNG. The Commission's current UDB documentation describes verified injection volumes, Transfer Gas PoS movements within the integrated grid, and registration at the exit or final-consumption point [26]. The current Dutch draft implementing order likewise requires the same mass-balance-traceable delivery to carry both a GO and a PoS [28]. The strongest defensible conclusion is therefore conditional: GOs can be unbundled for disclosure, while PoS-based claims remain subject to mass-balance, UDB, voluntary-scheme and national compliance rules. The documents reviewed here show an active dispute over those boundaries, not a settled EU-law endorsement of unrestricted fossil-LNG relabelling.
 
 ---
 
@@ -18,11 +22,11 @@ European Union law explicitly permits Guarantees of Origin (GOs) for biomethane 
 
 ### 1.1 Scope and Methodology
 
-This report identifies and analyses the exact EU legal provisions enabling Guarantees of Origin for biomethane to be decoupled from physical gas molecules. It covers primary legislation (RED II, RED III, Gas and Hydrogen Package), implementing regulations (IR 2022/996), technical standards (CEN EN 16325), institutional positions (ENTSOG, ERGaR, AIB), court decisions (CJEU), and critical academic and legal analysis. All legal citations reference specific articles, recitals, or paragraphs with verbatim or near-verbatim language drawn from official sources.
+This report identifies and analyses the EU provisions that separate disclosure GOs from compliance PoS for biomethane, and assesses what the mass-balance rules do and do not establish for gas and LNG. It covers primary legislation (RED II, RED III, Gas and Hydrogen Package), implementing regulations (IR 2022/996), technical standards (CEN EN 16325), institutional positions (ENTSOG, ERGaR, AIB), court decisions (CJEU), and critical academic and legal analysis. All legal citations reference specific articles, recitals, or paragraphs with verbatim or near-verbatim language drawn from official sources.
 
 ### 1.2 Why This Matters
 
-The GO system was originally designed for electricity, where electrons are fungible on a grid and physical tracing is technically impossible. Its extension to gas -- and specifically to the LNG supply chain -- raises distinct questions because gas molecules can be physically traced through segregated supply chains, yet the EU framework explicitly chooses not to require such segregation. This design choice has consequences for corporate emissions reporting, EU ETS compliance, national blending mandates, and public trust in "green gas" claims.
+The GO system was originally designed for electricity and has been extended to gas. Its extension to gas -- and specifically to the LNG supply chain -- raises distinct questions because GOs serve disclosure while PoS serve sustainability compliance through mass balance. The distinction has consequences for corporate emissions reporting, EU ETS compliance, national blending mandates, and public trust in "green gas" claims.
 
 ---
 
@@ -58,7 +62,7 @@ Directive (EU) 2024/1788 of 13 June 2024, on common rules for the internal marke
 
 The directive provides that "where guarantees of origin have been issued for the production of a consignment of low-carbon gas, they shall be subject to the same rules as those set out in that Article for guarantees of origin issued for the production of renewable gas" [4]. This means the decoupling principle established under Article 19 of RED II applies with equal force to low-carbon gas certificates -- extending the book-and-claim logic to a broader category of fuels.
 
-The directive also requires Member States to "require the relevant economic operators to enter into the Union database established pursuant to Article 31a(1) of Directive (EU) 2018/2001, or into national databases that are linked to that Union database, information on the transactions made and the sustainability characteristics of renewable gas and low-carbon fuels" [4]. This Union Database is intended to prevent double-counting across Member States but does not require physical tracing of gas molecules.
+The directive also requires Member States to require relevant operators to enter transactions and sustainability characteristics into the Union Database or linked national databases [4]. The Commission's current UDB documentation says the database covers gaseous renewable and recycled-carbon fuels, including biomethane; injected volumes are verified by TSOs/DSOs, Transfer Gas PoS can move within the integrated grid, and a formal transaction is recorded at exit or final consumption [26]. The UDB provides volume and certificate traceability, but it is not molecule-level physical tracing and does not eliminate the need to test the applicable national compliance rules.
 
 ### 3.2 Regulation 2024/1789
 
@@ -84,17 +88,17 @@ Crucially, RED III did not alter the core decoupling principle. The fundamental 
 
 Commission Implementing Regulation (EU) 2022/996, adopted on 14 June 2022, lays down rules for verifying sustainability and greenhouse gas emissions savings criteria and for low indirect land-use change-risk criteria [3]. Its provisions on mass balancing are the operational backbone enabling the transfer of sustainability attributes through the gas grid.
 
-**Recital 5** of IR 2022/996 states unequivocally: "In case of gaseous fuels, the EU interconnected grid is considered as one single mass balancing system" [3]. This single sentence has enormous consequences: it means that biomethane injected in Denmark can administratively transfer its sustainability attributes to gas withdrawn in Spain, or to LNG loaded at a terminal in France, without any requirement that the renewable molecules physically travel the route.
+**Recital 5** of IR 2022/996 states that, for gaseous fuels, the EU interconnected grid is considered one mass-balancing system [3]. That supports administrative transfer within a qualifying chain, but it does not by itself prove that any gas withdrawal or LNG cargo carries a valid compliance PoS. The operator still has to document the sustainability characteristics and preserve the applicable mass-balance and certification records.
 
 ### 5.2 Definition of Interconnected Infrastructure
 
-**Article 2(18)** of IR 2022/996 defines "interconnected infrastructure" as "a system of infrastructures, including pipelines, LNG terminals and storage facilities, which transports gases, that primarily consist of methane and include biogas and gas from biomass, in particular biomethane, or other types of gas that can technically and safely be injected into, and transported through the natural gas pipeline system" [3]. The explicit inclusion of LNG terminals within this definition is what creates the legal pathway for applying biomethane certificates to LNG.
+**Article 2(18)** of IR 2022/996 defines "interconnected infrastructure" as a system including pipelines, LNG terminals and storage facilities that transports gases that can technically and safely be injected into and transported through the natural-gas pipeline system [3]. The explicit inclusion of LNG terminals makes them potentially relevant to a mass-balance chain; it does not, standing alone, make fossil LNG a compliant renewable fuel.
 
 ### 5.3 How Mass Balance Works in Practice
 
-**Article 19(2)(d)** specifies that "fuels introduced into a logistical facility or a transmission or distribution infrastructure such as the gas grid or a pipeline network for liquid fuels, stored in LNG or other storage facilities shall only be considered to be part of a mixture...where that infrastructure is interconnected" [3]. The regulation requires that "the sustainability and GHG emissions saving characteristics and the other information describing raw materials or fuel" be "thoroughly documented and passed on from economic operator to economic operator through the supply chain" [3].
+**Article 19(2)(d)** specifies when fuels introduced into an interconnected logistical facility or transmission/distribution infrastructure can be treated as part of a mixture for mass-balance purposes. It also requires the sustainability and GHG characteristics and other fuel information to be documented and passed through the supply chain [3]. The provision therefore supports reassignment inside a documented chain; it is not a general licence to relabel fossil gas or LNG.
 
-In practice, this means a biomethane producer in Germany injects certified biomethane into the grid, creating a Proof of Sustainability (PoS) documented in the Union Database. An LNG terminal operator in Belgium, connected to the same interconnected grid, can then withdraw fossil gas (or import LNG), apply the mass-balanced sustainability attributes, and issue a PoS for "bio-LNG" -- even though the methane molecules are of fossil origin. The system tracks volumes, not molecules.
+The Commission's current UDB description says that injected gaseous-fuel volumes are verified by TSOs or DSOs. Intermediary trades within the integrated grid are not formally recorded in the same way as other supply-chain transactions, but Transfer Gas PoS moves the relevant volumes and PoS between UDB accounts, with a formal transaction recorded at the exit or final-consumption point [26]. Whether a particular LNG withdrawal can carry a compliance PoS therefore depends on the applicable infrastructure, mass-balance records, certification scheme and end-use rules. It cannot be inferred from Article 2(18)'s inclusion of LNG terminals alone.
 
 ---
 
@@ -106,21 +110,21 @@ The EU framework operates through two distinct certificate mechanisms that are o
 
 **Guarantees of Origin (GOs)** under Article 19 RED II serve a disclosure function: they allow end consumers to claim their energy consumption is "renewable" for marketing, ESG reporting, and voluntary sustainability purposes. GOs operate on a strict book-and-claim basis -- the certificate is completely decoupled from the physical molecule [1][2].
 
-**Proofs of Sustainability (PoS)** under the sustainability certification scheme (Article 30 RED II, IR 2022/996) serve a compliance function: they demonstrate that specific consignments of renewable fuel meet sustainability criteria for purposes such as RED targets, EU ETS, and FuelEU Maritime. PoS operate on a mass-balance basis within the interconnected infrastructure -- not full book-and-claim, but not physical tracing either [3].
+**Proofs of Sustainability (PoS)** under the sustainability certification scheme (Article 30 RED II, IR 2022/996) serve a compliance function: they demonstrate that fuel in a documented chain meets sustainability and GHG criteria for the relevant regulatory use. PoS operate on a mass-balance basis within qualifying interconnected infrastructure -- not full book-and-claim, but not molecule-level physical tracing either [3]. The distinction matters: an independently transferred GO is not a substitute for a compliance PoS. The May 2025 Energy Traders Europe position paper argues that physical gas trade should be a prerequisite for PoS transfer; that is an industry position rather than binding law, but it reinforces the need to distinguish a physical/mass-balance chain from a disclosure-only claim [29].
 
 The ERGaR (European Renewable Gas Registry) operates both mechanisms. Its Certificate of Origin (CoO) scheme enables cross-border transfer of biomethane certificates, and since 2021 has "facilitated more than 7 TWh in biomethane between the participants" [11]. ERGaR states explicitly that "These certificates can be traded irrespective of the physical flow of the renewable gas via a so-called book and claim system" [11]. However, one constraint applies: "when both a Proof of Sustainability and Guarantee of Origin exist for the same consignment of gas, they cannot be traded separately to different companies" [11].
 
 ### 6.2 The LNG Pathway
 
-The documented pathway by which a biomethane GO can be applied to LNG operates as follows.
+The conditional pathway by which biomethane certificates may be associated with gas or LNG operates as follows.
 
 **Step 1: Production and Injection.** A biomethane producer injects certified biomethane into the EU gas grid and receives a GO (for disclosure) and/or a PoS (for compliance) from a national registry or recognised voluntary scheme.
 
-**Step 2: Certificate Trading.** The GO can be sold to any buyer anywhere in the EU, independently of the physical gas. The PoS can be mass-balanced through the interconnected infrastructure, which includes LNG terminals per Article 2(18) of IR 2022/996 [3].
+**Step 2: Certificate Trading.** The GO can be sold to a buyer independently of the physical gas for disclosure purposes. A PoS can move only through the applicable certification, mass-balance and UDB rules; the current UDB documentation describes Transfer Gas PoS movements within the integrated grid [26].
 
-**Step 3: Application to LNG.** Under the mass-balance pathway, an LNG terminal operator who is physically connected to the interconnected gas grid can claim the sustainability attributes of biomethane that was injected elsewhere. The operator cancels the corresponding PoS and issues documentation for "bio-LNG." Under the GO pathway, a company purchasing fossil LNG can separately purchase a biomethane GO and, upon cancellation, claim "green gas" consumption for disclosure purposes.
+**Step 3: Application to LNG.** An LNG terminal may fall within the definition of interconnected infrastructure, but that fact alone does not establish that a fossil LNG purchase qualifies as compliant bio-LNG. The operator must show the required chain, scheme, UDB and end-use records. Separately, a company purchasing fossil LNG may purchase and cancel a biomethane GO for a disclosure claim, subject to the rules governing that claim.
 
-**Step 4: Consumer-facing claim.** The end consumer sees "renewable" or "green" gas in their supplier's fuel mix disclosure, even though the physical molecules are fossil methane (including, potentially, imported LNG from a non-EU source).
+**Step 4: Consumer-facing claim.** The end consumer may see a renewable disclosure claim even though the physically consumed molecules differ from the molecules that generated the GO. That disclosure result must not be presented as proof that the same fossil LNG was a compliant renewable-fuel consignment.
 
 The bio-LNG producer Nordsol has documented this distinction sharply: in "mass-balanced bio-LNG and greened LNG, the methane molecules are fossil but carry the green label of a biomethane molecule" [12]. Nordsol warns that "Greening fossil LNG by relabeling or offsetting it as 'bio' crumbles the integrity of the bio-LNG label" [12].
 
@@ -174,13 +178,13 @@ The electricity GO market has already produced a cautionary example. Iceland, wh
 
 ### 9.3 Member State Resistance
 
-Several Member States have resisted the full application of mass-balance and book-and-claim principles to gas. The Netherlands has combined GHG accounting arguments "with a rejection of EU mass-balance rules, essentially prohibiting biomethane imports unless physically segregated as bio-LNG or bio-CNG" [18]. France mandates that its 2026 green gas blending obligation be satisfied "through French production only" [18]. The Czech Republic has restricted export of subsidised biomethane, and Italy's transport systems "disregard EU mass balance rules" [18]. These national responses reflect a fundamental scepticism about whether administrative certificate trading can substitute for physical delivery of renewable gas.
+The Netherlands is a live example of the unresolved boundary between EU mass balance and national compliance design. Its original 2024 TRIS notification temporarily limited eligibility to Dutch production and physical injection into the Dutch network. The Netherlands later deleted those restrictions after the Commission's detailed opinion. In its latest exchange of 26 June 2026, the Commission viewed the deletions positively but continued to ask whether foreign EU gas is now eligible, whether physical transport remains required, and how the GGE register, AIB/VertiCer route, GO/PoS coupling and UDB interact [27]. The Commission has reserved its position; this is an unresolved regulatory dispute, not evidence that the Netherlands currently has a settled domestic-only rule.
 
-The European Commission has pushed back against these restrictions, arguing that the Netherlands' position "contradicts EU law" by rejecting the mass-balance framework established in IR 2022/996 [18]. This regulatory conflict illustrates the tension at the heart of the system: EU law treats administrative equivalence as sufficient, while some Member States insist on physical reality.
+The current Dutch draft implementing order requires a qualifying delivery to carry both a GO and a PoS in the same mass-balance-traceable chain and excludes gas receiving an operating subsidy, including foreign gas [28]. Those conditions may create practical constraints, but they are different from a formal blanket prohibition on biomethane imports.
 
 ### 9.4 The Cross-Border Trading Gap
 
-Despite the legal framework enabling cross-border GO trading, actual cross-border biomethane commerce remains "2-5%" of total consumption [18]. This figure suggests that the regulatory infrastructure for certificate trading has outpaced the actual market, raising questions about whether the primary function of gas GOs is facilitating genuine renewable gas deployment or enabling low-cost greenwashing by fossil gas consumers in countries without domestic biomethane production.
+Cross-border GO trading is legally available, but the existence of a transferable GO does not establish that a corresponding PoS can be used in every national compliance scheme. The relevant evidence for any cross-border compliance claim is the linked physical/mass-balance chain, UDB record, voluntary-scheme documentation and national eligibility rule.
 
 ---
 
@@ -208,7 +212,7 @@ The extension of CEN EN 16325 to gas means that gas GOs will be issued, traded, 
 
 ### 12.1 The Legal Chain of Provisions
 
-The complete legal chain enabling the decoupling of biomethane GOs from physical gas can be summarised as follows:
+The legal chain should be stated in two separate tracks: a broad disclosure rule for GOs, and a conditional mass-balance route for compliance PoS.
 
 1. **Recital 53, RED II** (Directive 2018/2001): Establishes that a GO "can be transferred, independently of the energy to which it relates" [1].
 
@@ -218,11 +222,11 @@ The complete legal chain enabling the decoupling of biomethane GOs from physical
 
 4. **Article 19(7), RED II**: Mandates conformity with CEN EN 16325, now extended to gas [2][8].
 
-5. **Recital 5, IR 2022/996**: Treats the EU interconnected gas grid as "one single mass balancing system" [3].
+5. **Recital 5, IR 2022/996**: Treats the EU interconnected gas grid as one mass-balancing system for gaseous fuels [3].
 
-6. **Article 2(18), IR 2022/996**: Defines "interconnected infrastructure" to include "pipelines, LNG terminals and storage facilities" [3].
+6. **Article 2(18), IR 2022/996**: Defines interconnected infrastructure to include pipelines, LNG terminals and storage facilities [3].
 
-7. **Article 19(2)(d), IR 2022/996**: Allows fuels in interconnected infrastructure to be part of a mixture for mass-balance purposes [3].
+7. **Article 19(2)(d), IR 2022/996**: Allows qualifying fuels in interconnected infrastructure to be treated as part of a mixture for mass-balance purposes, subject to documentation and chain-of-custody rules [3].
 
 8. **Directive 2024/1788**: Extends GO rules to low-carbon gas, providing that low-carbon gas GOs "shall be subject to the same rules as those set out for guarantees of origin issued for the production of renewable gas" [4].
 
@@ -230,9 +234,9 @@ The complete legal chain enabling the decoupling of biomethane GOs from physical
 
 ### 12.2 Is This Greenwashing?
 
-The answer depends on one's definition. Under EU law, the system is functioning exactly as designed. The legislative text explicitly permits GO trading independently of physical energy delivery. The CJEU has confirmed that GOs serve only a disclosure function. The EU legislature made a deliberate policy choice to favour market liquidity and cost-efficiency over physical tracing.
+Under EU law, GOs are disclosure instruments that may be transferred independently of physical energy. That does not mean PoS can be freely detached from the mass-balance and certification chain. The current UDB documentation and Dutch draft show active controls and unresolved implementation questions.
 
-From an environmental integrity perspective, however, the system enables outcomes that a reasonable consumer would likely consider misleading. A company can purchase 100% fossil LNG, acquire biomethane GOs from a producer thousands of kilometres away, and tell its customers it consumes "green gas." The physical reality of fossil combustion and the administrative reality of renewable certification operate in parallel, never intersecting.
+The strongest criticism is therefore narrower: a company may be able to buy and cancel a GO while consuming different gas and make a disclosure claim. A stronger claim that the same fossil LNG has been accepted as a compliant renewable-fuel consignment requires evidence of the applicable PoS, mass-balance, UDB and end-use rules. The documents reviewed do not establish that as a settled general legal fact.
 
 The critical question is whether this administrative equivalence delivers actual environmental benefit. Proponents argue that GO revenue provides a financial incentive for biomethane production, thereby driving investment in renewable gas capacity. Critics counter that the premium captured by GOs is too small to drive additionality and that the system primarily enables low-cost compliance and marketing claims by fossil gas consumers.
 
@@ -246,7 +250,7 @@ The critical question is whether this administrative equivalence delivers actual
 
 3. **No identified court decisions specifically on gas GOs**: The CJEU Alands Vindkraft case (C-573/12) addresses electricity GOs. No court decision specifically addressing gas GO trading or the application of biomethane certificates to LNG was identified.
 
-4. **Evolving regulation**: The transposition deadline for Directive 2024/1788 is 5 August 2026. Member State implementation may introduce additional requirements or restrictions not yet visible in the legislation.
+4. **Current implementation**: The UDB is operational for gaseous renewable and recycled-carbon fuels, including verified injection volumes and Transfer Gas PoS movements, while the Dutch blending obligation and draft implementing order remain under active EU and national review [26][27][28].
 
 5. **Law firm analysis**: Norton Rose Fulbright's publication on the Gas and Hydrogen Package did not specifically address GO decoupling mechanisms. The Osborne Clarke and Arthur Cox analyses provided structural overview but limited GO-specific detail.
 
@@ -254,9 +258,9 @@ The critical question is whether this administrative equivalence delivers actual
 
 ## Recommendations
 
-1. **For investigative journalism**: The strongest legal citations are Recital 53 and Article 19(2) of RED II, and Recital 5 with Article 2(18) of IR 2022/996. These four provisions, taken together, establish the complete legal basis for decoupling biomethane certificates from physical gas molecules and applying them to LNG.
+1. **For investigative journalism**: Use Recital 53 and Article 19(2) of RED II to document GO disclosure decoupling. Use IR 2022/996, the UDB documentation and the applicable national rules to test any PoS or LNG compliance claim. Do not treat LNG's inclusion in the infrastructure definition as proof that fossil LNG is compliant bio-LNG.
 
-2. **For policy analysis**: The tension between EU-level mass-balance rules and Member State resistance (Netherlands, France, Czech Republic, Italy) is the most revealing indicator of regulatory concern about the system's integrity.
+2. **For policy analysis**: The Netherlands is the clearest live case: its original domestic-production and physical-injection restrictions were deleted, but the Commission continues to examine foreign EU gas, physical transport, AIB/VertiCer, GGE, GO/PoS and UDB questions [27]. The current Dutch draft also excludes operating-subsidized gas and requires GO/PoS coupling [28].
 
 3. **For corporate accountability**: The Nordsol distinction between "fossil-free bio-LNG" (actual biomethane molecules) and "greened LNG" (fossil molecules with certificates) provides a clear framework for evaluating corporate green gas claims.
 
@@ -314,6 +318,14 @@ The critical question is whether this administrative equivalence delivers actual
 
 [25] Osborne Clarke. "Regulation (EU) 2024/1789 and its impact on the renewable, natural gas and hydrogen markets." https://www.osborneclarke.com/insights/regulation-eu-20241789-and-its-impact-renewable-natural-gas-and-hydrogen-markets
 
+[26] European Commission. "Union Database for liquid and gaseous renewable and recycled carbon fuels." Current UDB scope, verified gas injection volumes, Transfer Gas PoS and exit-point registration. https://energy.ec.europa.eu/topics/renewable-energy/bioenergy/biofuels/union-database-liquid-and-gaseous-renewable-and-recycled-carbon-fuels_en
+
+[27] European Commission. "TRIS notification 25868, message 116103." Commission comments on the Netherlands' amended green-gas blending proposal, 26 June 2026. https://technical-regulation-information-system.ec.europa.eu/en/notification/25868/message/116103/EN
+
+[28] Netherlands. "Conceptregeling bijmengverplichting groen gas." Draft implementing order and explanatory materials, public consultation July 2026. https://www.internetconsultatie.nl/bijmengverplichtinggroengasamvb/document/15871
+
+[29] Energy Traders Europe. "Rules for the Chain of Custody and Applicability to third countries." Position paper, May 2025. Local PDF reviewed: `/Users/martincollignon/Downloads/shell eu/Energy Traders Europe Position Paper Rules for the Chain of Custody and Applicability to third countries.pdf`.
+
 ---
 
 ## Methodology Appendix
@@ -321,7 +333,7 @@ The critical question is whether this administrative equivalence delivers actual
 **Research mode**: Deep (8-phase pipeline)
 **Phases executed**: Scope, Plan, Retrieve, Triangulate, Outline Refinement, Synthesize, Critique, Package
 **Date**: 5 June 2026
-**Sources consulted**: 25+ (official EU legislation, court decisions, regulatory body publications, industry position papers, academic analysis, law firm analyses, investigative journalism)
+**Sources consulted**: 29 (official EU legislation, current Commission and Dutch regulatory materials, court decisions, regulatory body publications, industry position papers, academic analysis, law firm analyses, investigative journalism)
 **Search strategy**: Parallel web searches across 10 research angles, followed by targeted deep-dive fetches of primary legal texts from EUR-Lex, institutional publications, and analytical sources
 **Triangulation**: Core legal provisions verified across EUR-Lex, UK legislation archive, secondary legal databases, and multiple independent commentaries
 **Limitations**: Binary PDF encoding prevented full extraction of 3 key documents (noted in Limitations section)

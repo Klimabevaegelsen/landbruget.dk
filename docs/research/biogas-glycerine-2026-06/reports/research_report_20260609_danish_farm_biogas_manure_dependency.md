@@ -249,7 +249,7 @@ CONCITO has identified this feedback loop explicitly, arguing that the biogas su
 
 ### 6.5 The Certificate Crisis and Domestic Lock-In
 
-Our prior research [documented locally in biogas_certificates_denmark_policy_findings_20260609.md] found that 88% of Danish biogas guarantees of origin (GOs) were purchased by foreign companies in 2024, primarily in Sweden and Germany [32]. As EU rules tighten around double-counting and subsidised certificates, this foreign revenue stream is becoming unreliable. Biogas Danmark has responded by lobbying for domestic demand mandates: a blending obligation on gas suppliers, tax exemption for "unsupported" biogas, and preservation of the gas grid and gas boilers [32].
+Our prior research [documented locally in biogas_certificates_denmark_policy_findings_20260609.md] found that 88% of Danish biogas guarantees of origin (GOs) were purchased by foreign companies in 2024, primarily in Sweden and Germany [32]. That foreign revenue stream is exposed to changing national eligibility and certificate rules: GO disclosure transfers remain distinct from PoS-based compliance, and the current Dutch GGE proposal would require GO/PoS linkage and exclude operating-subsidized gas, while the Commission continues to question the final Dutch design [32][54][55]. Biogas Danmark has responded by lobbying for domestic demand mandates: a blending obligation on gas suppliers, tax exemption for "unsupported" biogas, and preservation of the gas grid and gas boilers [32].
 
 If this domestic-demand strategy succeeds, Danish consumers become the captive market for biogas certificates — adding another layer of lock-in. The farms are locked to the plants; the plants are locked to the subsidy; and the subsidy is locked to domestic gas consumers and taxpayers. The entire chain becomes a closed loop of mutual dependency.
 
@@ -450,6 +450,10 @@ The Dutch experience shows where this leads without the biogas shock absorber: m
 [52] Klimarådet. "Afgift på alle landbrugets udledninger." Livestock production cannot continue at current levels. https://klimaraadet.dk/da/virkemiddel/afgift-paa-alle-landbrugets-udledninger
 
 [53] LandbrugsAvisen. "Gylleseparation er en dyr løsning." Treatment costs 43-80 kr/ton. https://landbrugsavisen.dk/avis/gylleseparationen-dyr-l%C3%B8sning
+
+[54] Netherlands. "Conceptregeling bijmengverplichting groen gas." Draft implementing order and explanatory materials, public consultation July 2026. https://www.internetconsultatie.nl/bijmengverplichtinggroengasamvb/document/15871 (Retrieved 2026-07-15)
+
+[55] European Commission. "TRIS notification 25868, message 116103." Commission comments on the Netherlands' amended green-gas blending proposal, 26 June 2026. https://technical-regulation-information-system.ec.europa.eu/en/notification/25868/message/116103/EN (Retrieved 2026-07-15)
 
 ---
 

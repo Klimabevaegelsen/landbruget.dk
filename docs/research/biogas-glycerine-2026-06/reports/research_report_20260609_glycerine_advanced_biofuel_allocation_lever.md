@@ -1,9 +1,11 @@
-# The Allocation Lever: How Crude Glycerine Becomes Double-Counted "Advanced" Biomethane — Coefficient, Capture, and a Closing Window
+# The Allocation Lever: How Crude Glycerine Is Allocated to Advanced Biomethane — Coefficient, Capture, and a Closing Multiplier
 
 > **⚠️ Unverified draft — work in progress.** This report was produced by an AI-assisted research pipeline and has not been fact-checked, edited, or reviewed by a journalist or editor. Claims, figures, and sourcing may be incomplete, outdated, or wrong. Do not cite, publish, or act on this content as-is. Landbruget.dk takes no responsibility for its accuracy.
 
 
 **Research mode:** Deep · **Date:** 2026-06-09 · **Analyst:** Deep Research pipeline (8-phase) · **Companion to:** `research_report_20260609_danish_biogas_glycerine_subsidy.md`
+
+**Update -- 15 July 2026:** The Commission's current UDB material, the latest Dutch TRIS exchange and the current Dutch draft implementing order change the certificate analysis. GOs can be transferred for disclosure, but PoS-based compliance claims remain tied to mass balance, UDB and national eligibility rules. The Dutch forward-looking value case is therefore conditional, not automatic.
 
 ---
 
@@ -13,13 +15,13 @@ The value that makes crude glycerine (*råglycerin*) worth more than its chemist
 
 - **The literal coefficient is 421 m³ CH₄ per tonne.** ISCC EU 205 allocates a co-digestion plant's gas to its feedstocks using literature methane-yield tables — naming the German *Biomasseverordnung* (BiomasseV) and KTBL [1]. BiomasseV Anlage 1 assigns **"Glyzerin" = 421 m³ CH₄/tonne fresh mass** [2] — **~99% of the pure-glycerol stoichiometric ceiling of 426 m³/t** [4]. But it is applied to *crude* glycerine that is legally only **≥70% glycerol** (typically 77–90%) [3][5]. Crediting near-pure yield to a dilute feedstock **over-attributes the advanced GJ by ~20–40%**, and crude glycerine carries **zero upstream emissions** as a "residue" [1].
 
-- **Denmark itself no longer double-counts — so the premium is exported.** Denmark runs a pure GHG-displacement mandate since 2022 (BEK 978/2025) with **no multiplier**, and treats **subsidised biogas as natural-gas-equivalent** (≈zero transport credit) [7][8]. The premium therefore accrues only abroad — realised by **unbundling the attribute (book-and-claim GoO/PoS) and selling it into Germany/Netherlands/UK** while the molecule and Danish subsidy stay home [33][34].
+- **Denmark itself no longer double-counts — so any premium must be tested abroad.** Denmark runs a pure GHG-displacement mandate since 2022 (BEK 978/2025) with **no multiplier**, and treats **subsidised biogas as natural-gas-equivalent** (≈zero transport credit) [7][8]. A Danish GO can be transferred independently for disclosure, but a compliance PoS is not unrestricted book-and-claim. Any foreign value therefore depends on the destination's mass-balance, UDB, scheme and eligibility rules [33][34][37][38].
 
-- **A tonne of glycerine is worth ~2–2.5× as an advanced feedstock vs. as a chemical** — but the window is closing. ~15 GJ/t valued through double-counting markets adds **~€250–400/t** on a ~€280–350/t commodity [24][26][28][31], captured by the **obligated supplier/trader (Nature Energy→Shell, Gasum)**, not the plant [35]. **Germany and the Netherlands both abolish advanced double-counting on 1 Jan 2026** [25][27]; the 2× rent is a closing arbitrage.
+- **The historical value case was potentially ~2–2.5× the chemical value** — but it is not a safe forward assumption. ~15 GJ/t valued through reported pre-2026 markets was estimated at **~€250–400/t** on a ~€280–350/t commodity [24][26][28][31]. Germany and the Netherlands were reported as ending advanced double-counting from 1 January 2026 [25][27]. The current Dutch GGE proposal is a separate, still-developing regime: it would require GO+PoS on the same qualifying delivery and exclude operating-subsidized gas, including foreign gas [38].
 
-- **The fraud risk is structural, not yet evidenced for glycerine.** No public case names crude glycerine; the documented fraud is POME/UCO/HVO [16][22]. But glycerine shares all three vulnerabilities: the over-stated coefficient, a self-declaration-at-origin regime with **no upstream tracing or yield verification** [15][18], and a thin, shrinking supply. The EU Union Database is non-mandatory and traces transactions, not physical supply [19]; the threatened ISCC suspension was never executed [20][21].
+- **The fraud risk is structural, not yet evidenced for glycerine.** No public case names crude glycerine; the documented fraud is POME/UCO/HVO [16][22]. But glycerine shares potential vulnerabilities: the coefficient, point-of-origin controls and a thin, shrinking supply. The UDB is now operational for gaseous renewable and recycled-carbon fuels, with verified injection volumes and Transfer Gas PoS movements, but it is not molecule-level tracing and cannot by itself prove that a glycerine allocation is plausible [19][37]. The threatened ISCC suspension was never executed [20][21].
 
-**Primary recommendation:** The durable lever is the **coefficient (421 m³/t on ≥70% feedstock) plus book-and-claim export**, not the soon-dead multiplier.
+**Primary recommendation:** Focus on the **coefficient (421 m³/t on ≥70% feedstock)** and test any GO export or PoS transfer separately. Do not describe PoS as unrestricted book-and-claim or assume current Dutch eligibility.
 
 **Confidence:** High on the coefficient, the Danish no-multiplier rule, and the 2026 abolition; Medium on certificate-price figures (broker/secondary) and on glycerine-specific fraud (absence of evidence).
 
@@ -63,25 +65,25 @@ Two provisions make Denmark actively *hostile* to a domestic glycerine double-di
 
 The obligation falls on *"enhver virksomhed"* that delivers transport fuel — in practice Circle K, OK, Q8/F24, Shell/DCC and Uno-X — reporting delivered volumes, types and emissions to Energistyrelsen by 31 March, with export and B2B sales exempt [11][12]. And biomethane-to-transport is still a **minor** Danish outlet: KEFM assumes new tender output goes to the gas grid, with transport only an emerging option that RED III newly opens [13]. The implication is structural: if the advanced premium cannot be earned on subsidised molecules inside Denmark, it must be earned by **moving the green attribute to a market that still pays for it** (Finding 3).
 
-### Finding 3: The premium is realised by exporting the attribute — book-and-claim into DE/NL/UK
+### Finding 3: Disclosure attributes can be exported; compliance value is conditional
 
-Biomethane's sustainability value is **unbundled** from its molecules. The attribute travels as a tradable certificate — a Guarantee of Origin (GoO) or Proof of Sustainability (PoS) — under a **book-and-claim** system: *"These certificates can be traded irrespective of the physical flow of the renewable gas... Green Gas Certificates booked out according to Book & Claim can be traded abroad"* [33]. So a Danish plant can sell its physical gas into the Danish grid (collecting the pristillæg), and **separately sell the Annex IX Part A "advanced" attribute** into a foreign mandate that double-counts it.
+Biomethane's disclosure attribute can be separated from its molecules. A Guarantee of Origin (GO/GoO) may be transferred independently of physical energy. A Proof of Sustainability (PoS), however, is a compliance document moving through a mass-balance and certification chain, not an unrestricted book-and-claim instrument. ERGaR's book-and-claim description therefore cannot be used to prove that a Danish PoS was eligible in every foreign mandate [33]. A Danish plant may sell physical gas into the Danish grid while a GO moves abroad; any separate Annex IX compliance value requires proof of the applicable PoS and destination rules.
 
-The cross-border plumbing is established and Danish-specific. Energinet has documented Danish biomethane certificate sales into Germany since 2017 — *"Danish Nature Energy entering into an agreement with German car manufacturer Audi on the delivery of biogas certificates"* — and notes that GoOs *"can currently be easily transferred from Denmark to Germany's biomethane register"* [34]. Denmark is the most liquid biomethane market in Europe (**8.2 TWh** grid injection in 2024), with Danish GoOs quoted around **€13/MWh** in the Nordic region, stacked on top of the molecule price [32]. The same producers are the conduit: **Nature Energy is now Shell** (Low Carbon Solutions Biogas) and **Gasum** is buying Danish plants and running bio-LNG [14] — i.e. the entities that monetise the attribute abroad are the integrated supplier/traders, exactly the actors in the existing certificate-arbitrage thread.
+The cross-border GO plumbing is established and Danish-specific. Energinet documented Danish biomethane certificate sales into Germany since 2017 and noted that GoOs could be transferred to Germany's biomethane register [34]. Denmark is a liquid biomethane market, with the historical volumes and prices cited in [32]. Those facts show a GO route, not that any particular glycerine-attributed PoS was accepted in a German, Dutch or UK compliance system. The latest Dutch TRIS exchange also shows that foreign gas, physical transport and GO/PoS/UDB coupling remain live regulatory questions [39].
 
-Who captures the spread is therefore not the farm or even the digester, but the **obligated fuel supplier or the producer-acting-as-distributor**: *"The resulting GHG quota is either sold directly to the obligated companies if the producers also act as distributors... The placing on the market or refuelling of the biomethane generates the quota"* [35]. The glycerine-derived advanced GJ — over-stated at source per Finding 1 — is thus minted in Denmark as a certificate and **realised as double-counted value in Germany, the Netherlands or the UK**, with the rent landing downstream.
+Who captures any spread depends on the contract and the destination scheme. German market analysis describes the obligated supplier or producer-distributor as a possible quota claimant [35]. The glycerine-derived GJ is therefore a potential Danish allocation whose GO disclosure value may travel abroad; its PoS-based compliance value and any premium must be demonstrated in the destination registry and cannot be assumed to be double-counted.
 
-### Finding 4: The value math — ~€250–400/t premium, ~2–2.5× the commodity, and a 2026 cliff
+### Finding 4: The historical value math — and why it cannot be carried forward automatically
 
-Quantifying the premium per tonne of glycerine: one tonne → ~421 m³ CH₄ [2] → ~**15 GJ** of advanced biomethane (CH₄ ≈ 0.036 GJ/m³). Valued through the three double-counting markets:
+The historical scenario can be modelled as follows: one tonne → ~421 m³ CH₄ [2] → ~**15 GJ** of allocated biomethane (CH₄ ≈ 0.036 GJ/m³). The market values below are historical/secondary estimates and should not be treated as current guaranteed revenue:
 
-- **Netherlands (HBE).** One HBE = 1 GJ delivered renewable energy [23], and because the system is energy-based, **double-counted Annex IX fuel earns 2 HBE per physical GJ**. Advanced "HBE-G" peaked at **€9.30–9.50/GJ** in 2022, with the marginal 2023 advanced premium **€3.10–3.40/GJ** [24]. Roughly **€135–285/t** glycerine.
-- **Germany (THG-Quote).** Manure-class biomethane captured a green premium of **€60–140/MWh (≈€16.7–38.9/GJ)** in 2024, with Annex IX Part A double-counting doubling the per-energy value [28]. The THG price itself ran **~€80/t CO₂e (late 2024) → €150–160 (end-2025) → €310–340/t (June 2026)** [26]. Roughly **€250–585/t** glycerine.
+- **Netherlands (historical HBE).** One HBE represented 1 GJ delivered renewable energy [23], and the historical energy-based system applied multipliers to eligible Annex IX fuel. Advanced "HBE-G" peaked at **€9.30–9.50/GJ** in 2022, with the marginal 2023 advanced premium **€3.10–3.40/GJ** [24]. Roughly **€135–285/t** glycerine in that historical scenario. This is not a current Dutch GGE eligibility finding.
+- **Germany (THG-Quote).** Manure-class biomethane was reported to capture a green premium of **€60–140/MWh (≈€16.7–38.9/GJ)** in 2024, with pre-2026 Annex IX treatment affecting the per-energy value [28]. The cited THG price series ran **~€80/t CO₂e (late 2024) → €150–160 (end-2025) → €310–340/t (June 2026)** [26]. Roughly **€250–585/t** in the historical scenario, subject to post-reform eligibility and registry evidence.
 - **UK (RTFO).** Waste-derived biomethane earns **3.8 RTFCs/kg** (double the 1.9 for non-waste) ≈ **~£15/GJ**; the development (advanced) sub-target carries an **80p/certificate** buy-out [29][30]. Roughly **€270/t** glycerine.
 
-Centred, the **certificate/premium value alone is ~€250–400/t**, stacked on the molecule. Against a European crude-glycerine commodity price of **~€280–350/t** in 2024 (DST/market: $610/t 2022 → $281/t 2024 → $806/t Feb-2025 → $550/t May-2025) [31], the double-counted advanced attribute is worth on the order of **0.8–1.7× the chemical value again** — i.e. the molecule is worth roughly **~2–2.5× as a double-counted advanced biomethane feedstock as it is as a chemical.** That premium is the economic gravity pulling scarce glycerine toward biomethane and away from oleochemistry.
+The historical estimate of **~€250–400/t** is therefore a scenario range, not a current price. Against a European crude-glycerine commodity price of **~€280–350/t** in 2024 [31], the reported attribute value could have been material. It should not be described as a current 2–2.5× multiplier without confirming the destination scheme, PoS eligibility, contract and market price.
 
-The decisive caveat is timing. **Both Germany and the Netherlands abolish advanced double-counting from 1 January 2026** under RED III transposition: Germany confirmed *"double crediting of advanced biofuels will cease from January 1, 2026"* (with the quota raised to 12.1%, pushing THG prices above €300/t) [27], and the Netherlands switches from the energy-based HBE system to a GHG-based ERE system with *"no multipliers or double-counting of tickets... the end of... the Dutch double counting of RED Annex IX biofuels"* [25]. Denmark never double-counted. So the **2× arbitrage is a closing window**: post-2026 the value compresses toward single-count GHG worth, and the historical doubling becomes a one-time rent rather than a durable structural subsidy. What persists is the **coefficient over-attribution** (Finding 1) and the **book-and-claim attribute export** (Finding 3) — both of which survive the death of the multiplier.
+The decisive caveat is timing and legal status. Market reporting described Germany and the Netherlands as ending advanced double-counting from 1 January 2026 [25][27], while the current Dutch GGE proposal would require GO+PoS on the same qualifying delivery and exclude operating-subsidized gas, including foreign gas [38]. Denmark never double-counted under the cited rule. The historical 2× scenario should therefore be treated as closed or unavailable unless a current scheme proves otherwise. GO disclosure transfer may persist, but that is not the same as PoS-based compliance value.
 
 ### Finding 5: The integrity gap is structural — and glycerine is the un-probed feedstock
 
@@ -89,7 +91,7 @@ No public enforcement case (2023–2026) names crude glycerine. The documented E
 
 Yet glycerine carries all three structural vulnerabilities. First, the **crude/refined boundary is a customs purity line**, not a biofuel test: glycerol ≥95% purity is HS 2905.45 (a chemical, *not* Annex IX); below 95% it is HS 1520 crude glycerine — the Annex IX Part A(i) advanced feedstock [17]. That threshold invites **mislabel-refined-as-crude** to access double-counting. Second, RED's Implementing Regulation 2022/996 fixes waste/residue status at the **point of origin via producer self-declaration**, and *"It is the responsibility of the auditor to check that at the point of origin no false declaration of a material has taken place"* — with **no requirement to trace the upstream process or verify the claimed by-product yield** [18][15]. So both levers in Finding 1's equation — declared tonnage and the assumed yield — rest on self-declaration. Third, supply is thin and shrinking, the precondition for over-declaration.
 
-The EU control response does not yet close the gap. The **Union Database (UDB)** was to be established by 21 Nov 2024 (RED III Art 31a) and extended to gaseous fuels including biomethane [19], but the **mandatory date for economic operators is still unfinalised** and it traces *transactions*, not *physical supply* — so it cannot by itself detect declared glycerine exceeding plausible global availability [19][15]. The threatened **ISCC suspension** (a drafted 30-month pause on obligatory acceptance of ISCC EU for waste-based biofuels, ~3.7 mtoe and >€4bn at risk) was discussed on 26 March 2025 but **never executed**, resolving instead toward tighter controls and UDB onboarding [20][21]. Net: glycerine is the residue the fraud-hunters have **not yet quantified**, sitting behind the same certification weaknesses that produced the POME scandal.
+The UDB is now described by the Commission as covering liquid and gaseous renewable and recycled-carbon fuels, including biomethane. Injected gaseous volumes are verified by TSOs/DSOs; Transfer Gas PoS can move volumes and PoS between UDB accounts within the integrated grid, with a formal transaction recorded at exit or final consumption [37]. This is materially more operational than the earlier report suggested. It still is not molecule-level tracing and cannot by itself determine whether a declared glycerine tonnage or yield is plausible against global supply. The threatened **ISCC suspension** was discussed in 2025 but **never executed** [20][21]. Net: glycerine remains a residue for which the fraud literature has not published a supply-vs-claims test, but the control baseline is an operational UDB plus certification and audit requirements, not an unimplemented database.
 
 ---
 
@@ -97,21 +99,21 @@ The EU control response does not yet close the gap. The **Union Database (UDB)**
 
 ### Patterns Identified
 
-**Pattern 1 — Two levers, different lifespans.** The glycerine "advanced" premium is the product of (a) an **over-stated yield coefficient** applied to a dilute, zero-upstream-emission feedstock, and (b) a **double-count multiplier**. Findings 1 and 4 show these are separable, and they expire on different clocks: the multiplier dies 1 Jan 2026 in the only markets that grant it (DE, NL; never in DK), while the coefficient and the zero-emissions credit persist in the GHG accounting indefinitely. Analysis that treats "double-counting" as the whole story will mis-date the problem.
+**Pattern 1 — Two levers, different lifespans.** The glycerine "advanced" value may reflect (a) an allocation coefficient applied to a dilute, zero-upstream-emission feedstock, and (b) a historical double-count multiplier. Findings 1 and 4 show these are separable. Market reporting says the multiplier ended or was being removed in Germany and the Netherlands from 1 January 2026, while the coefficient and emissions accounting remain questions for current certification and audit rules. Analysis that treats "double-counting" as the whole story will mis-date the problem.
 
-**Pattern 2 — Value is minted where it's cheap to declare and realised where it's dear to count.** Denmark is an efficient place to *produce* the attribute (liquid registry, 8.2 TWh, the pristillæg covering the molecule) but a worthless place to *count* it (pure GHG mandate; subsidised biogas = natural gas). The book-and-claim split resolves the contradiction by separating the molecule (stays in DK) from the attribute (sold to DE/NL/UK). The integrity-weak step (self-declared crude glycerine + default yield) and the value-rich step (foreign double-count) are in different jurisdictions — which is precisely what makes the chain hard to audit end-to-end.
+**Pattern 2 — Disclosure value can move more easily than compliance value.** Denmark is an efficient place to produce biomethane and issue certificates, but its cited transport rule gives subsidised biogas no advanced transport credit. A GO may move separately from the molecule; a PoS-based claim must follow the applicable mass-balance, UDB and national rules. The integrity-sensitive step (declared crude glycerine + default yield) and any foreign compliance value are in different jurisdictions, which makes the chain hard to audit end-to-end.
 
 ### Novel Insights
 
-**Insight 1 — The durable distortion is the coefficient, not the multiplier.** Once the 2026 abolitions land, commentary will likely declare the "advanced biofuel loophole" closed. It won't be. The 421 m³/t coefficient on ≥70%-pure feedstock, plus zero upstream emissions, still over-credits glycerine biomethane's GHG saving on a single-count basis — a quieter, permanent thumb on the scale that no one is sunsetting. The investigative target should migrate from "double-counting" to "the yield-and-purity assumption."
+**Insight 1 — The coefficient deserves more scrutiny than the historical multiplier.** Even after reported 2026 reforms, the 421 m³/t coefficient on ≥70%-pure feedstock and the zero-upstream-emissions treatment may affect the calculated GHG saving. Whether that is over-crediting depends on the applicable scheme, feedstock evidence and audit method; the investigative target should be the yield-and-purity assumption, not an assumed current multiplier.
 
-**Insight 2 — Glycerine is the POME analogue waiting to be measured.** Every structural precondition that produced the POME scandal is present for glycerine: a customs purity line that rewards mislabeling, self-declaration with no upstream tracing, a double-count premium (until 2026), and a physical supply too thin to meet plausible claims. The one missing element is the arithmetic. A supply-vs-claims test — EU advanced-biomethane GJ attributed to crude glycerine versus global crude-glycerine availability (~10% of FAME, minus chemical/pharma uses, minus the HVO-driven decline) — has not been published. That is a discrete, high-value piece of original analysis.
+**Insight 2 — Glycerine is a fraud-risk analogue waiting to be measured.** Some vulnerabilities resemble those identified in POME cases: a purity boundary, point-of-origin declarations and limited public supply data. No glycerine-specific case is established here. The missing arithmetic is a supply-vs-claims test — EU biomethane GJ attributed to crude glycerine versus plausible global crude-glycerine availability — which remains a discrete, high-value piece of original analysis.
 
-**Insight 3 — The 2026 cliff will redirect, not retire, the scarce molecule.** With the double-count gone in DE/NL, the per-tonne premium compresses by roughly half. But glycerine remains scarce and shrinking (HVO yields none), and its zero-upstream, high-yield GHG profile still makes it the cheapest way to lower a biomethane stream's carbon intensity. Expect the competition to persist as a *carbon-intensity* play rather than a *volume-multiplier* play — and watch whether declared glycerine volumes fall after 2026 (genuine demand) or hold (the multiplier was never the only driver).
+**Insight 3 — The 2026 change redirects the question.** If the historical double-counting mechanisms are no longer available, the value case should be rebuilt around current GHG intensity, GO disclosure value, PoS eligibility and the coefficient/audit treatment. Glycerine may remain commercially attractive, but the size and destination of any premium require current scheme evidence.
 
 ### Implications
 
-For the investigation, the chain now reads end-to-end: **scarce imported glycerine → over-stated 421 m³/t allocation → advanced/Annex IX PoS minted in Denmark → attribute exported book-and-claim to a double-counting market → ~€250–400/t rent captured by Shell/Gasum-type suppliers → window closing 1 Jan 2026.** It connects the manure/feedstock layer to the GoO-arbitrage layer through a single, quotable coefficient. Broader implication: GHG-based mandates (the EU's direction of travel) quietly retain the coefficient distortion even as they kill the headline multiplier — the reform is less complete than it appears.
+For the investigation, the defensible chain is: **scarce glycerine → allocation coefficient → biomethane certificate/PoS subject to certification → GO disclosure export and, where separately proven, a destination compliance claim.** The historic value range should not be treated as a current rent, and the Dutch route is conditional under the current draft. The key open question is whether the coefficient and feedstock allocation survive current audit and GHG rules.
 
 ---
 
@@ -119,9 +121,9 @@ For the investigation, the chain now reads end-to-end: **scarce imported glyceri
 
 ### Counterevidence Register
 
-**Contradictory finding 1 — Denmark grants no multiplier, undercutting a naïve "DK double-subsidy via glycerine" claim.** BEK 978/2025 is explicit: pure GHG displacement, and subsidised biogas counted as natural gas [7]. *Resolution:* the premium is real but **extraterritorial** — realised via attribute export, not in DK. The claim must be stated as cross-border, not domestic. *Impact: significant — it reframes where the value lands.*
+**Contradictory finding 1 — Denmark grants no multiplier, undercutting a naïve "DK double-subsidy via glycerine" claim.** BEK 978/2025 is explicit: pure GHG displacement, and subsidised biogas counted as natural gas [7]. *Resolution:* any premium must be demonstrated in a foreign destination; a Danish GO export is not proof of foreign PoS compliance value. *Impact: significant — it reframes where the value may land.*
 
-**Contradictory finding 2 — The double-count dies in 2026.** DE and NL abolish it [25][27]. *Resolution:* the multiplier rent is a closing window; the durable mechanics are the coefficient and book-and-claim. *Impact: significant for any forward-looking valuation.*
+**Contradictory finding 2 — The historical double-counting markets changed in 2026.** Market sources report DE and NL reforms [25][27], while the current Dutch GGE proposal adds GO/PoS and subsidy conditions [38]. *Resolution:* treat the multiplier as historical unless a current scheme confirms eligibility; rebuild forward valuation from current rules. *Impact: significant for any forward-looking valuation.*
 
 **Contradictory finding 3 — No glycerine-specific fraud is proven.** All named cases are UCO/POME/HVO [22]. *Resolution:* report the risk as structural/analogous, explicitly not evidenced. *Impact: moderate — it bounds the strength of any fraud claim.*
 
@@ -143,9 +145,9 @@ The exact 2030 Danish advanced/RFNBO sub-mandate counting rules, and whether any
 
 ### Immediate Actions
 
-1. **Reframe the claim around the coefficient and the export.** State it as: *"Crude glycerine biomethane is allocated a near-pure-glycerol yield (421 m³ CH₄/t) on a ≥70%-pure feedstock with zero upstream emissions, minting over-stated Annex IX 'advanced' certificates in Denmark that are exported book-and-claim to double-counting markets (DE/NL/UK, until 1 Jan 2026) and captured by integrated suppliers."* Defensible and precise.
+1. **Reframe the claim around the coefficient and conditional export.** State it as: *"Crude glycerine may be allocated a near-pure-glycerol yield (421 m³ CH₄/t) on a ≥70%-pure feedstock with zero upstream emissions. Danish GOs may be exported for disclosure; any Annex IX/PoS compliance value requires proof of the current destination scheme, UDB/mass-balance chain and contract."*
 2. **Run the glycerine supply-vs-claims test** (the missing POME-style arithmetic): EU advanced-biomethane GJ attributed to crude glycerine vs. plausible global crude-glycerine supply. This is the single highest-value original analysis available.
-3. **Note the 2026 cliff in any valuation** — model the premium pre- and post-abolition.
+3. **Note the 2026 rule change in any valuation** — model historical pre-reform values separately from current GO, PoS and GGE eligibility.
 
 ### Next Steps
 
@@ -235,6 +237,12 @@ The exact 2030 Danish advanced/RFNBO sub-mandate counting rules, and whether any
 
 [36] S&P Global Commodity Insights. "Biomethane GOs cross-border trading needs a harmonized EU registry system." https://www.spglobal.com/commodity-insights/en/news-research/latest-news/energy-transition/102621-feature-biomethane-gos-cross-border-trading-needs-a-harmonized-eu-registry-system (Retrieved 2026-06-09)
 
+[37] European Commission. "Union Database for liquid and gaseous renewable and recycled carbon fuels." Current UDB scope, verified gas injection volumes and Transfer Gas PoS movements. https://energy.ec.europa.eu/topics/renewable-energy/bioenergy/biofuels/union-database-liquid-and-gaseous-renewable-and-recycled-carbon-fuels_en (Retrieved 2026-07-15)
+
+[38] Netherlands. "Conceptregeling bijmengverplichting groen gas." Draft implementing order and explanatory materials, public consultation July 2026. https://www.internetconsultatie.nl/bijmengverplichtinggroengasamvb/document/15871 (Retrieved 2026-07-15)
+
+[39] European Commission. "TRIS notification 25868, message 116103." Commission comments on the Netherlands' amended green-gas blending proposal, 26 June 2026. https://technical-regulation-information-system.ec.europa.eu/en/notification/25868/message/116103/EN (Retrieved 2026-07-15)
+
 ---
 
 ## Appendix: Methodology
@@ -257,11 +265,11 @@ The exact 2030 Danish advanced/RFNBO sub-mandate counting rules, and whether any
 
 ### Sources Consulted
 
-**Total cited:** 36. **Types:** EU/German/Danish primary law & regulators (RED III/2022/996, BiomasseV, BEK 978/2025, biobrændstofloven, Energistyrelsen, KEFM, EC UDB) ~12; ISCC scheme docs 2; certificate-market analysts (Argus ×2, Veyt, Fastmarkets, emobility, CEGH/Platts, AD/ADBA) ~8; NGO/enforcement (T&E ×2, OCCRP) 3; peer-reviewed/technical (T&F, PMC, LfL/BGK) ~4; registry/trade (biogemexpress, Energinet, agriportance, S&P, Shell/Gasum, Q8) ~7. **Temporal:** mostly 2024–2026; foundational AD/BiomasseV 2012.
+**Total cited:** 39. **Types:** EU/German/Danish primary law & regulators (RED III/2022/996, BiomasseV, BEK 978/2025, biobrændstofloven, Energistyrelsen, KEFM, EC UDB, Dutch TRIS/AMvB) ~15; ISCC scheme docs 2; certificate-market analysts (Argus ×2, Veyt, Fastmarkets, emobility, CEGH/Platts, AD/ADBA) ~8; NGO/enforcement (T&E ×2, OCCRP) 3; peer-reviewed/technical (T&F, PMC, LfL/BGK) ~4; registry/trade (biogemexpress, Energinet, agriportance, S&P, Shell/Gasum, Q8) ~7. **Temporal:** mostly 2024–2026; foundational AD/BiomasseV 2012.
 
 ### Verification Approach
 
-**Triangulation:** The coefficient (C: 421 m³/t) is anchored on the statutory BiomasseV value [2], corroborated by the Buswell ceiling [4] and ISCC's naming of BiomasseV/KTBL [1]. The Danish no-multiplier finding rests on the BEK text [7] plus two independent restatements [8][9][13]. The 2026 abolition is confirmed independently for DE [27] and NL [25].
+**Triangulation:** The coefficient (C: 421 m³/t) is anchored on the statutory BiomasseV value [2], corroborated by the Buswell ceiling [4] and ISCC's naming of BiomasseV/KTBL [1]. The Danish no-multiplier finding rests on the BEK text [7] plus two independent restatements [8][9][13]. Historical 2026 reforms are reported for DE [27] and NL [25], while the current Dutch draft and Commission exchange were checked separately for forward eligibility [38][39]. The current UDB status was checked against the Commission's own documentation [37].
 
 **Credibility:** Primary law and scheme documents weighted highest; certificate prices (medium, broker/secondary) used for magnitude not precision; fraud absence stated explicitly rather than inferred.
 
@@ -275,12 +283,12 @@ The exact 2030 Danish advanced/RFNBO sub-mandate counting rules, and whether any
 | C2 | 421 ≈ 99% of pure-glycerol ceiling, applied to ≥70%-pure crude → ~20–40% over-attribution | Statutory + peer-reviewed | [2][3][4][5] | Medium-High |
 | C3 | Denmark applies **no double-count**; pure CO₂e mandate since 2022 | Primary law + regulator | [7][8][9] | High |
 | C4 | **Subsidised biogas = natural-gas-equivalent** in DK transport (≈zero credit) | Primary law | [7][13] | High |
-| C5 | Premium realised by **book-and-claim attribute export** to DE/NL/UK | Registry/trade | [33][34][32] | Medium-High |
+| C5 | Danish GOs can be exported; PoS-based premium is conditional on destination rules | Registry/trade + current regulatory material | [33][34][37][38][39] | Medium |
 | C6 | Premium ~**€250–400/t**, ~2–2.5× commodity value | Market analysts | [24][26][28][29][31] | Medium |
 | C7 | Capture sits with **obligated supplier/trader (Shell/Gasum)** | Trade analysis | [35][14] | Medium |
-| C8 | **DE & NL abolish double-counting 1 Jan 2026**; DK never had it | Market/regulatory | [25][27] | High |
+| C8 | Market sources report DE/NL 2026 reforms; current Dutch GGE route remains rule-dependent | Market/regulatory | [25][27][38][39] | Medium-High |
 | C9 | **No glycerine-specific fraud** case; risk structural (POME/UCO precedent) | NGO/enforcement | [15][16][22] | Medium-High |
-| C10 | UDB non-mandatory & traces transactions; ISCC suspension never executed | EC + scheme + analyst | [19][20][21] | Medium-High |
+| C10 | UDB is operational for gas volumes/Transfer Gas PoS but is not molecule-level tracing; ISCC suspension never executed | EC + scheme + analyst | [19][20][21][37] | High for UDB status; Medium for fraud-control effect |
 
 **Confidence:** High = 3+ independent sources; Medium-High = strong but partly secondary; Medium = broker/secondary or interpretive.
 
@@ -288,4 +296,4 @@ The exact 2030 Danish advanced/RFNBO sub-mandate counting rules, and whether any
 
 ## Report Metadata
 
-**Research Mode:** Deep · **Total Sources Cited:** 36 · **Approx. Word Count:** ~4,800 · **Generated:** 2026-06-09 · **Key reframe:** the durable lever is the 421 m³/t coefficient on ≥70%-pure feedstock + book-and-claim attribute export; the double-count multiplier is a rent expiring 1 Jan 2026 (DE/NL; never in DK) · **Validation:** self-validated — every in-text [N] has a bibliography entry; no placeholders.
+**Research Mode:** Deep · **Total Sources Cited:** 39 · **Approx. Word Count:** ~4,800 · **Generated:** 2026-06-09, updated 2026-07-15 · **Key reframe:** the durable investigative question is the 421 m³/t coefficient and feedstock allocation, while GO export and PoS compliance value must be analysed separately under current UDB and national rules; the historical multiplier is not a safe forward assumption · **Validation:** self-validated — every in-text [N] has a bibliography entry; no placeholders.
