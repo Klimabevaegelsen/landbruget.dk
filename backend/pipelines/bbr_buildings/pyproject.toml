@@ -13,7 +13,7 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "duckdb",
     "shapely>=2.0.0",
-    "pyogrio>=0.12.1",
+    "pyogrio>=0.13.0",
     "pydantic",
     "python-dotenv>=1.0.0",
     "pyarrow>=25.0.0",
