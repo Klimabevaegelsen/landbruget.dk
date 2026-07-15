@@ -63,7 +63,7 @@
     "codehike": "^1.1.0",
     "date-fns": "^4.4.0",
     "lodash": "^4.17.23",
-    "lucide-react": "^1.23.0",
+    "lucide-react": "^1.24.0",
     "maplibre-gl": "^5.24.0",
     "motion": "^12.42.0",
     "next": "^16.2.10",
