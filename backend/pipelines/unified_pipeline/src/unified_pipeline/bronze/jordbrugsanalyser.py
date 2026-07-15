@@ -37,9 +37,9 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     and request configuration.
 
     Performance Note:
-    Testing showed that downloading the full dataset in single requests is
-    ~730x faster than chunking (5,837 vs 8 features/second). The WFS server
-    is optimized for large single requests rather than many small ones.
+    Large layers (575k+ features) are fetched in paginated STARTINDEX/COUNT
+    chunks (batch_size). Single unlimited requests now time out server-side
+    (~300s) and return truncated GML, so pagination is required for reliability.
 
     Attributes:
         name (str): Human-readable name of the data source
@@ -69,9 +69,12 @@ class JordbrugsanalyserBronzeConfig(BaseJobConfig):
     start_year: int = 2012
     end_year: int = 2024
 
-    # Request configuration - optimized for full dataset downloads
-    # Testing showed full downloads are ~730x faster than chunking
-    batch_size: int = 0  # 0 = unlimited, download full dataset in one request
+    # Request configuration.
+    # NOTE: single unlimited requests (batch_size=0) now time out server-side
+    # (~300s) for the large layers (575k+ features), returning truncated/invalid
+    # GML that fails parsing (ValueError) and leaves corrupt bronze. Paginate
+    # instead: chunked STARTINDEX/COUNT requests complete fast and reliably.
+    batch_size: int = 25000  # features per WFS page (0 would download full dataset)
     max_concurrent: int = 1  # Process one year at a time for stability
     request_timeout: int = 600  # Increased timeout for full dataset downloads
 
