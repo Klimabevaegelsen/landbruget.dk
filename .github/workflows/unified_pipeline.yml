@@ -169,7 +169,7 @@ jobs:
           echo "✅ Sufficient disk space for memory-intensive processing: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
@@ -397,7 +397,7 @@ jobs:
           echo "✅ Sufficient disk space for pesticide processing: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
