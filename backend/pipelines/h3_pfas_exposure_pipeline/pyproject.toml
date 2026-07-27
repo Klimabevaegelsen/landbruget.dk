@@ -19,7 +19,7 @@ dependencies = [
     # Utilities
     "simple-singleton>=2.0.0",
     "psutil>=7.2.2",
-    "tqdm>=4.69.0",
+    "tqdm>=4.70.0",
     "landbruget-common",
 ]
 
