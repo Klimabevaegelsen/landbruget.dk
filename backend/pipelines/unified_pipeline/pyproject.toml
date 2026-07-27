@@ -20,7 +20,7 @@ dependencies = [
     "pyarrow>=25.0.0",
     "pydantic-settings>=2.14.2",
     "pydantic",
-    "pytz>=2026.2",
+    "pytz>=2026.3.post1",
     "python-dotenv>=1.1.0",
     "simple-singleton>=2.0.0",
     "tenacity>=9.1.4",
