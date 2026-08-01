@@ -15,6 +15,25 @@ export records the period explicitly as 1 August `YYYY` through 31 July
 `YYYY+1`. The job deliberately uses FVM fields from `YYYY+1`; it does not
 model changes in field geometry, field ID, or operator between the two years.
 
+### Historical field-CVR provenance
+
+The public FVM/LandbrugsGIS Marker WFS layers for the early years do not, by
+themselves, provide the complete field-level CVR values required for the
+CVR-and-crop match. For field years 2005, 2007, and 2008--2014, the FVM silver
+job can instead complete incomplete CVRs from a separate historical
+Fællesskema/IMK administrative extract. The original SAS-generated Excel files
+(`MARKER_<year>.xlsx`) are retained in the
+[Fields archive](https://drive.google.com/drive/folders/1RXaLAwJtAq_rJJJEgh7N3TMvnjlVE9Z0)
+and are converted to `silver/fields/.../MARKER_<year>.parquet`.
+
+The archive was received through *aktindsigt*. Its workbook metadata does not
+identify a publisher or request reference, and it is not reproducible from the
+public WFS/ZIP files alone. It supplies
+`Cvrnr`, `MarkblokNr_c`, `Mark Nr`, crop, and area. The enrichment joins it to
+FVM Marker records on mark-block number and field number, and only replaces
+missing or incomplete CVRs. The archive does not cover field year 2015, so it
+must not be cited as a source of a 2015 CVR match.
+
 ## Allocation rules
 
 The job only allocates records that meet all of these conditions:
