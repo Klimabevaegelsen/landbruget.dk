@@ -18,7 +18,7 @@ dependencies = [
     "lxml>=6.1.1,<6.2",
     "psutil>=7.2.2",
     "pyarrow>=25.0.0",
-    "pydantic-settings>=2.14.2",
+    "pydantic-settings>=2.15.0",
     "pydantic",
     "pytz>=2026.3.post1",
     "python-dotenv>=1.1.0",
