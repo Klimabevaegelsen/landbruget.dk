@@ -54,7 +54,7 @@
     "@radix-ui/react-tooltip": "^1.2.13",
     "@tailwindcss/typography": "^0.5.20",
     "@tanstack/react-table": "^8.21.3",
-    "@types/lodash": "^4.17.24",
+    "@types/lodash": "^4.17.25",
     "@types/react-vertical-timeline-component": "^3.3.6",
     "@vis.gl/react-maplibre": "^8.1.2",
     "class-variance-authority": "^0.7.1",
