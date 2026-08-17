@@ -18,7 +18,7 @@ dependencies = [
     "python-dotenv~=1.1.1",
     "cryptography>=50.0.0",
     "tqdm~=4.70.0",
-    "pyarrow~=25.0.0",
+    "pyarrow~=25.0.1",
     "duckdb",
     "loguru~=0.7.3",
     "simple-singleton~=2.0.0",
