@@ -9,7 +9,7 @@ authors = [
     { name = "Landbruget.dk Team" },
 ]
 dependencies = [
-    "pyarrow>=25.0.0",
+    "pyarrow>=25.0.1",
     "pyproj>=3.7.2",
     "shapely>=2.0.0",
     "ijson>=3.5.1",
