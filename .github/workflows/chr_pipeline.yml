@@ -1390,8 +1390,6 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
 
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
 
@@ -1406,14 +1404,6 @@ jobs:
           echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID" >> .env
 
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
-
-          # Add Supabase credentials for incremental processing tracking
-          if [[ -n "$SUPABASE_URL" ]]; then
-            echo "SUPABASE_URL=$SUPABASE_URL" >> .env
-          fi
-          if [[ -n "$SUPABASE_ANON_KEY" ]]; then
-            echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
-          fi
 
           # Set processing mode preferences
           echo "CHR_PROCESSING_MODE=${{ inputs.processing_mode || 'incremental' }}" >> .env
