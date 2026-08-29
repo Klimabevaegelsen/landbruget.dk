@@ -1,4 +1,5 @@
 'use client';
+import '@/lib/maplibre-worker';
 
 import * as React from 'react';
 import Map, {
