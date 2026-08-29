@@ -1,4 +1,5 @@
 'use client';
+import '@/lib/maplibre-worker';
 
 import React, {
   useEffect,
@@ -271,7 +272,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
             .__pmtiles_protocol_registered
         ) {
           const protocol = new Protocol();
-          maplibregl.default.addProtocol('pmtiles', protocol.tile);
+          maplibregl.addProtocol('pmtiles', protocol.tile);
           (
             window as unknown as { __pmtiles_protocol_registered?: boolean }
           ).__pmtiles_protocol_registered = true;
@@ -637,14 +638,14 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         map.setPaintProperty(
           'fields-fill',
           'fill-color',
-          paintProps['fill-color']
+          paintProps['fill-color'] as unknown as string
         );
 
         if (map.getLayer('fields-partial-coverage-base')) {
           map.setPaintProperty(
             'fields-partial-coverage-base',
             'fill-color',
-            paintProps['fill-color']
+            paintProps['fill-color'] as unknown as string
           );
         }
 
