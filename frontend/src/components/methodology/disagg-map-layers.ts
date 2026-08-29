@@ -1,3 +1,4 @@
+import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DisaggStepId } from '@/components/methodology/scrolly-disagg-views';
 
 const HIGHLIGHT_STEPS = new Set<DisaggStepId>([
@@ -21,7 +22,7 @@ const BURDEN_COLOR = [
   '#c4512c',
 ];
 
-type MapInstance = maplibregl.Map;
+type MapInstance = MaplibreMap;
 
 /** Add the highlight-fill and highlight-line layers for example fields. */
 export function addHighlightLayers(map: MapInstance, uuids: string[]) {
@@ -77,7 +78,7 @@ export function updateStepPaint(map: MapInstance, step: DisaggStepId) {
   const fillOpacity = isScale ? 0.6 : closeUp ? 0.5 : 0.08;
   for (const id of ['fields-fill', 'fields-overview-fill']) {
     if (!map.getLayer(id)) continue;
-    map.setPaintProperty(id, 'fill-color', fillColor);
+    map.setPaintProperty(id, 'fill-color', fillColor as unknown as string);
     map.setPaintProperty(id, 'fill-opacity', fillOpacity);
   }
   const lineColor = closeUp ? '#4a6741' : '#5f6b80';
@@ -91,7 +92,11 @@ export function updateStepPaint(map: MapInstance, step: DisaggStepId) {
   }
 
   // Highlighted example fields
-  map.setPaintProperty('method-highlight-fill', 'fill-color', color);
+  map.setPaintProperty(
+    'method-highlight-fill',
+    'fill-color',
+    color as unknown as string
+  );
   map.setPaintProperty(
     'method-highlight-fill',
     'fill-opacity',

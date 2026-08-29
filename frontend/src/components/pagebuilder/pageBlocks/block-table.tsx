@@ -3,6 +3,7 @@
 import { BaseDataGrid } from '@/services/data/types';
 import { DynamicDataTable } from '@/components/table/dynamic-table';
 import { ColumnDef } from '@tanstack/react-table';
+import { DataTableFeatures } from '@/components/table/table-features';
 import {
   ArrowsUpDownIcon,
   ArrowUpIcon,
@@ -35,32 +36,34 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
       return null;
     }
   }
-  const columns: ColumnDef<Record<string, string | number | boolean>>[] =
-    grid.columns.map((col) => ({
-      accessorKey: col.key,
-      header: ({ column }) => {
-        return (
-          <div
-            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-            className="group flex cursor-pointer items-center"
-          >
-            {col.label}
-            {column.getIsSorted() === 'asc' ? (
-              <ArrowUpIcon className="text-foreground ml-2 size-3" />
-            ) : column.getIsSorted() === 'desc' ? (
-              <ArrowDownIcon className="text-foreground ml-2 size-3" />
-            ) : (
-              <div className="ml-2 size-3">
-                <ArrowsUpDownIcon className="hidden group-hover:block" />
-              </div>
-            )}
-          </div>
-        );
-      },
-      meta: {
-        format: (col as { format?: string }).format, // Pass format information to column
-      },
-    }));
+  const columns: ColumnDef<
+    DataTableFeatures,
+    Record<string, string | number | boolean>
+  >[] = grid.columns.map((col) => ({
+    accessorKey: col.key,
+    header: ({ column }) => {
+      return (
+        <div
+          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="group flex cursor-pointer items-center"
+        >
+          {col.label}
+          {column.getIsSorted() === 'asc' ? (
+            <ArrowUpIcon className="text-foreground ml-2 size-3" />
+          ) : column.getIsSorted() === 'desc' ? (
+            <ArrowDownIcon className="text-foreground ml-2 size-3" />
+          ) : (
+            <div className="ml-2 size-3">
+              <ArrowsUpDownIcon className="hidden group-hover:block" />
+            </div>
+          )}
+        </div>
+      );
+    },
+    meta: {
+      format: (col as { format?: string }).format, // Pass format information to column
+    },
+  }));
 
   return (
     <div className="">

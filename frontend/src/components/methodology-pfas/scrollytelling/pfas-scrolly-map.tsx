@@ -1,4 +1,5 @@
 'use client';
+import '@/lib/maplibre-worker';
 
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 

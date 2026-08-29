@@ -1,4 +1,5 @@
 'use client';
+import '@/lib/maplibre-worker';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Map, { Marker, MapRef } from '@vis.gl/react-maplibre';
@@ -114,7 +115,7 @@ function applyPaintMode(
     opacity = 0.5;
   }
   for (const id of layers) {
-    map.setPaintProperty(id, 'fill-color', color);
+    map.setPaintProperty(id, 'fill-color', color as unknown as string);
     map.setPaintProperty(id, 'fill-opacity', opacity);
   }
 }
