@@ -66,7 +66,7 @@
     "date-fns": "^4.4.0",
     "lodash": "^4.17.23",
     "lucide-react": "^1.35.0",
-    "maplibre-gl": "^6.5.0",
+    "maplibre-gl": "^6.6.0",
     "motion": "^13.1.1",
     "next": "^16.3.3",
     "next-themes": "^0.4.6",
