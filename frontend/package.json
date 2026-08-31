@@ -55,7 +55,7 @@
     "@radix-ui/react-toggle-group": "^1.1.19",
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tailwindcss/typography": "^0.5.20",
-    "@tanstack/react-table": "^9.1.2",
+    "@tanstack/react-table": "^9.2.4",
     "@types/lodash": "^4.17.25",
     "@types/react-vertical-timeline-component": "^3.3.6",
     "@vis.gl/react-maplibre": "^8.1.2",
