@@ -9,6 +9,7 @@ from unified_pipeline.gold.nles5_nitrogen_estimation.data_loader import NLES5Dat
 from unified_pipeline.gold.nles5_nitrogen_estimation.fertilizer_distributor import (
     NLES5FertilizerDistributor,
 )
+from unified_pipeline.gold.nles5_nitrogen_estimation.nles5_calculator import NLES5Calculator
 
 
 class _Log:
@@ -165,8 +166,72 @@ def test_gkea_loader_uses_storage_for_bare_bucket_paths(tmp_path) -> None:
     assert loader._process_gkea_field_plan_data(cloud_path, "field_plan_data")
     assert storage.created_paths == [cloud_path]
     assert connection.execute(
-        "SELECT cvr_number, marknummer, areal FROM field_plan_data"
-    ).fetchall() == [("01234567", "field-1", 12.5)]
+        "SELECT field_id, cvr_number, marknummer, areal FROM field_plan_data"
+    ).fetchall() == [("field-1", "01234567", "field-1", 12.5)]
+
+
+def test_cover_crops_are_normalized_for_cvr_field_year_join() -> None:
+    connection = duckdb.connect()
+    connection.execute(
+        """
+        CREATE TABLE catch_crops_data (
+            year VARCHAR,
+            cvr_number VARCHAR,
+            marknummer VARCHAR,
+            indberet_alternativ VARCHAR,
+            faktisk_areal_ha DOUBLE,
+            omregnet_areal_ha DOUBLE
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO catch_crops_data VALUES
+            ('2024', '01234567', '4-0', 'Efterafgrøder', 3.0, 2.5),
+            ('2024', '01234567', '4-0', 'Efterafgrøder', 1.0, 0.5),
+            ('2024', '07654321', '4-0', 'Alternativ', 5.0, 5.0)
+        """
+    )
+    processor = SimpleNamespace(config=SimpleNamespace(), log=_Log(), conn=connection)
+
+    NLES5Calculator(processor)._prepare_catch_crops_table()
+
+    assert connection.execute(
+        """
+        SELECT field_id, cvr_number, year, catch_crop_type, catch_crop_area_ha
+        FROM catch_crops
+        ORDER BY cvr_number
+        """
+    ).fetchall() == [
+        ("4-0", "01234567", 2024, "Efterafgrøder", 3.0),
+        ("4-0", "07654321", 2024, "Alternativ", 5.0),
+    ]
+
+
+def test_year_specific_fertiliser_files_are_discovered_together() -> None:
+    connection = duckdb.connect()
+    storage = _Storage(
+        connection,
+        paths=[
+            "landbruget-data/silver/fertiliser/run/GKEA2021_Markplan_med_Gødningsoplysninger.parquet",
+            "landbruget-data/silver/fertiliser/run/GKEA2024_Markplan_med_Gødningsoplysninger.parquet",
+            "landbruget-data/silver/fertiliser/run/Efterafgrøder 2021.parquet",
+            "landbruget-data/silver/fertiliser/run/Efterafgrøder 2024.parquet",
+        ],
+    )
+    loader = _loader(connection, storage)
+    loader._get_fertilizer_data_path = lambda _target_year=None: (
+        "landbruget-data/silver/fertiliser/run/"
+    )
+
+    assert loader._get_field_plan_data_paths([2021, 2024]) == [
+        "landbruget-data/silver/fertiliser/run/GKEA2021_Markplan_med_Gødningsoplysninger.parquet",
+        "landbruget-data/silver/fertiliser/run/GKEA2024_Markplan_med_Gødningsoplysninger.parquet",
+    ]
+    assert loader._get_catch_crops_data_paths([2021, 2024]) == [
+        "landbruget-data/silver/fertiliser/run/Efterafgrøder 2021.parquet",
+        "landbruget-data/silver/fertiliser/run/Efterafgrøder 2024.parquet",
+    ]
 
 
 def test_gr_year_prefers_directory_and_supports_two_digit_filename() -> None:
