@@ -556,7 +556,11 @@ class FertiliserTransformer(BaseTransformer):
     def _is_in_depth_main_register(filename: str) -> bool:
         """Identify the farm-level ``V_4061GR_*_ISKV*_6*`` export."""
         name = Path(filename).name.lower()
-        if not re.match(r"v_4061gr_(?:\d{2}|20\d{2})_iskv\d+_6(?:[a-z]|_|\.|$)", name):
+        # Google Drive exports can prefix the logical file name with a source
+        # system name (for example ``DCKKON.``).  Match the register token
+        # anywhere in the basename so those files still use the lossless
+        # in-depth path instead of the generic CSV transformer.
+        if not re.search(r"v_4061gr_(?:\d{2}|20\d{2})_iskv\d+_6(?:[a-z]|_|\.|$)", name):
             return False
         return not any(token in name for token in ("_b_", "dyrerk", "aftrk", "feltdefinition"))
 
@@ -565,9 +569,9 @@ class FertiliserTransformer(BaseTransformer):
         """Identify any raw table in an in-depth GR release."""
         name = Path(filename).name.lower()
         return bool(
-            re.match(r"v_4061gr_(?:\d{2}|20\d{2})_iskv\d+_(?:6|b_)", name)
-            or name.startswith("b_")
-            or re.match(r"(?:v|lg)_company[ab]\.", name)
+            re.search(r"v_4061gr_(?:\d{2}|20\d{2})_iskv\d+_(?:6|b_)", name)
+            or re.search(r"(?:^|[._-])b_", name)
+            or re.search(r"(?:^|[._-])(?:v|lg)_company[ab]\.", name)
         )
 
     def _process_in_depth_register(self, table_name: str, filename: str) -> str:
