@@ -816,10 +816,13 @@ class SilverProcessor:
                 # Use the persistent StorageAccess instance to avoid connection closure
                 storage_access = self._shared_storage_access
 
-                # Construct cloud storage path if needed
-                if not is_storage_path and using_cloud_storage:
+                # Construct the complete cloud storage path when using R2. The
+                # Silver manager returns paths relative to the bucket (e.g.
+                # ``gr_2025/<run>/<file>.parquet``), while StorageAccess
+                # requires ``<bucket>/silver/<path>``.
+                if using_cloud_storage:
                     bucket = getattr(self.storage_manager, "bucket_name", "landbruget-data")
-                    storage_path = f"{bucket}/silver/{output_path_str}"
+                    storage_path = self._get_cloud_storage_path(output_path_str, bucket)
                 else:
                     storage_path = output_path_str
 
@@ -871,6 +874,25 @@ class SilverProcessor:
             logger.warning(f"Failed to apply schema to {output_path}: {e!s}")
             return None
 
+    @staticmethod
+    def _get_cloud_storage_path(output_path: Path | str, bucket: str) -> str:
+        """Return a complete bucket/key path for a Silver or Bronze output.
+
+        Drive's R2 storage manager returns paths relative to the layer, while
+        ``StorageAccess`` accepts a bucket-qualified path. Preserve paths that
+        are already qualified so this helper is safe for both representations.
+        """
+        path = str(output_path).replace("\\", "/").lstrip("/")
+        bucket = bucket.strip("/")
+
+        if path.startswith(("r2://", "s3://")):
+            return path
+        if path == bucket or path.startswith(f"{bucket}/"):
+            return path
+        if path.startswith(("silver/", "bronze/")):
+            return f"{bucket}/{path}"
+        return f"{bucket}/silver/{path}"
+
     def _handle_pii_in_file(self, output_path: Path, silver_run_path: Path) -> Path | None:
         """Detect and handle PII in a processed file.
 
@@ -900,12 +922,11 @@ class SilverProcessor:
                 # Use the persistent StorageAccess instance to avoid connection closure
                 storage_access = self._shared_storage_access
 
-                # If we have a local path but are using cloud storage, construct the storage path
-                if not is_storage_path and using_cloud_storage:
-                    # Convert local path to cloud path using storage manager's bucket and base path
-                    # The output_path is relative to the silver base path
+                if using_cloud_storage:
+                    # Convert the Silver-relative output path to the complete
+                    # bucket-qualified key used by StorageAccess.
                     bucket = getattr(self.storage_manager, "bucket_name", "landbruget-data")
-                    storage_path = f"{bucket}/silver/{output_path_str}"
+                    storage_path = self._get_cloud_storage_path(output_path_str, bucket)
                 else:
                     storage_path = output_path_str
 
