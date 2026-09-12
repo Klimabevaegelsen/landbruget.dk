@@ -11,6 +11,7 @@ Refactored to use vanilla DuckDB instead of pandas.
 
 import contextlib
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -120,7 +121,9 @@ class FertiliserTransformer(BaseTransformer):
         main_match = any(pattern in filename for pattern in fertiliser_patterns)
 
         # In-depth patterns match (and in correct folder structure)
-        indepth_match = is_in_gr_folder and any(pattern in filename for pattern in indepth_patterns)
+        indepth_match = self._is_in_depth_register(filename) or (
+            is_in_gr_folder and any(pattern in filename for pattern in indepth_patterns)
+        )
 
         return main_match or indepth_match
 
@@ -158,6 +161,22 @@ class FertiliserTransformer(BaseTransformer):
                 self.conn.execute(f"""
                     CREATE TABLE {table_name} AS
                     SELECT * FROM read_parquet('{file_path}')
+                """)
+            elif file_suffix == ".csv":
+                # The GR 2024 release is a semicolon-delimited Latin-1 export.
+                # Keep every column as text so Danish decimal formatting is
+                # parsed later by the NLES5 loader without losing precision.
+                table_name = f"fertiliser_raw_{id(self)}"
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name} AS
+                    SELECT * FROM read_csv(
+                        '{file_path}',
+                        delim=';',
+                        header=true,
+                        all_varchar=true,
+                        ignore_errors=true,
+                        encoding='latin-1'
+                    )
                 """)
             else:
                 return TransformResult(
@@ -232,8 +251,8 @@ class FertiliserTransformer(BaseTransformer):
     def _read_excel_to_table(self, file_path: Path) -> str | None:
         """Read Excel file into a DuckDB table.
 
-        Uses DuckDB's spatial extension for xlsx reading, with fallback to
-        temporary CSV conversion.
+        Uses DuckDB's spatial extension for Excel reading, with an ``xlrd``
+        fallback for the legacy binary XLS files used by the GR 2025 release.
 
         Args:
             file_path: Path to the Excel file
@@ -255,6 +274,74 @@ class FertiliserTransformer(BaseTransformer):
             return table_name
         except Exception as spatial_e:
             logger.debug(f"Spatial extension xlsx read failed: {spatial_e}")
+
+        # openpyxl intentionally does not read the legacy binary XLS format
+        # used by the GR 2025 release.  xlrd does, and is already a pipeline
+        # dependency for this purpose.
+        if file_path.suffix.lower() == ".xls":
+            try:
+                import xlrd
+
+                workbook = xlrd.open_workbook(file_path, on_demand=True)
+                all_data: list[dict[str, object]] = []
+                for sheet in workbook.sheets():
+                    if sheet.nrows == 0:
+                        continue
+                    headers = [
+                        str(value) if value is not None and str(value) else f"col_{index}"
+                        for index, value in enumerate(sheet.row_values(0))
+                    ]
+                    for row_index in range(1, sheet.nrows):
+                        values = sheet.row_values(row_index)
+                        row = {
+                            headers[index]: value if value != "" else None
+                            for index, value in enumerate(values)
+                        }
+                        row["source_sheet"] = sheet.name
+                        all_data.append(row)
+                workbook.release_resources()
+
+                if not all_data:
+                    logger.warning(f"No data found in XLS file: {file_path.name}")
+                    return None
+
+                all_columns = sorted({column for row in all_data for column in row})
+                column_types = {}
+                for column in all_columns:
+                    column_values = [row.get(column) for row in all_data]
+                    non_empty_values = [value for value in column_values if value is not None]
+                    column_types[column] = (
+                        "DOUBLE"
+                        if non_empty_values
+                        and all(
+                            isinstance(value, (int, float)) and not isinstance(value, bool)
+                            for value in non_empty_values
+                        )
+                        else "VARCHAR"
+                    )
+                columns_def = ", ".join(
+                    f'"{column.replace(chr(34), chr(34) * 2)}" {column_types[column]}'
+                    for column in all_columns
+                )
+                self.conn.execute(f"CREATE TABLE {table_name} ({columns_def})")
+                insert_values = [
+                    tuple(row.get(column) for column in all_columns) for row in all_data
+                ]
+                placeholders = ", ".join("?" for _ in all_columns)
+                self.conn.executemany(
+                    f"INSERT INTO {table_name} VALUES ({placeholders})", insert_values
+                )
+
+                logger.info(
+                    f"Read XLS file using xlrd fallback: {file_path.name} ({len(all_data)} rows)"
+                )
+                return table_name
+            except ImportError:
+                logger.error("xlrd not installed - cannot read legacy XLS files")
+                return None
+            except Exception as e:
+                logger.error(f"Failed to read XLS file {file_path.name}: {e}")
+                return None
 
         # Fallback: Use Python's openpyxl to read and convert to CSV, then load
         try:
@@ -356,6 +443,19 @@ class FertiliserTransformer(BaseTransformer):
                         CREATE TABLE {table_name} AS
                         SELECT * FROM read_parquet('{tmp_path}')
                     """)
+                elif file_suffix == ".csv":
+                    table_name = f"fertiliser_content_{id(self)}"
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name} AS
+                        SELECT * FROM read_csv(
+                            '{tmp_path}',
+                            delim=';',
+                            header=true,
+                            all_varchar=true,
+                            ignore_errors=true,
+                            encoding='latin-1'
+                        )
+                    """)
                 else:
                     logger.error(f"Unsupported file type for fertiliser transformer: {file_suffix}")
                     return None
@@ -425,6 +525,8 @@ class FertiliserTransformer(BaseTransformer):
 
             if "efterafgrøder" in filename_lower or "efterafgroeder" in filename_lower:
                 return self._process_efterafgroeder(table_name, filename)
+            if self._is_in_depth_register(filename):
+                return self._process_in_depth_register(table_name, filename)
             if "gkea" in filename_lower:
                 return self._process_gkea(table_name, filename)
             if (
@@ -449,6 +551,86 @@ class FertiliserTransformer(BaseTransformer):
         if column_name in column_names:
             return f'"{column_name}"'
         return "NULL"
+
+    @staticmethod
+    def _is_in_depth_main_register(filename: str) -> bool:
+        """Identify the farm-level ``V_4061GR_*_ISKV*_6*`` export."""
+        name = Path(filename).name.lower()
+        if not re.match(r"v_4061gr_(?:\d{2}|20\d{2})_iskv\d+_6(?:[a-z]|_|\.|$)", name):
+            return False
+        return not any(token in name for token in ("_b_", "dyrerk", "aftrk", "feltdefinition"))
+
+    @staticmethod
+    def _is_in_depth_register(filename: str) -> bool:
+        """Identify any raw table in an in-depth GR release."""
+        name = Path(filename).name.lower()
+        return bool(
+            re.match(r"v_4061gr_(?:\d{2}|20\d{2})_iskv\d+_(?:6|b_)", name)
+            or name.startswith("b_")
+            or re.match(r"(?:v|lg)_company[ab]\.", name)
+        )
+
+    def _process_in_depth_register(self, table_name: str, filename: str) -> str:
+        """Preserve raw in-depth register fields for downstream parsing.
+
+        The generic Gødningsregnskab projection intentionally produced a
+        small common schema, but that projection dropped all ``F_*`` columns.
+        Main and detail exports are now kept losslessly, with only normalized
+        CVR and source-year metadata added where absent.
+        """
+        is_main = self._is_in_depth_main_register(filename)
+        logger.info(
+            f"Preserving in-depth {'main-register' if is_main else 'detail'} fields: {filename}"
+        )
+        output_table = f"harmonized_gr_{'main' if is_main else 'detail'}_{id(self)}"
+        columns = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+        column_names = [column[0] for column in columns]
+        lower_names = {column.lower() for column in column_names}
+        extras: list[str] = []
+
+        if "cvr_number" not in lower_names:
+            cvr_column = next(
+                (column for column in column_names if column.lower() in {"cvr", "cvr_number"}),
+                None,
+            )
+            if cvr_column:
+                reference = f'"{cvr_column.replace(chr(34), chr(34) * 2)}"'
+                value = f"TRIM(CAST({reference} AS VARCHAR))"
+                without_decimal = f"regexp_replace({value}, '[.]0+$', '')"
+                digits = f"regexp_replace({without_decimal}, '[^0-9]', '', 'g')"
+                extras.append(
+                    f"CASE WHEN length({digits}) BETWEEN 1 AND 8 "
+                    f"AND {digits} <> '00000000' THEN lpad({digits}, 8, '0') END AS cvr_number"
+                )
+
+        year_match = re.search(
+            r"(?:gødningsregnskaber|goedningsregnskaber)[ _-]*(20\d{2})", filename, re.I
+        )
+        if year_match:
+            year = int(year_match.group(1))
+        else:
+            short_match = re.search(r"4061gr_(\d{2})_", filename, re.I)
+            year = 2000 + int(short_match.group(1)) if short_match else None
+        if "source_year" not in lower_names:
+            extras.append(f"{year if year is not None else 'NULL'}::INTEGER AS source_year")
+
+        escaped_filename = filename.replace("'", "''")
+        if "data_source" not in lower_names:
+            data_source = "goedningsregnskaber_main" if is_main else "goedningsregnskaber_detail"
+            extras.append(f"'{data_source}' AS data_source")
+        if "data_type" not in lower_names:
+            data_type = "Gødningsregnskab main register" if is_main else "Gødningsregnskab detail"
+            extras.append(f"'{data_type}' AS data_type")
+        if "data_source_file" not in lower_names:
+            extras.append(f"'{escaped_filename}' AS data_source_file")
+
+        select_list = "*" + (", " + ", ".join(extras) if extras else "")
+        self.conn.execute(f"""
+            CREATE TABLE {output_table} AS
+            SELECT {select_list}
+            FROM {table_name}
+        """)
+        return output_table
 
     def _process_efterafgroeder(self, table_name: str, filename: str) -> str:
         """Process Efterafgrøder (cover crops) files using DuckDB."""

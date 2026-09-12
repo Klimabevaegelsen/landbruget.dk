@@ -284,124 +284,345 @@ class NLES5DataLoader:
             self.log.error(f"Fertilizer directory discovery failed: {e}")
             raise
 
-    def _get_fertilizer_accounts_file_path(self, target_year: int | None = None) -> str:
+    @staticmethod
+    def _is_in_depth_main_register_file(file_path: str) -> bool:
+        """Return whether a Silver file is a GR main-register ``_6*`` export.
+
+        The 2024 and 2025 Drive releases contain several related tables.  Only
+        the ``V_4061GR_*_ISKV*_6*`` tables contain the farm-level balance fields
+        consumed by NLES5.  ``B_GOEDRK`` is a block/subtable and must not be
+        selected as a replacement for the main register.
         """
-        Get the specific path to fertilizer accounts data file (Gødningsregnskab - GR).
+        filename = file_path.rsplit("/", 1)[-1].upper()
+        if not filename.endswith(".PARQUET") or "4061GR" not in filename:
+            return False
+        if "_B_" in filename or filename.startswith("B_"):
+            return False
+        if any(token in filename for token in ("DYRERK", "AFTRK", "FELTDEFINITION")):
+            return False
+        return bool(re.search(r"_ISKV\d+_6(?:[A-Z]|_|\.|$)", filename))
 
-        Looks for year-specific GR data in 'gr {year}/' directories first,
-        with correct file patterns:
-        - 2019: B_GOEDRK_6B.parquet
-        - 2023+: V_4061GR_{YY}_ISKV1_B_GOEDRK_6B.parquet
+    @staticmethod
+    def _extract_godningsregnskab_year(
+        file_path: str, directory_year: int | None = None
+    ) -> int | None:
+        """Resolve a GR year, preferring the directory over two-digit file codes."""
+        if directory_year is not None:
+            return directory_year
 
-        Falls back to 'fertiliser/' directory if year-specific not found.
+        filename = file_path.rsplit("/", 1)[-1]
+        full_year = re.search(r"(?:GR|GODNINGSREGNSKAB[^0-9]*)(20\d{2})", filename, re.I)
+        if full_year:
+            return int(full_year.group(1))
 
-        Args:
-            target_year: Optional target year to match
+        short_year = re.search(r"4061GR_(\d{2})_", filename, re.I)
+        if short_year:
+            return 2000 + int(short_year.group(1))
+        return None
 
-        Returns:
-            storage path to specific fertilizer accounts parquet file, or None if not found
+    def _latest_gr_files(self, files: list[str]) -> list[str]:
+        """Keep files from the newest Silver run when several runs are present."""
+        if not files:
+            return []
+
+        timestamp_dirs: dict[str, str] = {}
+        for file_path in files:
+            match = re.search(r"/(\d{8}_\d{6})/", file_path)
+            if match:
+                timestamp_dirs[match.group(1)] = match.group(1)
+
+        if not timestamp_dirs:
+            return sorted(set(files))
+
+        latest_timestamp = max(timestamp_dirs)
+        return sorted(file_path for file_path in set(files) if f"/{latest_timestamp}/" in file_path)
+
+    @staticmethod
+    def _prefer_final_gr_files(files: list[str]) -> list[str]:
+        """Avoid counting the transform, schema, and PII copies of one file."""
+        unique_files = sorted(set(files))
+        for marker in ("_pii_handled.parquet", "_schema.parquet"):
+            final_files = [file_path for file_path in unique_files if marker in file_path.lower()]
+            if final_files:
+                return final_files
+        return unique_files
+
+    def _get_fertilizer_accounts_file_paths(self, target_year: int | None = None) -> list[str]:
+        """Find every main-register parquet part for a GR year.
+
+        2024 is split across ``6A``/``6B`` CSV exports and 2025 is distributed
+        as one or more Excel exports.  The Drive Silver layer converts both to
+        parquet, so NLES5 must load all matching ``_6*`` parts and aggregate
+        them by CVR instead of selecting one legacy ``B_GOEDRK`` file.
         """
-        try:
-            # Strategy 1: Try year-specific GR directory first (e.g., "gr 2019/", "gr 2023/")
-            if target_year:
-                gr_dir_path = f"{self.config.bucket}/silver/gr {target_year}/"
+        if target_year is None:
+            return []
 
+        bucket = self.config.bucket
+        base_candidates = (
+            f"{bucket}/silver/gr {target_year}/",
+            f"{bucket}/silver/gr_{target_year}/",
+        )
+
+        for base_path in base_candidates:
+            files: list[str] = []
+            for pattern in (f"{base_path}*/*.parquet", f"{base_path}*.parquet"):
                 try:
-                    # Get latest timestamped directory within the gr year directory
-                    dirs = self.storage.list_files(f"{gr_dir_path}*/")
-                    if dirs:
-                        latest_dir = sorted([d for d in dirs if d.endswith("/")])[-1]
-                        self.log.info(f"🔍 Checking year-specific GR directory: {latest_dir}")
-
-                        # Define year-specific file patterns for Gødningsregnskab (GR) data
-                        # B_GOEDRK_6B = Bedrift Gødningsregnskab (company fertilizer accounts)
-                        file_patterns = [
-                            f"{latest_dir}B_GOEDRK_6B.parquet",  # 2019 pattern
-                            # 2021+ pattern (e.g., V_4061GR_21_...)
-                            f"{latest_dir}V_4061GR_{target_year % 100:02d}_ISKV1_B_GOEDRK_6B"
-                            ".parquet",
-                            # Alternative with full year
-                            f"{latest_dir}V_4061GR_{target_year}_ISKV1_B_GOEDRK_6B.parquet",
-                        ]
-
-                        # Try each pattern
-                        for pattern in file_patterns:
-                            files = self.storage.list_files(pattern)
-                            if files:
-                                selected_file = files[0]
-                                self.log.info(
-                                    f"✅ Found year-specific GR data for {target_year}: "
-                                    f"{selected_file}"
-                                )
-                                return selected_file
-
-                        # If exact patterns don't match, try wildcard search in the directory
-                        all_files = self.storage.list_files(f"{latest_dir}*.parquet")
-                        gr_files = [f for f in all_files if "GOEDRK" in f or "B_GOEDRK" in f]
-                        if gr_files:
-                            selected_file = gr_files[0]
-                            self.log.info(
-                                f"✅ Found GR file (wildcard match) for {target_year}: "
-                                f"{selected_file}"
-                            )
-                            return selected_file
-
-                        self.log.warning(f"⚠️ No GR fertilizer data found in {latest_dir}")
+                    files.extend(self.storage.list_files(pattern))
                 except Exception as e:
-                    self.log.info(f"Year-specific gr {target_year}/ directory not available: {e}")
-
-            # Strategy 2: Fall back to main fertiliser/ directory (legacy location)
-            self.log.info("⏭️ Falling back to main fertiliser/ directory")
-            fertilizer_dir = self._get_fertilizer_data_path(target_year)
-
-            # List all files in the directory to find fertilizer accounts files
-            pattern = f"{fertilizer_dir}*.parquet"
-            files = self.storage.list_files(pattern)
-
-            # Look for files that match fertilizer accounts pattern (Gødningsregnskaber)
-            fertilizer_accounts_files = []
-            for file_path in files:
-                if "Gødningsregnskaber" in file_path or "fertilizer" in file_path.lower():
-                    # Extract year from filename (look for 4 digits that are not part of timestamp)
-                    import re
-
-                    # Get just the filename, not the full path to avoid timestamp confusion
-                    filename = file_path.split("/")[-1]
-                    year_match = re.search(r"(\d{4})", filename)
-                    if year_match:
-                        file_year = int(year_match.group(1))
-                        fertilizer_accounts_files.append((file_year, file_path))
-                    else:
-                        # If no year found, use as fallback
-                        fertilizer_accounts_files.append((0, file_path))
-
-            if fertilizer_accounts_files:
-                # If target_year specified, prefer closest year match
-                if target_year:
-                    # Sort by proximity to target year
-                    fertilizer_accounts_files.sort(
-                        key=lambda x: abs(x[0] - target_year) if x[0] > 0 else 9999
-                    )
-                    selected_year, selected_file = fertilizer_accounts_files[0]
-                    if selected_year != target_year:
-                        self.log.warning(
-                            f"⚠️ Using {selected_year} fertilizer data as proxy for {target_year}"
-                        )
-                else:
-                    # Sort by year (descending) and get the most recent
-                    fertilizer_accounts_files.sort(reverse=True)
-                    selected_year, selected_file = fertilizer_accounts_files[0]
-
+                    self.log.debug(f"Could not list GR files with {pattern}: {e}")
+            selected = [
+                file_path for file_path in files if self._is_in_depth_main_register_file(file_path)
+            ]
+            if selected:
+                selected = self._prefer_final_gr_files(self._latest_gr_files(selected))
                 self.log.info(
-                    f"Found fertilizer accounts file: {selected_file} (year: {selected_year})"
+                    f"✅ Found {len(selected)} main-register file part(s) for GR {target_year}"
                 )
-                return selected_file
-            self.log.warning(f"❌ No fertilizer accounts files found in {fertilizer_dir}")
-            return None
+                return selected
 
-        except Exception as e:
-            self.log.error(f"Error finding fertilizer accounts file: {e}")
-            return None
+            # Preserve compatibility with the older archive, whose farm
+            # register was exported as B_GOEDRK_6B rather than a V_* _6* file.
+            legacy = [
+                file_path
+                for file_path in files
+                if "GOEDRK" in file_path.rsplit("/", 1)[-1].upper()
+                and not any(
+                    token in file_path.rsplit("/", 1)[-1].upper() for token in ("DYRERK", "AFTRK")
+                )
+            ]
+            if legacy:
+                selected = self._prefer_final_gr_files(self._latest_gr_files(legacy))
+                self.log.info(
+                    f"✅ Found {len(selected)} legacy B_GOEDRK file part(s) for GR {target_year}"
+                )
+                return selected
+
+        # The Drive pipeline can place files under ``silver/fertiliser`` when
+        # the original subfolder metadata is only ``Fertiliser``.  Search that
+        # tree as a compatibility fallback, but still require a year-matching
+        # main-register filename/path and never substitute another year.
+        files: list[str] = []
+        for pattern in (
+            f"{bucket}/silver/{self.config.fertilizer_dataset}/**/*.parquet",
+            f"{bucket}/silver/{self.config.fertilizer_dataset}/*/*.parquet",
+            f"{bucket}/silver/{self.config.fertilizer_dataset}/*/*/*.parquet",
+            f"{bucket}/silver/**/*.parquet",
+        ):
+            try:
+                files.extend(self.storage.list_files(pattern))
+            except Exception as e:
+                self.log.debug(f"Could not search fertiliser fallback tree with {pattern}: {e}")
+
+        year_code = f"{target_year % 100:02d}"
+        year_files = [
+            file_path
+            for file_path in files
+            if (
+                self._is_in_depth_main_register_file(file_path)
+                or "GOEDRK" in file_path.rsplit("/", 1)[-1].upper()
+            )
+            and (
+                f"gr {target_year}" in file_path.lower()
+                or f"gr_{target_year}" in file_path.lower()
+                or f"4061gr_{year_code}_" in file_path.lower()
+                or f"4061gr_{target_year}_" in file_path.lower()
+            )
+        ]
+        if year_files:
+            selected = self._prefer_final_gr_files(self._latest_gr_files(year_files))
+            self.log.info(
+                f"✅ Found {len(selected)} main-register file part(s) for GR {target_year} "
+                "under fertiliser/"
+            )
+            return selected
+
+        self.log.warning(f"❌ No in-depth main-register files found for GR {target_year}")
+        return []
+
+    def _get_fertilizer_accounts_file_path(self, target_year: int | None = None) -> str | None:
+        """Return the first main-register part for backwards compatibility."""
+        files = self._get_fertilizer_accounts_file_paths(target_year)
+        return files[0] if files else None
+
+    def _get_gr_column_map(self, table_name: str) -> dict[str, tuple[str, str]]:
+        """Return lower-case GR column names mapped to quoted name and DuckDB type."""
+        return {
+            column[0].lower(): (f'"{column[0].replace(chr(34), chr(34) * 2)}"', column[1])
+            for column in self.db.execute(f"DESCRIBE {table_name}").fetchall()
+        }
+
+    @staticmethod
+    def _gr_number_expression(column: tuple[str, str] | None) -> str:
+        """Parse both Excel numerics and Danish CSV number formatting.
+
+        The 2024 CSV release uses ``1.234,56`` while Excel-derived Silver
+        files are usually native numerics or strings such as ``1234.56``.
+        """
+        if column is None:
+            return "0.0"
+
+        reference = column[0]
+        if column[1].upper() not in {"VARCHAR", "TEXT", "STRING"}:
+            return f"COALESCE(TRY_CAST({reference} AS DOUBLE), 0.0)"
+
+        value = f"TRIM(CAST({reference} AS VARCHAR))"
+        return f"""
+            COALESCE(
+                CASE
+                    WHEN instr({value}, ',') > 0 THEN
+                        TRY_CAST(
+                            replace(replace(replace({value}, ' ', ''), '.', ''), ',', '.')
+                            AS DOUBLE
+                        )
+                    WHEN regexp_matches({value}, '^-?[0-9]{{1,3}}([.][0-9]{{3}})+$') THEN
+                        TRY_CAST(replace({value}, '.', '') AS DOUBLE)
+                    ELSE TRY_CAST(replace({value}, ' ', '') AS DOUBLE)
+                END,
+                0.0
+            )
+        """
+
+    @classmethod
+    def _gr_cvr_expression(cls, column: tuple[str, str] | None) -> str:
+        """Normalize CVR values without converting identifiers through BIGINT."""
+        if column is None:
+            return "NULL"
+
+        value = f"TRIM(CAST({column[0]} AS VARCHAR))"
+        # Excel can represent an identifier as ``12345678.0``.  Strip only
+        # that numeric suffix, then remove separators and pad short values.
+        without_decimal = f"regexp_replace({value}, '[.]0+$', '')"
+        digits = f"regexp_replace({without_decimal}, '[^0-9]', '', 'g')"
+        return f"""
+            CASE
+                WHEN length({digits}) BETWEEN 1 AND 8 AND {digits} <> '00000000'
+                THEN lpad({digits}, 8, '0')
+                ELSE NULL
+            END
+        """
+
+    @staticmethod
+    def _first_gr_number(columns: dict[str, tuple[str, str]], names: tuple[str, ...]) -> str:
+        """Use the first available form code, with compatibility aliases."""
+        for name in names:
+            column = columns.get(name.lower())
+            if column is not None:
+                return NLES5DataLoader._gr_number_expression(column)
+        return "0.0"
+
+    def _transform_gr_main_register(
+        self, raw_table: str, output_table: str, year: int, source_file_count: int
+    ) -> None:
+        """Project a raw in-depth main register to the NLES5 fertilizer schema."""
+        columns = self._get_gr_column_map(raw_table)
+        cvr_column = next(
+            (columns[name] for name in ("cvr", "cvr_number") if name in columns), None
+        )
+        cvr_expression = self._gr_cvr_expression(cvr_column)
+
+        total_n = self._first_gr_number(columns, ("f_901",))
+        mineral_n = self._first_gr_number(columns, ("f_706_1", "f_706"))
+        mineral_n_autumn = self._first_gr_number(columns, ("f_704_1", "f_704"))
+        grazing_n = self._first_gr_number(columns, ("f_318_1", "f_318"))
+        manure_n = self._first_gr_number(columns, ("f_308_1",))
+        other_organic_n = self._first_gr_number(columns, ("f_804_1",))
+        own_livestock_n = self._first_gr_number(columns, ("f_225_1",))
+        quota = self._first_gr_number(columns, ("f_512",))
+        remaining_quota = self._first_gr_number(columns, ("f_902",))
+        harmoni_area = self._first_gr_number(columns, ("f_243",))
+        area_total = f"NULLIF(SUM({harmoni_area}), 0)"
+        total_n_kg = f"SUM({total_n})"
+        mineral_n_kg = f"SUM({mineral_n})"
+        mineral_n_autumn_kg = f"SUM({mineral_n_autumn})"
+        grazing_n_kg = f"SUM({grazing_n})"
+        manure_n_kg = f"SUM({manure_n})"
+
+        # F_* fields are farm totals in kg N; NLES5 inputs are kg/ha. The GR
+        # main register does not contain a spring mineral-N total. F_704_1 is
+        # the explicit early-autumn consumption field, and F_318_1 is the
+        # explicit grazing-deposition field used by the NLES5 ``udb`` input.
+        # F_706_1 remains an annual audit total; it is never allocated to a
+        # season that the source does not report.
+        self.db.execute(f"""
+            CREATE OR REPLACE TABLE {output_table} AS
+            SELECT
+                {cvr_expression} AS cvr_number,
+                {year}::INTEGER AS year,
+                COALESCE({total_n_kg} / {area_total} / 1000.0, 0.0) AS tn_t_ha,
+                0.0::DOUBLE AS mineral_n_foraar,
+                COALESCE({mineral_n_autumn_kg} / {area_total}, 0.0) AS mineral_n_eft,
+                COALESCE({grazing_n_kg} / {area_total}, 0.0) AS mineral_n_udb,
+                COALESCE({manure_n_kg} / {area_total}, 0.0) AS organic_n_hus,
+                {mineral_n_kg} AS mineral_n_total,
+                {mineral_n_autumn_kg} AS mineral_n_autumn_total_kg,
+                {grazing_n_kg} AS grazing_n_total_kg,
+                COALESCE({manure_n_kg} / {area_total}, 0.0) AS organic_n_livestock,
+                SUM({other_organic_n}) AS organic_n_other,
+                SUM({own_livestock_n}) AS own_livestock_n,
+                SUM({quota}) AS n_quota,
+                SUM({remaining_quota}) AS remaining_n_quota,
+                SUM({harmoni_area}) AS harmoni_area_ha,
+                {total_n_kg} AS total_n_consumption_kg,
+                {manure_n_kg} AS organic_n_livestock_total_kg,
+                'Detailed main register' AS niveau,
+                'explicit_register_fields_only' AS mineral_n_allocation_method,
+                {source_file_count}::INTEGER AS source_file_count
+            FROM {raw_table}
+            WHERE {cvr_expression} IS NOT NULL
+            GROUP BY 1
+        """)
+
+    def _load_fertilizer_accounts_for_years(
+        self, years: list[int], table_name: str = "fertilizer_accounts"
+    ) -> bool:
+        """Load and aggregate all available GR main-register parts for ``years``."""
+        year_tables: list[str] = []
+        requested_years = sorted({int(year) for year in years})
+        self.db.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+        for year in requested_years:
+            files = self._get_fertilizer_accounts_file_paths(year)
+            if not files:
+                self.log.warning(f"⚠️ Skipping fertilizer accounts for {year}: no main register")
+                continue
+
+            raw_tables: list[str] = []
+            for index, file_path in enumerate(files):
+                raw_table = f"gr_raw_{year}_{index}"
+                self.storage.create_table_from_storage(raw_table, file_path)
+                raw_tables.append(raw_table)
+
+            combined_raw = f"gr_raw_combined_{year}"
+            union_parts = [f"SELECT * FROM {raw_table}" for raw_table in raw_tables]
+            self.db.execute(
+                f"CREATE OR REPLACE TABLE {combined_raw} AS "
+                + " UNION ALL BY NAME ".join(union_parts)
+            )
+            for raw_table in raw_tables:
+                self.db.execute(f"DROP TABLE IF EXISTS {raw_table}")
+
+            year_table = f"fertilizer_accounts_{year}"
+            self._transform_gr_main_register(combined_raw, year_table, year, len(files))
+            self.db.execute(f"DROP TABLE IF EXISTS {combined_raw}")
+            year_tables.append(year_table)
+
+        if not year_tables:
+            return False
+
+        self.db.execute(
+            f"CREATE TABLE {table_name} AS "
+            + " UNION ALL BY NAME ".join(f"SELECT * FROM {table}" for table in year_tables)
+        )
+        for year_table in year_tables:
+            self.db.execute(f"DROP TABLE IF EXISTS {year_table}")
+
+        row_count = self.db.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.log.info(
+            f"✅ Aggregated {row_count:,} farm fertilizer-account rows across "
+            f"{len(year_tables)} GR year(s)"
+        )
+        return row_count > 0
 
     def _get_field_plan_data_path(self, target_year: int | None = None) -> str:
         """
@@ -1104,8 +1325,9 @@ class NLES5DataLoader:
                             # the directory structure
                             try:
                                 if dataset_name == self.config.fertilizer_dataset:
-                                    test_path = self._get_fertilizer_accounts_file_path()
-                                    files = [test_path] if test_path else []
+                                    target_years = getattr(self.config, "target_years", [])
+                                    first_year = target_years[0] if target_years else None
+                                    files = self._get_fertilizer_accounts_file_paths(first_year)
                                 elif dataset_name == self.config.catch_crops_dataset:
                                     test_path = self._get_catch_crops_data_path()
                                     files = [test_path] if test_path else []
@@ -1131,60 +1353,33 @@ class NLES5DataLoader:
                             data_file = f"{latest_dir}data.parquet"
                             files = [data_file] if self.storage.file_exists(data_file) else []
 
+                        if dataset_name == self.config.fertilizer_dataset:
+                            try:
+                                target_years = getattr(self.config, "target_years", [])
+                                success = self._load_fertilizer_accounts_for_years(
+                                    target_years, table_name
+                                )
+                                if success:
+                                    loaded_tables[dataset_name] = table_name
+                                    self.log.info(
+                                        f"✅ Successfully loaded fertilizer data for years: "
+                                        f"{target_years}"
+                                    )
+                                else:
+                                    self.log.error(
+                                        f"❌ Failed to load fertilizer data {dataset_name}"
+                                    )
+                            except Exception as e:
+                                self.log.error(
+                                    f"❌ CRITICAL: Failed to load required fertilizer data: {e}"
+                                )
+                            continue
+
                         if files:
                             self.log.info(f"Found {dataset_name} in silver layer.")
 
-                            # Special handling for fertilizer data to get the latest 2024 data
-                            if dataset_name == self.config.fertilizer_dataset:
-                                try:
-                                    # Use the first target year as the reference for fertilizer data
-                                    target_year = (
-                                        self.config.target_years[0]
-                                        if getattr(self.config, "target_years", None)
-                                        and len(self.config.target_years) > 0
-                                        else None
-                                    )
-                                    fertilizer_file_path = self._get_fertilizer_accounts_file_path(
-                                        target_year
-                                    )
-                                    if fertilizer_file_path:
-                                        self.log.info(
-                                            f"Using fertilizer accounts file for year "
-                                            f"{target_year}: {fertilizer_file_path}"
-                                        )
-                                        success = self._read_silver_data_from_path(
-                                            dataset_name, fertilizer_file_path, table_name
-                                        )
-                                        if success:
-                                            # Add year column to fertilizer data
-                                            self._add_year_to_fertilizer_data(
-                                                fertilizer_file_path, table_name
-                                            )
-                                            # Transform raw fertilizer data to expected schema
-                                            self._transform_raw_fertilizer_data(table_name)
-                                            loaded_tables[dataset_name] = table_name
-                                            self.log.info(
-                                                f"✅ Successfully loaded fertilizer data: "
-                                                f"{dataset_name}"
-                                            )
-                                            continue
-                                        self.log.error(
-                                            f"❌ Failed to load fertilizer data {dataset_name}"
-                                        )
-                                        continue
-                                    self.log.error(
-                                        f"❌ No fertilizer accounts file found for year "
-                                        f"{target_year}"
-                                    )
-                                    continue
-                                except Exception as e:
-                                    self.log.error(
-                                        f"❌ CRITICAL: Failed to load required fertilizer data: {e}"
-                                    )
-                                    continue
-
                             # Special handling for catch crops data (optional)
-                            elif dataset_name == self.config.catch_crops_dataset:
+                            if dataset_name == self.config.catch_crops_dataset:
                                 try:
                                     target_year = (
                                         self.config.target_years[0]
@@ -1498,8 +1693,8 @@ class NLES5DataLoader:
         Load farm-level gødningsregnskab data for enhanced NLES5 calculations.
 
         Loads animal production data (C_2016, C_2006) and fertilizer application data
-        (F_901, F_902, F_512, F_703_1, F_706_1, F_308_1) to replace estimated values
-        with actual farm-specific data.
+        (F_901, F_902, F_512, F_704_1, F_706_1, F_318_1, F_308_1, F_804_1) to replace
+        estimated values with actual farm-specific data.
 
         Args:
             years: List of years to load farm data for
@@ -1570,6 +1765,51 @@ class NLES5DataLoader:
             self.log.error(f"❌ Failed to load farm data: {e}")
             return None
 
+    def _normalize_gr_cvr_table(self, table_name: str, output_table: str) -> None:
+        """Create a copy of a GR table with one normalized ``cvr`` column."""
+        columns = self._get_gr_column_map(table_name)
+        cvr_column = next(
+            (columns[name] for name in ("cvr", "cvr_number") if name in columns), None
+        )
+        if cvr_column is None:
+            raise ValueError(f"GR table {table_name} has no CVR column")
+
+        source_columns = [
+            column[0] for name, column in columns.items() if name not in {"cvr", "cvr_number"}
+        ]
+        select_parts = [*source_columns, f"{self._gr_cvr_expression(cvr_column)} AS cvr"]
+        self.db.execute(f"""
+            CREATE OR REPLACE TABLE {output_table} AS
+            SELECT {", ".join(select_parts)}
+            FROM {table_name}
+            WHERE {self._gr_cvr_expression(cvr_column)} IS NOT NULL
+        """)
+
+    def _summarize_gr_animal_table(self, table_name: str, output_table: str) -> None:
+        """Aggregate B_DYRERK's animal rows to one row per farm."""
+        columns = self._get_gr_column_map(table_name)
+        cvr_column = next(
+            (columns[name] for name in ("cvr", "cvr_number") if name in columns), None
+        )
+        if cvr_column is None:
+            raise ValueError(f"GR animal table {table_name} has no CVR column")
+
+        cvr_expression = self._gr_cvr_expression(cvr_column)
+        production_n = self._first_gr_number(columns, ("c_2016",))
+        animal_count = self._first_gr_number(columns, ("c_2006",))
+        animal_units = self._first_gr_number(columns, ("c_2017",))
+        self.db.execute(f"""
+            CREATE OR REPLACE TABLE {output_table} AS
+            SELECT
+                {cvr_expression} AS cvr,
+                SUM({production_n}) AS organic_n_production,
+                SUM({animal_count}) AS animal_count,
+                SUM({animal_units}) AS animal_units
+            FROM {table_name}
+            WHERE {cvr_expression} IS NOT NULL
+            GROUP BY 1
+        """)
+
     def _load_farm_data_for_year(self, year: int) -> str | None:
         """
         Load farm data for a specific year from storage bucket into DuckDB.
@@ -1581,26 +1821,49 @@ class NLES5DataLoader:
             Table name with farm data or None if not available
         """
         try:
-            # Load gødningsregnskab from storage bucket
-            # Dynamically find the latest timestamped directory for this year
-            base_path = f"{self.config.bucket}/silver/gr {year}/"
-            latest_dir = self._get_latest_timestamped_directory(base_path, f"farm data {year}")
-
-            if not latest_dir:
-                self.log.warning(f"No farm data found for year {year} in {base_path}")
-                return None
-
-            self.log.info(f"Loading farm data from: {latest_dir}")
-
-            # List available parquet files in the latest directory
-            pattern = f"{latest_dir}*.parquet"
-            files = self.storage.list_files(pattern)
+            # The Drive Silver processor may sanitize ``GR 2025`` to
+            # ``gr_2025`` and may use a Unix timestamp rather than the older
+            # YYYYMMDD_HHMMSS directory format.  Search both layouts and keep
+            # the newest timestamped run when that metadata is available.
+            files: list[str] = []
+            for base_path in (
+                f"{self.config.bucket}/silver/gr {year}/",
+                f"{self.config.bucket}/silver/gr_{year}/",
+            ):
+                for pattern in (f"{base_path}*/*.parquet", f"{base_path}*.parquet"):
+                    try:
+                        files.extend(self.storage.list_files(pattern))
+                    except Exception as e:
+                        self.log.debug(f"Could not list farm data with {pattern}: {e}")
+                if files:
+                    break
 
             if not files:
-                self.log.warning(
-                    f"No farm data files found for year {year} in cloud storage: {pattern}"
-                )
+                year_code = f"{year % 100:02d}"
+                try:
+                    all_silver_files = self.storage.list_files(
+                        f"{self.config.bucket}/silver/**/*.parquet"
+                    )
+                except Exception as e:
+                    self.log.debug(f"Could not search Silver fallback tree for GR {year}: {e}")
+                    all_silver_files = []
+                files = [
+                    file_path
+                    for file_path in all_silver_files
+                    if (
+                        f"gr {year}" in file_path.lower()
+                        or f"gr_{year}" in file_path.lower()
+                        or f"4061gr_{year_code}_" in file_path.lower()
+                        or f"4061gr_{year}_" in file_path.lower()
+                    )
+                ]
+
+            files = self._latest_gr_files(files)
+            if not files:
+                self.log.warning(f"No farm data found for year {year}")
                 return None
+
+            self.log.info(f"Loading farm data from {len(files)} GR file(s) for {year}")
 
             # Create temporary table name for this year
             main_table = f"farm_main_{year}"
@@ -1608,14 +1871,21 @@ class NLES5DataLoader:
             final_table = f"farm_data_{year}"
 
             # Find main data files (typically 4061GR files or Del1/Del2 files)
-            main_files = [
-                f
-                for f in files
-                if any(pattern in f for pattern in ["4061GR", "_Del1", "_Del2", "FELTDEFINITION"])
-            ]
+            main_files = [f for f in files if self._is_in_depth_main_register_file(f)]
+            if not main_files:
+                # Legacy GR releases used B_GOEDRK_6B instead of the V_4061GR
+                # main-register naming convention.
+                main_files = [
+                    f
+                    for f in files
+                    if "GOEDRK" in f.upper()
+                    and not any(token in f.upper() for token in ("DYRERK", "AFTRK"))
+                ]
+            main_files = self._prefer_final_gr_files(main_files)
             animal_files = [
-                f for f in files if any(pattern in f for pattern in ["DYRERK", "B_DYRERK"])
+                f for f in files if any(pattern in f.upper() for pattern in ["DYRERK", "B_DYRERK"])
             ]
+            animal_files = self._prefer_final_gr_files(animal_files)
 
             if not main_files:
                 self.log.warning(f"No main farm data files found for year {year}")
@@ -1634,12 +1904,22 @@ class NLES5DataLoader:
                     union_parts.append(f"SELECT * FROM {temp_table}")
 
                 # Create combined main table
-                union_sql = f"CREATE TABLE {main_table} AS {' UNION ALL '.join(union_parts)}"
+                union_sql = (
+                    f"CREATE TABLE {main_table} AS {' UNION ALL BY NAME '.join(union_parts)}"
+                )
                 self.db.execute(union_sql)
 
                 # Clean up temp tables
                 for i, _ in enumerate(main_files):
                     self.db.execute(f"DROP TABLE IF EXISTS farm_temp_main_{year}_{i}")
+
+            # Normalize CVR once so both raw ``CVR`` columns and the Drive
+            # transformer's ``cvr_number`` column join consistently and the
+            # cache's existing COUNT(DISTINCT cvr) check remains valid.
+            normalized_main_table = f"farm_main_normalized_{year}"
+            self._normalize_gr_cvr_table(main_table, normalized_main_table)
+            self.db.execute(f"DROP TABLE IF EXISTS {main_table}")
+            self.db.execute(f"ALTER TABLE {normalized_main_table} RENAME TO {main_table}")
 
             # Load animal data if available
             if animal_files:
@@ -1655,14 +1935,21 @@ class NLES5DataLoader:
                         union_parts.append(f"SELECT * FROM {temp_table}")
 
                     # Create combined animal table
-                    union_sql = f"CREATE TABLE {animal_table} AS {' UNION ALL '.join(union_parts)}"
+                    union_sql = (
+                        f"CREATE TABLE {animal_table} AS {' UNION ALL BY NAME '.join(union_parts)}"
+                    )
                     self.db.execute(union_sql)
 
                     # Clean up temp tables
                     for i, _ in enumerate(animal_files):
                         self.db.execute(f"DROP TABLE IF EXISTS farm_temp_animal_{year}_{i}")
 
-                # Merge main data with animal data (try to find CVR column in different formats)
+                animal_summary_table = f"farm_animal_summary_{year}"
+                self._summarize_gr_animal_table(animal_table, animal_summary_table)
+                self.db.execute(f"DROP TABLE IF EXISTS {animal_table}")
+                self.db.execute(f"ALTER TABLE {animal_summary_table} RENAME TO {animal_table}")
+
+                # Merge main data with the aggregated B_DYRERK animal data.
                 try:
                     self.db.execute(f"""
                         CREATE TABLE {final_table} AS
@@ -1671,7 +1958,7 @@ class NLES5DataLoader:
                                COALESCE(a.animal_count, 0) as animal_count,
                                COALESCE(a.animal_units, 0) as animal_units
                         FROM {main_table} m
-                        LEFT JOIN {animal_table} a ON m.CVR = a.CVR
+                        LEFT JOIN {animal_table} a ON m.cvr = a.cvr
                     """)
                 except Exception as e:
                     self.log.warning(f"Failed to join with animal data: {e}. Using main data only.")
@@ -2150,22 +2437,62 @@ class NLES5DataLoader:
     def _transform_fertilizer_accounting_data(
         self, table_name: str, column_names: list[str]
     ) -> None:
-        """Transform fertilizer accounting data with form codes (f_901, etc.)."""
+        """Transform legacy accounting tables using the same GR field mapping."""
         try:
-            # Map form codes to expected columns
+            columns = self._get_gr_column_map(table_name)
+            cvr_column = next(
+                (columns[name] for name in ("cvr", "cvr_number") if name in columns), None
+            )
+            year_column = columns.get("year")
+            if year_column is None:
+                raise ValueError(f"Legacy fertilizer table {table_name} has no year column")
+
+            cvr_expression = self._gr_cvr_expression(cvr_column)
+            total_n = self._first_gr_number(columns, ("f_901",))
+            mineral_n = self._first_gr_number(columns, ("f_706_1", "f_706"))
+            mineral_n_autumn = self._first_gr_number(columns, ("f_704_1", "f_704"))
+            grazing_n = self._first_gr_number(columns, ("f_318_1", "f_318"))
+            manure_n = self._first_gr_number(columns, ("f_308_1",))
+            other_organic_n = self._first_gr_number(columns, ("f_804_1",))
+            own_livestock_n = self._first_gr_number(columns, ("f_225_1",))
+            quota = self._first_gr_number(columns, ("f_512",))
+            remaining_quota = self._first_gr_number(columns, ("f_902",))
+            harmoni_area = self._first_gr_number(columns, ("f_243",))
+            year_expression = f"TRY_CAST({year_column[0]} AS INTEGER)"
+            area_total = f"NULLIF(SUM({harmoni_area}), 0)"
+            total_n_kg = f"SUM({total_n})"
+            mineral_n_kg = f"SUM({mineral_n})"
+            mineral_n_autumn_kg = f"SUM({mineral_n_autumn})"
+            grazing_n_kg = f"SUM({grazing_n})"
+            manure_n_kg = f"SUM({manure_n})"
+
             self.processor.conn.execute(f"""
                 CREATE OR REPLACE TABLE {table_name}_transformed AS
                 SELECT
-                    cvr_number,
-                    year,
-                    COALESCE(TRY_CAST(f_901 AS DOUBLE), 0.0) as tn_t_ha,
-                    COALESCE(TRY_CAST(f_185_2 AS DOUBLE), 0.0) as mineral_n_foraar,
-                    COALESCE(TRY_CAST(f_185_3 AS DOUBLE), 0.0) as mineral_n_eft,
-                    COALESCE(TRY_CAST(f_188_2 AS DOUBLE), 0.0) as mineral_n_udb,
-                    COALESCE(TRY_CAST(f_601_2 AS DOUBLE), 0.0) as organic_n_hus,
-                    'Standard' as niveau
+                    {cvr_expression} AS cvr_number,
+                    {year_expression} AS year,
+                    COALESCE({total_n_kg} / {area_total} / 1000.0, 0.0) AS tn_t_ha,
+                    0.0::DOUBLE AS mineral_n_foraar,
+                    COALESCE({mineral_n_autumn_kg} / {area_total}, 0.0) AS mineral_n_eft,
+                    COALESCE({grazing_n_kg} / {area_total}, 0.0) AS mineral_n_udb,
+                    COALESCE({manure_n_kg} / {area_total}, 0.0) AS organic_n_hus,
+                    {mineral_n_kg} AS mineral_n_total,
+                    {mineral_n_autumn_kg} AS mineral_n_autumn_total_kg,
+                    {grazing_n_kg} AS grazing_n_total_kg,
+                    COALESCE({manure_n_kg} / {area_total}, 0.0) AS organic_n_livestock,
+                    SUM({other_organic_n}) AS organic_n_other,
+                    SUM({own_livestock_n}) AS own_livestock_n,
+                    SUM({quota}) AS n_quota,
+                    SUM({remaining_quota}) AS remaining_n_quota,
+                    SUM({harmoni_area}) AS harmoni_area_ha,
+                    {total_n_kg} AS total_n_consumption_kg,
+                    {manure_n_kg} AS organic_n_livestock_total_kg,
+                    'Detailed main register' AS niveau,
+                    'explicit_register_fields_only' AS mineral_n_allocation_method,
+                    1::INTEGER AS source_file_count
                 FROM {table_name}
-                WHERE cvr_number IS NOT NULL
+                WHERE {cvr_expression} IS NOT NULL
+                GROUP BY 1, 2
             """)
 
             self.processor.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
