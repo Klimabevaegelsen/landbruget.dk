@@ -15,6 +15,8 @@ from pathlib import Path
 # Add common utilities to path for CRS constants
 sys.path.insert(0, str(Path(__file__).resolve().parents[6]))
 
+from common.crs_utils import sql_transform_to_utm
+
 from unified_pipeline.util.timing import timed
 
 from .fertilizer_distributor import NLES5FertilizerDistributor
@@ -83,24 +85,26 @@ class NLES5SpatialOperations:
                 # to ensure no data loss. This triggers DuckDB's spatial indexing
                 # while maintaining result consistency. Denmark max width ~400km,
                 # so 100km radius should cover all reasonable cases
-                self.conn.execute("""
+                self.conn.execute(f"""
                     CREATE OR REPLACE TABLE fields_climate_candidates AS
                     SELECT
                         f.field_id, f.geom, f.geometry, f.area_ha, f.crop_code, f.crop_name,
                         f.cvr_number, f.year, f.block_id, f.journal_number,
                         f.layer_type, f.processed_at, f.reported_area_ha, f.GB, f.field_area_m2,
                         c.year as climate_year,
-                        c.geometry as climate_point,
+                        {sql_transform_to_utm("c.geometry")} as climate_point,
                         c.perco_apr_aug_current, c.perco_sep_mar_current,
                         c.perco_apr_aug_previous, c.perco_sep_mar_previous,
                         c.total_percolation, c.avg_precipitation, c.avg_evaporation,
                         c.sufficient_climate_data,
-                        ST_Distance(ST_Centroid(f.geom), c.geometry) as distance_to_climate,
+                        ST_Distance(
+                            ST_Centroid(f.geom), {sql_transform_to_utm("c.geometry")}
+                        ) as distance_to_climate,
                         ABS(f.year - c.year) as year_diff
                     FROM agricultural_fields_spatial f
                     JOIN climate_percolation c ON ST_Intersects(
                         ST_Centroid(f.geom),
-                        ST_Buffer(c.geometry, 100000)
+                        ST_Buffer({sql_transform_to_utm("c.geometry")}, 100000)
                     )
                     WHERE ABS(f.year - c.year) <= 2
                 """)
@@ -921,32 +925,36 @@ class NLES5SpatialOperations:
                 """)
 
                 # SPATIAL_JOIN optimized join for this batch
-                # Data is already in EPSG:25832 - buffer operations work directly in meters
+                # Field and climate geometries are compared in EPSG:25832 metres.
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {batch_table} AS
                     WITH batch_climate_candidates AS (
                         SELECT
                             f.*,
                             c.year as climate_year,
-                            c.geometry as climate_point,
+                            {sql_transform_to_utm("c.geometry")} as climate_point,
                             c.perco_apr_aug_current, c.perco_sep_mar_current,
                             c.perco_apr_aug_previous, c.perco_sep_mar_previous,
                             c.total_percolation, c.avg_precipitation,
                             c.avg_evaporation, c.sufficient_climate_data,
-                            ST_Distance(ST_Centroid(f.geom), c.geometry)
+                            ST_Distance(
+                                ST_Centroid(f.geom), {sql_transform_to_utm("c.geometry")}
+                            )
                                 as distance_to_climate,
                             ABS(f.year - c.year) as year_diff,
                             ROW_NUMBER() OVER (
                                 PARTITION BY f.field_id, f.year
                                 ORDER BY
                                     ABS(f.year - c.year),
-                                    ST_Distance(ST_Centroid(f.geom), c.geometry)
+                                    ST_Distance(
+                                        ST_Centroid(f.geom), {sql_transform_to_utm("c.geometry")}
+                                    )
                             ) as rn
                         FROM fields_batch f
                         JOIN climate_percolation c
                             ON ST_Intersects(
                                 ST_Centroid(f.geom),
-                                ST_Buffer(c.geometry, 20000)
+                                ST_Buffer({sql_transform_to_utm("c.geometry")}, 20000)
                             )
                         WHERE ABS(f.year - c.year) <= 2
                     )
@@ -1047,14 +1055,14 @@ class NLES5SpatialOperations:
             self.log.info("Verifying SPATIAL_JOIN operator compliance (PR #545)")
 
             # Test query using PR #545 compliant pattern
-            # Data is already in EPSG:25832 - buffer operations work directly in meters
-            explain_result = self.conn.execute("""
+            # Field and climate geometries are compared in EPSG:25832 metres.
+            explain_result = self.conn.execute(f"""
                 EXPLAIN SELECT COUNT(*)
                 FROM agricultural_fields_spatial f
                 JOIN climate_percolation c
                     ON ST_Intersects(
                         ST_Centroid(f.geom),
-                        ST_Buffer(c.geometry, 10000)
+                        ST_Buffer({sql_transform_to_utm("c.geometry")}, 10000)
                     )
                 LIMIT 1
             """).fetchall()
@@ -1074,14 +1082,14 @@ class NLES5SpatialOperations:
             # Additional verification: test the specific pattern we're using
             self.log.info("Testing SPATIAL_JOIN pattern compliance...")
             try:
-                # Data is already in EPSG:25832 - buffer operations work directly in meters
-                test_result = self.conn.execute("""
+                # Field and climate geometries are compared in EPSG:25832 metres.
+                test_result = self.conn.execute(f"""
                     EXPLAIN ANALYZE SELECT COUNT(*)
                     FROM agricultural_fields_spatial f
                     JOIN climate_percolation c
                         ON ST_Intersects(
                             ST_Centroid(f.geom),
-                            ST_Buffer(c.geometry, 20000)
+                            ST_Buffer({sql_transform_to_utm("c.geometry")}, 20000)
                         )
                     WHERE ABS(f.year - c.year) <= 2
                     LIMIT 10
@@ -1127,14 +1135,14 @@ class NLES5SpatialOperations:
 
             # Check 2: Spatial predicate in JOIN ON clause
             try:
-                # Data is already in EPSG:25832 - buffer operations work directly in meters
-                self.conn.execute("""
+                # Field and climate geometries are compared in EPSG:25832 metres.
+                self.conn.execute(f"""
                     SELECT COUNT(*) FROM (
                         SELECT 1 FROM agricultural_fields_spatial f
                         JOIN climate_percolation c
                             ON ST_Intersects(
                                 ST_Centroid(f.geom),
-                                ST_Buffer(c.geometry, 1000)
+                                ST_Buffer({sql_transform_to_utm("c.geometry")}, 1000)
                             )
                         LIMIT 1
                     ) test
