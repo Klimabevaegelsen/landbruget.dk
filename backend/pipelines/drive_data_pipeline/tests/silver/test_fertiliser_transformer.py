@@ -6,6 +6,8 @@ from drive_data_pipeline.silver.transformers.fertiliser_transformer import Ferti
 def test_csv_in_depth_main_register_preserves_form_codes(tmp_path) -> None:
     transformer = FertiliserTransformer()
     assert transformer.can_handle(tmp_path / "V_4061GR_24_ISKV1_6A.csv", {})
+    assert transformer.can_handle(tmp_path / "DCKKON.V_4061GR_24_ISKV1_6A.csv", {})
+    assert transformer.can_handle(tmp_path / "DCKKON.V_4061GR_25_ISKV1_B_DYRERK_6B.xls", {})
     assert transformer.can_handle(tmp_path / "V_COMPANYA.xls", {})
     assert transformer.can_handle(tmp_path / "B_AOGGOED_6B.xls", {})
     content = ("CVR;F_901;F_706_1;F_308_1\n01234567;1.234,5;2.000,0;3.000,5\n").encode("latin-1")
