@@ -51,14 +51,8 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Note: farm_data_storage_path is no longer used - the pipeline now dynamically discovers
     # the latest timestamped directory for each year (e.g., silver/gr {year}/YYYYMMDD_HHMMSS/)
     enable_farm_data_integration: bool = True  # Enable farm data integration for enhanced accuracy
-    farm_data_years: ClassVar[list[int]] = [
-        2018,
-        2019,
-        2020,
-        2021,
-        2022,
-        2023,
-    ]  # Available farm data years (updated based on cloud storage tree)
+    farm_data_years: ClassVar[list[int]] = list(range(2018, 2026))
+    # Available farm data years, including the 2024 and 2025 in-depth releases.
     farm_data_cache_table: str = "farm_data_cache"  # DuckDB table name for cached farm data
 
     # Processing configuration - CHUNKED FOR STABILITY
@@ -99,9 +93,8 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # target_years: Optional[List[int]] = None
     # NOTE: Updated analysis shows 2023 agricultural fields data IS available
     # in cloud storage (fvm_marker_2023)
-    # TEMPORAL EXTENSION: Added 2023 support based on confirmed cloud storage data
-    # availability
-    target_years: ClassVar[list[int]] = [2021, 2022, 2023]
+    # The in-depth Gødningsregnskab releases now extend the target period through 2025.
+    target_years: ClassVar[list[int]] = [2021, 2022, 2023, 2024, 2025]
 
     # MEMORY OPTIMIZATION: Limits target calculation years (auto-discovery with memory management)
     # NLES5 requires 3-year windows: current + previous + year before previous

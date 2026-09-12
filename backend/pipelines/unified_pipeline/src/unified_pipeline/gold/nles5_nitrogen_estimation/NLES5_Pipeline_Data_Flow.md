@@ -134,6 +134,15 @@ flowchart TD
 - **Purpose**: Replace estimated values with actual farm-specific data for enhanced accuracy
 - **Validation**: Comprehensive quality controls per N2023_62 Table 1 (21 validation rules)
 
+### In-depth GR 2024–2025 format
+- The Drive release is read from all `V_4061GR_{YY}_ISKV*_6*` main-register parts; `B_GOEDRK` is not used as a substitute when a main register exists.
+- The Drive Silver transformer accepts the 2024 semicolon/Latin-1 CSV export and 2025 Excel exports, preserving `F_*` and `C_*` columns.
+- Main-register fields are mapped as `F_901` → total N consumption, `F_706_1` → annual commercial N, `F_704_1` → explicit early-August/September commercial N, `F_318_1` → grazing-deposited manure N, `F_308_1` → manure N consumption, `F_804_1` → other organic N, `F_512` → corrected N quota, `F_902` → quota headroom, and `F_243` → harmoni area.
+- `F_706_1` is retained as an annual audit total. It is never assigned to spring or another season. The NLES5 spring input remains zero when the source does not report one; `F_704_1` populates only the autumn input, and `F_318_1` populates the grazing/`udb` input. `mineral_n_allocation_method` is `explicit_register_fields_only`.
+- Farm-to-field distribution keeps these reported sources separate and allocates each one using the same N-quota allocation method. It does not infer a seasonal split.
+- `F_901` remains the reported annual total used for `tn_t_ha`; it is allocated to fields independently of the seasonal inputs, so the annual total is not silently reduced to the subset of source components with explicit timing.
+- `B_DYRERK` detail rows are aggregated by CVR for animal-production fields, while Silver transform/schema/PII copies are de-duplicated before loading.
+
 ### Output Tables
 - **Intermediate**: `nles5_estimates_final_batched` (per batch/year with field_uuid)
 - **Final**: `nles5_nitrogen_estimates_gold` (consolidated results with field_uuid)
@@ -153,5 +162,3 @@ flowchart TD
 - **Validation**: Comprehensive quality controls ensure data integrity per Danish NLES5 methodology (N2023_62, Table 1).
 - Pipeline processes data in target-year batches for memory efficiency.
 - Final export table is `nles5_nitrogen_estimates_gold`.
-
-
