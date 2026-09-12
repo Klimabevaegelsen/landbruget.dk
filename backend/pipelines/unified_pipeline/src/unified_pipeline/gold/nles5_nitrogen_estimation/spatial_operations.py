@@ -618,9 +618,9 @@ class NLES5SpatialOperations:
             )
 
             try:
-                field_plan_count = self.conn.execute("SELECT COUNT(*) FROM field_plan").fetchone()[
-                    0
-                ]
+                field_plan_count = self.conn.execute(
+                    "SELECT COUNT(*) FROM field_plan_data"
+                ).fetchone()[0]
                 if field_plan_count > 0:
                     self.log.info(f"Supplementing with {field_plan_count:,} field plan records")
 
@@ -676,8 +676,13 @@ class NLES5SpatialOperations:
                             FROM {field_plan_table} f
                             LEFT JOIN {enhanced_mappings_table} em
                                 ON f.field_id = em.fvm_field_id
-                            LEFT JOIN field_plan fp
+                            LEFT JOIN field_plan_data fp
                                 ON em.gkea_field_id = fp.field_id
+                                AND (
+                                    em.gkea_cvr_number IS NULL
+                                    OR em.gkea_cvr_number = fp.cvr_number
+                                )
+                                AND f.cvr_number = fp.cvr_number
                                 AND f.year = fp.year
                         """)
                     else:
@@ -702,7 +707,10 @@ class NLES5SpatialOperations:
                                 END as final_nitrogen_source,
                                 1.0 as field_plan_match_confidence
                             FROM {field_plan_table} f
-                            LEFT JOIN field_plan fp ON f.field_id = fp.field_id AND f.year = fp.year
+                            LEFT JOIN field_plan_data fp
+                                ON f.field_id = fp.field_id
+                                AND f.cvr_number = fp.cvr_number
+                                AND f.year = fp.year
                         """)
                     field_plan_table = "fields_with_field_plan"
                 else:
@@ -726,7 +734,10 @@ class NLES5SpatialOperations:
                             cc.catch_crop_type, cc.catch_crop_area_ha,
                             cc.n_reduction_effect
                         FROM {final_table} f
-                        LEFT JOIN catch_crops cc ON f.field_id = cc.field_id AND f.year = cc.year
+                        LEFT JOIN catch_crops cc
+                            ON f.field_id = cc.field_id
+                            AND f.cvr_number = cc.cvr_number
+                            AND f.year = cc.year
                     """)
                     final_table = "fields_with_climate_soil_crops"
                 else:

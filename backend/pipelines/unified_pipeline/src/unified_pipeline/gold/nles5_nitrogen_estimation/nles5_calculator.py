@@ -771,6 +771,74 @@ class NLES5Calculator:
             self.log.error(f"❌ Error creating NLES5 parameter tables: {e}")
             raise
 
+    def _create_empty_catch_crops_table(self) -> None:
+        """Create the normalized cover-crop table used by spatial joins."""
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE catch_crops AS
+            SELECT
+                NULL::VARCHAR AS field_id,
+                NULL::VARCHAR AS cvr_number,
+                NULL::INTEGER AS year,
+                NULL::VARCHAR AS catch_crop_type,
+                NULL::DOUBLE AS catch_crop_area_ha,
+                0.0::DOUBLE AS n_reduction_effect
+            WHERE false
+        """)
+
+    def _prepare_catch_crops_table(self) -> None:
+        """Normalize loaded Efterafgrøder rows for CVR/field/year joins.
+
+        The Drive silver schema contains the actual field identifiers and areas,
+        but not a documented nitrogen-reduction value.  This keeps the observed
+        cover-crop presence and area while leaving that model input explicit.
+        """
+        columns = {row[0] for row in self.conn.execute("DESCRIBE catch_crops_data").fetchall()}
+        required = {"cvr_number", "marknummer", "year"}
+        if not required.issubset(columns):
+            self.log.warning(
+                "⚠️  Catch crops table lacks normalized identifiers; using no cover-crop matches"
+            )
+            self._create_empty_catch_crops_table()
+            return
+
+        area_column = "omregnet_areal_ha" if "omregnet_areal_ha" in columns else "faktisk_areal_ha"
+        type_expression = (
+            "NULLIF(TRIM(CAST(indberet_alternativ AS VARCHAR)), '')"
+            if "indberet_alternativ" in columns
+            else "NULL"
+        )
+        self.conn.execute(f"""
+            CREATE OR REPLACE TABLE catch_crops AS
+            WITH normalized AS (
+                SELECT
+                    TRIM(CAST(marknummer AS VARCHAR)) AS field_id,
+                    TRIM(CAST(cvr_number AS VARCHAR)) AS cvr_number,
+                    TRY_CAST(year AS INTEGER) AS year,
+                    COALESCE({type_expression}, 'catch_crop') AS catch_crop_type,
+                    COALESCE(
+                        NULLIF(TRY_CAST({area_column} AS DOUBLE), 0.0),
+                        0.0
+                    ) AS catch_crop_area_ha
+                FROM catch_crops_data
+                WHERE NULLIF(TRIM(CAST(cvr_number AS VARCHAR)), '') IS NOT NULL
+                  AND NULLIF(TRIM(CAST(marknummer AS VARCHAR)), '') IS NOT NULL
+                  AND TRY_CAST(year AS INTEGER) IS NOT NULL
+            )
+            SELECT
+                field_id,
+                cvr_number,
+                year,
+                MAX(catch_crop_type) AS catch_crop_type,
+                SUM(catch_crop_area_ha) AS catch_crop_area_ha,
+                0.0::DOUBLE AS n_reduction_effect
+            FROM normalized
+            WHERE catch_crop_area_ha > 0
+            GROUP BY field_id, cvr_number, year
+        """)
+
+        count = self.conn.execute("SELECT COUNT(*) FROM catch_crops").fetchone()[0]
+        self.log.info(f"✅ Normalized cover-crop matches: {count:,}")
+
     @timed(name="Preparing nitrogen input tables")
     def _prepare_nitrogen_inputs_tables(self) -> None:
         """
@@ -833,9 +901,11 @@ class NLES5Calculator:
                     "SELECT COUNT(*) FROM catch_crops_data"
                 ).fetchone()[0]
                 self.log.info(f"📊 Catch crops records available: {catch_crops_count:,}")
+                self._prepare_catch_crops_table()
             except Exception:
                 self.log.warning("⚠️  No catch_crops table found - will use defaults")
                 catch_crops_count = 0
+                self._create_empty_catch_crops_table()
 
             # OPTIMIZATION: Nitrogen fixation calculated inline - no separate table needed
             self.log.info(
@@ -1119,10 +1189,16 @@ class NLES5Calculator:
                             ELSE 'default_field_plan_data'
                         END as field_plan_data_quality,
 
-                        -- Catch crops effect (not implemented - using defaults)
-                        0.0 as has_catch_crops,
-                        'none' as catch_crop_type,
-                        'no_catch_crops' as catch_crops_data_quality,
+                        -- Cover-crop metadata comes from the normalized
+                        -- Efterafgrøder table. The source does not contain a
+                        -- documented N reduction value, so that field remains 0.
+                        CASE WHEN cc.field_id IS NOT NULL THEN 1.0 ELSE 0.0 END
+                            as has_catch_crops,
+                        COALESCE(cc.catch_crop_type, 'none') as catch_crop_type,
+                        CASE
+                            WHEN cc.field_id IS NOT NULL THEN 'has_catch_crops'
+                            ELSE 'no_catch_crops'
+                        END as catch_crops_data_quality,
 
                         -- Calculate total mineral nitrogen
                         nwn.mineral_n_spring + nwn.mineral_n_autumn
@@ -1133,8 +1209,13 @@ class NLES5Calculator:
                         -- Large table on left (2.3M+ records)
                     LEFT JOIN field_plan_data fp
                         ON nwn.field_id = fp.field_id
+                        AND nwn.cvr_number = fp.cvr_number
                         AND nwn.year = fp.year
                         -- Small table on right (~567K records)
+                    LEFT JOIN catch_crops cc
+                        ON nwn.field_id = cc.field_id
+                        AND nwn.cvr_number = cc.cvr_number
+                        AND nwn.year = cc.year
                 """)
 
             # Clean up final intermediate table
@@ -1648,9 +1729,13 @@ class NLES5Calculator:
                         WHEN fp.field_id IS NOT NULL THEN 'real_field_plan_data'
                         ELSE 'default_field_plan_data'
                     END as field_plan_data_quality,
-                    0.0 as has_catch_crops,
-                    'none' as catch_crop_type,
-                    'no_catch_crops' as catch_crops_data_quality,
+                    CASE WHEN cc.field_id IS NOT NULL THEN 1.0 ELSE 0.0 END
+                        as has_catch_crops,
+                    COALESCE(cc.catch_crop_type, 'none') as catch_crop_type,
+                    CASE
+                        WHEN cc.field_id IS NOT NULL THEN 'has_catch_crops'
+                        ELSE 'no_catch_crops'
+                    END as catch_crops_data_quality,
                     nwn.mineral_n_spring + nwn.mineral_n_autumn
                         + nwn.mineral_n_growing_season as total_mineral_nitrogen
                 FROM (
@@ -1661,7 +1746,12 @@ class NLES5Calculator:
                 ) nwn  -- Large chunk on left
                 LEFT JOIN field_plan_data fp
                     ON nwn.field_id = fp.field_id
+                    AND nwn.cvr_number = fp.cvr_number
                     AND nwn.year = fp.year  -- Small table on right
+                LEFT JOIN catch_crops cc
+                    ON nwn.field_id = cc.field_id
+                    AND nwn.cvr_number = cc.cvr_number
+                    AND nwn.year = cc.year
             """)
 
             chunk_count = self.conn.execute(
@@ -2011,6 +2101,8 @@ class NLES5Calculator:
                 AND fh.year = {target_year}
             LEFT JOIN field_plan_data fp
                 ON f.field_id = fp.field_id
+                AND f.cvr_number = fp.cvr_number
+                AND fp.year = {target_year}
             WHERE f.drainage_effect IS NOT NULL
         """)
 

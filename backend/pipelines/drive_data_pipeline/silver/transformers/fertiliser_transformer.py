@@ -636,208 +636,169 @@ class FertiliserTransformer(BaseTransformer):
         """)
         return output_table
 
+    @staticmethod
+    def _normalise_spreadsheet_label(value: object) -> str:
+        """Normalise Danish worksheet labels for schema-independent matching."""
+        label = str(value or "").strip().lower()
+        label = label.translate(str.maketrans({"æ": "ae", "ø": "oe", "å": "aa"}))
+        return re.sub(r"[^a-z0-9]+", "_", label).strip("_")
+
+    @staticmethod
+    def _excel_number_expression(reference: str) -> str:
+        """Return a safe DuckDB expression for Danish or invariant decimals."""
+        if reference == "NULL":
+            return "NULL::DOUBLE"
+        value = f"TRIM(CAST({reference} AS VARCHAR))"
+        return f"""
+            CASE
+                WHEN instr({value}, ',') > 0 THEN
+                    TRY_CAST(replace(replace(replace({value}, ' ', ''), '.', ''), ',', '.') AS DOUBLE)
+                ELSE TRY_CAST(replace({value}, ' ', '') AS DOUBLE)
+            END
+        """
+
+    def _resolve_spreadsheet_columns(self, table_name: str) -> dict[str, str]:
+        """Resolve GKEA columns from names or the three-row Excel header layout.
+
+        ``st_read`` exposes these workbooks as ``OGC_FID, Field1, ...`` and keeps
+        the title, code, and header rows as data.  Resolving the labels in that
+        header row avoids year-specific positional offsets and also supports
+        already-normalised Parquet inputs.
+        """
+        columns = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+        references = [f'"{name.replace(chr(34), chr(34) * 2)}"' for name, *_ in columns]
+        by_name = {
+            self._normalise_spreadsheet_label(name): references[index]
+            for index, (name, *_rest) in enumerate(columns)
+        }
+
+        header: dict[str, str] = {}
+        try:
+            rows = self.conn.execute(f"SELECT * FROM {table_name} LIMIT 25").fetchall()
+            for row in rows:
+                labels = {
+                    self._normalise_spreadsheet_label(value): references[index]
+                    for index, value in enumerate(row)
+                    if value is not None and str(value).strip()
+                }
+                if {"cvr", "marknummer", "areal"}.issubset(labels):
+                    header = labels
+                    break
+        except Exception as error:
+            logger.debug(f"Could not inspect spreadsheet header rows in {table_name}: {error}")
+
+        resolved = {**by_name, **header}
+
+        def find(*aliases: str, contains: tuple[str, ...] = ()) -> str:
+            for alias in aliases:
+                if alias in resolved:
+                    return resolved[alias]
+            for key, reference in resolved.items():
+                if any(token in key for token in contains):
+                    return reference
+            return "NULL"
+
+        # Prefer the exact data columns before broader aliases (for example,
+        # ``Harmoni Areal Indikator`` must not be used as the area value).
+        return {
+            "year": find("prod_aar", "year"),
+            "journal": find("journal_nummer", "journal_number", "journalnr", contains=("journal",)),
+            "cvr": find("cvr", "cvr_number", "cvr_nr", "cvrnummer", contains=("cvr",)),
+            "marknummer": find("marknummer", "mark_nr", contains=("marknummer",)),
+            "capnumber": find("capnumber", "cap_number"),
+            "markbloknummer": find("markbloknummer", "markbloknr", "block_id"),
+            "indberet": find(
+                "indberet_alternativ",
+                "eaeller_alternativ_type",
+                contains=("indberet", "alternativ_type"),
+            ),
+            "faktisk_areal": find("faktisk_areal_ha", "areal", "faktisk_ha", contains=("faktisk",)),
+            "omregnet_areal": find(
+                "omregnet_areal_ha",
+                "areal_omregnet_til_ea",
+                "harmoni_areal",
+                "areal_til_radighed_for_ea",
+                contains=("omregnet", "harmoni_areal"),
+            ),
+            "fosfor": find("fosfortal", contains=("fosfor",)),
+        }
+
     def _process_efterafgroeder(self, table_name: str, filename: str) -> str:
-        """Process Efterafgrøder (cover crops) files using DuckDB."""
+        """Process Efterafgrøder (cover crops) files using their worksheet labels."""
         logger.info(f"Processing Efterafgrøder file: {filename}")
 
         harmonized_table = f"harmonized_efterafgroeder_{id(self)}"
-
-        # Get available columns
-        columns = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
-        column_names = [col[0] for col in columns]
-
-        # Build dynamic column selections based on what's available
-        year_col = self._get_column_if_exists(table_name, "PROD_AAR")
-        cvr_col = self._get_column_if_exists(table_name, "CVR")
-        cap_col = self._get_column_if_exists(table_name, "CapNumber")
-        markblok_col = self._get_column_if_exists(table_name, "MARKBLOKNUMMER")
-        marknr_col = self._get_column_if_exists(table_name, "MARKNUMMER")
-
-        # Determine which year format we have for alternativ columns
-        indberet_col = "NULL"
-        faktisk_col = "NULL"
-        omregnet_col = "NULL"
-
-        # Check for different year formats
-        if "A19_INDBERETEFTERAFGALTERNATIV" in column_names:
-            # 2023 format
-            indberet_col = '"A19_INDBERETEFTERAFGALTERNATIV"'
-            if "A20_FAKTISKHAUDLAGTEAALTERNATIV" in column_names:
-                faktisk_col = """TRY_CAST(
-                    REPLACE(CAST("A20_FAKTISKHAUDLAGTEAALTERNATIV" AS VARCHAR), ',', '.')
-                    AS DOUBLE)"""
-            if "A23_OMREGNETHAMEDEA" in column_names:
-                omregnet_col = """TRY_CAST(
-                    REPLACE(CAST("A23_OMREGNETHAMEDEA" AS VARCHAR), ',', '.')
-                    AS DOUBLE)"""
-        elif "A18_INDBERETEFTERAFGALTERNATIV" in column_names:
-            # 2020 format
-            indberet_col = '"A18_INDBERETEFTERAFGALTERNATIV"'
-            if "A19_FAKTISKHAUDLAGTEAALTERNATIV" in column_names:
-                faktisk_col = """TRY_CAST(
-                    REPLACE(CAST("A19_FAKTISKHAUDLAGTEAALTERNATIV" AS VARCHAR), ',', '.')
-                    AS DOUBLE)"""
-            if "A20_OMREGNETHAMEDEA" in column_names:
-                omregnet_col = """TRY_CAST(
-                    REPLACE(CAST("A20_OMREGNETHAMEDEA" AS VARCHAR), ',', '.')
-                    AS DOUBLE)"""
-        elif "A20_INDBERETEFTERAFGALTERNATIV" in column_names:
-            # 2022 format
-            indberet_col = '"A20_INDBERETEFTERAFGALTERNATIV"'
-            if "A21_FAKTISKHAUDLAGTEAALTERNATIV" in column_names:
-                faktisk_col = """TRY_CAST(
-                    REPLACE(CAST("A21_FAKTISKHAUDLAGTEAALTERNATIV" AS VARCHAR), ',', '.')
-                    AS DOUBLE)"""
-            if "A24_OMREGNETHAMEDEA" in column_names:
-                omregnet_col = """TRY_CAST(
-                    REPLACE(CAST("A24_OMREGNETHAMEDEA" AS VARCHAR), ',', '.')
-                    AS DOUBLE)"""
-
-        # Escape filename for SQL
+        columns = self._resolve_spreadsheet_columns(table_name)
+        year = columns["year"]
+        if year == "NULL":
+            year_match = re.search(r"20\d{2}", filename)
+            year = f"'{year_match.group(0)}'" if year_match else "NULL"
+        else:
+            year = f"CAST({year} AS VARCHAR)"
         escaped_filename = filename.replace("'", "''")
+        actual_area = self._excel_number_expression(columns["faktisk_areal"])
+        converted_area = self._excel_number_expression(columns["omregnet_areal"])
 
         self.conn.execute(f"""
             CREATE TABLE {harmonized_table} AS
             SELECT
                 'efterafgroeder' AS data_source,
-                CAST({year_col} AS VARCHAR) AS year,
-                CAST({cvr_col} AS VARCHAR) AS cvr_number,
-                CAST({cap_col} AS VARCHAR) AS capnumber,
-                CAST({markblok_col} AS VARCHAR) AS markbloknummer,
-                CAST({marknr_col} AS VARCHAR) AS marknummer,
-                CAST({indberet_col} AS VARCHAR) AS indberet_alternativ,
-                {faktisk_col} AS faktisk_areal_ha,
-                {omregnet_col} AS omregnet_areal_ha,
-                NULL AS journal_nummer,
+                {year} AS year,
+                CAST({columns["cvr"]} AS VARCHAR) AS cvr_number,
+                CAST({columns["capnumber"]} AS VARCHAR) AS capnumber,
+                CAST({columns["markbloknummer"]} AS VARCHAR) AS markbloknummer,
+                CAST({columns["marknummer"]} AS VARCHAR) AS marknummer,
+                CAST({columns["indberet"]} AS VARCHAR) AS indberet_alternativ,
+                {actual_area} AS faktisk_areal_ha,
+                {converted_area} AS omregnet_areal_ha,
+                CAST({columns["journal"]} AS VARCHAR) AS journal_nummer,
                 NULL::DOUBLE AS total_n_kvote,
                 NULL::DOUBLE AS fosfortal,
                 'Efterafgrøder' AS data_type,
                 '{escaped_filename}' AS data_source_file
             FROM {table_name}
+            WHERE NULLIF(TRIM(CAST({columns["cvr"]} AS VARCHAR)), '') IS NOT NULL
+              AND NULLIF(TRIM(CAST({columns["marknummer"]} AS VARCHAR)), '') IS NOT NULL
+              AND {actual_area} > 0
         """)
 
         return harmonized_table
 
     def _process_gkea(self, table_name: str, filename: str) -> str:
-        """Process GKEA markplan files using DuckDB."""
+        """Process GKEA markplan files using their worksheet labels."""
         logger.info(f"Processing GKEA file: {filename}")
 
         harmonized_table = f"harmonized_gkea_{id(self)}"
-
-        # Extract year from filename
-        year = None
-        for yr in ["2021", "2022", "2023", "2024"]:
-            if yr in filename:
-                year = yr
-                break
-
-        # Get column info
-        columns = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
-        num_cols = len(columns)
-
-        # Escape filename for SQL
+        columns = self._resolve_spreadsheet_columns(table_name)
+        year_match = re.search(r"20\d{2}", filename)
+        year = f"'{year_match.group(0)}'" if year_match else "NULL"
         escaped_filename = filename.replace("'", "''")
+        actual_area = self._excel_number_expression(columns["faktisk_areal"])
+        converted_area = self._excel_number_expression(columns["omregnet_areal"])
+        phosphor = self._excel_number_expression(columns["fosfor"])
 
-        # GKEA files typically have positional columns
-        # Create the harmonized table based on column positions
-        if num_cols >= 2:
-            # Build column references by position (0-indexed)
-            # First, rename columns to positional names for easier access
-            select_parts = []
-            for i, col in enumerate(columns):
-                col_name = col[0]
-                escaped_name = col_name.replace('"', '""')
-                select_parts.append(f'"{escaped_name}" AS column{i}')
-
-            positional_table = f"gkea_positional_{id(self)}"
-            self.conn.execute(f"""
-                CREATE TABLE {positional_table} AS
-                SELECT {", ".join(select_parts)}
-                FROM {table_name}
-            """)
-
-            # Now create harmonized table based on year-specific mappings
-            journal_col = "column0" if num_cols > 0 else "NULL"
-            cvr_col = "column1" if num_cols > 1 else "NULL"
-
-            if year == "2021" and num_cols > 14:
-                marknr_col = "column5"
-                faktisk_col = "TRY_CAST(REPLACE(CAST(column6 AS VARCHAR), ',', '.') AS DOUBLE)"
-                omregnet_col = "TRY_CAST(REPLACE(CAST(column10 AS VARCHAR), ',', '.') AS DOUBLE)"
-                indberet_col = "column14"
-                fosfor_col = (
-                    "TRY_CAST(REPLACE(CAST(column19 AS VARCHAR), ',', '.') AS DOUBLE)"
-                    if num_cols > 19
-                    else "NULL"
-                )
-            elif year == "2022" and num_cols > 12:
-                marknr_col = "column3"
-                faktisk_col = "TRY_CAST(REPLACE(CAST(column4 AS VARCHAR), ',', '.') AS DOUBLE)"
-                omregnet_col = "TRY_CAST(REPLACE(CAST(column8 AS VARCHAR), ',', '.') AS DOUBLE)"
-                indberet_col = "column12"
-                fosfor_col = (
-                    "TRY_CAST(REPLACE(CAST(column17 AS VARCHAR), ',', '.') AS DOUBLE)"
-                    if num_cols > 17
-                    else "NULL"
-                )
-            elif year in ["2023", "2024"] and num_cols > 10:
-                marknr_col = "column3"
-                faktisk_col = "TRY_CAST(REPLACE(CAST(column4 AS VARCHAR), ',', '.') AS DOUBLE)"
-                omregnet_col = "TRY_CAST(REPLACE(CAST(column6 AS VARCHAR), ',', '.') AS DOUBLE)"
-                indberet_col = "column10"
-                fosfor_col = "NULL"
-            else:
-                marknr_col = "NULL"
-                faktisk_col = "NULL"
-                omregnet_col = "NULL"
-                indberet_col = "NULL"
-                fosfor_col = "NULL"
-
-            year_val = f"'{year}'" if year else "NULL"
-
-            self.conn.execute(f"""
-                CREATE TABLE {harmonized_table} AS
-                SELECT
-                    'gkea' AS data_source,
-                    {year_val} AS year,
-                    CAST({cvr_col} AS VARCHAR) AS cvr_number,
-                    NULL AS capnumber,
-                    NULL AS markbloknummer,
-                    CAST({marknr_col} AS VARCHAR) AS marknummer,
-                    CAST({indberet_col} AS VARCHAR) AS indberet_alternativ,
-                    {faktisk_col} AS faktisk_areal_ha,
-                    {omregnet_col} AS omregnet_areal_ha,
-                    CAST({journal_col} AS VARCHAR) AS journal_nummer,
-                    NULL::DOUBLE AS total_n_kvote,
-                    {fosfor_col} AS fosfortal,
-                    'GKEA Markplan' AS data_type,
-                    '{escaped_filename}' AS data_source_file
-                FROM {positional_table}
-            """)
-
-            # Clean up positional table
-            self._drop_table(positional_table)
-        else:
-            # Not enough columns, create empty harmonized table
-            self.conn.execute(f"""
-                CREATE TABLE {harmonized_table} AS
-                SELECT
-                    'gkea' AS data_source,
-                    NULL AS year,
-                    NULL AS cvr_number,
-                    NULL AS capnumber,
-                    NULL AS markbloknummer,
-                    NULL AS marknummer,
-                    NULL AS indberet_alternativ,
-                    NULL::DOUBLE AS faktisk_areal_ha,
-                    NULL::DOUBLE AS omregnet_areal_ha,
-                    NULL AS journal_nummer,
-                    NULL::DOUBLE AS total_n_kvote,
-                    NULL::DOUBLE AS fosfortal,
-                    'GKEA Markplan' AS data_type,
-                    '{escaped_filename}' AS data_source_file
-                WHERE 1=0
-            """)
+        self.conn.execute(f"""
+            CREATE TABLE {harmonized_table} AS
+            SELECT
+                'gkea' AS data_source,
+                {year} AS year,
+                CAST({columns["cvr"]} AS VARCHAR) AS cvr_number,
+                CAST({columns["capnumber"]} AS VARCHAR) AS capnumber,
+                CAST({columns["markbloknummer"]} AS VARCHAR) AS markbloknummer,
+                CAST({columns["marknummer"]} AS VARCHAR) AS marknummer,
+                CAST({columns["indberet"]} AS VARCHAR) AS indberet_alternativ,
+                {actual_area} AS faktisk_areal_ha,
+                {converted_area} AS omregnet_areal_ha,
+                CAST({columns["journal"]} AS VARCHAR) AS journal_nummer,
+                NULL::DOUBLE AS total_n_kvote,
+                {phosphor} AS fosfortal,
+                'GKEA Markplan' AS data_type,
+                '{escaped_filename}' AS data_source_file
+            FROM {table_name}
+            WHERE NULLIF(TRIM(CAST({columns["cvr"]} AS VARCHAR)), '') IS NOT NULL
+              AND NULLIF(TRIM(CAST({columns["marknummer"]} AS VARCHAR)), '') IS NOT NULL
+              AND {actual_area} > 0
+        """)
 
         return harmonized_table
 

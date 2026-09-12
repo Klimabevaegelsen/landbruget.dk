@@ -701,6 +701,33 @@ class NLES5DataLoader:
             self.log.error(f"Failed to get field plan data path: {e}")
             raise
 
+    def _get_field_plan_data_paths(self, target_years: list[int] | None = None) -> list[str]:
+        """Find the available year-specific GKEA field-plan files in the latest run."""
+        fertiliser_dir = self._get_fertilizer_data_path()
+        files = self.storage.list_files(
+            f"{fertiliser_dir}GKEA*_Markplan_med_Gødningsoplysninger*.parquet"
+        )
+        if not files:
+            files = self.storage.list_files(f"{fertiliser_dir}GKEA*_Markplan*.parquet")
+
+        requested_years = set(target_years or [])
+        selected: list[str] = []
+        for file_path in sorted(set(files)):
+            filename = file_path.rsplit("/", 1)[-1]
+            year_match = re.search(r"GKEA(20\d{2})_", filename, re.IGNORECASE)
+            if not year_match or "efterafgr" in filename.lower():
+                continue
+            if not requested_years or int(year_match.group(1)) in requested_years:
+                selected.append(file_path)
+
+        if not selected:
+            raise FileNotFoundError(
+                f"No year-matching GKEA field-plan files found in {fertiliser_dir}"
+            )
+
+        self.log.info(f"✅ Found {len(selected)} year-specific GKEA field-plan file(s)")
+        return selected
+
     def _get_catch_crops_data_path(self, target_year: int | None = None) -> str:
         """
         Get the path to catch crops (Efterafgrøder) data from the fertiliser directory.
@@ -760,6 +787,25 @@ class NLES5DataLoader:
         except Exception as e:
             self.log.error(f"Failed to get catch crops data path: {e}")
             return f"{self.config.bucket}/silver/fertiliser/Efterafgrøder.parquet"
+
+    def _get_catch_crops_data_paths(self, target_years: list[int] | None = None) -> list[str]:
+        """Find available year-specific Efterafgrøder files in the latest run."""
+        fertiliser_dir = self._get_fertilizer_data_path()
+        files = self.storage.list_files(f"{fertiliser_dir}Efterafgrøder*.parquet")
+        requested_years = set(target_years or [])
+        selected: list[str] = []
+        for file_path in sorted(set(files)):
+            filename = file_path.rsplit("/", 1)[-1]
+            year_match = re.search(r"Efterafgr(?:ø|oe)der[ _-]*(20\d{2})", filename, re.IGNORECASE)
+            if year_match and (not requested_years or int(year_match.group(1)) in requested_years):
+                selected.append(file_path)
+
+        if not selected:
+            raise FileNotFoundError(
+                f"No year-matching Efterafgrøder files found in {fertiliser_dir}"
+            )
+        self.log.info(f"✅ Found {len(selected)} year-specific Efterafgrøder file(s)")
+        return selected
 
     def _read_silver_data_from_path(
         self, dataset_name: str, file_path: str, target_table: str
@@ -924,7 +970,10 @@ class NLES5DataLoader:
             self.db.execute(f"""
                 CREATE OR REPLACE TABLE {target_table} AS
                 SELECT
-                    CONCAT("{cvr_col}", '_', "{marknummer_col}") as field_id,
+                    -- FVM uses the farmer-local mark number as field_id.  CVR is
+                    -- retained separately and is part of every downstream join;
+                    -- a CVR+mark composite is not compatible with marker data.
+                    TRIM(CAST("{marknummer_col}" AS VARCHAR)) as field_id,
                     {gkea_year} as year,
                     {f'"{journal_col}"' if journal_col else "NULL"} as journal_nummer,
                     "{cvr_col}" as cvr_number,
@@ -1057,9 +1106,9 @@ class NLES5DataLoader:
             self.db.execute(f"""
                 CREATE OR REPLACE TABLE {target_table} AS
                 SELECT
-                    -- COMPOSITE KEY: Create field_id from CVR + marknummer for FVM matching
-                    -- Dynamic CVR_Marknummer composite key
-                    CONCAT({cvr_column}, '_', {marknummer_column}) as field_id,
+                    -- FVM uses the farmer-local mark number as field_id.  Keep
+                    -- CVR separate so joins can disambiguate reused mark numbers.
+                    TRIM(CAST({marknummer_column} AS VARCHAR)) as field_id,
                     -- Year from filename (e.g., 2021 from GKEA2021_...)
                     {gkea_year} as year,
                     -- 'Journal Nummer' (dynamically determined)
@@ -1176,7 +1225,9 @@ class NLES5DataLoader:
                         CREATE OR REPLACE TABLE gkea_fvm_enhanced_mappings AS
                         SELECT
                             g.field_id as gkea_field_id,
+                            g.cvr_number as gkea_cvr_number,
                             f.field_id as fvm_field_id,
+                            f.cvr_number as fvm_cvr_number,
                             'direct_composite_key' as match_method,
                             1.0 as confidence_score
                         FROM {gkea_table} g
@@ -1187,7 +1238,9 @@ class NLES5DataLoader:
 
                         SELECT
                             gkea_field_id,
+                            NULL::VARCHAR as gkea_cvr_number,
                             fvm_field_id,
+                            NULL::VARCHAR as fvm_cvr_number,
                             'agricultural_pattern' as match_method,
                             field_similarity_score as confidence_score
                         FROM enhanced_gkea_fvm_matches
@@ -1286,25 +1339,30 @@ class NLES5DataLoader:
                     # Always try to load from fertiliser directory
                     elif dataset_name == self.config.field_plan_dataset:
                         try:
-                            # Use the first target year as the reference for field plan data
-                            target_year = (
-                                self.config.target_years[0]
-                                if getattr(self.config, "target_years", None)
-                                and len(self.config.target_years) > 0
-                                else None
-                            )
-                            field_plan_path = self._get_field_plan_data_path(target_year)
-                            self.log.info(
-                                f"Using field plan file from fertiliser directory for year "
-                                f"{target_year}: {field_plan_path}"
-                            )
-                            success = self._read_silver_data_from_path(
-                                dataset_name, field_plan_path, table_name
-                            )
-                            if success:
+                            target_years = getattr(self.config, "target_years", [])
+                            field_plan_paths = self._get_field_plan_data_paths(target_years)
+                            field_plan_tables: list[str] = []
+                            for index, field_plan_path in enumerate(field_plan_paths):
+                                source_table = f"field_plan_data_{index}"
+                                if self._read_silver_data_from_path(
+                                    dataset_name, field_plan_path, source_table
+                                ):
+                                    field_plan_tables.append(source_table)
+
+                            if field_plan_tables:
+                                self.db.execute(
+                                    f"CREATE OR REPLACE TABLE {table_name} AS "
+                                    + " UNION ALL BY NAME ".join(
+                                        f"SELECT * FROM {source_table}"
+                                        for source_table in field_plan_tables
+                                    )
+                                )
+                                for source_table in field_plan_tables:
+                                    self.db.execute(f"DROP TABLE IF EXISTS {source_table}")
                                 loaded_tables[dataset_name] = table_name
                                 self.log.info(
-                                    f"✅ Successfully loaded field plan data: {dataset_name}"
+                                    f"✅ Successfully loaded field plan data from "
+                                    f"{len(field_plan_tables)} year(s): {dataset_name}"
                                 )
                                 continue
                             self.log.error(f"❌ Failed to load field plan data {dataset_name}")
@@ -1383,25 +1441,32 @@ class NLES5DataLoader:
                             # Special handling for catch crops data (optional)
                             if dataset_name == self.config.catch_crops_dataset:
                                 try:
-                                    target_year = (
-                                        self.config.target_years[0]
-                                        if getattr(self.config, "target_years", None)
-                                        and len(self.config.target_years) > 0
-                                        else None
+                                    target_years = getattr(self.config, "target_years", [])
+                                    catch_crops_paths = self._get_catch_crops_data_paths(
+                                        target_years
                                     )
-                                    catch_crops_path = self._get_catch_crops_data_path(target_year)
-                                    self.log.info(
-                                        f"Using catch crops file for year {target_year}: "
-                                        f"{catch_crops_path}"
-                                    )
-                                    success = self._read_silver_data_from_path(
-                                        dataset_name, catch_crops_path, table_name
-                                    )
-                                    if success:
+                                    catch_crops_tables: list[str] = []
+                                    for index, catch_crops_path in enumerate(catch_crops_paths):
+                                        source_table = f"catch_crops_data_{index}"
+                                        if self._read_silver_data_from_path(
+                                            dataset_name, catch_crops_path, source_table
+                                        ):
+                                            catch_crops_tables.append(source_table)
+
+                                    if catch_crops_tables:
+                                        self.db.execute(
+                                            f"CREATE OR REPLACE TABLE {table_name} AS "
+                                            + " UNION ALL BY NAME ".join(
+                                                f"SELECT * FROM {source_table}"
+                                                for source_table in catch_crops_tables
+                                            )
+                                        )
+                                        for source_table in catch_crops_tables:
+                                            self.db.execute(f"DROP TABLE IF EXISTS {source_table}")
                                         loaded_tables[dataset_name] = table_name
                                         self.log.info(
-                                            f"✅ Successfully loaded catch crops data: "
-                                            f"{dataset_name}"
+                                            f"✅ Successfully loaded catch crops data from "
+                                            f"{len(catch_crops_tables)} year(s): {dataset_name}"
                                         )
                                         continue
                                     self.log.warning(
