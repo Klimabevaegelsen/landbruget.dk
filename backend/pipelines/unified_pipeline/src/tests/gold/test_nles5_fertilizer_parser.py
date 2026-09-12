@@ -39,6 +39,21 @@ class _Storage:
         )
 
 
+class _MappedGkeaStorage(_Storage):
+    """Map a canonical cloud path to a local fixture for path-boundary tests."""
+
+    def __init__(self, connection: duckdb.DuckDBPyConnection, fixture_path: str):
+        super().__init__(connection)
+        self.fixture_path = fixture_path
+        self.created_paths: list[str] = []
+
+    def create_table_from_storage(self, table_name: str, path: str) -> None:
+        self.created_paths.append(path)
+        self.connection.execute(
+            f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{self.fixture_path}')"
+        )
+
+
 def _loader(
     connection: duckdb.DuckDBPyConnection, storage: _Storage | None = None
 ) -> NLES5DataLoader:
@@ -126,6 +141,32 @@ def test_file_selection_prefers_final_pii_copy() -> None:
     ]
 
     assert NLES5DataLoader._prefer_final_gr_files(files) == [files[2]]
+
+
+def test_gkea_loader_uses_storage_for_bare_bucket_paths(tmp_path) -> None:
+    connection = duckdb.connect()
+    source_path = tmp_path / "GKEA2024_fixture.parquet"
+    connection.execute(
+        """
+        CREATE TABLE gkea_source AS
+        SELECT '01234567'::VARCHAR AS cvr_number,
+               'field-1'::VARCHAR AS marknummer,
+               12.5::DOUBLE AS faktisk_areal_ha,
+               'journal-1'::VARCHAR AS journal_nummer
+        """
+    )
+    connection.execute(f"COPY gkea_source TO '{source_path}' (FORMAT PARQUET)")
+    connection.execute("DROP TABLE gkea_source")
+
+    cloud_path = "landbruget-data/silver/fertiliser/run/GKEA2024_Markplan.parquet"
+    storage = _MappedGkeaStorage(connection, str(source_path))
+    loader = _loader(connection, storage)
+
+    assert loader._process_gkea_field_plan_data(cloud_path, "field_plan_data")
+    assert storage.created_paths == [cloud_path]
+    assert connection.execute(
+        "SELECT cvr_number, marknummer, areal FROM field_plan_data"
+    ).fetchall() == [("01234567", "field-1", 12.5)]
 
 
 def test_gr_year_prefers_directory_and_supports_two_digit_filename() -> None:

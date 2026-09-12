@@ -823,10 +823,12 @@ class NLES5DataLoader:
             gkea_year = int(year_match.group(1)) if year_match else 2024
 
             # First, load the data to check its structure
-            self.db.execute(f"""
-                CREATE OR REPLACE TABLE field_plan_temp AS
-                SELECT * FROM '{file_path}'
-            """)
+            # StorageAccess owns the cloud/local path boundary.  The paths
+            # returned by list_files are canonical bare bucket/key paths,
+            # which DuckDB would otherwise interpret as local files when the
+            # R2 scheme is omitted.
+            self.db.execute("DROP TABLE IF EXISTS field_plan_temp")
+            self.storage.create_table_from_storage("field_plan_temp", file_path)
 
             # Check the actual column names in the parquet file
             columns_info = self.db.execute("PRAGMA table_info(field_plan_temp)").fetchall()
