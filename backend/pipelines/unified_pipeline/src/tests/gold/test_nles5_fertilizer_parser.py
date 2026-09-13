@@ -144,6 +144,51 @@ def test_file_selection_prefers_final_pii_copy() -> None:
     assert NLES5DataLoader._prefer_final_gr_files(files) == [files[2]]
 
 
+def test_combine_dmi_datasets_preserves_both_climate_parameters() -> None:
+    connection = duckdb.connect()
+    connection.execute(
+        """
+        CREATE TABLE dmi_precipitation (
+            parameter_id VARCHAR,
+            valid_time TIMESTAMP,
+            avg_value DOUBLE
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE dmi_evaporation (
+            parameter_id VARCHAR,
+            valid_time TIMESTAMP,
+            avg_value DOUBLE
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO dmi_precipitation VALUES
+            ('acc_precip', '2025-04-01', 40.0)
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO dmi_evaporation VALUES
+            ('pot_evaporation_makkink', '2025-04-01', 25.0)
+        """
+    )
+
+    loader = _loader(connection)
+    loader._combine_dmi_datasets()
+
+    assert connection.execute("SELECT COUNT(*) FROM dmi_data").fetchone() == (2,)
+    assert connection.execute(
+        "SELECT parameter_id, data_type FROM dmi_data ORDER BY parameter_id"
+    ).fetchall() == [
+        ("acc_precip", "precipitation"),
+        ("pot_evaporation_makkink", "evaporation"),
+    ]
+
+
 def test_gkea_loader_uses_storage_for_bare_bucket_paths(tmp_path) -> None:
     connection = duckdb.connect()
     source_path = tmp_path / "GKEA2024_fixture.parquet"

@@ -3,10 +3,12 @@
 from types import SimpleNamespace
 
 import duckdb
+import pytest
 
 from unified_pipeline.gold.nles5_nitrogen_estimation.climate_processor import (
     NLES5ClimateProcessor,
 )
+from unified_pipeline.gold.nles5_nitrogen_estimation.data_loader import NLES5DataLoader
 
 
 class _Log:
@@ -94,3 +96,56 @@ def test_year_climate_join_uses_processing_crs_for_both_geometries() -> None:
     assert 6_000_000 < row[1] < 6_500_000
     assert row[2] < 1.0
     assert row[3] == 300.0
+
+
+def test_dmi_combination_feeds_evaporation_into_net_percolation() -> None:
+    connection = duckdb.connect()
+    connection.execute("INSTALL spatial")
+    connection.execute("LOAD spatial")
+
+    connection.execute(
+        """
+        CREATE TABLE dmi_precipitation AS
+        SELECT
+            'acc_precip'::VARCHAR AS parameter_id,
+            '2025-04-01'::TIMESTAMP AS valid_time,
+            40.0::DOUBLE AS avg_value,
+            '{"type":"Point","coordinates":[10.0,56.0]}'::VARCHAR
+                AS centroid_geometry,
+            'EPSG:4326'::VARCHAR AS source_crs,
+            'EPSG:4326'::VARCHAR AS target_crs
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE dmi_evaporation AS
+        SELECT
+            'pot_evaporation_makkink'::VARCHAR AS parameter_id,
+            '2025-04-01'::TIMESTAMP AS valid_time,
+            25.0::DOUBLE AS avg_value,
+            '{"type":"Point","coordinates":[10.0,56.0]}'::VARCHAR
+                AS centroid_geometry,
+            'EPSG:4326'::VARCHAR AS source_crs,
+            'EPSG:4326'::VARCHAR AS target_crs
+        """
+    )
+
+    processor = SimpleNamespace(
+        config=SimpleNamespace(bucket="landbruget-data"),
+        log=_Log(),
+        conn=connection,
+        storage_access=None,
+    )
+    NLES5DataLoader(processor)._combine_dmi_datasets()
+
+    result_table = NLES5ClimateProcessor(processor)._process_climate_data()
+    row = connection.execute(
+        f"""
+        SELECT perco_apr_aug_current, total_percolation,
+               avg_precipitation, avg_evaporation
+        FROM {result_table}
+        WHERE year = 2025
+        """
+    ).fetchone()
+
+    assert row == pytest.approx((15.0, 15.0, 40.0, 25.0))
