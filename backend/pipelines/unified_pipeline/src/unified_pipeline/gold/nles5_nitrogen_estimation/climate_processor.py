@@ -271,11 +271,17 @@ class NLES5ClimateProcessor:
                                                 / (4.5113925120 - 4.5113287175)
                                             ) * 3.3
                                         )
-                                    -- Check if coords might be in WGS84 (lon/lat)
-                                    WHEN ST_X(ST_GeomFromGeoJSON(centroid_geometry)) >= 8.0
-                                         AND ST_X(ST_GeomFromGeoJSON(centroid_geometry)) <= 15.0
-                                         AND ST_Y(ST_GeomFromGeoJSON(centroid_geometry)) >= 54.0
-                                         AND ST_Y(ST_GeomFromGeoJSON(centroid_geometry)) <= 58.0
+                                    -- Check if coords are in WGS84 (lon/lat). The
+                                    -- silver metadata currently labels these DMI
+                                    -- coordinates as EPSG:25832, so detect the
+                                    -- coordinate values instead of trusting that
+                                    -- metadata. Keep valid geographic coordinates
+                                    -- just outside Denmark too: three real DMI grid
+                                    -- centroids are east of 15 degrees longitude.
+                                    WHEN ST_X(ST_GeomFromGeoJSON(centroid_geometry)) >= -180.0
+                                         AND ST_X(ST_GeomFromGeoJSON(centroid_geometry)) <= 180.0
+                                         AND ST_Y(ST_GeomFromGeoJSON(centroid_geometry)) >= -90.0
+                                         AND ST_Y(ST_GeomFromGeoJSON(centroid_geometry)) <= 90.0
                                     THEN
                                         -- Coordinates are already in WGS84 - keep as-is
                                         ST_GeomFromGeoJSON(centroid_geometry)
@@ -291,17 +297,7 @@ class NLES5ClimateProcessor:
                                             'EPSG:25832',
                                             'EPSG:4326'
                                         )
-                                    ELSE
-                                        -- Fallback: Simple scaling approach for
-                                        -- unknown coordinate systems → WGS84
-                                        ST_Point(
-                                            10.0 + (ST_X(ST_GeomFromGeoJSON(
-                                                centroid_geometry
-                                            )) * 5.0),
-                                            55.5 + (ST_Y(ST_GeomFromGeoJSON(
-                                                centroid_geometry
-                                            )) * 2.0)
-                                        )
+                                    ELSE NULL
                                 END
                             ELSE NULL
                         END as clim_geometry
@@ -1261,12 +1257,54 @@ class NLES5ClimateProcessor:
 
             result_table = f"fields_climate_{year}"
 
+            # Climate geometries are stored in WGS84 while fields are stored in
+            # EPSG:25832. DuckDB represents projections that cannot be evaluated
+            # as POINT (inf inf); those values must never reach ST_GeomFromText
+            # or they abort the whole year's join.
+            projected_climate_geometry = sql_transform_to_utm("geometry")
+            valid_projected_climate_predicate = f"""
+                geometry IS NOT NULL
+                AND isfinite(ST_X({projected_climate_geometry}))
+                AND isfinite(ST_Y({projected_climate_geometry}))
+            """
+            projected_qualified_climate_geometry = sql_transform_to_utm("c.geometry")
+            valid_projected_qualified_climate_predicate = f"""
+                c.geometry IS NOT NULL
+                AND isfinite(ST_X({projected_qualified_climate_geometry}))
+                AND isfinite(ST_Y({projected_qualified_climate_geometry}))
+            """
+
             # Check if climate data exists for this year
-            climate_count = self.conn.execute(f"""
+            climate_source_count = self.conn.execute(f"""
                 SELECT COUNT(*)
                 FROM {climate_table}
                 WHERE year = {year}
             """).fetchone()[0]
+            climate_count = self.conn.execute(f"""
+                SELECT COUNT(*)
+                FROM {climate_table}
+                WHERE year = {year}
+                  AND {valid_projected_climate_predicate}
+            """).fetchone()[0]
+
+            excluded_climate_count = climate_source_count - climate_count
+            if excluded_climate_count > 0:
+                self.log.warning(
+                    f"⚠️ Excluding {excluded_climate_count:,} climate point(s) for year "
+                    f"{year}: non-finite EPSG:25832 coordinates after transformation. "
+                    "No replacement values are generated."
+                )
+
+            if climate_count == 0:
+                if climate_source_count == 0:
+                    self.log.warning(f"No climate data available for year {year}")
+                else:
+                    self.log.error(
+                        f"No usable climate geometries available for year {year} "
+                        f"({climate_source_count:,} source record(s) were invalid after "
+                        "EPSG:25832 transformation)"
+                    )
+                return None
 
             # DIAGNOSTIC: Check spatial variation of climate data for this year
             climate_variation = self.conn.execute(f"""
@@ -1280,6 +1318,7 @@ class NLES5ClimateProcessor:
                     MAX(total_percolation) as max_perco
                 FROM {climate_table}
                 WHERE year = {year}
+                  AND {valid_projected_climate_predicate}
             """).fetchone()
 
             if climate_variation:
@@ -1314,10 +1353,6 @@ class NLES5ClimateProcessor:
                         f"   Value: {climate_variation[4]:.1f}mm (constant across all locations)"
                     )
 
-            if climate_count == 0:
-                self.log.warning(f"No climate data available for year {year}")
-                return None
-
             # OPTIMIZED FOR 10km x 10km GRID: Nearest neighbor with safe buffer
             self.log.info(
                 f"Using NEAREST-NEIGHBOR spatial join for year {year} (10km x 10km DMI grid)"
@@ -1340,17 +1375,21 @@ class NLES5ClimateProcessor:
                      WHERE year = {year} AND geom IS NOT NULL) as fields_with_geom,
                     (SELECT COUNT(*) FROM agricultural_fields_spatial
                      WHERE year = {year} AND ST_IsValid(geom)) as fields_valid_geom,
-                    (SELECT COUNT(*) FROM climate_percolation
-                     WHERE year = {year} AND geometry IS NOT NULL) as climate_with_geom,
-                    (SELECT COUNT(*) FROM climate_percolation
-                     WHERE year = {year} AND ST_IsValid(geometry)) as climate_valid_geom,
+                    (SELECT COUNT(*) FROM {climate_table}
+                     WHERE year = {year} AND {valid_projected_climate_predicate})
+                        as climate_with_geom,
+                    (SELECT COUNT(*) FROM {climate_table}
+                     WHERE year = {year}
+                       AND {valid_projected_climate_predicate}
+                       AND ST_IsValid(geometry)) as climate_valid_geom,
                     -- Test spatial intersection with small sample
                     (SELECT COUNT(*) FROM (
-                        SELECT 1 FROM agricultural_fields_spatial f, climate_percolation c
+                        SELECT 1 FROM agricultural_fields_spatial f, {climate_table} c
                         WHERE f.year = {year} AND c.year = {year}
+                        AND {valid_projected_qualified_climate_predicate}
                         AND ST_Intersects(
                             ST_Centroid(f.geom),
-                            ST_Buffer({sql_transform_to_utm("c.geometry")}, 15000)
+                            ST_Buffer({projected_qualified_climate_geometry}, 15000)
                         )
                         LIMIT 5
                     )) as sample_intersections
@@ -1376,13 +1415,13 @@ class NLES5ClimateProcessor:
 
             climate_distribution = self.conn.execute(f"""
                 SELECT
-                    MIN(ST_X({sql_transform_to_utm("geometry")})) as climate_min_x,
-                    MAX(ST_X({sql_transform_to_utm("geometry")})) as climate_max_x,
-                    MIN(ST_Y({sql_transform_to_utm("geometry")})) as climate_min_y,
-                    MAX(ST_Y({sql_transform_to_utm("geometry")})) as climate_max_y,
+                    MIN(ST_X({projected_climate_geometry})) as climate_min_x,
+                    MAX(ST_X({projected_climate_geometry})) as climate_max_x,
+                    MIN(ST_Y({projected_climate_geometry})) as climate_min_y,
+                    MAX(ST_Y({projected_climate_geometry})) as climate_max_y,
                     COUNT(*) as total_climate_points
-                FROM climate_percolation
-                WHERE year = {year} AND geometry IS NOT NULL
+                FROM {climate_table}
+                WHERE year = {year} AND {valid_projected_climate_predicate}
             """).fetchone()
 
             self.log.info("🗺️  GEOGRAPHIC DISTRIBUTION ANALYSIS:")
@@ -1460,14 +1499,22 @@ class NLES5ClimateProcessor:
                         (SELECT MAX(ST_Y(ST_Centroid(geom)))
                          FROM agricultural_fields_spatial WHERE year = {year}) as field_max_y,
                         -- Climate coordinate ranges
-                        (SELECT MIN(ST_X({sql_transform_to_utm("geometry")}))
-                         FROM climate_percolation WHERE year = {year}) as climate_min_x,
-                        (SELECT MAX(ST_X({sql_transform_to_utm("geometry")}))
-                         FROM climate_percolation WHERE year = {year}) as climate_max_x,
-                        (SELECT MIN(ST_Y({sql_transform_to_utm("geometry")}))
-                         FROM climate_percolation WHERE year = {year}) as climate_min_y,
-                        (SELECT MAX(ST_Y({sql_transform_to_utm("geometry")}))
-                         FROM climate_percolation WHERE year = {year}) as climate_max_y
+                        (SELECT MIN(ST_X({projected_climate_geometry}))
+                         FROM {climate_table}
+                         WHERE year = {year} AND {valid_projected_climate_predicate})
+                            as climate_min_x,
+                        (SELECT MAX(ST_X({projected_climate_geometry}))
+                         FROM {climate_table}
+                         WHERE year = {year} AND {valid_projected_climate_predicate})
+                            as climate_max_x,
+                        (SELECT MIN(ST_Y({projected_climate_geometry}))
+                         FROM {climate_table}
+                         WHERE year = {year} AND {valid_projected_climate_predicate})
+                            as climate_min_y,
+                        (SELECT MAX(ST_Y({projected_climate_geometry}))
+                         FROM {climate_table}
+                         WHERE year = {year} AND {valid_projected_climate_predicate})
+                            as climate_max_y
                 """).fetchone()
 
                 self.log.error("📍 COORDINATE ANALYSIS:")
@@ -1509,11 +1556,12 @@ class NLES5ClimateProcessor:
                 for buffer_size in [2500, 5000, 7500, 10000, 15000]:  # Grid-optimized sizes
                     test_result = self.conn.execute(f"""
                         SELECT COUNT(*) FROM (
-                        SELECT 1 FROM agricultural_fields_spatial f, climate_percolation c
+                        SELECT 1 FROM agricultural_fields_spatial f, {climate_table} c
                         WHERE f.year = {year} AND c.year = {year}
+                        AND {valid_projected_qualified_climate_predicate}
                         AND ST_Intersects(
                             ST_Centroid(f.geom),
-                            ST_Buffer({sql_transform_to_utm("c.geometry")}, {buffer_size})
+                            ST_Buffer({projected_qualified_climate_geometry}, {buffer_size})
                         )
                         LIMIT 1
                         )
@@ -1620,7 +1668,7 @@ class NLES5ClimateProcessor:
             # Field centroids are EPSG:25832, so all distances below are metres.
             climate_points = self.conn.execute(f"""
                 SELECT
-                    ST_AsText({sql_transform_to_utm("geometry")}) as geom_wkt,
+                    ST_AsText({projected_climate_geometry}) as geom_wkt,
                     year,
                     perco_apr_aug_current, perco_sep_mar_current,
                     perco_apr_aug_previous, perco_sep_mar_previous,
@@ -1628,6 +1676,7 @@ class NLES5ClimateProcessor:
                     sufficient_climate_data
                 FROM {climate_table}
                 WHERE year = {year}
+                  AND {valid_projected_climate_predicate}
             """).fetchall()
 
             total_climate_points = len(climate_points)
