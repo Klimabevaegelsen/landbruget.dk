@@ -31,7 +31,7 @@
     "@next/mdx": "^16.3.4",
     "@number-flow/react": "^0.6.2",
     "@observablehq/plot": "^0.6.17",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@radix-ui/react-accordion": "^1.2.20",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-aspect-ratio": "^1.1.15",
