@@ -147,13 +147,10 @@ test.describe('Pesticidkort', () => {
   test('should render pesticidkort overlays with dark-safe contrast in dark mode', async ({
     page,
   }) => {
-    await page.goto('/pesticidkort');
-
-    await page.evaluate(() => {
+    await page.addInitScript(() => {
       window.localStorage.setItem('landbruget-theme', 'dark');
     });
-
-    await page.reload();
+    await page.goto('/pesticidkort');
     await page.locator('[data-testid="explore-map-button"]').click();
 
     await expect(page.locator('[data-testid="map-legend"]')).toBeVisible({

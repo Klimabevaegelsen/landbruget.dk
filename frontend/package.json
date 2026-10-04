@@ -10,7 +10,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "oxlint -c .oxlintrc.json .",
-    "lint:eslint": "next lint",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "test": "playwright test",
@@ -90,15 +89,12 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/mapbox-gl": "^3.5.0",
     "@types/node": "^26",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "axe-core": "^4.13.0",
-    "eslint": "^10.11.0",
-    "eslint-config-next": "^16.3.6",
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0",
     "tailwindcss": "^4",
@@ -108,13 +104,9 @@
     "vitest": "^5.0.2"
   },
   "overrides": {
-    "eslint-config-next": {
-      "eslint": "$eslint",
-      "typescript": "$typescript"
-    },
     "next": {
       "postcss": "8.5.25",
-      "sharp": "0.35.3"
+      "sharp": "0.35.5"
     }
   }
 }
