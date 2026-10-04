@@ -500,9 +500,9 @@ Important interpretation limits:
   separately reconstruct field-boundary, identifier, or operator changes between the two years.
 - Public files exclude raw CVR numbers.
 - Field-level amounts are allocations, not observed field measurements.
-- The `quality/` resources describe published allocation rows and methods. They do not provide a
-  quantity-weighted allocation-coverage measure against all original SJI quantity, nor an
-  unmatched-quantity breakdown by crop or company.
+- The `quality/` resources describe published allocation rows and methods.
+- They do not provide a quantity-weighted allocation-coverage measure
+  against all original SJI quantity, nor an unmatched-quantity breakdown by crop or company.
 
 ## Credit (required attribution)
 

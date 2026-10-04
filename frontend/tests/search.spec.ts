@@ -131,24 +131,27 @@ test.describe('Search Functionality', () => {
   });
 
   test('should show loading state while searching', async ({ page }) => {
-    // Slow down network to see loading state
-    await page.route('**/api/**', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    let releaseSearchIndex: (() => void) | undefined;
+    const pendingSearchIndex = new Promise<void>((resolve) => {
+      releaseSearchIndex = resolve;
+    });
+    let searchIndexIntercepted = false;
+
+    await page.route('**/search/index.json**', async (route) => {
+      searchIndexIntercepted = true;
+      await pendingSearchIndex;
       await route.continue();
     });
+    await page.goto('/');
 
-    const searchInput = await getVisibleSearchInput(page);
-
-    await searchInput.fill('test');
-
-    // Look for loading indicator
-    const loadingIndicator = page.locator(
-      '[data-testid="search-loading"], .animate-spin, [aria-busy="true"]'
-    );
-
-    // Should show loading state briefly
-    const hasLoading = (await loadingIndicator.count()) > 0;
-    expect(hasLoading).toBe(true);
+    try {
+      const searchInput = await getVisibleSearchInput(page);
+      await searchInput.fill('test');
+      await expect.poll(() => searchIndexIntercepted).toBe(true);
+      await expect(page.getByTestId('search-loading')).toBeVisible();
+    } finally {
+      releaseSearchIndex?.();
+    }
   });
 
   test('should filter results by category tabs', async ({ page }) => {
