@@ -74,7 +74,7 @@
     "react": "^19.3.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.3.0",
-    "react-hook-form": "^7.88.0",
+    "react-hook-form": "^7.89.0",
     "react-resizable-panels": "^4.13.3",
     "react-scrollama": "^2.4.2",
     "react-vertical-timeline-component": "^3.6.0",
