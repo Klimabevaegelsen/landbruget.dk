@@ -15,7 +15,7 @@ export default defineConfig({
   test: {
     name: 'routes',
     environment: 'node',
-    include: ['tests/routes/**/*.test.ts'],
+    include: ['tests/routes/**/*.test.ts', 'tests/lib/**/*.test.ts'],
     setupFiles: ['./tests/routes/setup.ts'],
     restoreMocks: true,
     clearMocks: true,
