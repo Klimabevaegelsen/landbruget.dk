@@ -207,11 +207,11 @@ def _read_postal_code_centroids(
 def _adressevaelger_search(query: str, maximum: int = 5) -> list[dict]:
     """Search Adressevælger for use when the unified pipeline package is unavailable."""
     response = requests.get(
-        f"{os.getenv('ADRESSEVAELGER_API_URL', 'https://adressevaelger.dk').rstrip('/')}/adresser/soeg",
+        f"{(os.getenv('ADRESSEVAELGER_API_URL') or 'https://adressevaelger.dk').rstrip('/')}/adresser/soeg",
         params={
             "tekst": query,
             "maksimum": maximum,
-            "token": os.getenv("ADRESSEVAELGER_TOKEN", "adressevaelger123"),
+            "token": (os.getenv("ADRESSEVAELGER_TOKEN") or "adressevaelger123"),
         },
         timeout=30,
     )
@@ -249,10 +249,10 @@ def _geocode_adressevaelger_free_text(address: str, postal_code: int | str | Non
             continue
 
         resource = "husnumre" if hit.get("type") == "husnummer" else "adresser"
-        base_url = os.getenv("ADRESSEVAELGER_API_URL", "https://adressevaelger.dk").rstrip("/")
+        base_url = (os.getenv("ADRESSEVAELGER_API_URL") or "https://adressevaelger.dk").rstrip("/")
         response = requests.get(
             f"{base_url}/{resource}/{hit['id']}",
-            params={"token": os.getenv("ADRESSEVAELGER_TOKEN", "adressevaelger123")},
+            params={"token": (os.getenv("ADRESSEVAELGER_TOKEN") or "adressevaelger123")},
             timeout=30,
         )
         if response.status_code == 404:

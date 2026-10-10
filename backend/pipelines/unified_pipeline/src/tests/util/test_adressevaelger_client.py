@@ -71,6 +71,16 @@ class TestAdressevaelgerClient:
         assert client.token == "adressevaelger123"
         assert client.session.headers["User-Agent"] == "landbrugsdata-cvr-enrichment/1.0"
 
+    def test_empty_env_vars_fall_back_to_public_defaults(self, monkeypatch):
+        # GitHub Actions sets unset secrets to "", which must not become an empty token.
+        monkeypatch.setenv("ADRESSEVAELGER_API_URL", "")
+        monkeypatch.setenv("ADRESSEVAELGER_TOKEN", "")
+
+        client = AdressevaelgerClient()
+
+        assert client.base_url == "https://adressevaelger.dk"
+        assert client.token == "adressevaelger123"
+
     @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
     def test_id_lookup_parses_adresse_with_floor_and_door(self, mock_get):
         mock_get.return_value = make_response(ADRESSE_DETAIL)

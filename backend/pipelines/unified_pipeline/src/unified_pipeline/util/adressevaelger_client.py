@@ -20,8 +20,10 @@ class AdressevaelgerClient:
 
     def __init__(self):
         self.log = Logger.get_logger()
-        self.base_url = os.getenv("ADRESSEVAELGER_API_URL", "https://adressevaelger.dk").rstrip("/")
-        self.token = os.getenv("ADRESSEVAELGER_TOKEN", "adressevaelger123")
+        self.base_url = (os.getenv("ADRESSEVAELGER_API_URL") or "https://adressevaelger.dk").rstrip(
+            "/"
+        )
+        self.token = os.getenv("ADRESSEVAELGER_TOKEN") or "adressevaelger123"
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "landbrugsdata-cvr-enrichment/1.0"})
 
