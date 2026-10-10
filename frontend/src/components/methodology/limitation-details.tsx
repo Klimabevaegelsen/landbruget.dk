@@ -59,6 +59,14 @@ export function LimitationDetails() {
         Resultaterne er derfor en rumlig kortlægning, ikke en formel
         risikovurdering.
       </p>
+      <p>
+        Adresserne, vi viser ved hver mark, er boligbygninger fra BBR (inklusive
+        sommerhuse) inden for 100 meter af markens kant. De er naboer til marken
+        – ikke markens ejer. Hvem der dyrker marken, fremgår af CVR-nummeret fra
+        Landbrugsstyrelsens markkort, som også er den virksomhed, sprøjtningen
+        er indberettet under. Indberetningen sker pr. virksomhed og afgrøde, så
+        fordelingen på den enkelte mark er beregnet.
+      </p>
 
       <SubsectionHeader
         id="lim-generalizability"

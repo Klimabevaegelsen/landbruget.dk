@@ -3,10 +3,11 @@
 import { X } from 'lucide-react';
 import type { NearbyFieldSummary } from '@/components/pesticidkort/types';
 import { burdenHeadline } from '@/components/pesticidkort/field-utils';
+import { FieldProducts } from '@/components/pesticidkort/FieldCardDetails';
 import {
+  FieldOperator,
   FieldProximity,
-  FieldProducts,
-} from '@/components/pesticidkort/FieldCardDetails';
+} from '@/components/pesticidkort/FieldProximity';
 
 interface ExploreFieldPanelProps {
   field: NearbyFieldSummary;
@@ -55,6 +56,7 @@ export function ExploreFieldPanel({ field, onClose }: ExploreFieldPanelProps) {
       </div>
 
       <FieldProximity field={field} />
+      <FieldOperator field={field} />
       <FieldProducts field={field} />
     </div>
   );

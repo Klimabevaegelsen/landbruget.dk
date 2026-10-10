@@ -1073,8 +1073,8 @@ CREATE TABLE pesticide_applications (
 - `AllocatedArea` - Hectares sprayed per application
 - `DisaggregationDate` - Processing timestamp (not actual application date)
 - `residential_buildings_formatted` - "Address:Distance" format (e.g., "Lyngevej 24, Lynge, 7741 Frøstrup:30.8m")
-- `educational_facilities_formatted` - School proximity in same format
-- `water_distance_formatted` - Water body proximity in same format
+- `educational_facilities_formatted` - School and daycare buildings (BBR codes 420–441) in the same format
+- `water_distance_formatted` - Water body proximity as a single distance value (e.g., "42.3m"), with no address component
 
 **From BMD Database** (via `PesticideRegistrationNumber` JOIN):
 - `contains_pfas` - Boolean PFAS content (238 products = 2.3% contain PFAS)
