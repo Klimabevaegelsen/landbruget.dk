@@ -1,0 +1,42 @@
+[project]
+name = "child-receptors"
+version = "0.1.0"
+description = "Danish children's sensitive receptors, from source bronze data to national silver layer"
+requires-python = ">=3.11"
+dependencies = [
+    "landbruget-common",
+    "duckdb>=1.5.0",
+    "requests",
+    "playwright>=1.60.0",
+    "loguru",
+    "pydantic",
+]
+
+[tool.uv.sources]
+landbruget-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/child_receptors"]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "RUF", "RET", "SIM", "C4"]
+ignore = ["E501", "RUF001", "RUF002", "RUF003", "N806"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

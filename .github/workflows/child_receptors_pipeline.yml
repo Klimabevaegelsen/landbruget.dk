@@ -1,0 +1,40 @@
+name: Child Receptors Pipeline
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 2 * *'
+
+jobs:
+  build-child-receptors:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || vars.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      DATAFORDELER_GRAPHQL_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install pipeline dependencies
+        working-directory: backend/pipelines/child_receptors
+        run: uv pip install --system -e .
+
+      - name: Install Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Run bronze and silver
+        working-directory: backend/pipelines/child_receptors
+        run: python main.py --layer all

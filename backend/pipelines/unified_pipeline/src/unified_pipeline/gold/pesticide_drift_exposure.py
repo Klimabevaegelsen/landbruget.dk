@@ -150,6 +150,24 @@ def wind_direction_weight(
     return sum(region_freq[b] for b in bins_to_sum)
 
 
+def wind_weight_for_location(
+    bearing_deg: float,
+    utm_e: float,
+    utm_n: float,
+    freq_table: dict[int, list[float]],
+) -> float:
+    """Return the wind-direction weight for a location and bearing.
+
+    The drift job uses this core to register its existing SQL UDF. Receptor
+    exposure also applies the same weight at the field-pair level.
+    """
+    region_id = nearest_region_id(utm_e, utm_n)
+    region_freq = freq_table.get(region_id)
+    if not region_freq:
+        return 1.0
+    return wind_direction_weight(bearing_deg, region_freq)
+
+
 class PesticideDriftExposureGoldConfig(BaseJobConfig):
     """Configuration for pesticide drift exposure analysis."""
 
@@ -559,11 +577,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         freq_table = self.wind_freq_table
 
         def wind_weight_udf(bearing_deg: float, utm_e: float, utm_n: float) -> float:
-            rid = nearest_region_id(utm_e, utm_n)
-            freq = freq_table.get(rid)
-            if not freq:
-                return 1.0  # No data → neutral weight
-            return wind_direction_weight(bearing_deg, freq)
+            return wind_weight_for_location(bearing_deg, utm_e, utm_n, freq_table)
 
         self.conn.create_function("wind_weight", wind_weight_udf, [float, float, float], float)
 
