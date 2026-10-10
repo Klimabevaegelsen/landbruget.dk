@@ -228,7 +228,14 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             # DAGI SPECIAL CASE: Data comes in WGS84 (GeoJSON format)
             # With new CRS strategy, we transform TO EPSG:25832 for consistent processing
             if USE_UTM_PROCESSING:
-                # First validate and normalize (will detect WGS84 and transform to 25832)
+                # Bronze GeoJSON is WGS84 lon/lat by contract. Transform explicitly: bounds-based
+                # CRS detection misfires on sea-inclusive postnumre (lon 3.2-16.5) and would
+                # leave them in degrees. The validator below then only validates.
+                self.conn.execute(f"""
+                    UPDATE {processed_table}
+                    SET geometry = ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true)
+                    WHERE geometry IS NOT NULL
+                """)
                 validate_and_normalize_to_utm(
                     self.conn, processed_table, f"dagi_{layer_type}", geometry_column="geometry"
                 )
@@ -259,6 +266,15 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                         SET geometry = ST_Transform(geometry, 'EPSG:4326', '{self.config.target_crs}')
                         WHERE geometry IS NOT NULL
                     """)
+
+            # `area_m2` was initially computed from GeoJSON's WGS84 coordinates. Recompute it
+            # after normalization, when DAGI geometry is in EPSG:25832 metres.
+            if USE_UTM_PROCESSING:
+                self.conn.execute(f"""
+                    UPDATE {processed_table}
+                    SET area_m2 = ST_Area(geometry)
+                    WHERE geometry IS NOT NULL
+                """)
 
             # Get counts for logging
             total_count = self.conn.execute(f"SELECT COUNT(*) FROM {processed_table}").fetchone()[0]

@@ -4,11 +4,16 @@ This conftest.py adds the backend directory to sys.path so that tests can
 import from common.storage and other backend-level modules.
 """
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# Package startup can fetch optional secrets from Google Cloud. Keep unit tests offline.
+os.environ["GCP_PROJECT"] = ""
+os.environ["GOOGLE_CLOUD_PROJECT"] = ""
 
 # Add backend directory to Python path for common module access
 # Path structure: tests/conftest.py -> src/tests -> src -> unified_pipeline -> pipelines -> backend

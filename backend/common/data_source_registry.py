@@ -123,10 +123,13 @@ DATA_SOURCE_REGISTRY: dict[str, DataSourceInfo] = {
         data_description="Danish Administrative Geographic Division boundaries",
         update_frequency="Annually",
         pipeline_name="unified_pipeline",
-        data_format="GeoJSON",
+        data_format="GML",
         data_source_type=DataSourceType.WFS,
         display_name="Danmarks Administrative Geografiske Inddelinger (DAGI)",
         display_description="Officielle administrative grænser (kommuner, regioner, mv.)",
+        custom_fields={
+            "wfs_endpoint": "https://wfs.datafordeler.dk/DAGIM/DAGI_10MULTIGEOM_GMLSFP/1.0.0/WFS",
+        },
     ),
     "jordbrugsanalyser": DataSourceInfo(
         source_authority="Landbrugsstyrelsen",  # 🚨 MANUAL INPUT NEEDED: Verify authority
