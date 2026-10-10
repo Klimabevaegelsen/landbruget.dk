@@ -50,6 +50,7 @@ class Source(Enum):
         pesticide_disaggregation: Pesticide disaggregation gold layer
         pesticide_proximity: Pesticide proximity analysis gold layer
         pesticide_drift_exposure: Pesticide drift exposure analysis gold layer (Rautmann curves)
+        child_receptor_exposure: Pesticide exposure analysis for child receptor sites
         pesticide_compliance: Pesticide regulatory compliance analysis gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
@@ -78,6 +79,7 @@ class Source(Enum):
     nles5_nitrogen_estimation = "nles5_nitrogen_estimation"
     pesticide_proximity = "pesticide_proximity"
     pesticide_drift_exposure = "pesticide_drift_exposure"
+    child_receptor_exposure = "child_receptor_exposure"
     pesticide_compliance = "pesticide_compliance"
     cvr_enrichment = "cvr_enrichment"
     cvr_geometry_datasets = "cvr_geometry_datasets"

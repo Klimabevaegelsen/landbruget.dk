@@ -22,6 +22,7 @@ on:
           - grukos
           - pesticide_disaggregation
           - pesticide_drift_exposure
+          - child_receptor_exposure
           - pesticide_compliance
           - worker_safety
           - work_permits
@@ -254,6 +255,10 @@ jobs:
             # Pesticide drift exposure runs as part of pesticide-processing matrix job
             echo "Pesticide drift exposure detected - using dedicated matrix jobs instead"
             echo "Main pipeline job skipped for pesticide_drift_exposure (matrix jobs handle this)"
+          elif [ "${{ matrix.source }}" = "child_receptor_exposure" ]; then
+            # Child receptor exposure runs as part of pesticide-processing matrix job
+            echo "Child receptor exposure detected - using dedicated matrix jobs instead"
+            echo "Main pipeline job skipped for child_receptor_exposure (matrix jobs handle this)"
           elif [ "${{ matrix.source }}" = "pesticide_compliance" ]; then
             # Pesticide compliance uses dedicated matrix jobs - skip main pipeline
             echo "Pesticide compliance detected - using dedicated matrix jobs instead"
@@ -292,11 +297,11 @@ jobs:
           du -sh /tmp 2>/dev/null || echo "N/A"
           echo "✅ Cleanup completed"
 
-  # Pesticide Processing Matrix Jobs - Combined disaggregation + proximity + drift exposure per year
+  # Pesticide Processing Matrix Jobs - Combined disaggregation, proximity, drift, and child receptor exposure per year
   # Needs run-pipeline to complete first because pesticide_proximity requires water_typology silver data
   pesticide-processing:
     needs: [run-unified-pipeline]
-    if: ${{ !cancelled() && contains(fromJson('["all", "pesticide_disaggregation", "pesticide_drift_exposure"]'), github.event.inputs.source) }}
+    if: ${{ !cancelled() && contains(fromJson('["all", "pesticide_disaggregation", "pesticide_drift_exposure", "child_receptor_exposure"]'), github.event.inputs.source) }}
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
@@ -476,6 +481,20 @@ jobs:
           else
             DRIFT_EXIT_CODE=$?
             echo "❌ Drift exposure analysis FAILED for year ${{ matrix.year }} with exit code $DRIFT_EXIT_CODE"
+            echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
+            exit 1
+          fi
+
+          # Step 4: Run child receptor exposure analysis (uses fresh disaggregation data)
+          echo "🏫 Step 4: Running child receptor exposure analysis for year ${{ matrix.year }}"
+          echo "🌱 Computing sprayed-field proximity and Rautmann drift dose per child receptor"
+          echo "🚨 WORKFLOW: About to execute Python command for child receptor exposure"
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s child_receptor_exposure -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s child_receptor_exposure -j gold --pesticide-year ${{ matrix.year }}; then
+            echo "✅ Child receptor exposure analysis completed for year ${{ matrix.year }}"
+          else
+            CHILD_RECEPTOR_EXIT_CODE=$?
+            echo "❌ Child receptor exposure analysis FAILED for year ${{ matrix.year }} with exit code $CHILD_RECEPTOR_EXIT_CODE"
             echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
             exit 1
           fi
