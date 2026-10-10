@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+from urllib.parse import quote, quote_plus
 
 import requests
 
@@ -31,7 +33,11 @@ def make_query(kommunekode: str, virkningstid: str, cursor: str | None = None) -
 
 
 def _redact(message: str, secret: str) -> str:
-    return message.replace(secret, "***") if secret else message
+    if not secret:
+        return message
+    for value in (secret, quote(secret, safe=""), quote_plus(secret)):
+        message = message.replace(value, "***")
+    return re.sub(r"(?i)([?&]apikey=)[^&#\s]*", r"\1***", message)
 
 
 def fetch_kommune(
