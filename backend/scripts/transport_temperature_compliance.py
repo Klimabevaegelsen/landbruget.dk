@@ -21,12 +21,14 @@ import json
 import logging
 import math
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
 
 import duckdb
 import requests
+from common.crs_utils import DANISH_UTM, WGS84, detect_crs_from_bounds, utm32_to_wgs84
 from common.storage.filesystem import setup_duckdb_cloud_auth
 from dotenv import load_dotenv
 
@@ -147,8 +149,139 @@ def load_movements(
     return unique_pcs
 
 
-def geocode_postal_codes(postal_codes: list[int], cache_path: Path) -> dict[int, tuple[float, float]]:
-    """Step 2: Get lat/lon centroid for each postal code via DAWA."""
+def _latest_postal_code_parquet(conn: duckdb.DuckDBPyConnection) -> str:
+    """Find the latest DAGI postal-code parquet file in R2."""
+    result = conn.execute(f"""
+        SELECT file
+        FROM glob('r2://{BUCKET}/silver/dagi_postnumre/*/data.parquet')
+        ORDER BY regexp_extract(file, '.*/([^/]+)/data\\.parquet$', 1) DESC
+        LIMIT 1
+    """).fetchone()
+    if not result:
+        raise FileNotFoundError("No silver/dagi_postnumre data.parquet found in R2")
+    return result[0]
+
+
+def _read_postal_code_centroids(
+    conn: duckdb.DuckDBPyConnection, postal_codes: list[int]
+) -> dict[int, tuple[float, float]]:
+    """Read DAGI postal-code centroids and return WGS84 (latitude, longitude)."""
+    parquet_path = _latest_postal_code_parquet(conn)
+    bounds = conn.execute(f"""
+        SELECT
+            MIN(ST_XMin(geometry)), MAX(ST_XMax(geometry)),
+            MIN(ST_YMin(geometry)), MAX(ST_YMax(geometry))
+        FROM read_parquet('{parquet_path}')
+        WHERE geometry IS NOT NULL
+    """).fetchone()
+    if not bounds or bounds[0] is None:
+        raise ValueError("DAGI postal-code parquet contains no valid geometries")
+
+    crs, coordinate_order = detect_crs_from_bounds(*bounds)
+    if crs not in {DANISH_UTM, WGS84}:
+        raise ValueError(f"Could not detect postal-code geometry CRS from bounds: {bounds}")
+
+    rows = conn.execute(f"""
+        SELECT CAST(code AS VARCHAR),
+               ST_X(ST_PointOnSurface(geometry)),
+               ST_Y(ST_PointOnSurface(geometry))
+        FROM read_parquet('{parquet_path}')
+        WHERE code IS NOT NULL AND geometry IS NOT NULL
+    """).fetchall()
+
+    wanted = {str(code) for code in postal_codes}
+    centroids = {}
+    for code, x, y in rows:
+        if str(code) not in wanted:
+            continue
+        if crs == DANISH_UTM:
+            longitude, latitude = utm32_to_wgs84(x, y)
+        elif coordinate_order == "lat_lon_swapped":
+            latitude, longitude = x, y
+        else:
+            longitude, latitude = x, y
+        centroids[int(code)] = (float(latitude), float(longitude))
+    return centroids
+
+
+def _adressevaelger_search(query: str, maximum: int = 5) -> list[dict]:
+    """Search Adressevælger for use when the unified pipeline package is unavailable."""
+    response = requests.get(
+        f"{os.getenv('ADRESSEVAELGER_API_URL', 'https://adressevaelger.dk').rstrip('/')}/adresser/soeg",
+        params={
+            "tekst": query,
+            "maksimum": maximum,
+            "token": os.getenv("ADRESSEVAELGER_TOKEN", "adressevaelger123"),
+        },
+        timeout=30,
+    )
+    if response.status_code == 404:
+        return []
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        if isinstance(data, dict) and data.get("status") == "fejl":
+            logger.warning("Adressevælger search failed for %r: %s", query, data.get("beskrivelse"))
+        return []
+    return [result for result in data.get("fund", []) if result.get("type") in {"adresse", "husnummer"}]
+
+
+def _geocode_adressevaelger_free_text(address: str, postal_code: int | str | None = None) -> tuple[float, float] | None:
+    """Search then fetch one selectable address and return WGS84 latitude/longitude."""
+    if not address:
+        return None
+
+    postal_text = str(postal_code) if postal_code is not None else None
+    queries = [f"{address} {postal_text}"] if postal_text else []
+    queries.append(address)
+    for query in queries:
+        if len(query) > 73:
+            continue
+        results = _adressevaelger_search(query)
+        if postal_text:
+            hit = next(
+                (result for result in results if re.search(rf"\b{re.escape(postal_text)}\b", result.get("titel", ""))),
+                None,
+            )
+        else:
+            hit = results[0] if len(results) == 1 else None
+        if not hit or not hit.get("id"):
+            continue
+
+        resource = "husnumre" if hit.get("type") == "husnummer" else "adresser"
+        base_url = os.getenv("ADRESSEVAELGER_API_URL", "https://adressevaelger.dk").rstrip("/")
+        response = requests.get(
+            f"{base_url}/{resource}/{hit['id']}",
+            params={"token": os.getenv("ADRESSEVAELGER_TOKEN", "adressevaelger123")},
+            timeout=30,
+        )
+        if response.status_code == 404:
+            continue
+        response.raise_for_status()
+        detail = response.json()
+        data = detail.get("adresse") or detail.get("husnummer") or {}
+        house_number = data.get("husnummer") or data
+        access_point = house_number.get("adgangspunkt") or {}
+        coordinates = access_point.get("koordinater") or {}
+        x, y = coordinates.get("x"), coordinates.get("y")
+        if x is None or y is None:
+            pair = (access_point.get("geometri") or {}).get("coordinates")
+            if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+                continue
+            x, y = pair[:2]
+        try:
+            longitude, latitude = utm32_to_wgs84(float(x), float(y))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(latitude) and math.isfinite(longitude):
+            return latitude, longitude
+    return None
+
+
+def geocode_postal_codes(
+    postal_codes: list[int], cache_path: Path, conn: duckdb.DuckDBPyConnection | None = None
+) -> dict[int, tuple[float, float]]:
+    """Step 2: Get postal-code centroids from the latest DAGI parquet in R2."""
 
     # Load cache
     cache = {}
@@ -162,27 +295,30 @@ def geocode_postal_codes(postal_codes: list[int], cache_path: Path) -> dict[int,
     to_fetch = [pc for pc in postal_codes if pc not in cache]
 
     if to_fetch:
-        logger.info(f"Fetching {len(to_fetch)} postal code centroids from DAWA...")
-        for i, pc in enumerate(to_fetch):
-            try:
-                resp = requests.get(
-                    f"https://api.dataforsyningen.dk/postnumre/{pc}",
-                    timeout=10,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    # DAWA returns [lon, lat] in visueltcenter
-                    lon, lat = data["visueltcenter"]
-                    cache[pc] = (lat, lon)
-                else:
-                    logger.warning(f"DAWA returned {resp.status_code} for postal code {pc}")
-            except Exception as e:
-                logger.warning(f"Failed to geocode postal code {pc}: {e}")
+        logger.info(f"Fetching {len(to_fetch)} postal code centroids from DAGI parquet...")
+        owns_connection = conn is None
+        try:
+            if conn is None:
+                conn = duckdb.connect()
+                setup_duckdb_cloud_auth(conn)
+            cache.update(_read_postal_code_centroids(conn, to_fetch))
+        except Exception as error:
+            logger.warning("Could not read postal-code centroids from R2: %s", error)
+            logger.warning("Falling back to Adressevælger search; search results have no coordinates")
+            for postal_code in to_fetch:
+                try:
+                    _adressevaelger_search(str(postal_code))
+                    logger.warning("No postal-code centroid coordinates available for %s", postal_code)
+                except Exception as search_error:
+                    logger.warning(
+                        "Adressevælger search failed for postal code %s: %s",
+                        postal_code,
+                        search_error,
+                    )
+        finally:
+            if owns_connection and conn is not None:
+                conn.close()
 
-            if (i + 1) % 50 == 0:
-                logger.info(f"  Geocoded {i + 1}/{len(to_fetch)}")
-
-        # Save cache
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cache_path, "w") as f:
             json.dump({str(k): list(v) for k, v in cache.items()}, f)
@@ -358,7 +494,7 @@ def filter_cold_movements(conn: duckdb.DuckDBPyConnection) -> int:
 
 
 def geocode_addresses(conn: duckdb.DuckDBPyConnection, cache_path: Path) -> dict[str, tuple[float, float]]:
-    """Step 5a: Geocode full addresses for cold-hour movements via DAWA."""
+    """Step 5a: Geocode full addresses for cold-hour movements via Adressevælger."""
 
     # Get unique addresses to geocode
     addresses = conn.execute("""
@@ -391,24 +527,16 @@ def geocode_addresses(conn: duckdb.DuckDBPyConnection, cache_path: Path) -> dict
             continue
 
         try:
-            resp = requests.get(
-                "https://api.dataforsyningen.dk/adresser",
-                params={"q": f"{addr}, {postal_code}", "struktur": "mini"},
-                timeout=10,
-            )
-            if resp.status_code == 200:
-                results = resp.json()
-                if results:
-                    coord = results[0]
-                    lat, lon = coord["y"], coord["x"]
-                    cache[cache_key] = [lat, lon]
-                    coords[cache_key] = (lat, lon)
-                    fetched += 1
-                else:
-                    # Fallback to postal code centroid (already have these)
-                    logger.debug(f"No DAWA result for {addr}, {postal_code}")
+            coordinate = _geocode_adressevaelger_free_text(addr, postal_code)
+            if coordinate:
+                cache[cache_key] = list(coordinate)
+                coords[cache_key] = coordinate
+                fetched += 1
+            else:
+                # Postal centroids are computed separately; a failed address match is not guessed.
+                logger.debug("No Adressevælger result for %s, %s", addr, postal_code)
         except Exception as e:
-            logger.debug(f"Geocode failed for {addr}: {e}")
+            logger.debug("Adressevælger geocode failed for %s: %s", addr, e)
 
         if fetched % 50 == 0 and fetched > 0:
             logger.info(f"  Geocoded {fetched} addresses")
@@ -1789,7 +1917,7 @@ def main():
 
     # Step 2: Geocode postal codes
     logger.info("\n--- Step 2: Geocoding postal codes ---")
-    postal_coords = geocode_postal_codes(unique_postal_codes, output_dir / "postal_code_coords.json")
+    postal_coords = geocode_postal_codes(unique_postal_codes, output_dir / "postal_code_coords.json", conn=conn)
 
     if not postal_coords:
         logger.error("Failed to geocode any postal codes")

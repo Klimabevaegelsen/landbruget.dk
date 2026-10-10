@@ -14,6 +14,7 @@ Key patterns:
 """
 
 import logging
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,62 @@ TARGET_CRS_STORAGE = WGS84
 # Process in EPSG:25832 throughout Bronze/Silver/Gold, transform to EPSG:4326 only at Supabase upload
 TARGET_CRS_PROCESSING = DANISH_UTM  # Use throughout pipeline processing
 TARGET_CRS_SUPABASE = WGS84  # Use ONLY at final Supabase upload
+
+
+def utm32_to_wgs84(x: float, y: float) -> tuple[float, float]:
+    """Convert EPSG:25832 easting/northing to WGS84 longitude/latitude.
+
+    This is a pure Python port of the frontend's ``utm32ToWgs84`` conversion.
+    """
+    semi_major_axis = 6378137
+    flattening = 1 / 298.257222101
+    eccentricity_squared = flattening * (2 - flattening)
+    second_eccentricity_squared = eccentricity_squared / (1 - eccentricity_squared)
+    scale = 0.9996
+    e1 = (1 - (1 - eccentricity_squared) ** 0.5) / (1 + (1 - eccentricity_squared) ** 0.5)
+    x_from_origin = x - 500000
+    meridional_arc = y / scale
+    mu = meridional_arc / (
+        semi_major_axis
+        * (1 - eccentricity_squared / 4 - (3 * eccentricity_squared**2) / 64 - (5 * eccentricity_squared**3) / 256)
+    )
+
+    footprint_latitude = (
+        mu
+        + ((3 * e1) / 2 - (27 * e1**3) / 32) * math.sin(2 * mu)
+        + ((21 * e1**2) / 16 - (55 * e1**4) / 32) * math.sin(4 * mu)
+        + (151 * e1**3 / 96) * math.sin(6 * mu)
+        + (1097 * e1**4 / 512) * math.sin(8 * mu)
+    )
+
+    sin_latitude = math.sin(footprint_latitude)
+    cos_latitude = math.cos(footprint_latitude)
+    tan_latitude = math.tan(footprint_latitude)
+    radius_prime_vertical = semi_major_axis / math.sqrt(1 - eccentricity_squared * sin_latitude**2)
+    radius_meridian = (semi_major_axis * (1 - eccentricity_squared)) / (
+        1 - eccentricity_squared * sin_latitude**2
+    ) ** 1.5
+    tangent_squared = tan_latitude**2
+    c = second_eccentricity_squared * cos_latitude**2
+    d = x_from_origin / (radius_prime_vertical * scale)
+
+    latitude = footprint_latitude - ((radius_prime_vertical * tan_latitude) / radius_meridian) * (
+        d**2 / 2
+        - (5 + 3 * tangent_squared + 10 * c - 4 * c**2 - 9 * second_eccentricity_squared) * d**4 / 24
+        + (61 + 90 * tangent_squared + 298 * c + 45 * tangent_squared**2 - 252 * second_eccentricity_squared - 3 * c**2)
+        * d**6
+        / 720
+    )
+    longitude = (9 * math.pi / 180) + (
+        d
+        - ((1 + 2 * tangent_squared + c) * d**3) / 6
+        + (5 - 2 * c + 28 * tangent_squared - 3 * c**2 + 8 * second_eccentricity_squared + 24 * tangent_squared**2)
+        * d**5
+        / 120
+    ) / cos_latitude
+
+    return math.degrees(longitude), math.degrees(latitude)
+
 
 # =============================================================================
 # Denmark Bounding Boxes for CRS Detection

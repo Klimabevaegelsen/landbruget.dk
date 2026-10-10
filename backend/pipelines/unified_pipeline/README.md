@@ -141,7 +141,7 @@ src/unified_pipeline/
 ├── gold/                     # Gold analytical modules (14+)
 ├── common/                   # Shared utilities (geometry_validator, schema_manager)
 ├── model/                    # Pydantic config models
-├── util/                     # Utilities (CVR API, geocoding, DAWA, logging)
+├── util/                     # Utilities (CVR API, Adressevælger geocoding, logging)
 └── core/                     # Core features (incremental processing)
 ```
 
