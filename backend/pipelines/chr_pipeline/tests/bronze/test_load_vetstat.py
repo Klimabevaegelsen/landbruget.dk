@@ -100,45 +100,9 @@ class MockEtree:
         pass
 
 
-mock_lxml = MagicMock()
-mock_lxml.etree = MockEtree
-sys.modules["lxml"] = mock_lxml
-sys.modules["lxml.etree"] = MockEtree
-
-# Now we can "import" etree from our mock
+# Local alias only: registering this in sys.modules would break every later test that
+# uses the real lxml (e.g. unified_pipeline DAGI GML parsing).
 etree = MockEtree
-
-
-# =============================================================================
-# Mock cryptography module
-# =============================================================================
-
-mock_crypto = MagicMock()
-mock_crypto.hazmat = MagicMock()
-mock_crypto.hazmat.primitives = MagicMock()
-mock_crypto.hazmat.primitives.serialization = MagicMock()
-mock_crypto.hazmat.primitives.serialization.pkcs12 = MagicMock()
-mock_crypto.hazmat.primitives.hashes = MagicMock()
-mock_crypto.hazmat.primitives.hashes.SHA256 = MagicMock
-mock_crypto.hazmat.primitives.asymmetric = MagicMock()
-mock_crypto.hazmat.primitives.asymmetric.padding = MagicMock()
-mock_crypto.hazmat.backends = MagicMock()
-mock_crypto.hazmat.backends.default_backend = MagicMock(return_value=MagicMock())
-sys.modules["cryptography"] = mock_crypto
-sys.modules["cryptography.hazmat"] = mock_crypto.hazmat
-sys.modules["cryptography.hazmat.primitives"] = mock_crypto.hazmat.primitives
-sys.modules["cryptography.hazmat.primitives.serialization"] = (
-    mock_crypto.hazmat.primitives.serialization
-)
-sys.modules["cryptography.hazmat.primitives.serialization.pkcs12"] = (
-    mock_crypto.hazmat.primitives.serialization.pkcs12
-)
-sys.modules["cryptography.hazmat.primitives.hashes"] = mock_crypto.hazmat.primitives.hashes
-sys.modules["cryptography.hazmat.primitives.asymmetric"] = mock_crypto.hazmat.primitives.asymmetric
-sys.modules["cryptography.hazmat.primitives.asymmetric.padding"] = (
-    mock_crypto.hazmat.primitives.asymmetric.padding
-)
-sys.modules["cryptography.hazmat.backends"] = mock_crypto.hazmat.backends
 
 
 # =============================================================================

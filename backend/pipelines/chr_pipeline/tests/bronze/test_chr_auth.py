@@ -1,8 +1,9 @@
 """Tests for CHR pipeline SOAP authentication (bronze/auth.py).
 
 This test module verifies the authentication functionality for the CHR pipeline
-SOAP services. Since the actual cryptography package may not be available in all
-environments, this module mocks the cryptographic operations.
+SOAP services. The bronze.auth module is replaced by a pure-Python mock below, so the
+real cryptography package is never touched (and must not be stubbed globally, which
+would break every later test that imports it).
 """
 
 import base64
@@ -16,41 +17,6 @@ import pytest
 
 # Mark all tests in this file as bronze layer tests
 pytestmark = pytest.mark.chr_bronze
-
-
-# =============================================================================
-# Mock cryptography module - do this before imports that use it
-# =============================================================================
-
-# Create mock cryptography module structure
-mock_crypto = MagicMock()
-mock_crypto.hazmat = MagicMock()
-mock_crypto.hazmat.primitives = MagicMock()
-mock_crypto.hazmat.primitives.serialization = MagicMock()
-mock_crypto.hazmat.primitives.asymmetric = MagicMock()
-mock_crypto.hazmat.primitives.asymmetric.rsa = MagicMock()
-mock_crypto.hazmat.primitives.serialization.pkcs12 = MagicMock()
-mock_crypto.x509 = MagicMock()
-mock_crypto.x509.oid = MagicMock()
-mock_crypto.hazmat.primitives.hashes = MagicMock()
-
-# Register in sys.modules
-sys.modules["cryptography"] = mock_crypto
-sys.modules["cryptography.hazmat"] = mock_crypto.hazmat
-sys.modules["cryptography.hazmat.primitives"] = mock_crypto.hazmat.primitives
-sys.modules["cryptography.hazmat.primitives.serialization"] = (
-    mock_crypto.hazmat.primitives.serialization
-)
-sys.modules["cryptography.hazmat.primitives.asymmetric"] = mock_crypto.hazmat.primitives.asymmetric
-sys.modules["cryptography.hazmat.primitives.asymmetric.rsa"] = (
-    mock_crypto.hazmat.primitives.asymmetric.rsa
-)
-sys.modules["cryptography.hazmat.primitives.serialization.pkcs12"] = (
-    mock_crypto.hazmat.primitives.serialization.pkcs12
-)
-sys.modules["cryptography.x509"] = mock_crypto.x509
-sys.modules["cryptography.x509.oid"] = mock_crypto.x509.oid
-sys.modules["cryptography.hazmat.primitives.hashes"] = mock_crypto.hazmat.primitives.hashes
 
 
 # =============================================================================

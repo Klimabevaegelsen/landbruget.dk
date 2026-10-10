@@ -32,29 +32,6 @@ Fault = MockFaultError
 
 
 # =============================================================================
-# Mock cryptography module (required by bronze.auth)
-# =============================================================================
-
-mock_crypto = MagicMock()
-mock_crypto.hazmat = MagicMock()
-mock_crypto.hazmat.primitives = MagicMock()
-mock_crypto.hazmat.primitives.serialization = MagicMock()
-mock_crypto.hazmat.primitives.serialization.pkcs12 = MagicMock()
-mock_crypto.hazmat.backends = MagicMock()
-mock_crypto.hazmat.backends.default_backend = MagicMock(return_value=MagicMock())
-sys.modules["cryptography"] = mock_crypto
-sys.modules["cryptography.hazmat"] = mock_crypto.hazmat
-sys.modules["cryptography.hazmat.primitives"] = mock_crypto.hazmat.primitives
-sys.modules["cryptography.hazmat.primitives.serialization"] = (
-    mock_crypto.hazmat.primitives.serialization
-)
-sys.modules["cryptography.hazmat.primitives.serialization.pkcs12"] = (
-    mock_crypto.hazmat.primitives.serialization.pkcs12
-)
-sys.modules["cryptography.hazmat.backends"] = mock_crypto.hazmat.backends
-
-
-# =============================================================================
 # Mock bronze.load_besaetning module
 # =============================================================================
 

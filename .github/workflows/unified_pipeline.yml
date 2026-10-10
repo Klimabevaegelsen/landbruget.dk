@@ -95,6 +95,7 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      DATAFORDELER_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
       STORAGE_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       R2_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}
       GCS_BUCKET: ${{ secrets.R2_BUCKET || vars.R2_BUCKET }}

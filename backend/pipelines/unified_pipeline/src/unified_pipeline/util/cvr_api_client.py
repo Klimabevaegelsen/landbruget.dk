@@ -78,7 +78,7 @@ class CVRAPIClient:
         Args:
             username: CVR API username (defaults to environment variable)
             password: CVR API password (defaults to environment variable)
-            enable_geocoding: Whether to enable address geocoding via DAWA API
+            enable_geocoding: Whether to enable address geocoding via Adressevælger
             geocode_current_only: Whether to geocode only current addresses (not
                 historical)
         """
@@ -112,16 +112,16 @@ class CVRAPIClient:
         self.last_request_time = 0
         self.min_request_interval = 0.1  # 100ms between requests
 
-        # Initialize cached DAWA client for address geocoding
+        # Initialize cached Adressevælger client for address geocoding
         self.enable_geocoding = enable_geocoding
         self.geocode_current_only = geocode_current_only
 
         if enable_geocoding:
-            from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
+            from unified_pipeline.util.cached_geocoding_client import CachedGeocodingClient
 
-            self.dawa_client = CachedDAWAAPIClient()
+            self.geocoding_client = CachedGeocodingClient()
         else:
-            self.dawa_client = None
+            self.geocoding_client = None
 
         self.log.info("CVR API client initialized")
 
@@ -188,7 +188,7 @@ class CVRAPIClient:
         Args:
             cvr_number: 8-digit CVR number
             fetch_all_fields: Whether to fetch all available fields or just basic ones
-            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+            enrich_with_geometry: Whether to enrich addresses with geometry via Adressevælger
 
         Returns:
             Comprehensive company data dictionary or None if not found
@@ -441,7 +441,7 @@ class CVRAPIClient:
                         kommune.get("kommuneNavn") if isinstance(kommune, dict) else None
                     ),
                     "country_code": address_entry.get("landekode"),
-                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                    "adresse_id": address_entry.get("adresseId"),  # For Adressevælger geocoding
                     "period_start": (address_entry.get("periode", {}) or {}).get("gyldigFra"),
                     "period_end": (address_entry.get("periode", {}) or {}).get("gyldigTil"),
                     "is_current": (address_entry.get("periode", {}) or {}).get("gyldigTil") is None,
@@ -485,7 +485,7 @@ class CVRAPIClient:
                         kommune.get("kommuneNavn") if isinstance(kommune, dict) else None
                     ),
                     "country_code": address_entry.get("landekode"),
-                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                    "adresse_id": address_entry.get("adresseId"),  # For Adressevælger geocoding
                     "period_start": (address_entry.get("periode", {}) or {}).get("gyldigFra"),
                     "period_end": (address_entry.get("periode", {}) or {}).get("gyldigTil"),
                     "is_current": (address_entry.get("periode", {}) or {}).get("gyldigTil") is None,
@@ -863,7 +863,7 @@ class CVRAPIClient:
 
     def enrich_company_with_geometry(self, company_data: dict[str, Any]) -> dict[str, Any]:
         """
-        Enrich company data with address geometry using DAWA API.
+        Enrich company data with address geometry using Adressevælger.
 
         Args:
             company_data: Parsed company data from CVR API
@@ -871,7 +871,7 @@ class CVRAPIClient:
         Returns:
             Company data enriched with geometry information
         """
-        if not self.enable_geocoding or not self.dawa_client:
+        if not self.enable_geocoding or not self.geocoding_client:
             self.log.debug("Address geocoding disabled, skipping geometry enrichment")
             return company_data
 
@@ -899,27 +899,33 @@ class CVRAPIClient:
                 # Determine if we should geocode this address based on configuration
                 should_geocode = not self.geocode_current_only or address.get("is_current")
 
-                # Try DAWA geocoding first if address has adresse_id
+                # Try Adressevælger geocoding first if address has adresse_id
                 if should_geocode and address.get("adresse_id"):
-                    geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
+                    geocoded = self.geocoding_client.geocode_address_by_id(address["adresse_id"])
                     if geocoded:
-                        self.log.debug(f"DAWA geocoded address: {address.get('full_address')}")
-
-                # Fallback to Datavask API if DAWA failed and we have address text
-                if not geocoded and should_geocode and address.get("full_address"):
-                    # Reconstruct complete address with postal code and city for better geocoding
-                    complete_address = address["full_address"]
-                    if address.get("postal_code") and address.get("city"):
-                        complete_address = (
-                            f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                        self.log.debug(
+                            f"Adressevælger geocoded address: {address.get('full_address')}"
                         )
 
-                    self.log.debug(f"Trying Datavask with complete address: {complete_address}")
-                    geocoded = self.dawa_client.geocode_with_datavask(complete_address)
+                # Search by address text if the ID lookup failed.
+                if not geocoded and should_geocode and address.get("full_address"):
+                    self.log.debug(
+                        "Trying Adressevælger with address: {}, {} {}",
+                        address["full_address"],
+                        address.get("postal_code"),
+                        address.get("city"),
+                    )
+                    geocoded = self.geocoding_client.geocode_free_text(
+                        address["full_address"], address.get("postal_code"), address.get("city")
+                    )
                     if geocoded:
-                        self.log.debug(f"Datavask geocoded address: {complete_address}")
+                        self.log.debug(
+                            "Adressevælger geocoded address: {}", address["full_address"]
+                        )
                     else:
-                        self.log.warning(f"Datavask failed for address: {complete_address}")
+                        self.log.warning(
+                            "Adressevælger failed for address: {}", address["full_address"]
+                        )
 
                 # Add geometry data if geocoding succeeded
                 if geocoded:
@@ -929,10 +935,10 @@ class CVRAPIClient:
                             "longitude": geocoded["longitude"],  # WGS84 longitude
                             "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
                             "srid": geocoded.get("srid", 4326),
-                            "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                            "geometry_wkt": self.geocoding_client.create_geometry_wkt(
                                 geocoded["latitude"], geocoded["longitude"]
                             ),
-                            "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                            "geometry_geojson": self.geocoding_client.create_geometry_geojson(
                                 geocoded["latitude"], geocoded["longitude"]
                             ),
                             "coordinate_quality": geocoded.get("coordinate_quality"),
@@ -942,7 +948,7 @@ class CVRAPIClient:
                             "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp"),
                         }
                     )
-                    # Update BFE fields if available from Datavask
+                    # Update BFE fields if available from Adressevælger
                     if geocoded.get("floor") is not None:
                         enriched_address["floor"] = geocoded["floor"]
                     if geocoded.get("door") is not None:
@@ -1106,7 +1112,7 @@ class CVRAPIClient:
         Args:
             cvr_numbers: List of 8-digit CVR numbers
             fetch_all_fields: Whether to fetch all available fields or just basic ones
-            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+            enrich_with_geometry: Whether to enrich addresses with geometry via Adressevælger
             batch_size: Number of CVRs to fetch per API call (default: 50)
 
         Returns:
@@ -1464,7 +1470,7 @@ class CVRAPIClient:
         Args:
             pnumber: P-number (production unit number)
             fetch_all_fields: Whether to fetch all available fields or just basic ones
-            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+            enrich_with_geometry: Whether to enrich addresses with geometry via Adressevælger
 
         Returns:
             Comprehensive P-number data dictionary or None if not found
@@ -1528,7 +1534,7 @@ class CVRAPIClient:
         Args:
             pnumbers: List of P-numbers
             fetch_all_fields: Whether to fetch all available fields or just basic ones
-            enrich_with_geometry: Whether to enrich addresses with geometry via DAWA API
+            enrich_with_geometry: Whether to enrich addresses with geometry via Adressevælger
             batch_size: Number of P-numbers to fetch per API call (default: 50)
 
         Returns:
@@ -1857,7 +1863,7 @@ class CVRAPIClient:
                         (address_entry.get("kommune") or {}).get("kommuneNavn")
                     ),
                     "country_code": address_entry.get("landekode"),
-                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                    "adresse_id": address_entry.get("adresseId"),  # For Adressevælger geocoding
                     "period_start": address_entry.get("periode", {}).get("gyldigFra"),
                     "period_end": address_entry.get("periode", {}).get("gyldigTil"),
                     "is_current": True,  # All addresses here are current
@@ -1898,7 +1904,7 @@ class CVRAPIClient:
                         (address_entry.get("kommune") or {}).get("kommuneNavn")
                     ),
                     "country_code": address_entry.get("landekode"),
-                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                    "adresse_id": address_entry.get("adresseId"),  # For Adressevælger geocoding
                     "period_start": address_entry.get("periode", {}).get("gyldigFra"),
                     "period_end": address_entry.get("periode", {}).get("gyldigTil"),
                     "is_current": True,  # All addresses here are current
@@ -2013,7 +2019,7 @@ class CVRAPIClient:
 
     def enrich_pnumber_with_geometry(self, pnumber_data: dict[str, Any]) -> dict[str, Any]:
         """
-        Enrich P-number data with address geometry using DAWA API.
+        Enrich P-number data with address geometry using Adressevælger.
 
         Args:
             pnumber_data: Parsed P-number data from CVR API
@@ -2021,7 +2027,7 @@ class CVRAPIClient:
         Returns:
             P-number data enriched with geometry information
         """
-        if not self.enable_geocoding or not self.dawa_client:
+        if not self.enable_geocoding or not self.geocoding_client:
             self.log.debug("Address geocoding disabled, skipping P-number geometry enrichment")
             return pnumber_data
 
@@ -2040,29 +2046,29 @@ class CVRAPIClient:
                 # Determine if we should geocode this address based on configuration
                 should_geocode = not self.geocode_current_only or address.get("is_current")
 
-                # Try DAWA geocoding first if address has adresse_id
+                # Try Adressevælger geocoding first if address has adresse_id
                 if should_geocode and address.get("adresse_id"):
-                    geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
+                    geocoded = self.geocoding_client.geocode_address_by_id(address["adresse_id"])
                     if geocoded:
                         self.log.debug(
-                            f"DAWA geocoded P-number address: {address.get('full_address')}"
+                            f"Adressevælger geocoded P-number address: {address.get('full_address')}"
                         )
 
-                # Fallback to Datavask API if DAWA failed and we have address text
+                # Search by address text if the ID lookup failed.
                 if not geocoded and should_geocode and address.get("full_address"):
-                    # Reconstruct complete address with postal code and city for better geocoding
-                    complete_address = address["full_address"]
-                    if address.get("postal_code") and address.get("city"):
-                        complete_address = (
-                            f"{address['full_address']}, {address['postal_code']} {address['city']}"
-                        )
-
                     self.log.debug(
-                        f"Trying Datavask with complete P-number address: {complete_address}"
+                        "Trying Adressevælger with P-number address: {}, {} {}",
+                        address["full_address"],
+                        address.get("postal_code"),
+                        address.get("city"),
                     )
-                    geocoded = self.dawa_client.geocode_with_datavask(complete_address)
+                    geocoded = self.geocoding_client.geocode_free_text(
+                        address["full_address"], address.get("postal_code"), address.get("city")
+                    )
                     if geocoded:
-                        self.log.debug(f"Datavask geocoded P-number address: {complete_address}")
+                        self.log.debug(
+                            "Adressevælger geocoded P-number address: {}", address["full_address"]
+                        )
 
                 # Add geometry data if geocoding succeeded
                 if geocoded:
@@ -2072,10 +2078,10 @@ class CVRAPIClient:
                             "longitude": geocoded["longitude"],  # WGS84 longitude
                             "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
                             "srid": geocoded.get("srid", 4326),
-                            "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                            "geometry_wkt": self.geocoding_client.create_geometry_wkt(
                                 geocoded["latitude"], geocoded["longitude"]
                             ),
-                            "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                            "geometry_geojson": self.geocoding_client.create_geometry_geojson(
                                 geocoded["latitude"], geocoded["longitude"]
                             ),
                             "coordinate_quality": geocoded.get("coordinate_quality"),
@@ -2085,7 +2091,7 @@ class CVRAPIClient:
                             "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp"),
                         }
                     )
-                    # Update BFE fields if available from Datavask
+                    # Update BFE fields if available from Adressevælger
                     if geocoded.get("floor") is not None:
                         enriched_address["floor"] = geocoded["floor"]
                     if geocoded.get("door") is not None:

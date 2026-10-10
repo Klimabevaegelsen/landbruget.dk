@@ -20,6 +20,8 @@ The data processing includes:
 import json
 from typing import Any, ClassVar
 
+from common.crs_utils import DANISH_UTM
+from common.dagi_coverage import validate_dagi_coverage
 from common.geometry_validator import (
     validate_and_normalize_to_utm,
     validate_and_transform_geometries_duckdb,
@@ -112,6 +114,79 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
         self.conn.execute("INSTALL spatial")
         self.conn.execute("LOAD spatial")
         self.log.info("✅ DuckDB-spatial initialized for DAGI processing")
+
+    def _load_bronze_snapshot(self) -> dict[str, str]:
+        """Load all configured layers from one completed bronze snapshot."""
+        manifest_pattern = f"{self.config.bucket}/bronze/{self.config.dataset}/*/completion.json"
+        manifests = sorted(self.storage.list_files(manifest_pattern), reverse=True)
+        if not manifests:
+            raise FileNotFoundError(
+                "No completed DAGI bronze snapshot found. Markerless legacy files are not "
+                "accepted because they may be a partial publish; run the DAGI bronze stage first."
+            )
+
+        expected_layers = set(self.config.endpoints)
+        last_error: Exception | None = None
+        for manifest_path in manifests:
+            try:
+                manifest = self.storage.download_json(manifest_path)
+                if not isinstance(manifest, dict) or manifest.get("complete") is not True:
+                    continue
+                snapshot_id = manifest.get("snapshot_id")
+                manifest_snapshot_id = manifest_path.rsplit("/", 2)[-2]
+                if not isinstance(snapshot_id, str) or snapshot_id != manifest_snapshot_id:
+                    raise ValueError(f"DAGI snapshot {manifest_path} has a mismatched snapshot_id")
+                layer_paths = manifest.get("layers")
+                if not isinstance(layer_paths, dict) or not expected_layers.issubset(layer_paths):
+                    self.log.warning("Skipping incomplete DAGI snapshot manifest {}", manifest_path)
+                    continue
+
+                snapshot_data = {}
+                for layer_name in self.config.endpoints:
+                    layer_path = layer_paths[layer_name]
+                    dataset_name = f"{self.config.dataset}_{layer_name}"
+                    expected_path = (
+                        f"{self.config.bucket}/bronze/{dataset_name}/"
+                        f"{snapshot_id}/{dataset_name}.json"
+                    )
+                    if not isinstance(layer_path, str) or layer_path != expected_path:
+                        raise ValueError(
+                            f"DAGI snapshot {manifest_path} has an invalid path for {layer_name}"
+                        )
+                    raw_data = self.storage.download_json(layer_path)
+                    if not isinstance(raw_data, dict | list):
+                        raise ValueError(
+                            f"DAGI snapshot layer {layer_name} is not a JSON object or array"
+                        )
+                    snapshot_data[layer_name] = json.dumps(raw_data)
+                return snapshot_data
+            except Exception as error:
+                last_error = error
+                self.log.warning(
+                    "Skipping unreadable DAGI snapshot manifest {} ({})",
+                    manifest_path,
+                    type(error).__name__,
+                )
+
+        message = (
+            "No valid completed DAGI bronze snapshot contains all configured layers. "
+            "Markerless legacy files are not accepted; run the DAGI bronze stage first."
+        )
+        if last_error:
+            raise FileNotFoundError(message) from last_error
+        raise FileNotFoundError(message)
+
+    def _save_dagi_layer(self, table_name: str, dataset: str) -> str:
+        """Write DAGI silver with its declared EPSG:25832 GeoParquet CRS."""
+        storage_path = f"{self.config.bucket}/silver/{dataset}/{self.date_pattern}/data.parquet"
+        self.storage.upload_from_duckdb_table(
+            table_name,
+            storage_path,
+            compression="zstd",
+            row_group_size=100000,
+            crs=DANISH_UTM,
+        )
+        return storage_path
 
     def _process_layer(self, raw_geojson: str, layer_type: str) -> str | None:
         """
@@ -228,10 +303,26 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             # DAGI SPECIAL CASE: Data comes in WGS84 (GeoJSON format)
             # With new CRS strategy, we transform TO EPSG:25832 for consistent processing
             if USE_UTM_PROCESSING:
-                # First validate and normalize (will detect WGS84 and transform to 25832)
+                # Bronze GeoJSON is WGS84 lon/lat by contract. Transform explicitly: bounds-based
+                # CRS detection misfires on sea-inclusive postnumre (lon 3.2-16.5) and would
+                # leave them in degrees. The validator below then only validates.
+                self.conn.execute(f"""
+                    UPDATE {processed_table}
+                    SET geometry = ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832', always_xy := true)
+                    WHERE geometry IS NOT NULL
+                """)
                 validate_and_normalize_to_utm(
                     self.conn, processed_table, f"dagi_{layer_type}", geometry_column="geometry"
                 )
+                bounds = self.conn.execute(f"""
+                    SELECT
+                        MIN(ST_XMin(geometry)), MIN(ST_YMin(geometry)),
+                        MAX(ST_XMax(geometry)), MAX(ST_YMax(geometry))
+                    FROM {processed_table}
+                    WHERE geometry IS NOT NULL
+                """).fetchone()
+                if bounds and bounds[0] is not None:
+                    validate_dagi_coverage(tuple(bounds), DANISH_UTM, layer_name=layer_type)
                 self.log.info(
                     f"DAGI {layer_type}: Transformed from WGS84 to EPSG:25832 for processing"
                 )
@@ -259,6 +350,15 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                         SET geometry = ST_Transform(geometry, 'EPSG:4326', '{self.config.target_crs}')
                         WHERE geometry IS NOT NULL
                     """)
+
+            # `area_m2` was initially computed from GeoJSON's WGS84 coordinates. Recompute it
+            # after normalization, when DAGI geometry is in EPSG:25832 metres.
+            if USE_UTM_PROCESSING:
+                self.conn.execute(f"""
+                    UPDATE {processed_table}
+                    SET area_m2 = ST_Area(geometry)
+                    WHERE geometry IS NOT NULL
+                """)
 
             # Get counts for logging
             total_count = self.conn.execute(f"SELECT COUNT(*) FROM {processed_table}").fetchone()[0]
@@ -298,61 +398,36 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
         """
         self.log.info("Running DAGI silver job with DuckDB-spatial")
 
-        processed_data = {}
-
         try:
             async with AsyncTimer("DAGI silver layer processing"):
+                if bronze_data is None:
+                    raw_layers = self._load_bronze_snapshot()
+                else:
+                    missing = set(self.config.endpoints) - set(bronze_data)
+                    if missing:
+                        raise ValueError(
+                            "In-memory DAGI bronze data is missing configured layers: "
+                            f"{sorted(missing)}"
+                        )
+                    raw_layers = {}
+                    for layer_name in self.config.endpoints:
+                        layer_data = bronze_data[layer_name]
+                        if isinstance(layer_data, dict | list):
+                            raw_layers[layer_name] = json.dumps(layer_data)
+                        elif isinstance(layer_data, str):
+                            raw_layers[layer_name] = layer_data
+                        else:
+                            raise ValueError(
+                                f"In-memory DAGI bronze data for {layer_name} is not JSON text/data"
+                            )
+
+                processed_data = {}
                 for layer_name in self.config.endpoints:
                     try:
                         self.log.info(f"Processing DAGI layer: {layer_name}")
 
-                        # Determine dataset names
-                        bronze_dataset_name = f"{self.config.dataset}_{layer_name}"
                         silver_dataset_name = f"{self.config.dataset}_{layer_name}"
-
-                        # Read data with support for in-memory passing
-                        if bronze_data is not None and layer_name in bronze_data:
-                            self.log.info(f"Using bronze data from memory for {layer_name}")
-                            raw_geojson = bronze_data[layer_name]
-                        else:
-                            # Fallback to reading from storage using direct cloud storage access
-                            self.log.info(f"Reading bronze data from storage for {layer_name}")
-                            try:
-                                # Find the latest bronze data file for this layer
-                                pattern = f"{self.config.bucket}/bronze/{bronze_dataset_name}/*/{bronze_dataset_name}.json"
-                                bronze_files = self.storage.list_files(pattern)
-
-                                if not bronze_files:
-                                    self.log.warning(f"No bronze data files found for {layer_name}")
-                                    continue
-
-                                # Sort by path (which includes date) and get the most recent
-                                bronze_files.sort(reverse=True)
-                                latest_file = bronze_files[0]
-
-                                self.log.info(
-                                    f"Loading latest bronze data from cloud storage: {latest_file}"
-                                )
-
-                                # ✅ FIXED: Use direct JSON download instead of DuckDB extraction
-                                # This avoids the maximum_object_size issue and JSON parsing errors
-                                raw_geojson_data = self.storage.download_json(latest_file)
-
-                                # Convert back to JSON string for processing (if it's a dict/list)
-                                if isinstance(raw_geojson_data, dict | list):
-                                    import json
-
-                                    raw_geojson = json.dumps(raw_geojson_data)
-                                else:
-                                    raw_geojson = str(raw_geojson_data)
-
-                            except Exception as e:
-                                self.log.error(f"Error loading bronze data for {layer_name}: {e}")
-                                raw_geojson = None
-
-                        if raw_geojson is None:
-                            self.log.warning(f"No raw data available for {layer_name}")
-                            continue
+                        raw_geojson = raw_layers[layer_name]
 
                         # Process the data using DuckDB-spatial
                         processed_table = self._process_layer(raw_geojson, layer_name)
@@ -362,8 +437,8 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
                         # ✅ OPTIMIZED: Save directly from main connection without copying
                         try:
-                            storage_path = self.save_data_direct(
-                                processed_table, silver_dataset_name, self.config.bucket, "silver"
+                            storage_path = self._save_dagi_layer(
+                                processed_table, silver_dataset_name
                             )
                             self.log.info(
                                 f"Successfully processed and saved DAGI {layer_name} to {storage_path}"

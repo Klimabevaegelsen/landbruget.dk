@@ -1540,6 +1540,8 @@ dependencies = [
     { name = "duckdb", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "google-cloud-secret-manager", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pyproj", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "requests", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "s3fs", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "tenacity", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
 ]
@@ -1549,6 +1551,8 @@ requires-dist = [
     { name = "duckdb" },
     { name = "google-cloud-secret-manager", specifier = ">=2.30.0" },
     { name = "pydantic" },
+    { name = "pyproj", specifier = ">=3.7.2" },
+    { name = "requests", specifier = ">=2.31.0" },
     { name = "s3fs" },
     { name = "tenacity" },
 ]
