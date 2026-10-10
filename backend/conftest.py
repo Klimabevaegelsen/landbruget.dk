@@ -8,6 +8,7 @@ It also adds pipeline directories to sys.path to support pipeline-local imports.
 """
 
 import sys
+import types
 from pathlib import Path
 
 # CRITICAL: Add paths at module import time, before pytest loads test files
@@ -51,3 +52,14 @@ def pytest_configure(config):
     for path in paths_to_add:
         if path.exists() and str(path) not in sys.path:
             sys.path.insert(0, str(path))
+
+
+def pytest_collectreport(report):
+    """Remove CHR test-module crypto stubs before unrelated tests are imported."""
+    if "backend/pipelines/chr_pipeline/tests/" not in report.nodeid:
+        return
+    crypto_module = sys.modules.get("cryptography")
+    if crypto_module is not None and not isinstance(crypto_module, types.ModuleType):
+        for name in tuple(sys.modules):
+            if name == "cryptography" or name.startswith("cryptography."):
+                sys.modules.pop(name, None)

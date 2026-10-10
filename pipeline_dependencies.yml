@@ -84,6 +84,16 @@ pipelines:
     outputs:
       - silver/bbr_buildings
 
+  child_receptors_pipeline:
+    workflow: child_receptors_pipeline.yml
+    description: "National daycare, school, and playground receptor points for pesticide exposure analysis"
+    downstream:
+      - child_receptor_exposure
+    paths:
+      - backend/pipelines/child_receptors/**
+    outputs:
+      - silver/child_receptors
+
   chr_pipeline:
     workflow: chr_pipeline.yml
     description: "Livestock tracking (CHR registry)"
