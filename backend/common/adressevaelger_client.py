@@ -1,5 +1,6 @@
-"""Adressevælger client for CVR address geocoding."""
+"""Shared client for search and geocoding through Adressevælger."""
 
+import logging
 import math
 import os
 import re
@@ -10,7 +11,7 @@ import requests
 from common.crs_utils import utm32_to_wgs84
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from unified_pipeline.util.log_util import Logger
+logger = logging.getLogger(__name__)
 
 
 class AdressevaelgerClient:
@@ -18,26 +19,20 @@ class AdressevaelgerClient:
 
     SELECTABLE_TYPES: ClassVar[frozenset[str]] = frozenset({"adresse", "husnummer"})
 
-    def __init__(self):
-        self.log = Logger.get_logger()
-        self.base_url = (os.getenv("ADRESSEVAELGER_API_URL") or "https://adressevaelger.dk").rstrip(
-            "/"
-        )
+    def __init__(self) -> None:
+        self.log = logger
+        self.base_url = (os.getenv("ADRESSEVAELGER_API_URL") or "https://adressevaelger.dk").rstrip("/")
         self.token = os.getenv("ADRESSEVAELGER_TOKEN") or "adressevaelger123"
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "landbrugsdata-cvr-enrichment/1.0"})
 
     @retry(
-        retry=retry_if_exception_type(
-            (requests.exceptions.RequestException, requests.exceptions.HTTPError)
-        ),
+        retry=retry_if_exception_type((requests.exceptions.RequestException, requests.exceptions.HTTPError)),
         wait=wait_exponential(multiplier=1, min=2, max=8),
         stop=stop_after_attempt(3),
     )
-    def _make_request(
-        self, url: str, params: dict[str, Any] | None = None
-    ) -> dict[str, Any] | list[Any] | None:
-        """Make a request with the legacy retry, timeout, and rate-limit behavior."""
+    def _make_request(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any] | list[Any] | None:
+        """Make a request with retries, a timeout, and rate-limit handling."""
         try:
             response = self.session.get(url, params=params, timeout=30)
             if response.status_code == 404:
@@ -48,14 +43,14 @@ class AdressevaelgerClient:
                     retry_after = int(response.headers.get("Retry-After", 5))
                 except (TypeError, ValueError):
                     retry_after = 5
-                self.log.warning("Adressevælger rate limit hit, waiting {} seconds", retry_after)
+                self.log.warning("Adressevælger rate limit hit, waiting %s seconds", retry_after)
                 time.sleep(retry_after)
                 response = self.session.get(url, params=params, timeout=30)
 
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as error:
-            self.log.error("Adressevælger API request error: {}", error)
+            self.log.error("Adressevælger API request error (%s)", type(error).__name__)
             raise
 
     @staticmethod
@@ -97,9 +92,7 @@ class AdressevaelgerClient:
                 return x, y
         return None
 
-    def geocode_address_by_id(
-        self, address_id: str, *, result_type: str | None = None
-    ) -> dict[str, Any] | None:
+    def geocode_address_by_id(self, address_id: str, *, result_type: str | None = None) -> dict[str, Any] | None:
         """Resolve a DAR UUID, trying the address endpoint before house number."""
         if not address_id:
             return None
@@ -108,9 +101,7 @@ class AdressevaelgerClient:
         try:
             data = None
             for resource in resources:
-                data = self._make_request(
-                    f"{self.base_url}/{resource}/{address_id}", {"token": self.token}
-                )
+                data = self._make_request(f"{self.base_url}/{resource}/{address_id}", {"token": self.token})
                 if data is not None:
                     break
 
@@ -119,7 +110,7 @@ class AdressevaelgerClient:
 
             projected = self._coordinates(data)
             if projected is None:
-                self.log.warning("Missing or invalid Adressevælger coordinates for {}", address_id)
+                self.log.warning("Missing or invalid Adressevælger coordinates for %s", address_id)
                 return None
 
             x, y = projected
@@ -133,9 +124,7 @@ class AdressevaelgerClient:
                 house_number = address
             postal_code = house_number.get("postnummer") or {}
             road = house_number.get("navngivenvejkommunedel") or {}
-            full_address = address.get("adressebetegnelse") or address.get(
-                "adgangsadressebetegnelse"
-            )
+            full_address = address.get("adressebetegnelse") or address.get("adgangsadressebetegnelse")
 
             return {
                 "adresse_id": address_id,
@@ -157,7 +146,7 @@ class AdressevaelgerClient:
                 "dawa_fetch_timestamp": time.time(),
             }
         except Exception as error:
-            self.log.error("Error geocoding address ID {}: {}", address_id, error)
+            self.log.error("Error geocoding address ID %s (%s)", address_id, type(error).__name__)
             return None
 
     def search_address(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
@@ -172,25 +161,23 @@ class AdressevaelgerClient:
             )
             if not isinstance(data, dict) or data.get("status") == "fejl":
                 if isinstance(data, dict) and data.get("status") == "fejl":
-                    self.log.warning("Adressevælger search failed: {}", data.get("beskrivelse", ""))
+                    self.log.warning("Adressevælger search failed: %s", data.get("beskrivelse", ""))
                 return []
 
             funds = data.get("fund")
             if not isinstance(funds, list):
                 return []
             return [
-                result
-                for result in funds
-                if isinstance(result, dict) and result.get("type") in self.SELECTABLE_TYPES
+                result for result in funds if isinstance(result, dict) and result.get("type") in self.SELECTABLE_TYPES
             ]
         except Exception as error:
-            self.log.error("Error searching Adressevælger for {!r}: {}", query, error)
+            self.log.error("Error searching Adressevælger for %r (%s)", query, type(error).__name__)
             return []
 
     def geocode_free_text(
         self, street_address: str, postal_code: str | None = None, city: str | None = None
     ) -> dict[str, Any] | None:
-        """Geocode strict address queries, requiring a matching postcode when provided."""
+        """Geocode strict street/house queries, requiring a matching postcode when provided."""
         if not street_address:
             return None
 
@@ -202,9 +189,7 @@ class AdressevaelgerClient:
         queries.append(street_address)
 
         expected_street = self._street_and_number(street_address)
-        postcode_pattern = (
-            re.compile(rf"\b{re.escape(str(postal_code))}\b") if postal_code else None
-        )
+        postcode_pattern = re.compile(rf"\b{re.escape(str(postal_code))}\b") if postal_code else None
 
         def matches(result: dict[str, Any]) -> bool:
             title = str(result.get("titel", ""))
@@ -216,10 +201,9 @@ class AdressevaelgerClient:
             if len(query) > 73:
                 continue
             results = [result for result in self.search_address(query, limit=5) if matches(result)]
-            if postal_code:
-                hit = results[0] if results else None
-            else:
-                hit = results[0] if len(results) == 1 else None
+            hit = results[0] if results else None
+            if not postal_code and len(results) != 1:
+                hit = None
 
             if not hit or not hit.get("id"):
                 continue
@@ -234,7 +218,7 @@ class AdressevaelgerClient:
 
     @staticmethod
     def _street_and_number(text: str) -> str | None:
-        """Normalise the leading "street housenumber[letter]" part, e.g. "nørregade 2a"."""
+        """Normalise the leading street and house number, e.g. "Nørregade 2a"."""
         match = re.match(r"\s*(.*?\D)\s*(\d+)\s*([A-Za-zÆØÅæøå])?(?=[\s,.]|$)", text)
         if not match:
             return None

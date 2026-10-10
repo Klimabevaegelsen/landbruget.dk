@@ -1,6 +1,7 @@
 """Tests for DAGI silver processing and its WGS84 compatibility input."""
 
 import json
+from unittest.mock import MagicMock
 
 import duckdb
 import pytest
@@ -76,3 +77,142 @@ def test_sea_inclusive_postnummer_is_transformed_to_utm() -> None:
     ).fetchone()
     assert min_x == pytest.approx(150000, abs=1)
     assert area_m2 == pytest.approx(1_000_000, rel=0.01)
+
+
+def _silver_for_storage() -> DAGISilver:
+    silver = DAGISilver.__new__(DAGISilver)
+    silver.config = DAGISilverConfig()
+    silver.storage = MagicMock()
+    silver.log = logger
+    silver.date_pattern = "20261010_120000"
+    return silver
+
+
+def _snapshot_manifest(snapshot_id: str, dataset: str = "dagi") -> dict:
+    return {
+        "snapshot_id": snapshot_id,
+        "complete": True,
+        "layers": {
+            layer: (
+                f"landbruget-data/bronze/{dataset}_{layer}/{snapshot_id}/{dataset}_{layer}.json"
+            )
+            for layer in DAGISilverConfig.endpoints
+        },
+    }
+
+
+def test_storage_read_skips_incomplete_newer_and_uses_one_completed_snapshot() -> None:
+    silver = _silver_for_storage()
+    newer_path = "landbruget-data/bronze/dagi/20261010_120001/completion.json"
+    older_path = "landbruget-data/bronze/dagi/20261010_120000/completion.json"
+    newer = _snapshot_manifest("20261010_120001")
+    del newer["layers"]["regioner"]
+    older = _snapshot_manifest("20261010_120000")
+    payloads = {newer_path: newer, older_path: older}
+    payloads.update(
+        {
+            layer_path: {"type": "FeatureCollection", "snapshot": "older"}
+            for layer_path in older["layers"].values()
+        }
+    )
+    silver.storage.list_files.return_value = [newer_path, older_path]
+    silver.storage.download_json.side_effect = payloads.__getitem__
+
+    loaded = silver._load_bronze_snapshot()
+
+    assert set(loaded) == set(DAGISilverConfig.endpoints)
+    assert all(json.loads(value)["snapshot"] == "older" for value in loaded.values())
+    assert all(
+        path in [call.args[0] for call in silver.storage.download_json.call_args_list]
+        for path in older["layers"].values()
+    )
+
+
+def test_storage_read_loads_a_successful_complete_snapshot() -> None:
+    silver = _silver_for_storage()
+    manifest_path = "landbruget-data/bronze/dagi/20261010_120000/completion.json"
+    manifest = _snapshot_manifest("20261010_120000")
+    payloads = {manifest_path: manifest}
+    payloads.update(
+        {
+            layer_path: {"type": "FeatureCollection", "features": []}
+            for layer_path in manifest["layers"].values()
+        }
+    )
+    silver.storage.list_files.return_value = [manifest_path]
+    silver.storage.download_json.side_effect = payloads.__getitem__
+
+    loaded = silver._load_bronze_snapshot()
+
+    assert set(loaded) == set(DAGISilverConfig.endpoints)
+    assert all(json.loads(value)["type"] == "FeatureCollection" for value in loaded.values())
+
+
+def test_storage_read_rejects_layer_from_mixed_snapshot() -> None:
+    silver = _silver_for_storage()
+    manifest_path = "landbruget-data/bronze/dagi/20261010_120000/completion.json"
+    manifest = _snapshot_manifest("20261010_120000")
+    manifest["layers"]["postnumre"] = (
+        "landbruget-data/bronze/dagi_postnumre/20261010_120001/dagi_postnumre.json"
+    )
+    silver.storage.list_files.return_value = [manifest_path]
+    silver.storage.download_json.return_value = manifest
+
+    with pytest.raises(FileNotFoundError, match="No valid completed DAGI bronze snapshot"):
+        silver._load_bronze_snapshot()
+
+    downloaded_paths = [call.args[0] for call in silver.storage.download_json.call_args_list]
+    assert manifest["layers"]["postnumre"] not in downloaded_paths
+
+
+def test_storage_read_rejects_snapshot_id_mismatched_with_manifest_directory() -> None:
+    silver = _silver_for_storage()
+    manifest_path = "landbruget-data/bronze/dagi/20261010_120000/completion.json"
+    silver.storage.list_files.return_value = [manifest_path]
+    silver.storage.download_json.return_value = _snapshot_manifest("20261010_120001")
+
+    with pytest.raises(FileNotFoundError, match="No valid completed DAGI bronze snapshot"):
+        silver._load_bronze_snapshot()
+
+    assert silver.storage.download_json.call_count == 1
+
+
+def test_markerless_storage_raises_actionable_no_snapshot_error() -> None:
+    silver = _silver_for_storage()
+    silver.storage.list_files.return_value = []
+
+    with pytest.raises(FileNotFoundError, match="Markerless legacy files are not accepted"):
+        silver._load_bronze_snapshot()
+
+
+def test_dagi_silver_write_declares_epsg_25832_crs() -> None:
+    silver = _silver_for_storage()
+
+    path = silver._save_dagi_layer("processed_postnumre", "dagi_postnumre")
+
+    assert path.endswith("/silver/dagi_postnumre/20261010_120000/data.parquet")
+    silver.storage.upload_from_duckdb_table.assert_called_once_with(
+        "processed_postnumre",
+        path,
+        compression="zstd",
+        row_group_size=100000,
+        crs="EPSG:25832",
+    )
+
+
+@pytest.mark.asyncio
+async def test_in_memory_bronze_handoff_processes_all_configured_layers() -> None:
+    silver = _silver_for_storage()
+    silver._process_layer = MagicMock(
+        side_effect=lambda _raw, layer_name: f"processed_{layer_name}"
+    )
+    silver._save_dagi_layer = MagicMock(side_effect=lambda _table, dataset: dataset)
+    bronze_data = dict.fromkeys(
+        DAGISilverConfig.endpoints, '{"type":"FeatureCollection","features":[]}'
+    )
+
+    processed = await silver.run(bronze_data)
+
+    assert set(processed) == set(DAGISilverConfig.endpoints)
+    assert silver._process_layer.call_count == len(DAGISilverConfig.endpoints)
+    silver.storage.list_files.assert_not_called()

@@ -10,6 +10,7 @@ from typing import Any
 
 import aiohttp
 import certifi
+from common.dagi_coverage import validate_dagi_coverage
 from lxml import etree
 from pydantic import Field
 from pyproj import Transformer
@@ -466,10 +467,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
             geometry = shape(feature["geometry"])
             if geometry.is_empty or not geometry.is_valid:
                 raise ValueError(f"DAGI {layer_name} has an invalid WGS84 geometry")
-            min_lon, min_lat, max_lon, max_lat = geometry.bounds
-            # Postnummer polygons include territorial sea (east of Bornholm, south of Gedser).
-            if min_lon < 7.0 or max_lon > 17.0 or min_lat < 54.3 or max_lat > 58.2:
-                raise ValueError(f"DAGI {layer_name} geometry is outside Denmark bounds")
+            validate_dagi_coverage(geometry.bounds, "EPSG:4326", layer_name=layer_name)
 
     def _save_raw_page(self, layer_name: str, page_number: int, page: bytes) -> str:
         dataset_name = f"{self.config.dataset}_{layer_name}"
@@ -505,7 +503,7 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
 
                 fetch_timestamp = datetime.now(UTC).isoformat()
                 regions = parsed["regioner"]
-                output = {}
+                serialized_layers: dict[str, tuple[str, str]] = {}
                 for layer_name in self.config.endpoints:
                     collection = self._build_geojson(
                         layer_name, parsed[layer_name], regions, fetch_timestamp
@@ -517,8 +515,28 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
                         f"{self.config.bucket}/bronze/{dataset_name}/{self.date_pattern}/"
                         f"{dataset_name}.json"
                     )
+                    serialized_layers[layer_name] = (geojson, storage_path)
+
+                # Build and serialize every layer before publishing any compatible JSON.
+                output = {}
+                layer_paths = {}
+                for layer_name, (geojson, storage_path) in serialized_layers.items():
                     self.storage.upload_json_string(geojson, storage_path)
                     output[layer_name] = geojson
+                    layer_paths[layer_name] = storage_path
+
+                manifest = {
+                    "snapshot_id": self.date_pattern,
+                    "complete": True,
+                    "layers": layer_paths,
+                }
+                manifest_path = (
+                    f"{self.config.bucket}/bronze/{self.config.dataset}/"
+                    f"{self.date_pattern}/completion.json"
+                )
+                self.storage.upload_json_string(
+                    json.dumps(manifest, ensure_ascii=False, allow_nan=False), manifest_path
+                )
 
                 self.log.info(
                     "DAGI bronze processing completed in {:.2f}s for layers {}",

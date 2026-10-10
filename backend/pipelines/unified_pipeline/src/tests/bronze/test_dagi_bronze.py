@@ -1,12 +1,15 @@
 """Tests for Datafordeler DAGI WFS bronze ingestion."""
 
 import asyncio
+import json
 from io import StringIO
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from loguru import logger
-from shapely.geometry import MultiPolygon, Point, Polygon, box
+from pyproj import Transformer
+from shapely.geometry import MultiPolygon, Point, Polygon, box, mapping
+from shapely.ops import transform
 
 from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
 
@@ -57,6 +60,7 @@ def bronze(monkeypatch: pytest.MonkeyPatch) -> DAGIBronze:
     source.semaphore = asyncio.Semaphore(source.config.max_concurrent_requests)
     source.storage = MagicMock()
     source.log = logger
+    source.date_pattern = "20261010_120000"
     return source
 
 
@@ -254,3 +258,107 @@ def test_validation_rejects_wrong_region_count(monkeypatch: pytest.MonkeyPatch) 
         source._validate_layer(
             "regioner", [{"attributes": {"regionskode": str(i)}} for i in range(4)]
         )
+
+
+def test_geojson_coverage_allows_sea_inclusive_postnummer(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = bronze(monkeypatch)
+    to_wgs84 = Transformer.from_crs("EPSG:25832", "EPSG:4326", always_xy=True)
+    sea_polygon = transform(
+        to_wgs84.transform,
+        box(150000, 6400000, 151000, 6401000),
+    )
+    collection = {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {}, "geometry": mapping(sea_polygon)}],
+    }
+
+    source._validate_geojson("postnumre", collection)
+
+    assert sea_polygon.bounds[0] == pytest.approx(3.137, abs=0.02)
+
+
+def test_geojson_coverage_rejects_clearly_invalid_geography() -> None:
+    collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": mapping(box(30, 10, 31, 11)),
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="outside declared EPSG:4326 coverage"):
+        DAGIBronze._validate_geojson("kommuner", collection)
+
+
+def _prepare_run_source(source: DAGIBronze) -> None:
+    source._fetch_all_layers = AsyncMock(
+        return_value={layer: [b"page"] for layer in source.config.endpoints}
+    )
+    source._save_raw_page = MagicMock(return_value="raw.gml")
+    source._parse_layer = MagicMock(return_value=[])
+    source._validate_layer = MagicMock()
+    source._build_geojson = MagicMock(
+        return_value={
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {},
+                    "geometry": mapping(box(12, 55, 12.01, 55.01)),
+                }
+            ],
+        }
+    )
+    source._validate_geojson = MagicMock()
+
+
+@pytest.mark.asyncio
+async def test_run_validates_all_layers_before_uploading_any_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = bronze(monkeypatch)
+    _prepare_run_source(source)
+    source._validate_geojson.side_effect = [None, None, None, ValueError("bad last layer")]
+
+    with pytest.raises(ValueError, match="bad last layer"):
+        await source.run()
+
+    source.storage.upload_json_string.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_does_not_publish_completion_marker_after_mid_upload_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = bronze(monkeypatch)
+    _prepare_run_source(source)
+    source.storage.upload_json_string.side_effect = [None, OSError("upload failed")]
+
+    with pytest.raises(OSError, match="upload failed"):
+        await source.run()
+
+    uploaded_paths = [call.args[1] for call in source.storage.upload_json_string.call_args_list]
+    assert len(uploaded_paths) == 2
+    assert all(not path.endswith("completion.json") for path in uploaded_paths)
+
+
+@pytest.mark.asyncio
+async def test_run_publishes_complete_manifest_only_after_all_layer_uploads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = bronze(monkeypatch)
+    _prepare_run_source(source)
+
+    result = await source.run()
+
+    calls = source.storage.upload_json_string.call_args_list
+    assert list(result) == list(source.config.endpoints)
+    assert len(calls) == len(source.config.endpoints) + 1
+    assert all(not call.args[1].endswith("completion.json") for call in calls[:-1])
+    assert calls[-1].args[1].endswith("/completion.json")
+    manifest = json.loads(calls[-1].args[0])
+    assert manifest["complete"] is True
+    assert set(manifest["layers"]) == set(source.config.endpoints)

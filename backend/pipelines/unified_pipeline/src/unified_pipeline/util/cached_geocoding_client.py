@@ -15,7 +15,8 @@ Features:
 
 from typing import Any
 
-from unified_pipeline.util.adressevaelger_client import AdressevaelgerClient
+from common.adressevaelger_client import AdressevaelgerClient
+
 from unified_pipeline.util.geocoding_cache import GeocodingCache
 from unified_pipeline.util.log_util import Logger
 

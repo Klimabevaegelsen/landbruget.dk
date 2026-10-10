@@ -4,8 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 import requests
-
-from unified_pipeline.util.adressevaelger_client import AdressevaelgerClient
+from common.adressevaelger_client import AdressevaelgerClient
 
 
 def make_response(data, status_code=200, headers=None):
@@ -81,7 +80,7 @@ class TestAdressevaelgerClient:
         assert client.base_url == "https://adressevaelger.dk"
         assert client.token == "adressevaelger123"
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_id_lookup_parses_adresse_with_floor_and_door(self, mock_get):
         mock_get.return_value = make_response(ADRESSE_DETAIL)
 
@@ -130,7 +129,7 @@ class TestAdressevaelgerClient:
             timeout=30,
         )
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_id_lookup_falls_back_to_husnummer_after_404(self, mock_get):
         mock_get.side_effect = [make_response(None, 404), make_response(HUSNUMMER_DETAIL)]
 
@@ -145,7 +144,7 @@ class TestAdressevaelgerClient:
             "https://adressevaelger.dk/husnumre/house-id",
         ]
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_empty_id_and_missing_coordinates_return_none(self, mock_get):
         client = AdressevaelgerClient()
         assert client.geocode_address_by_id("") is None
@@ -155,7 +154,7 @@ class TestAdressevaelgerClient:
         mock_get.return_value = make_response(missing_coordinates)
         assert client.geocode_address_by_id("missing-coordinates") is None
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_non_finite_coordinates_return_none(self, mock_get):
         response = {
             "status": "ok",
@@ -165,7 +164,7 @@ class TestAdressevaelgerClient:
 
         assert AdressevaelgerClient().geocode_address_by_id("invalid") is None
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_search_returns_only_selectable_fund_items(self, mock_get):
         mock_get.return_value = make_response(SEARCH_RESULTS)
         client = AdressevaelgerClient()
@@ -179,7 +178,7 @@ class TestAdressevaelgerClient:
             timeout=30,
         )
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_search_rejects_empty_short_and_too_long_queries_without_request(self, mock_get):
         client = AdressevaelgerClient()
 
@@ -188,7 +187,7 @@ class TestAdressevaelgerClient:
         assert client.search_address("a" * 74) == []
         mock_get.assert_not_called()
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_status_fejl_returns_no_search_results(self, mock_get):
         mock_get.return_value = make_response(
             {"status": "fejl", "beskrivelse": "Invalid query", "fund": []}
@@ -196,7 +195,7 @@ class TestAdressevaelgerClient:
 
         assert AdressevaelgerClient().search_address("Nørregade") == []
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_free_text_accepts_matching_postcode_token(self, mock_get):
         mock_get.side_effect = [
             make_response(SEARCH_RESULTS),
@@ -211,7 +210,7 @@ class TestAdressevaelgerClient:
         assert mock_get.call_args_list[0].kwargs["params"]["tekst"] == "Nørregade 1 6000"
         assert mock_get.call_args_list[1].args[0] == "https://adressevaelger.dk/adresser/address-id"
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_free_text_rejects_postcode_prefix_match(self, mock_get):
         mismatched = {
             "status": "ok",
@@ -256,7 +255,7 @@ class TestAdressevaelgerClient:
             assert client.geocode_free_text("Vestergade 2 A 1.", "1456") is not None
         by_id.assert_called_once_with("match", result_type="adresse")
 
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_free_text_query_order_and_long_query_skipping(self, mock_get):
         client = AdressevaelgerClient()
         with patch.object(client, "search_address", return_value=[]) as search:
@@ -274,8 +273,8 @@ class TestAdressevaelgerClient:
             "Nørregade 1",
         ]
 
-    @patch("unified_pipeline.util.adressevaelger_client.time.sleep")
-    @patch("unified_pipeline.util.adressevaelger_client.requests.Session.get")
+    @patch("common.adressevaelger_client.time.sleep")
+    @patch("common.adressevaelger_client.requests.Session.get")
     def test_429_retries_after_retry_after_header(self, mock_get, mock_sleep):
         mock_get.side_effect = [
             make_response({}, 429, {"Retry-After": "7"}),
@@ -292,7 +291,7 @@ class TestAdressevaelgerClient:
         response = make_response({}, 503)
         monkeypatch.setattr(AdressevaelgerClient._make_request.retry, "sleep", lambda _delay: None)
         with patch(
-            "unified_pipeline.util.adressevaelger_client.requests.Session.get",
+            "common.adressevaelger_client.requests.Session.get",
             return_value=response,
         ) as mock_get:
             assert AdressevaelgerClient().geocode_address_by_id("unavailable") is None
