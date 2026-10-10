@@ -9,10 +9,11 @@ import {
   BurdenScale,
   type HistogramBin,
 } from '@/components/pesticidkort/BurdenScale';
+import { FieldProducts } from '@/components/pesticidkort/FieldCardDetails';
 import {
+  FieldOperator,
   FieldProximity,
-  FieldProducts,
-} from '@/components/pesticidkort/FieldCardDetails';
+} from '@/components/pesticidkort/FieldProximity';
 
 interface FieldCardProps {
   field: NearbyFieldSummary;
@@ -81,6 +82,7 @@ export const FieldCard = forwardRef<HTMLDivElement, FieldCardProps>(
         </button>
 
         <FieldProximity field={field} />
+        <FieldOperator field={field} />
 
         {hasProducts && (
           <button

@@ -31,6 +31,7 @@ export interface NearbyFieldSummary {
   glyphosate_products_detail?: string;
   other_applications: number;
   other_products_detail?: string;
+  cvr_number?: string;
   residential_buildings_proximity?: string;
   educational_facilities_proximity?: string;
   water_distance_proximity?: string;
