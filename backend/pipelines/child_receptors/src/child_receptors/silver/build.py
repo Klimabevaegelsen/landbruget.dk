@@ -8,6 +8,7 @@ import logging
 import math
 import re
 from collections import Counter, defaultdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ import duckdb
 
 from child_receptors.config import (
     ALLOWED_RECEPTOR_TYPES,
+    DAGTILBUD_MAX_STALE_DAYS,
     DAYCARE_TYPES,
     KOMMUNE_CODES_BY_NAME,
     OSM_REGIONS,
@@ -30,6 +32,11 @@ _SPATIAL_CONNECTION: duckdb.DuckDBPyConnection | None = None
 _DIGITS = re.compile(r"^\d+$")
 _CVR_PATTERN = re.compile(r"^\d{8}$")
 _P_NUMBER_PATTERN = re.compile(r"^\d{10}$")
+DAGTILBUD_SEED_COMMAND = "cd backend/pipelines/child_receptors && python main.py --layer bronze --sources dagtilbud"
+
+
+class DagtilbudBronzeError(ValueError):
+    """Raised when no recent complete Dagtilbudsregisteret bronze is available."""
 
 
 def _spatial_connection() -> duckdb.DuckDBPyConnection:
@@ -705,25 +712,61 @@ def _source_run(source_dir: Path, timestamp: str | None) -> Path:
     return runs[-1]
 
 
-def _complete_osm_run(run_dir: Path) -> bool:
-    return run_dir.is_dir() and all((run_dir / filename).is_file() for filename in SOURCE_FILENAMES["osm"])
+def _complete_source_run(run_dir: Path, source: str, *, require_manifest: bool = False) -> bool:
+    filenames = SOURCE_FILENAMES[source]
+    if require_manifest:
+        filenames = (*filenames, "manifest.json")
+    return run_dir.is_dir() and all((run_dir / filename).is_file() for filename in filenames)
 
 
-def _osm_source_run(source_dir: Path, timestamp: str | None) -> tuple[Path | None, str]:
-    """Choose the requested/latest complete OSM run, falling back to an earlier complete run."""
+def _source_run_with_fallback(
+    source_dir: Path,
+    source: str,
+    timestamp: str | None,
+    *,
+    require_manifest: bool = False,
+) -> tuple[Path | None, str]:
+    """Choose the requested/latest complete source run, falling back to an earlier complete run."""
     runs = sorted(path for path in source_dir.iterdir() if path.is_dir()) if source_dir.exists() else []
     target_timestamp = timestamp or (runs[-1].name if runs else None)
     if target_timestamp is None:
         return None, "missing"
 
     requested_run = source_dir / target_timestamp
-    if _complete_osm_run(requested_run):
+    if _complete_source_run(requested_run, source, require_manifest=require_manifest):
         return requested_run, "fresh"
 
-    earlier_runs = [run for run in runs if run.name < target_timestamp and _complete_osm_run(run)]
+    earlier_runs = [
+        run
+        for run in runs
+        if run.name < target_timestamp and _complete_source_run(run, source, require_manifest=require_manifest)
+    ]
     if earlier_runs:
         return earlier_runs[-1], "stale"
     return None, "missing"
+
+
+def _dagtilbud_age(manifest: dict[str, Any], now: datetime | None) -> tuple[int, bool]:
+    fetch_timestamp = manifest.get("_fetch_timestamp")
+    if not isinstance(fetch_timestamp, str) or not fetch_timestamp:
+        raise DagtilbudBronzeError(
+            "Dagtilbudsregisteret bronze manifest has no valid _fetch_timestamp. "
+            f"Seed locally with: {DAGTILBUD_SEED_COMMAND}"
+        )
+    try:
+        fetched_at = datetime.fromisoformat(fetch_timestamp.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise DagtilbudBronzeError(
+            "Dagtilbudsregisteret bronze manifest has an invalid _fetch_timestamp. "
+            f"Seed locally with: {DAGTILBUD_SEED_COMMAND}"
+        ) from exc
+    if fetched_at.tzinfo is None:
+        fetched_at = fetched_at.replace(tzinfo=UTC)
+    current_time = now or datetime.now(UTC)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=UTC)
+    age = current_time.astimezone(UTC) - fetched_at.astimezone(UTC)
+    return max(0, age.days), age > timedelta(days=DAGTILBUD_MAX_STALE_DAYS)
 
 
 def _floor_requirements(minimums: dict[str, int] | None, osm_status: str) -> dict[str, int]:
@@ -740,6 +783,7 @@ def build_silver(
     *,
     sources: tuple[str, ...] | list[str] = ("dagtilbud", "stil", "bbr", "geofa", "osm"),
     bronze_timestamp: str | None = None,
+    now: datetime | None = None,
     minimums: dict[str, int] | None = None,
     enforce_floors: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -752,22 +796,60 @@ def build_silver(
     osm_run_status = "missing"
     osm_run_timestamp: str | None = None
     osm_regions: list[str] = []
+    dagtilbud_run_status = "missing"
+    dagtilbud_run_timestamp: str | None = None
+    dagtilbud_age_days: int | None = None
     for source in sources:
         if source == "osm":
-            run_dir, osm_run_status = _osm_source_run(bronze_root / source, bronze_timestamp)
+            run_dir, osm_run_status = _source_run_with_fallback(bronze_root / source, source, bronze_timestamp)
             if run_dir is None:
                 continue
             osm_run_timestamp = run_dir.name
             osm_regions = list(OSM_REGIONS)
+        elif source == "dagtilbud":
+            run_dir, dagtilbud_run_status = _source_run_with_fallback(
+                bronze_root / source,
+                source,
+                bronze_timestamp,
+                require_manifest=True,
+            )
+            if run_dir is None:
+                raise DagtilbudBronzeError(
+                    "No complete Dagtilbudsregisteret bronze run is available. "
+                    f"Seed locally with: {DAGTILBUD_SEED_COMMAND}"
+                )
+            dagtilbud_run_timestamp = run_dir.name
         else:
             run_dir = _source_run(bronze_root / source, bronze_timestamp)
         run_dirs[source] = run_dir
         manifest_path = run_dir / "manifest.json"
-        manifest = (
-            json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() or source != "osm" else {}
-        )
+        manifest: dict[str, Any] = {}
+        if manifest_path.is_file() or source != "osm":
+            try:
+                loaded_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                if source == "dagtilbud":
+                    raise DagtilbudBronzeError(
+                        "Dagtilbudsregisteret bronze manifest cannot be read. "
+                        f"Seed locally with: {DAGTILBUD_SEED_COMMAND}"
+                    ) from exc
+                raise
+            if not isinstance(loaded_manifest, dict):
+                if source == "dagtilbud":
+                    raise DagtilbudBronzeError(
+                        f"Dagtilbudsregisteret bronze manifest is invalid. Seed locally with: {DAGTILBUD_SEED_COMMAND}"
+                    )
+            else:
+                manifest = loaded_manifest
         fetch_timestamp = manifest.get("_fetch_timestamp")
         if source == "dagtilbud":
+            dagtilbud_age_days, dagtilbud_is_over_limit = _dagtilbud_age(manifest, now)
+            if dagtilbud_is_over_limit:
+                raise DagtilbudBronzeError(
+                    f"Dagtilbudsregisteret bronze is {dagtilbud_age_days} days old; "
+                    f"the maximum allowed age is {DAGTILBUD_MAX_STALE_DAYS} days. "
+                    f"Seed locally with: {DAGTILBUD_SEED_COMMAND}"
+                )
             records.extend(
                 parse_dagtilbud(
                     run_dir / "dagtilbudsregister_anvisningsenhed.csv",
@@ -814,6 +896,12 @@ def build_silver(
             "regions": osm_regions,
         },
     }
+    if "dagtilbud" in sources:
+        qa["dagtilbud"] = {
+            "status": dagtilbud_run_status,
+            "bronze_timestamp": dagtilbud_run_timestamp,
+            "age_days": dagtilbud_age_days,
+        }
     checked = validate_rows(records, minimums=minimums, qa=qa, enforce_floors=False)
     deduped, dedupe_stats = dedupe_playgrounds(checked)
     floor_requirements = _floor_requirements(minimums, osm_run_status)

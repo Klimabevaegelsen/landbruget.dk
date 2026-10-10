@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -151,6 +152,21 @@ def _patch_small_floors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "build_silver", build_with_small_floors)
 
 
+def _write_dagtilbud_run(
+    local_dir: Path,
+    timestamp: str,
+    fetch_timestamp: str,
+    files: dict[str, bytes] | None = None,
+) -> Path:
+    files = files or _fixture_fetches()["dagtilbud"]
+    cli._save_bronze("dagtilbud", timestamp, files, local_dir=local_dir, storage=None)
+    manifest_path = local_dir / "bronze" / "child_receptors" / "dagtilbud" / timestamp / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["_fetch_timestamp"] = fetch_timestamp
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path.parent
+
+
 def _qa_path(local_dir: Path) -> Path:
     silver_root = local_dir / "silver" / "child_receptors"
     return next(silver_root.iterdir()) / "qa_report.json"
@@ -204,6 +220,9 @@ def test_cli_all_writes_bronze_manifests_and_silver_contract(monkeypatch: pytest
     } <= parquet_columns
     qa = json.loads(_qa_path(tmp_path).read_text(encoding="utf-8"))
     assert qa["osm"] == {"status": "fresh", "bronze_timestamp": "20261010_120000", "regions": list(OSM_REGIONS)}
+    assert qa["dagtilbud"]["status"] == "fresh"
+    assert qa["dagtilbud"]["bronze_timestamp"] == "20261010_120000"
+    assert qa["dagtilbud"]["age_days"] >= 0
 
 
 def test_cli_continues_when_osm_fails_and_reports_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -232,3 +251,124 @@ def test_cli_continues_when_osm_fails_and_reports_missing(monkeypatch: pytest.Mo
     assert qa["osm"] == {"status": "missing", "bronze_timestamp": None, "regions": []}
     assert "WARNING OSM fetch failed; skipping OSM bronze for this run" in warning_stream.getvalue()
     assert "Traceback" not in warning_stream.getvalue()
+
+
+def test_dagtilbud_fetch_failure_skips_this_bronze_with_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_fetchers(monkeypatch, _fixture_fetches())
+
+    def fail_dagtilbud() -> dict[str, bytes]:
+        raise RuntimeError("bot challenge page")
+
+    monkeypatch.setitem(cli.FETCHERS, "dagtilbud", fail_dagtilbud)
+    warning_stream = io.StringIO()
+    sink_id = logger.add(warning_stream, format="{level} {message}", level="WARNING")
+    try:
+        cli.run_bronze(("dagtilbud", "bbr"), "20261010_120000", local_dir=tmp_path, upload=False)
+    finally:
+        logger.remove(sink_id)
+
+    assert not (tmp_path / "bronze" / "child_receptors" / "dagtilbud" / "20261010_120000").exists()
+    assert (tmp_path / "bronze" / "child_receptors" / "bbr" / "20261010_120000" / "manifest.json").is_file()
+    assert "WARNING Dagtilbudsregisteret fetch failed; skipping dagtilbud bronze for this run: bot challenge page" in (
+        warning_stream.getvalue()
+    )
+    assert "Traceback" not in warning_stream.getvalue()
+
+
+def test_silver_falls_back_to_latest_earlier_complete_dagtilbud_run(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_dagtilbud_run(tmp_path, "20261008_120000", "2026-10-09T12:00:00Z")
+    incomplete = tmp_path / "bronze" / "child_receptors" / "dagtilbud" / "20261009_120000"
+    incomplete.mkdir()
+    (incomplete / SOURCE_FILENAMES["dagtilbud"][0]).write_bytes(b"incomplete")
+    _patch_small_floors(monkeypatch)
+
+    cli.run_silver(
+        ("dagtilbud",),
+        local_dir=tmp_path,
+        bronze_timestamp="20261009_120000",
+        upload=False,
+        now=datetime(2026, 10, 10, 12, tzinfo=UTC),
+    )
+
+    qa = json.loads(_qa_path(tmp_path).read_text(encoding="utf-8"))
+    assert qa["dagtilbud"] == {"status": "stale", "bronze_timestamp": "20261008_120000", "age_days": 1}
+
+
+def test_stale_dagtilbud_within_limit_reports_qa_annotation_and_step_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_dagtilbud_run(tmp_path, "20260901_120000", "2026-09-01T12:00:00Z")
+    incomplete = tmp_path / "bronze" / "child_receptors" / "dagtilbud" / "20261010_120000"
+    incomplete.mkdir()
+    _patch_small_floors(monkeypatch)
+    summary_path = tmp_path / "step-summary.md"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary_path))
+
+    cli.run_silver(
+        ("dagtilbud",),
+        local_dir=tmp_path,
+        bronze_timestamp="20261010_120000",
+        upload=False,
+        now=datetime(2026, 10, 10, 12, tzinfo=UTC),
+    )
+
+    qa = json.loads(_qa_path(tmp_path).read_text(encoding="utf-8"))
+    expected_age = (datetime(2026, 10, 10, 12, tzinfo=UTC) - datetime(2026, 9, 1, 12, tzinfo=UTC)).days
+    assert qa["dagtilbud"] == {"status": "stale", "bronze_timestamp": "20260901_120000", "age_days": expected_age}
+    line = capsys.readouterr().out.strip()
+    assert line.startswith("::warning title=Dagtilbudsregisteret stale::39 days old (bronze 20260901_120000)")
+    assert "cd backend/pipelines/child_receptors && python main.py --layer bronze --sources dagtilbud" in line
+    assert summary_path.read_text(encoding="utf-8").strip() == line
+
+
+def test_dagtilbud_older_than_limit_is_fatal_with_seed_command(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _write_dagtilbud_run(tmp_path, "20260501_120000", "2026-05-01T12:00:00Z")
+    _patch_small_floors(monkeypatch)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli.run_silver(
+            ("dagtilbud",),
+            local_dir=tmp_path,
+            bronze_timestamp=None,
+            upload=False,
+            now=datetime(2026, 10, 10, 12, tzinfo=UTC),
+        )
+
+    assert "Dagtilbudsregisteret bronze is 162 days old" in str(excinfo.value)
+    assert "cd backend/pipelines/child_receptors && python main.py --layer bronze --sources dagtilbud" in str(
+        excinfo.value
+    )
+    assert not (tmp_path / "silver" / "child_receptors").exists()
+
+
+def test_missing_dagtilbud_bronze_is_fatal_with_seed_command(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_small_floors(monkeypatch)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli.run_silver(
+            ("dagtilbud",),
+            local_dir=tmp_path,
+            bronze_timestamp=None,
+            upload=False,
+        )
+
+    assert "No complete Dagtilbudsregisteret bronze run is available" in str(excinfo.value)
+    assert "cd backend/pipelines/child_receptors && python main.py --layer bronze --sources dagtilbud" in str(
+        excinfo.value
+    )
+    assert not (tmp_path / "silver" / "child_receptors").exists()

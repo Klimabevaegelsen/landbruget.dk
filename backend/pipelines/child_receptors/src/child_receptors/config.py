@@ -10,6 +10,7 @@ SILVER_PREFIX = "silver/child_receptors"
 SOURCES = ("dagtilbud", "stil", "bbr", "geofa", "osm")
 PLAYGROUND_PRIORITY = {"geofa": 0, "bbr": 1, "osm": 2}
 PLAYGROUND_DISTANCE_METERS = 25.0
+DAGTILBUD_MAX_STALE_DAYS = 120
 
 SOURCE_URLS = {
     "dagtilbud": "https://dagtilbudsregister.stil.dk/Eksport.aspx",
