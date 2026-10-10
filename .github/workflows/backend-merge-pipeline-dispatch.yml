@@ -14,6 +14,9 @@ permissions:
 
 jobs:
   detect-backend-changes:
+    # Opt-out for merges that only touch CI wiring/shared files and must not re-run data pipelines:
+    # put "[skip dispatch]" in the (squash) commit message.
+    if: ${{ !contains(github.event.head_commit.message, '[skip dispatch]') }}
     runs-on: ubuntu-latest
     outputs:
       dispatch_targets: ${{ steps.detect.outputs.dispatch_targets }}

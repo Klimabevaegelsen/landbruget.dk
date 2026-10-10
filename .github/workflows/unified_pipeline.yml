@@ -301,7 +301,7 @@ jobs:
   # Needs run-pipeline to complete first because pesticide_proximity requires water_typology silver data
   pesticide-processing:
     needs: [run-unified-pipeline]
-    if: ${{ !cancelled() && contains(fromJson('["all", "pesticide_disaggregation", "pesticide_drift_exposure", "child_receptor_exposure"]'), github.event.inputs.source) }}
+    if: ${{ !cancelled() && contains(fromJson('["all", "pesticide_disaggregation", "pesticide_drift_exposure"]'), github.event.inputs.source) }}
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
