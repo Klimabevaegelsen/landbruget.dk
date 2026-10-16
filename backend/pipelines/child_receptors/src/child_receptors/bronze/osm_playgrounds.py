@@ -23,7 +23,9 @@ BACKOFF_SECONDS = (30, 60, 120)
 
 
 def region_slug(region: str) -> str:
-    normalized = unicodedata.normalize("NFKD", region).encode("ascii", "ignore").decode().lower()
+    # NFKD does not decompose æ/ø/å, so transliterate them first ("Sjælland" -> "sjaelland").
+    transliterated = region.translate(str.maketrans({"æ": "ae", "ø": "oe", "å": "aa", "Æ": "Ae", "Ø": "Oe", "Å": "Aa"}))
+    normalized = unicodedata.normalize("NFKD", transliterated).encode("ascii", "ignore").decode().lower()
     return "_".join(normalized.replace("region", "").split())
 
 

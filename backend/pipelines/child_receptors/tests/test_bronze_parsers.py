@@ -522,3 +522,10 @@ def test_bbr_errors_never_leak_api_key() -> None:
         chain.append(str(error))
         error = error.__cause__ or error.__context__
     assert all("secret-key" not in message for message in chain)
+
+
+def test_osm_region_slugs_transliterate_danish_letters() -> None:
+    from child_receptors.config import OSM_REGIONS
+
+    slugs = {osm_playgrounds.region_slug(region) for region in OSM_REGIONS}
+    assert slugs == {"hovedstaden", "sjaelland", "syddanmark", "midtjylland", "nordjylland"}
