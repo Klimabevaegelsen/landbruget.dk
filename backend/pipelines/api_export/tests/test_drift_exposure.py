@@ -51,7 +51,7 @@ def conn_with_fixtures() -> duckdb.DuckDBPyConnection:
             ('b4', 'Addr 4', 'residential',    2024, 0.20, 2, 2, 60.0, 1.0, 50.0, FALSE,
              ST_Point(12.5683, 55.6761))
         ) AS t(building_uuid, address, category_group, pesticide_year,
-               total_drift_dose_kg, contributing_fields, unique_pesticides,
+               total_drift_deposit_per_ha, contributing_fields, unique_pesticides,
                nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
                wind_weighted, geometry)
     """)
@@ -104,7 +104,7 @@ def test_export_writes_per_tile_and_index(
     assert index["building_count"] == 4
     assert index["tile_zoom"] == DRIFT_TILE_ZOOM
     assert index["tile_count"] == 3
-    assert index["national_avg_drift_dose_kg"] == pytest.approx(0.1875)
+    assert index["national_avg_drift_deposit"] == pytest.approx(0.1875)
 
     tile_x, tile_y = _slippy_tile(55.25, 8.25)
     tile_payload = json.loads(
@@ -128,7 +128,7 @@ def test_export_matches_swapped_wgs84_drift_geometry(tmp_path: Path) -> None:
             ('b1', 'Addr 1', 'residential', 2024, 0.10, 3, 2, 50.0, 1.5, 10.0, FALSE,
              ST_FlipCoordinates(ST_Point(8.2500, 55.2500)))
         ) AS t(building_uuid, address, category_group, pesticide_year,
-               total_drift_dose_kg, contributing_fields, unique_pesticides,
+               total_drift_deposit_per_ha, contributing_fields, unique_pesticides,
                nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
                wind_weighted, geometry)
     """)
@@ -162,7 +162,7 @@ def test_export_matches_utm_drift_geometry_without_crs_metadata(tmp_path: Path) 
             ('b1', 'Addr 1', 'residential', 2024, 0.10, 3, 2, 50.0, 1.5, 10.0, FALSE,
              ST_Transform(ST_Point(8.5000, 55.5000), 'EPSG:4326', 'EPSG:25832', always_xy := true))
         ) AS t(building_uuid, address, category_group, pesticide_year,
-               total_drift_dose_kg, contributing_fields, unique_pesticides,
+               total_drift_deposit_per_ha, contributing_fields, unique_pesticides,
                nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
                wind_weighted, geometry)
     """)
@@ -197,7 +197,7 @@ def test_export_handles_wkb_blob_geometry_from_parquet(tmp_path: Path) -> None:
             ('b1', 'Addr 1', 'residential', 2024, 0.10, 3, 2, 50.0, 1.5, 10.0, FALSE,
              ST_AsWKB(ST_Point(8.2500, 55.2500)))
         ) AS t(building_uuid, address, category_group, pesticide_year,
-               total_drift_dose_kg, contributing_fields, unique_pesticides,
+               total_drift_deposit_per_ha, contributing_fields, unique_pesticides,
                nearest_field_distance_m, max_single_drift_pct, exposure_percentile,
                wind_weighted, geometry)
     """)
@@ -237,5 +237,16 @@ def test_export_noop_when_drift_parquet_missing(tmp_path: Path) -> None:
             return None
 
     stats = _NoDrift(conn=conn, output_dir=str(tmp_path)).export()
+    assert stats == {"files_written": 0}
+    assert not (tmp_path / "pesticides").exists()
+
+
+def test_export_skips_legacy_drift_schema(tmp_path: Path) -> None:
+    conn = duckdb.connect(":memory:")
+    conn.execute("CREATE TABLE drift_exposure (legacy_value DOUBLE)")
+
+    exporter = _StubbedExporter(conn=conn, output_dir=str(tmp_path))
+    stats = exporter.export()
+
     assert stats == {"files_written": 0}
     assert not (tmp_path / "pesticides").exists()

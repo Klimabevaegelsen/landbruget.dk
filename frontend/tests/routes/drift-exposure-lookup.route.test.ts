@@ -25,7 +25,7 @@ describe('GET /api/drift-exposure/lookup', () => {
   it('returns the nearest drift-exposure match for a coordinate', async () => {
     getCachedDriftExposureIndexMock.mockResolvedValue({
       pesticide_year: 2024,
-      national_avg_drift_dose_kg: 1.23,
+      national_avg_drift_deposit: 1.23,
       building_count: 2,
       tile_zoom: 12,
       tile_count: 1,
@@ -45,8 +45,36 @@ describe('GET /api/drift-exposure/lookup', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       exposure_percentile: 95,
-      drift_dose_kg: 2.4,
+      drift_deposit: 2.4,
+      national_avg_drift_deposit: 1.23,
+      building_distance_m: 0,
+    });
+  });
+
+  it('reads the legacy national average key during the index migration', async () => {
+    const legacyIndex = {
+      pesticide_year: 2024,
       national_avg_drift_dose_kg: 1.23,
+      building_count: 1,
+      tile_zoom: 12,
+      tile_count: 1,
+    };
+    getCachedDriftExposureIndexMock.mockResolvedValue(legacyIndex);
+    getCachedDriftExposureTileMock.mockResolvedValue([
+      { uid: 'near', lat: 55.6761, lng: 12.5683, pct: 95, dose: 2.4 },
+    ]);
+
+    const response = await GET(
+      createRouteRequest(
+        'https://landbruget.dk/api/drift-exposure/lookup?lat=55.6761&lng=12.5683'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      exposure_percentile: 95,
+      drift_deposit: 2.4,
+      national_avg_drift_deposit: 1.23,
       building_distance_m: 0,
     });
   });
@@ -54,7 +82,7 @@ describe('GET /api/drift-exposure/lookup', () => {
   it('returns null when no building is within match tolerance', async () => {
     getCachedDriftExposureIndexMock.mockResolvedValue({
       pesticide_year: 2024,
-      national_avg_drift_dose_kg: 1.23,
+      national_avg_drift_deposit: 1.23,
       building_count: 1,
       tile_zoom: 12,
       tile_count: 1,

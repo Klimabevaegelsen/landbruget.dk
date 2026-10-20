@@ -291,7 +291,9 @@ export const getCachedBurdenHistogram = unstable_cache(
 
 export interface DriftExposureIndex {
   pesticide_year: number | null;
-  national_avg_drift_dose_kg: number | null;
+  national_avg_drift_deposit?: number | null;
+  /** @deprecated Pre-2026-10 R2 index key; read only as a fallback. */
+  national_avg_drift_dose_kg?: number | null;
   building_count: number;
   tile_zoom: number;
   tile_count: number;
