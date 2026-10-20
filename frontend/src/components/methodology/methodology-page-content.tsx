@@ -7,10 +7,18 @@ import { SectionDataSources } from '@/components/methodology/section-data-source
 import { SectionLiteratureReview } from '@/components/methodology/section-literature-review';
 import { SectionDisaggregation } from '@/components/methodology/section-disaggregation';
 import { SectionResults } from '@/components/methodology/section-results';
+import { SectionPopulationExposure } from '@/components/methodology/section-population-exposure';
 import { SectionLimitations } from '@/components/methodology/section-limitations';
 import { SectionReferences } from '@/components/methodology/section-references';
+import type { PopulationExposureSummary } from '@/lib/server-cache';
 
-export function MethodologyPageContent() {
+interface MethodologyPageContentProps {
+  populationExposureSummary?: PopulationExposureSummary | null;
+}
+
+export function MethodologyPageContent({
+  populationExposureSummary,
+}: MethodologyPageContentProps) {
   return (
     <ArticleLayout>
       <MethodologyHero />
@@ -18,6 +26,7 @@ export function MethodologyPageContent() {
       <SectionLiteratureReview />
       <SectionDisaggregation />
       <SectionResults />
+      <SectionPopulationExposure summary={populationExposureSummary ?? null} />
       <SectionLimitations />
       <SectionReferences />
 

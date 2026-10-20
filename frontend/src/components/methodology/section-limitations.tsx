@@ -5,7 +5,7 @@ export function SectionLimitations() {
     <section data-testid="section-limitations">
       <SectionHeader
         id="limitations"
-        number="5"
+        number="6"
         title="Begrænsninger og datakvalitet"
       />
 
