@@ -162,8 +162,6 @@ class BuildingProcessor:
 
         # Look for the expected bronze output files
         joined_buildings_file = input_dir / "joined_buildings.geoparquet"
-        inspire_attributes_file = input_dir / "inspire_attributes.parquet"
-
         if not joined_buildings_file.exists():
             raise ValueError(f"Expected joined buildings file not found: {joined_buildings_file}")
 
@@ -182,46 +180,43 @@ class BuildingProcessor:
             WHERE column_name IN ('current_use', 'category_group', 'bbr_usage_code')
         """).fetchall()
 
-        if len(inspire_columns_check) >= 3:
-            self.logger.info("✅ INSPIRE data already present in joined_buildings, using directly")
-            processing_table = "joined_buildings"
+        required_inspire_columns = {"current_use", "category_group", "bbr_usage_code"}
+        available_inspire_columns = {row[0] for row in inspire_columns_check}
+        missing_inspire_columns = required_inspire_columns - available_inspire_columns
+        if missing_inspire_columns:
+            missing = ", ".join(sorted(missing_inspire_columns))
+            raise ValueError(f"Joined buildings are missing required INSPIRE columns: {missing}")
 
-            # Debug: Check publicServices count in existing data
-            public_count = conn.execute("""
-                SELECT COUNT(*) FROM joined_buildings
+        self.logger.info("✅ INSPIRE data already present in joined_buildings, using directly")
+        processing_table = "joined_buildings"
+
+        # Debug: Check publicServices count in existing data
+        public_count = conn.execute("""
+            SELECT COUNT(*) FROM joined_buildings
+            WHERE current_use = 'publicServices'
+        """).fetchone()[0]
+        self.logger.info(f"🔍 PublicServices buildings in joined data: {public_count:,}")
+
+        if public_count > 0:
+            # Show sample education codes
+            education_sample = conn.execute("""
+                SELECT bbr_usage_code, COUNT(*) as count
+                FROM joined_buildings
                 WHERE current_use = 'publicServices'
-            """).fetchone()[0]
-            self.logger.info(f"🔍 PublicServices buildings in joined data: {public_count:,}")
+                  AND bbr_usage_code IN ('420', '421', '422', '429', '440', '441')
+                GROUP BY bbr_usage_code
+                ORDER BY count DESC
+            """).fetchall()
 
-            if public_count > 0:
-                # Show sample education codes
-                education_sample = conn.execute("""
-                    SELECT bbr_usage_code, COUNT(*) as count
-                    FROM joined_buildings
-                    WHERE current_use = 'publicServices'
-                      AND bbr_usage_code IN ('420', '421', '422', '429', '440', '441')
-                    GROUP BY bbr_usage_code
-                    ORDER BY count DESC
-                """).fetchall()
-
-                if education_sample:
-                    self.logger.info("🏫 Education buildings by BBR code:")
-                    for code, count in education_sample:
-                        code_name = self._get_bbr_code_name(code)
-                        self.logger.info(f"  {code_name}: {count:,} buildings")
-                else:
-                    self.logger.warning(
-                        "⚠️ No education BBR codes found in joined publicServices buildings"
-                    )
-
-        elif inspire_attributes_file.exists():
-            self.logger.warning("⚠️ INSPIRE data not in joined_buildings, attempting separate join")
-            self.logger.info(f"Loading INSPIRE attributes from: {inspire_attributes_file}")
-            # ... keep the old join logic as fallback ...
-            processing_table = "joined_buildings"
-        else:
-            self.logger.warning("INSPIRE attributes file not found, processing without enrichment")
-            processing_table = "joined_buildings"
+            if education_sample:
+                self.logger.info("🏫 Education buildings by BBR code:")
+                for code, count in education_sample:
+                    code_name = self._get_bbr_code_name(code)
+                    self.logger.info(f"  {code_name}: {count:,} buildings")
+            else:
+                self.logger.warning(
+                    "⚠️ No education BBR codes found in joined publicServices buildings"
+                )
 
         # Apply comprehensive geo validation before transformations
         self.logger.info("Applying comprehensive geo validation...")
