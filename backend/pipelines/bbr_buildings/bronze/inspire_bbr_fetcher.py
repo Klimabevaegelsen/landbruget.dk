@@ -302,6 +302,7 @@ class InspireBBRFetcher:
                 inspireId_localId as building_uuid,
                 externalReference_reference1 as external_ref,
                 currentUse,
+                conditionOfConstruction AS condition_of_construction,
                 buildingNature,
                 dateOfConstruction_dateOfEvent_anyPoint as construction_year,
                 officialArea as floor_area,
@@ -311,6 +312,7 @@ class InspireBBRFetcher:
                 '{category_group}' as category_group
             FROM ST_Read('{gpkg_path}', layer='building')
             WHERE currentUse IN ({category_sql})
+              AND (conditionOfConstruction IS NULL OR conditionOfConstruction <> 'demolished')
             ORDER BY random()
             LIMIT {min(sample_size, 500)}
             """
@@ -322,13 +324,14 @@ class InspireBBRFetcher:
                     "building_uuid": row[0],
                     "external_ref": row[1],
                     "current_use": row[2],
-                    "building_nature": row[3],
-                    "construction_year": row[4],
-                    "floor_area": row[5],
-                    "floors": row[6],
-                    "dwellings": row[7],
-                    "address": row[8],
-                    "category_group": row[9],
+                    "condition_of_construction": row[3],
+                    "building_nature": row[4],
+                    "construction_year": row[5],
+                    "floor_area": row[6],
+                    "floors": row[7],
+                    "dwellings": row[8],
+                    "address": row[9],
+                    "category_group": row[10],
                 }
                 for row in result
             )
@@ -346,6 +349,7 @@ class InspireBBRFetcher:
             inspireId_localId as building_uuid,
             externalReference_reference1 as external_ref,
             currentUse,
+            conditionOfConstruction AS condition_of_construction,
             buildingNature,
             dateOfConstruction_dateOfEvent_anyPoint as construction_year,
             officialArea as floor_area,
@@ -364,6 +368,7 @@ class InspireBBRFetcher:
             'individualResidence', 'collectiveResidence', 'twoDwellings',
             'agriculture', 'publicServices'
         )
+          AND (conditionOfConstruction IS NULL OR conditionOfConstruction <> 'demolished')
         """
 
         result = conn.execute(query).fetchall()
@@ -373,13 +378,14 @@ class InspireBBRFetcher:
                 "building_uuid": row[0],
                 "external_ref": row[1],
                 "current_use": row[2],
-                "building_nature": row[3],
-                "construction_year": row[4],
-                "floor_area": row[5],
-                "floors": row[6],
-                "dwellings": row[7],
-                "address": row[8],
-                "category_group": row[9],
+                "condition_of_construction": row[3],
+                "building_nature": row[4],
+                "construction_year": row[5],
+                "floor_area": row[6],
+                "floors": row[7],
+                "dwellings": row[8],
+                "address": row[9],
+                "category_group": row[10],
             }
             for row in result
         ]
@@ -1069,6 +1075,8 @@ class InspireBBRFetcher:
                     'individualResidence', 'collectiveResidence', 'twoDwellings',
                     'agriculture', 'publicServices'
                 )
+                  AND (conditionOfConstruction IS NULL
+                       OR conditionOfConstruction <> 'demolished')
                 GROUP BY currentUse
                 ORDER BY currentUse
             """).fetchall()
@@ -1093,24 +1101,33 @@ class InspireBBRFetcher:
                 if sample_size and sample_size > 0:
                     conn.execute(f"""
                         CREATE OR REPLACE TABLE category_buildings AS
-                        SELECT inspireId_localId as building_uuid
+                        SELECT
+                            inspireId_localId as building_uuid,
+                            conditionOfConstruction AS condition_of_construction
                         FROM buildings
                         WHERE currentUse IN ('{use_filter}')
+                          AND (conditionOfConstruction IS NULL
+                               OR conditionOfConstruction <> 'demolished')
                         LIMIT {sample_size}
                     """)
                 else:
                     conn.execute(f"""
                         CREATE OR REPLACE TABLE category_buildings AS
-                        SELECT inspireId_localId as building_uuid
+                        SELECT
+                            inspireId_localId as building_uuid,
+                            conditionOfConstruction AS condition_of_construction
                         FROM buildings
                         WHERE currentUse IN ('{use_filter}')
+                          AND (conditionOfConstruction IS NULL
+                               OR conditionOfConstruction <> 'demolished')
                     """)
 
                 # Get building UUIDs for this category
-                building_uuids = conn.execute(
-                    "SELECT building_uuid FROM category_buildings"
+                category_rows = conn.execute(
+                    "SELECT building_uuid, condition_of_construction FROM category_buildings"
                 ).fetchall()
-                building_uuids = [row[0] for row in building_uuids]
+                building_uuids = [row[0] for row in category_rows]
+                conditions_by_uuid = {row[0]: row[1] for row in category_rows}
 
                 self.logger.info(f"Found {len(building_uuids)} {category_name} buildings")
 
@@ -1131,6 +1148,7 @@ class InspireBBRFetcher:
                                 "category": "residential",
                                 "bbr_usage_code": None,  # Residential doesn't need detailed codes
                                 "detailed_usage": None,
+                                "condition_of_construction": conditions_by_uuid.get(uuid),
                             }
                             for uuid in chunk_uuids
                         ]
@@ -1144,7 +1162,11 @@ class InspireBBRFetcher:
                 else:
                     # For agriculture and publicServices, enrich with GraphQL API
                     self._enrich_and_stream_category(
-                        building_uuids, category_name, building_queue, conn
+                        building_uuids,
+                        category_name,
+                        building_queue,
+                        conn,
+                        conditions_by_uuid=conditions_by_uuid,
                     )
 
             conn.close()
@@ -1160,6 +1182,7 @@ class InspireBBRFetcher:
         category_name: str,
         building_queue: Queue[tuple[list[str], list[dict[str, Any]]]],
         conn: Any,
+        conditions_by_uuid: dict[str, Any] | None = None,
     ) -> None:
         """
         Enrich buildings with GraphQL data and stream to queue in batches.
@@ -1213,6 +1236,7 @@ class InspireBBRFetcher:
                         enriched_record = {
                             "building_uuid": uuid,
                             "category": category_name,
+                            "condition_of_construction": (conditions_by_uuid or {}).get(uuid),
                             "bbr_code": building_data.get("bbr_code") if building_data else None,
                             "bbr_description": building_data.get("bbr_description")
                             if building_data

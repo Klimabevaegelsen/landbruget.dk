@@ -52,6 +52,9 @@ except ImportError:
     STORAGE_AVAILABLE = False
 
 
+MIN_JOIN_MATCH_RATE = 0.90
+
+
 def check_memory_usage() -> None:
     """Monitor memory and disk usage."""
     if not PSUTIL_AVAILABLE:
@@ -84,14 +87,11 @@ def perform_uuid_join_optimized(
     """
     Perform efficient UUID-based join between INSPIRE BBR and GeoDanmark data.
 
-    This approach uses simple UUID matching (inspireId_localId = bbruuid) which is:
+    This approach uses case-insensitive UUID matching (inspireId_localId = bbruuid) which is:
     - Much faster than spatial operations (no geometry calculations needed)
     - More reliable (exact matches, no tolerance issues)
     - Memory efficient (no spatial indexes required)
-    - Proven to work with 63.9% match rate on full datasets
-
-    Our testing showed 3.56M successful matches between INSPIRE BBR and GeoDanmark
-    using this UUID-based approach.
+    - Normalized to lowercase on both sides of the join
 
     Args:
         building_ids: List of building UUIDs from INSPIRE BBR data
@@ -109,6 +109,8 @@ def perform_uuid_join_optimized(
 
     if not building_ids:
         raise ValueError("No building IDs provided for UUID join")
+    if attributes_df is None:
+        raise ValueError("INSPIRE attributes are required for the GeoDanmark UUID join")
 
     # Connect to DuckDB with spatial optimization
     conn = duckdb.connect()
@@ -133,18 +135,33 @@ def perform_uuid_join_optimized(
             SELECT * FROM read_parquet('{geodanmark_path}')
         """)
 
-        # OPTIMIZATION: Skip expensive ST_Union_Agg - use buildings directly for faster processing
+        # GeoDanmark coordinates are expected in EPSG:25832. Some older files carry
+        # an incorrect CRS84 tag, so use planar area unless coordinates look like degrees.
         print("🎯 Using all GeoDanmark buildings directly (no expensive aggregation)...")
-        conn.execute("""
+        median_x = conn.execute("""
+            SELECT MEDIAN(ST_XMin(geometri::GEOMETRY))
+            FROM geodanmark_buildings_raw
+            WHERE geometri IS NOT NULL AND ST_IsValid(geometri::GEOMETRY)
+        """).fetchone()[0]
+        if median_x is not None and median_x < 180:
+            area_expression = "ST_Area_Spheroid(geometri::GEOMETRY)"
+            logging.getLogger(__name__).warning(
+                "GeoDanmark geometry median X is %.6f; using spheroidal area for lon/lat data",
+                median_x,
+            )
+        else:
+            area_expression = "ST_Area(geometri::GEOMETRY)"
+
+        conn.execute(f"""
             CREATE OR REPLACE TABLE geodanmark_buildings AS
             SELECT
-                BBRUUID,
+                LOWER(TRIM(CAST(BBRUUID AS VARCHAR))) AS BBRUUID,
                 bygningstype,
-                geometri as geometry,
-                ST_Area_Spheroid(geometri) as building_area_m2
+                geometri::GEOMETRY AS geometry,
+                {area_expression} AS building_area_m2
             FROM geodanmark_buildings_raw
-            WHERE ST_IsValid(geometri)
-            AND ST_Area_Spheroid(geometri) > 5  -- Basic size filter
+            WHERE ST_IsValid(geometri::GEOMETRY)
+            AND {area_expression} > 5
         """)
 
         # Drop the raw table to save memory
@@ -158,73 +175,117 @@ def perform_uuid_join_optimized(
         print("⚡ Executing direct join (attributes ↔ GeoDanmark)...")
 
         # Direct join between INSPIRE attributes and GeoDanmark (skip building_ids)
-        if attributes_df is not None:
-            print("📋 Direct join: INSPIRE attributes ↔ GeoDanmark...")
+        print("📋 Direct join: INSPIRE attributes ↔ GeoDanmark...")
 
-            # Convert attributes to DuckDB table
-            if isinstance(attributes_df, list):
-                import pandas as pd
+        # Convert attributes to DuckDB table
+        if isinstance(attributes_df, list):
+            import pandas as pd
 
-                attributes_df = pd.DataFrame(attributes_df)
+            attributes_df = pd.DataFrame(attributes_df)
 
-            # Register attributes DataFrame with DuckDB
-            conn.register("inspire_attributes", attributes_df)
+        # Register attributes DataFrame with DuckDB and normalize UUIDs according to
+        # the type DuckDB inferred from the source parquet/DataFrame.
+        conn.register("inspire_attributes", attributes_df)
+        attribute_columns = {
+            row[0]: row[1].upper() for row in conn.execute("DESCRIBE inspire_attributes").fetchall()
+        }
+        if "building_uuid" not in attribute_columns:
+            raise ValueError("INSPIRE attributes are missing the building_uuid column")
 
-            # OPTIMIZATION: Pre-compute UUID strings to avoid expensive join-time conversion
-            print("🔧 Pre-computing UUID strings for faster join...")
-            conn.execute("""
-                CREATE OR REPLACE TABLE inspire_attributes_with_uuid AS
-                SELECT
-                    *,
-                    LOWER(CONCAT(
-                        SUBSTR(hex(building_uuid), 1, 8), '-',
-                        SUBSTR(hex(building_uuid), 9, 4), '-',
-                        SUBSTR(hex(building_uuid), 13, 4), '-',
-                        SUBSTR(hex(building_uuid), 17, 4), '-',
-                        SUBSTR(hex(building_uuid), 21, 12)
-                    )) as building_uuid_string
-                FROM inspire_attributes
-            """)
-
-            # Fast direct join using pre-computed UUID strings
-            uuid_join_query = """
-            CREATE OR REPLACE TABLE joined_results AS
-            SELECT
-                g.BBRUUID,
-                g.geometry,
-                g.bygningstype,
-                g.building_area_m2,
-                'direct_uuid_matched' as join_status,
-                -- INSPIRE attributes
-                ia.current_use,
-                ia.building_nature,
-                ia.construction_year,
-                ia.floor_area,
-                ia.floors,
-                ia.dwellings,
-                ia.address,
-                ia.bbr_usage_code,
-                ia.category_group
-            FROM geodanmark_buildings g
-            INNER JOIN inspire_attributes_with_uuid ia ON g.BBRUUID = ia.building_uuid_string
-            WHERE ST_IsValid(g.geometry)
-            AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
-            """
+        if attribute_columns["building_uuid"] == "BLOB":
+            uuid_expression = """LOWER(CONCAT(
+                SUBSTR(hex(building_uuid), 1, 8), '-',
+                SUBSTR(hex(building_uuid), 9, 4), '-',
+                SUBSTR(hex(building_uuid), 13, 4), '-',
+                SUBSTR(hex(building_uuid), 17, 4), '-',
+                SUBSTR(hex(building_uuid), 21, 12)
+            ))"""
         else:
-            print("📋 No INSPIRE attributes available - using all GeoDanmark buildings...")
-            # Basic table with all GeoDanmark buildings (no attributes join needed)
-            uuid_join_query = """
-            CREATE OR REPLACE TABLE joined_results AS
-            SELECT
-                g.BBRUUID,
-                g.geometry,
-                g.bygningstype,
-                g.building_area_m2,
-                'geodanmark_only' as join_status
-            FROM geodanmark_buildings g
-            WHERE ST_IsValid(g.geometry)
-            AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
+            uuid_expression = "LOWER(TRIM(CAST(building_uuid AS VARCHAR)))"
+
+        condition_filter = ""
+        if "condition_of_construction" in attribute_columns:
+            condition_filter = """
+            WHERE condition_of_construction IS NULL
+               OR LOWER(TRIM(CAST(condition_of_construction AS VARCHAR))) <> 'demolished'
             """
+
+        print("🔧 Pre-computing normalized UUIDs for the join...")
+        conn.execute(f"""
+            CREATE OR REPLACE TABLE inspire_attributes_with_uuid AS
+            SELECT *, {uuid_expression} AS building_uuid_string
+            FROM inspire_attributes
+            {condition_filter}
+        """)
+
+        join_logger = logging.getLogger(__name__)
+        category_match_stats = conn.execute("""
+            SELECT
+                COALESCE(CAST(ia.category_group AS VARCHAR), '(null)') AS category_group,
+                COUNT(DISTINCT ia.building_uuid_string) AS attribute_uuids,
+                COUNT(DISTINCT CASE
+                    WHEN g.BBRUUID IS NOT NULL THEN ia.building_uuid_string
+                END) AS matched_attribute_uuids
+            FROM inspire_attributes_with_uuid ia
+            LEFT JOIN geodanmark_buildings g
+                ON g.BBRUUID = ia.building_uuid_string
+            WHERE ia.building_uuid_string IS NOT NULL
+            GROUP BY ia.category_group
+            ORDER BY category_group
+        """).fetchall()
+        for category_group, category_total, category_matched in category_match_stats:
+            category_rate = category_matched / category_total if category_total else 0.0
+            join_logger.info(
+                "INSPIRE↔GeoDanmark match rate for %s: %.1f%% (%s/%s distinct UUIDs)",
+                category_group,
+                category_rate * 100,
+                category_matched,
+                category_total,
+            )
+
+        attribute_total, matched_total = conn.execute("""
+            SELECT
+                COUNT(DISTINCT ia.building_uuid_string),
+                COUNT(DISTINCT CASE
+                    WHEN g.BBRUUID IS NOT NULL THEN ia.building_uuid_string
+                END)
+            FROM inspire_attributes_with_uuid ia
+            LEFT JOIN geodanmark_buildings g
+                ON g.BBRUUID = ia.building_uuid_string
+            WHERE ia.building_uuid_string IS NOT NULL
+        """).fetchone()
+        match_rate = matched_total / attribute_total if attribute_total else 0.0
+        if match_rate < MIN_JOIN_MATCH_RATE:
+            raise RuntimeError(
+                f"INSPIRE↔GeoDanmark overall match rate {match_rate:.1%} is below "
+                f"the required {MIN_JOIN_MATCH_RATE:.0%} "
+                f"({matched_total}/{attribute_total} distinct UUIDs matched)"
+            )
+
+        uuid_join_query = """
+        CREATE OR REPLACE TABLE joined_results AS
+        SELECT
+            g.BBRUUID,
+            g.geometry,
+            g.bygningstype,
+            g.building_area_m2,
+            'direct_uuid_matched' as join_status,
+            ia.current_use,
+            ia.building_nature,
+            ia.construction_year,
+            ia.floor_area,
+            ia.floors,
+            ia.dwellings,
+            ia.address,
+            ia.bbr_usage_code,
+            ia.category_group
+        FROM geodanmark_buildings g
+        INNER JOIN inspire_attributes_with_uuid ia
+            ON g.BBRUUID = ia.building_uuid_string
+        WHERE g.BBRUUID IS NOT NULL
+          AND ST_IsValid(g.geometry)
+          AND g.building_area_m2 > 5
+        """
 
         conn.execute(uuid_join_query)
 
@@ -358,7 +419,7 @@ def perform_uuid_join_optimized(
                 "total_building_area_m2": total_area,
                 "join_method": "UUID-based matching (BBRUUID)",
                 "optimization_used": "DuckDB UUID join with optional INSPIRE attributes",
-                "includes_inspire_attributes": "inspire_current_use" in column_names,
+                "includes_inspire_attributes": "current_use" in column_names,
             }
         print("❌ No matching buildings found")
         return {
@@ -1177,7 +1238,7 @@ def run_silver_layer(
     logger: logging.Logger,
     bronze_data: dict[str, Any] | None = None,
     bronze_timestamp: str | None = None,
-) -> dict:
+) -> dict | None:
     """
     Execute silver layer processing - joins, transformations, and final output.
 
@@ -1204,6 +1265,11 @@ def run_silver_layer(
 
     if not building_ids:
         logger.error("❌ No building IDs available for processing")
+        return None
+    if attributes_df is None or len(attributes_df) == 0:
+        logger.error(
+            "❌ INSPIRE attributes are missing or empty; refusing GeoDanmark-only silver output"
+        )
         return None
 
     logger.info(f"📊 Loaded {len(building_ids):,} building IDs for UUID join")
@@ -1242,42 +1308,47 @@ def run_silver_layer(
 
         # Copy the main joined file to expected location
         main_joined_file = silver_output_dir / "joined_buildings.parquet"
-        if main_joined_file.exists():
-            # Convert parquet to geoparquet for BuildingProcessor
-            import duckdb
+        if not main_joined_file.is_file():
+            raise FileNotFoundError(f"UUID join output was not created: {main_joined_file}")
 
-            temp_conn = duckdb.connect()
+        # Convert parquet to geoparquet for BuildingProcessor.
+        import duckdb
+
+        temp_conn = duckdb.connect()
+        try:
             temp_conn.execute("INSTALL spatial")
             temp_conn.execute("LOAD spatial")
             temp_conn.execute(f"""
                 COPY (SELECT * FROM read_parquet('{main_joined_file}'))
                 TO '{temp_joined_file}' (FORMAT PARQUET)
             """)
+        finally:
             temp_conn.close()
 
-            # Save attributes for BuildingProcessor
-            if attributes_df is not None:
-                if isinstance(attributes_df, list):
-                    import pandas as pd
+        # Save attributes for BuildingProcessor.
+        if isinstance(attributes_df, list):
+            import pandas as pd
 
-                    attributes_df = pd.DataFrame(attributes_df)
+            attributes_df = pd.DataFrame(attributes_df)
 
-                attributes_file = silver_output_dir / "inspire_attributes.parquet"
-                attributes_df.to_parquet(attributes_file, index=False)
-                logger.info(
-                    f"✅ Saved attributes for BuildingProcessor: {len(attributes_df)} records"
-                )
+        attributes_file = silver_output_dir / "inspire_attributes.parquet"
+        attributes_df.to_parquet(attributes_file, index=False)
+        logger.info(f"✅ Saved attributes for BuildingProcessor: {len(attributes_df)} records")
 
-            # Run BuildingProcessor for final enrichment
-            final_output_dir = silver_output_dir / "processed"
-            processor.process_buildings(silver_output_dir, final_output_dir)
+        # Run BuildingProcessor for final enrichment.
+        final_output_dir = silver_output_dir / "processed"
+        processor.process_buildings(silver_output_dir, final_output_dir)
+        processed_file = final_output_dir / "buildings_processed.parquet"
+        if not processed_file.is_file():
+            raise FileNotFoundError(
+                f"BuildingProcessor did not create the required output: {processed_file}"
+            )
 
-            logger.info("✅ BuildingProcessor completed final enrichment")
-        else:
-            logger.warning("⚠️ Main joined file not found, skipping BuildingProcessor")
+        logger.info("✅ BuildingProcessor completed final enrichment")
 
     except Exception as e:
-        logger.warning(f"⚠️ BuildingProcessor failed, continuing without enrichment: {e}")
+        logger.error(f"❌ BuildingProcessor failed; silver output will not be uploaded: {e}")
+        raise
 
     # Step 5: Upload silver results to storage
     _upload_silver_data_to_storage(silver_output_dir, timestamp, logger)
@@ -1403,19 +1474,28 @@ def _load_bronze_data_from_storage(
             logger.info(f"✅ Loaded {len(attributes_df):,} attribute records from storage")
 
         except Exception as e:
-            logger.info(f"📂 No attributes found in storage: {e}")
+            logger.error(f"❌ Failed to load INSPIRE attributes from storage: {e}")
+            raise RuntimeError(
+                f"Could not load required INSPIRE attributes for bronze timestamp {timestamp}"
+            ) from e
 
         return building_ids, attributes_df
 
     except Exception as e:
-        logger.warning(f"⚠️ Failed to load bronze data from storage: {e}")
-        return [], None
+        logger.error(f"❌ Failed to load bronze data from storage: {e}")
+        raise
 
 
 def _upload_silver_data_to_storage(
     silver_output_dir: Path, timestamp: str, logger: logging.Logger
 ) -> None:
     """Upload silver results to storage."""
+    processed_file = silver_output_dir / "processed" / "buildings_processed.parquet"
+    if not processed_file.is_file():
+        raise FileNotFoundError(
+            f"Refusing silver upload because BuildingProcessor output is missing: {processed_file}"
+        )
+
     if not STORAGE_AVAILABLE:
         logger.warning("⚠️ Storage not available - skipping silver data upload")
         return
@@ -1431,7 +1511,7 @@ def _upload_silver_data_to_storage(
         # Upload processed files (with coordinate fixes) if available
         processed_dir = silver_output_dir / "processed"
 
-        if processed_dir.exists() and any(processed_dir.glob("*.parquet")):
+        if any(processed_dir.glob("*.parquet")):
             # Upload processed files (with coordinate fixes applied)
             logger.info("📤 Uploading processed files with coordinate fixes...")
             for file_path in processed_dir.glob("*.parquet"):
@@ -1475,7 +1555,8 @@ def _upload_silver_data_to_storage(
             logger.warning(f"⚠️ Retention cleanup failed for silver/bbr_buildings: {e}")
 
     except Exception as e:
-        logger.warning(f"⚠️ Failed to upload silver data to storage: {e}")
+        logger.error(f"❌ Failed to upload silver data to storage: {e}")
+        raise
 
 
 if __name__ == "__main__":
