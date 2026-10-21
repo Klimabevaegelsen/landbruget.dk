@@ -1,0 +1,62 @@
+[
+ {
+  "id_lokalId": "090d0df8-0182-4e22-8b9e-82a3f9860d26",
+  "status": "6",
+  "kommunekode": "0147",
+  "registreringFra": "2022-04-27T09:07:08.921714Z",
+  "virkningFra": "2022-04-27T09:07:08.921714Z",
+  "tek109Koordinat": {
+   "wkt": "POINT (720278.88 6176396.83)"
+  }
+ },
+ {
+  "id_lokalId": "37a644d5-d54d-4fbf-8d99-dec9f05601a4",
+  "status": "6",
+  "kommunekode": "0147",
+  "registreringFra": "2017-06-02T12:29:37.000000Z",
+  "virkningFra": "2013-09-30T14:56:13.910000Z",
+  "tek109Koordinat": {
+   "wkt": "POINT (721263.05 6176072.08)"
+  }
+ },
+ {
+  "id_lokalId": "37a644d5-d54d-4fbf-8d99-dec9f05601a4",
+  "status": "6",
+  "kommunekode": "0147",
+  "registreringFra": "2018-04-24T10:44:00.343273Z",
+  "virkningFra": "2018-04-24T10:44:00.343273Z",
+  "tek109Koordinat": {
+   "wkt": "POINT (721276.05 6176072.69)"
+  }
+ },
+ {
+  "id_lokalId": "3f6a6cbb-8301-43b9-9301-1494417edf16",
+  "status": "6",
+  "kommunekode": "0147",
+  "registreringFra": "2017-06-02T12:29:37.000000Z",
+  "virkningFra": "2012-03-21T15:28:44.357000Z",
+  "tek109Koordinat": {
+   "wkt": "POINT (722101.28 6177365.73)"
+  }
+ },
+ {
+  "id_lokalId": "3f6a6cbb-8301-43b9-9301-1494417edf16",
+  "status": "6",
+  "kommunekode": "0147",
+  "registreringFra": "2021-08-02T07:16:18.043839Z",
+  "virkningFra": "2021-08-02T07:16:18.043839Z",
+  "tek109Koordinat": {
+   "wkt": "POINT (722143.17 6177353.28)"
+  }
+ },
+ {
+  "id_lokalId": "406a28f0-5946-47d2-9887-46db6d2da214",
+  "status": "6",
+  "kommunekode": "0147",
+  "registreringFra": "2017-06-02T12:29:37.000000Z",
+  "virkningFra": "2012-05-01T09:36:09.700000Z",
+  "tek109Koordinat": {
+   "wkt": "POINT (723034.32 6176696.49)"
+  }
+ }
+]

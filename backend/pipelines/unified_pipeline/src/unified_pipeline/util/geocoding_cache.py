@@ -7,7 +7,7 @@ in the CVR enrichment pipeline. Stores address->coordinates mappings in cloud st
 and loads them into DuckDB for fast lookups during pipeline execution.
 
 Cache Strategy:
-- DAWA ID Cache: adresse_id -> coordinates (primary)
+- Address ID Cache: adresse_id -> coordinates (primary)
 - Address Text Cache: normalized address text -> coordinates (fallback)
 - Persistent storage in cloud storage as Parquet files
 - Fast in-memory lookups via DuckDB during pipeline execution
@@ -29,11 +29,11 @@ class GeocodingCache:
     Persistent geocoding cache to avoid redundant API calls.
 
     Provides two cache types:
-    1. DAWA ID Cache: Direct lookup by adresse_id (most reliable)
+    1. Address ID Cache: Direct lookup by adresse_id (most reliable)
     2. Address Text Cache: Normalized address string lookup (fallback)
     """
 
-    def __init__(self, bucket: str = "landbruget-data", cache_version: int = 1):
+    def __init__(self, bucket: str = "landbruget-data", cache_version: int = 2):
         """
         Initialize the geocoding cache.
 
@@ -52,7 +52,9 @@ class GeocodingCache:
         self.storage = StorageAccess(connection=self.conn)
 
         # Cache paths in cloud storage
-        self.dawa_cache_path = f"{bucket}/cache/geocoding/dawa_id_cache_v{cache_version}.parquet"
+        self.address_id_cache_path = (
+            f"{bucket}/cache/geocoding/address_id_cache_v{cache_version}.parquet"
+        )
         self.address_cache_path = (
             f"{bucket}/cache/geocoding/address_text_cache_v{cache_version}.parquet"
         )
@@ -66,9 +68,9 @@ class GeocodingCache:
     def _initialize_cache_tables(self) -> None:
         """Initialize DuckDB tables for cache storage."""
 
-        # DAWA ID cache table
+        # Address ID cache table
         self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS dawa_id_cache (
+            CREATE TABLE IF NOT EXISTS address_id_cache (
                 adresse_id VARCHAR PRIMARY KEY,
                 latitude DOUBLE,
                 longitude DOUBLE,
@@ -106,22 +108,22 @@ class GeocodingCache:
     def _load_existing_cache(self) -> None:
         """Load existing cache data from cloud storage into DuckDB tables."""
 
-        # Load DAWA ID cache
+        # Load Address ID cache
         try:
-            if self.storage.file_exists(self.dawa_cache_path):
-                self.log.info("Loading existing DAWA ID cache from cloud storage")
-                with self.storage._temp_download(self.dawa_cache_path) as temp_file:
+            if self.storage.file_exists(self.address_id_cache_path):
+                self.log.info("Loading existing Address ID cache from cloud storage")
+                with self.storage._temp_download(self.address_id_cache_path) as temp_file:
                     self.conn.execute(f"""
-                        INSERT INTO dawa_id_cache
+                        INSERT INTO address_id_cache
                         SELECT * FROM read_parquet('{temp_file}')
                     """)
 
-                count = self.conn.execute("SELECT COUNT(*) FROM dawa_id_cache").fetchone()[0]
-                self.log.info(f"Loaded {count:,} DAWA ID cache entries")
+                count = self.conn.execute("SELECT COUNT(*) FROM address_id_cache").fetchone()[0]
+                self.log.info(f"Loaded {count:,} Address ID cache entries")
             else:
-                self.log.info("No existing DAWA ID cache found")
+                self.log.info("No existing Address ID cache found")
         except Exception as e:
-            self.log.warning(f"Failed to load DAWA ID cache: {e}")
+            self.log.warning(f"Failed to load Address ID cache: {e}")
 
         # Load address text cache
         try:
@@ -178,12 +180,12 @@ class GeocodingCache:
         normalized = self._normalize_address(address)
         return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
-    def lookup_by_dawa_id(self, adresse_id: str) -> dict[str, Any] | None:
+    def lookup_by_address_id(self, adresse_id: str) -> dict[str, Any] | None:
         """
-        Look up geocoding results by DAWA address ID.
+        Look up geocoding results by Adressevælger address ID.
 
         Args:
-            adresse_id: DAWA address ID
+            adresse_id: Adressevælger address ID
 
         Returns:
             Cached geocoding result or None if not found
@@ -198,7 +200,7 @@ class GeocodingCache:
                     latitude, longitude, coordinate_system, srid,
                     geometry_wkt, geometry_geojson, coordinate_quality,
                     coordinate_source, geocoded_timestamp
-                FROM dawa_id_cache
+                FROM address_id_cache
                 WHERE adresse_id = ?
             """,
                 [adresse_id],
@@ -221,7 +223,7 @@ class GeocodingCache:
             return None
 
         except Exception as e:
-            self.log.warning(f"Error looking up DAWA ID {adresse_id}: {e}")
+            self.log.warning(f"Error looking up Address ID {adresse_id}: {e}")
             return None
 
     def lookup_by_address_text(self, address: str) -> dict[str, Any] | None:
@@ -273,13 +275,13 @@ class GeocodingCache:
             self.log.warning(f"Error looking up address text {address}: {e}")
             return None
 
-    def store_dawa_result(self, adresse_id: str, geocoding_result: dict[str, Any]) -> None:
+    def store_address_id_result(self, adresse_id: str, geocoding_result: dict[str, Any]) -> None:
         """
-        Store DAWA geocoding result in cache.
+        Store Adressevælger geocoding result in cache.
 
         Args:
-            adresse_id: DAWA address ID
-            geocoding_result: Geocoding result from DAWA API
+            adresse_id: Adressevælger address ID
+            geocoding_result: Geocoding result from Adressevælger API
         """
         if not adresse_id or not geocoding_result:
             return
@@ -287,7 +289,7 @@ class GeocodingCache:
         try:
             self.conn.execute(
                 """
-                INSERT OR REPLACE INTO dawa_id_cache VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO address_id_cache VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 [
                     adresse_id,
@@ -304,13 +306,13 @@ class GeocodingCache:
                 ],
             )
 
-            self.log.debug(f"Cached DAWA result for address ID: {adresse_id}")
+            self.log.debug(f"Cached Adressevælger result for address ID: {adresse_id}")
 
         except Exception as e:
-            self.log.warning(f"Error storing DAWA result for {adresse_id}: {e}")
+            self.log.warning(f"Error storing Adressevælger result for {adresse_id}: {e}")
 
     def store_address_text_result(
-        self, address: str, geocoding_result: dict[str, Any], api_source: str = "datavask"
+        self, address: str, geocoding_result: dict[str, Any], api_source: str = "adressevaelger"
     ) -> None:
         """
         Store address text geocoding result in cache.
@@ -318,7 +320,7 @@ class GeocodingCache:
         Args:
             address: Full address string
             geocoding_result: Geocoding result from API
-            api_source: Source API ('dawa' or 'datavask')
+            api_source: Source API, currently 'adressevaelger'
         """
         if not address or not geocoding_result:
             return
@@ -363,7 +365,7 @@ class GeocodingCache:
             Dictionary with cache statistics
         """
         try:
-            dawa_count = self.conn.execute("SELECT COUNT(*) FROM dawa_id_cache").fetchone()[0]
+            dawa_count = self.conn.execute("SELECT COUNT(*) FROM address_id_cache").fetchone()[0]
             address_count = self.conn.execute("SELECT COUNT(*) FROM address_text_cache").fetchone()[
                 0
             ]
@@ -385,14 +387,16 @@ class GeocodingCache:
         """Save cache tables back to storage for persistence."""
 
         try:
-            # Save DAWA ID cache
-            dawa_count = self.conn.execute("SELECT COUNT(*) FROM dawa_id_cache").fetchone()[0]
+            # Save Address ID cache
+            dawa_count = self.conn.execute("SELECT COUNT(*) FROM address_id_cache").fetchone()[0]
             if dawa_count > 0:
-                self.log.info(f"Saving {dawa_count:,} DAWA ID cache entries to cloud storage")
+                self.log.info(f"Saving {dawa_count:,} Address ID cache entries to cloud storage")
 
                 # Upload directly from DuckDB table to cloud storage
-                self.storage.upload_from_duckdb_table("dawa_id_cache", self.dawa_cache_path)
-                self.log.info(f"DAWA ID cache saved to {self.dawa_cache_path}")
+                self.storage.upload_from_duckdb_table(
+                    "address_id_cache", self.address_id_cache_path
+                )
+                self.log.info(f"Address ID cache saved to {self.address_id_cache_path}")
 
             # Save address text cache
             address_count = self.conn.execute("SELECT COUNT(*) FROM address_text_cache").fetchone()[
@@ -414,7 +418,7 @@ class GeocodingCache:
     def clear_cache(self) -> None:
         """Clear all cache data (for testing/debugging)."""
         try:
-            self.conn.execute("DELETE FROM dawa_id_cache")
+            self.conn.execute("DELETE FROM address_id_cache")
             self.conn.execute("DELETE FROM address_text_cache")
             self.log.info("Cache cleared")
         except Exception as e:

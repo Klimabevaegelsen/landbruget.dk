@@ -41,7 +41,7 @@ export interface FieldAnalysisData {
   bnbo_status_categories?: string;
 
   // Proximity data
-  residential_buildings_proximity: string;
+  residential_buildings_proximity?: string;
   educational_facilities_proximity?: string;
   water_distance_proximity?: string;
 

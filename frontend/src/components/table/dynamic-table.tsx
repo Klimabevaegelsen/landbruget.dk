@@ -2,14 +2,16 @@
 import * as React from 'react';
 import {
   ColumnDef,
+  RowData,
   SortingState,
   flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useTable,
 } from '@tanstack/react-table';
+
+import {
+  dataTableFeatures,
+  DataTableFeatures,
+} from '@/components/table/table-features';
 
 import {
   Table,
@@ -30,8 +32,8 @@ import {
   translateOriginType,
 } from '@/lib/translations/animal-transportation';
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
+interface DataTableProps<TData extends RowData> {
+  columns: ColumnDef<DataTableFeatures, TData>[];
   data: TData[];
   filterable: boolean;
   yearFilter?: {
@@ -42,12 +44,12 @@ interface DataTableProps<TData, TValue> {
   };
 }
 
-export function DynamicDataTable<TData, TValue>({
+export function DynamicDataTable<TData extends RowData>({
   columns,
   data,
   filterable,
   yearFilter,
-}: DataTableProps<TData, TValue>) {
+}: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState<string>('');
 
@@ -107,14 +109,11 @@ export function DynamicDataTable<TData, TValue>({
     }
   };
 
-  const table = useReactTable({
+  const table = useTable({
+    features: dataTableFeatures,
     data,
     columns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     globalFilterFn: 'includesString',
     state: {
       sorting,
@@ -198,13 +197,12 @@ export function DynamicDataTable<TData, TValue>({
                 <TableRow
                   index={index}
                   key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
                   data-testid={`table-row-${index}`}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const columnDef = cell.column.columnDef as ColumnDef<
-                      TData,
-                      TValue
+                      DataTableFeatures,
+                      TData
                     > & { meta?: { format?: string } };
                     const format = columnDef.meta?.format;
                     const cellValue = cell.getValue();

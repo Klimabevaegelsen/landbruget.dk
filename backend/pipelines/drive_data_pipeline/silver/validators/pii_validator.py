@@ -318,7 +318,7 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
             # Create the handled table
             if select_parts:  # Only if we have columns to select
                 self.conn.execute(f"""
-                    CREATE TABLE {handled_table} AS
+                    CREATE OR REPLACE TABLE {handled_table} AS
                     SELECT {", ".join(select_parts)}
                     FROM {source_table}
                 """)

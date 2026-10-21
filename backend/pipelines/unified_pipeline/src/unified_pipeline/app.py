@@ -52,6 +52,10 @@ from unified_pipeline.gold.carbon_emissions import (
     CarbonEmissionsGold,
     CarbonEmissionsGoldConfig,
 )
+from unified_pipeline.gold.child_receptor_exposure import (
+    ChildReceptorExposureGold,
+    ChildReceptorExposureGoldConfig,
+)
 
 # Import new modular CVR enrichment steps from the package directory
 from unified_pipeline.gold.cvr_enrichment.address_geocoding import (
@@ -108,6 +112,10 @@ from unified_pipeline.gold.pesticide_drift_exposure import (
 from unified_pipeline.gold.pesticide_proximity import (
     PesticideProximityGold,
     PesticideProximityGoldConfig,
+)
+from unified_pipeline.gold.population_exposure import (
+    PopulationExposureGold,
+    PopulationExposureGoldConfig,
 )
 from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
@@ -609,6 +617,21 @@ def execute(cli_config: cli_models.CliConfig) -> int:
                 # Note: This requires gold pesticide_disaggregation and silver datasets:
                 # bbr_buildings, fvm_marker
                 (PesticideDriftExposureGold, PesticideDriftExposureGoldConfig),
+            ],
+        },
+        cli_models.Source.child_receptor_exposure: {
+            cli_models.Stage.gold: [(ChildReceptorExposureGold, ChildReceptorExposureGoldConfig)],
+            cli_models.Stage.all: [
+                # Requires gold pesticide_disaggregation and silver datasets:
+                # child_receptors, cadastral, fvm_marker
+                (ChildReceptorExposureGold, ChildReceptorExposureGoldConfig),
+            ],
+        },
+        cli_models.Source.population_exposure: {
+            cli_models.Stage.gold: [(PopulationExposureGold, PopulationExposureGoldConfig)],
+            cli_models.Stage.all: [
+                # Requires pesticide disaggregation and silver buildings, fields, and municipalities.
+                (PopulationExposureGold, PopulationExposureGoldConfig),
             ],
         },
         cli_models.Source.pesticide_compliance: {

@@ -30485,7 +30485,7 @@
       "rowCount": 61428,
       "sizeBytes": 49953420,
       "columns": 33,
-      "description": "Enriched master data for companies in the Danish Central Business Register (CVR), serving as the primary dimension table for agricultural business analysis. It combines official registration details with geocoded address data from DAWA and industry classifications.",
+      "description": "Enriched master data for companies in the Danish Central Business Register (CVR), serving as the primary dimension table for agricultural business analysis. It combines official registration details with geocoded address data from Adressevælger and industry classifications.",
       "columnDescriptions": {
         "cvr_number": {
           "description": "The 8-digit Danish Central Business Register (CVR) identifier.",
@@ -30521,15 +30521,15 @@
         },
         "latitude": {
           "description": "WGS84 latitude coordinate of the company headquarters.",
-          "notes": "Geocoded via the Danish Address Web API (DAWA)."
+          "notes": "Geocoded via Adressevælger."
         },
         "longitude": {
           "description": "WGS84 longitude coordinate of the company headquarters.",
-          "notes": "Geocoded via the Danish Address Web API (DAWA)."
+          "notes": "Geocoded via Adressevælger."
         },
         "coordinate_quality": {
-          "description": "The quality level of the address geocoding.",
-          "notes": "Refers to DAWA quality levels where 'A' is the highest precision (house-level)."
+          "description": "NULL because Adressevælger does not provide coordinate accuracy.",
+          "notes": "Adressevælger does not return coordinate accuracy metadata."
         },
         "primary_industry_code": {
           "description": "The 6-digit Danish industry classification code (DB07).",
@@ -31056,7 +31056,7 @@
       "rowCount": 0,
       "sizeBytes": 622,
       "columns": 22,
-      "description": "Contains enriched data for Danish Production Units (p-numre) linked to parent CVR entities, featuring geocoded address information sourced from the Danish Address Web API (DAWA). This table is used to identify the physical locations of agricultural operations and link them to their legal owners.",
+      "description": "Contains enriched data for Danish Production Units (p-numre) linked to parent CVR entities, featuring geocoded address information sourced from Adressevælger. This table is used to identify the physical locations of agricultural operations and link them to their legal owners.",
       "columnDescriptions": {
         "p_number": {
           "description": "The unique 10-digit identification number for a specific physical production unit (p-nummer).",
@@ -31091,12 +31091,12 @@
           "notes": "Geographic coordinate system EPSG:4326."
         },
         "coordinate_quality": {
-          "description": "The accuracy level of the geocoded coordinates returned by DAWA.",
-          "notes": "Levels range from exact address matches to centroid-based approximations."
+          "description": "NULL because Adressevælger does not provide coordinate accuracy.",
+          "notes": "Adressevælger does not return coordinate accuracy metadata."
         },
         "dawa_enriched": {
-          "description": "Indicates whether the address was successfully validated and geocoded against the Danish Address Web API.",
-          "notes": "If false, coordinates may be missing or derived from less reliable sources."
+          "description": "Indicates whether the address was successfully geocoded via Adressevælger.",
+          "notes": "A false value means Adressevælger geocoding did not succeed."
         },
         "pnumber_data_json": {
           "description": "The raw JSON response containing full metadata for the production unit from the source registry.",

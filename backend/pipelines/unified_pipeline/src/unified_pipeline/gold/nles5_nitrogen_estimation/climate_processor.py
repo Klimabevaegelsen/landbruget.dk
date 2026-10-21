@@ -14,7 +14,7 @@ from pathlib import Path
 
 # Add common module to path for CRS utilities
 sys.path.insert(0, str(Path(__file__).resolve().parents[6]))
-from common.crs_utils import DANISH_UTM, WGS84
+from common.crs_utils import sql_transform_to_utm
 
 from unified_pipeline.util.timing import timed
 
@@ -852,10 +852,10 @@ class NLES5ClimateProcessor:
                 """).fetchone()
                 self.log.info(f"climate_percolation geometry bounding box: {bbox}")
 
-                # Climate data is already transformed to EPSG:25832 during processing
-                # (see coordinate transformation logic above)
+                # Climate data is stored in WGS84 and transformed to EPSG:25832
+                # at metric-operation boundaries (see the spatial joins below).
                 self.log.info(
-                    "Climate data transformed to WGS84 (EPSG:4326) to match field coordinates"
+                    "Climate data stored in WGS84 (EPSG:4326); metric joins transform it to EPSG:25832"
                 )
 
                 # Geometry validity
@@ -905,11 +905,11 @@ class NLES5ClimateProcessor:
             self.conn.execute("DROP TABLE IF EXISTS climate_tessellation")
 
             # Build the tessellation: one square (10 km per side) per climate-year
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE TABLE climate_tessellation AS
                 SELECT
                     year,
-                    geometry AS climate_point,
+                    {sql_transform_to_utm("geometry")} AS climate_point,
                     perco_apr_aug_current,  perco_sep_mar_current,
                     perco_apr_aug_previous, perco_sep_mar_previous,
                     total_percolation,
@@ -919,10 +919,10 @@ class NLES5ClimateProcessor:
                     0.0     AS avg_distance_to_climate,   -- single centroid → distance 0
                     1       AS grid_cells_count,
                     ST_MakeEnvelope(
-                        ST_X(geometry) - 5000,
-                        ST_Y(geometry) - 5000,
-                        ST_X(geometry) + 5000,
-                        ST_Y(geometry) + 5000
+                        ST_X({sql_transform_to_utm("geometry")}) - 5000,
+                        ST_Y({sql_transform_to_utm("geometry")}) - 5000,
+                        ST_X({sql_transform_to_utm("geometry")}) + 5000,
+                        ST_Y({sql_transform_to_utm("geometry")}) + 5000
                     ) AS tessellation_polygon
                 FROM climate_percolation
                 WHERE geometry IS NOT NULL
@@ -1191,7 +1191,7 @@ class NLES5ClimateProcessor:
                     SELECT
                         f.*,
                         c.year as climate_year,
-                        c.geometry as climate_point,
+                        {sql_transform_to_utm("c.geometry")} as climate_point,
                         c.perco_apr_aug_current,
                         c.perco_sep_mar_current,
                         c.perco_apr_aug_previous,
@@ -1200,12 +1200,12 @@ class NLES5ClimateProcessor:
                         c.avg_precipitation,
                         c.avg_evaporation,
                         c.sufficient_climate_data,
-                        ST_Distance(ST_Centroid(f.geom), c.geometry)
+                        ST_Distance(ST_Centroid(f.geom), {sql_transform_to_utm("c.geometry")})
                             as distance_to_climate
                     FROM agricultural_fields_spatial f
                     JOIN climate_percolation c ON ST_Intersects(
-                        ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
-                        ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), 50000)
+                        ST_Centroid(f.geom),
+                        ST_Buffer({sql_transform_to_utm("c.geometry")}, 50000)
                     )
                     WHERE c.year = {year}
                 """)
@@ -1349,8 +1349,8 @@ class NLES5ClimateProcessor:
                         SELECT 1 FROM agricultural_fields_spatial f, climate_percolation c
                         WHERE f.year = {year} AND c.year = {year}
                         AND ST_Intersects(
-                            ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
-                            ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), 15000)
+                            ST_Centroid(f.geom),
+                            ST_Buffer({sql_transform_to_utm("c.geometry")}, 15000)
                         )
                         LIMIT 5
                     )) as sample_intersections
@@ -1376,10 +1376,10 @@ class NLES5ClimateProcessor:
 
             climate_distribution = self.conn.execute(f"""
                 SELECT
-                    MIN(ST_X(geometry)) as climate_min_x,
-                    MAX(ST_X(geometry)) as climate_max_x,
-                    MIN(ST_Y(geometry)) as climate_min_y,
-                    MAX(ST_Y(geometry)) as climate_max_y,
+                    MIN(ST_X({sql_transform_to_utm("geometry")})) as climate_min_x,
+                    MAX(ST_X({sql_transform_to_utm("geometry")})) as climate_max_x,
+                    MIN(ST_Y({sql_transform_to_utm("geometry")})) as climate_min_y,
+                    MAX(ST_Y({sql_transform_to_utm("geometry")})) as climate_max_y,
                     COUNT(*) as total_climate_points
                 FROM climate_percolation
                 WHERE year = {year} AND geometry IS NOT NULL
@@ -1390,23 +1390,23 @@ class NLES5ClimateProcessor:
             span_x_f = field_distribution[1] - field_distribution[0]
             self.log.info(
                 f"      X range: {field_distribution[0]:.3f} to "
-                f"{field_distribution[1]:.3f} (span: {span_x_f:.3f}°)"
+                f"{field_distribution[1]:.3f} (span: {span_x_f:.3f}m)"
             )
             span_y_f = field_distribution[3] - field_distribution[2]
             self.log.info(
                 f"      Y range: {field_distribution[2]:.3f} to "
-                f"{field_distribution[3]:.3f} (span: {span_y_f:.3f}°)"
+                f"{field_distribution[3]:.3f} (span: {span_y_f:.3f}m)"
             )
             self.log.info(f"   📐 CLIMATE GRID DISTRIBUTION ({climate_distribution[4]:,} points):")
             span_x_c = climate_distribution[1] - climate_distribution[0]
             self.log.info(
                 f"      X range: {climate_distribution[0]:.3f} to "
-                f"{climate_distribution[1]:.3f} (span: {span_x_c:.3f}°)"
+                f"{climate_distribution[1]:.3f} (span: {span_x_c:.3f}m)"
             )
             span_y_c = climate_distribution[3] - climate_distribution[2]
             self.log.info(
                 f"      Y range: {climate_distribution[2]:.3f} to "
-                f"{climate_distribution[3]:.3f} (span: {span_y_c:.3f}°)"
+                f"{climate_distribution[3]:.3f} (span: {span_y_c:.3f}m)"
             )
 
             # Check overlap and field clustering
@@ -1424,14 +1424,14 @@ class NLES5ClimateProcessor:
             field_span_y = field_distribution[3] - field_distribution[2]
 
             self.log.info("   🎯 GEOGRAPHIC ANALYSIS:")
-            self.log.info(f"      Overlap: X={x_overlap:.3f}°, Y={y_overlap:.3f}°")
-            self.log.info(f"      Field coverage: X={field_span_x:.3f}°, Y={field_span_y:.3f}°")
+            self.log.info(f"      Overlap: X={x_overlap:.3f}m, Y={y_overlap:.3f}m")
+            self.log.info(f"      Field coverage: X={field_span_x:.3f}m, Y={field_span_y:.3f}m")
 
-            if field_span_x < 0.1 and field_span_y < 0.1:  # Less than ~10km span
+            if field_span_x < 1000 and field_span_y < 1000:  # Less than 1km span
                 self.log.error("🚨 ROOT CAUSE: FIELDS ARE GEOGRAPHICALLY CLUSTERED!")
                 self.log.error(
                     f"   All {field_distribution[4]:,} fields are clustered in "
-                    f"tiny area ({field_span_x:.3f}° x {field_span_y:.3f}°)"
+                    f"tiny area ({field_span_x:.3f}m x {field_span_y:.3f}m)"
                 )
                 self.log.error("   With 10km x 10km grid, only 1 grid cell covers this cluster")
                 self.log.error("   This explains why all fields get same climate data!")
@@ -1460,13 +1460,13 @@ class NLES5ClimateProcessor:
                         (SELECT MAX(ST_Y(ST_Centroid(geom)))
                          FROM agricultural_fields_spatial WHERE year = {year}) as field_max_y,
                         -- Climate coordinate ranges
-                        (SELECT MIN(ST_X(geometry))
+                        (SELECT MIN(ST_X({sql_transform_to_utm("geometry")}))
                          FROM climate_percolation WHERE year = {year}) as climate_min_x,
-                        (SELECT MAX(ST_X(geometry))
+                        (SELECT MAX(ST_X({sql_transform_to_utm("geometry")}))
                          FROM climate_percolation WHERE year = {year}) as climate_max_x,
-                        (SELECT MIN(ST_Y(geometry))
+                        (SELECT MIN(ST_Y({sql_transform_to_utm("geometry")}))
                          FROM climate_percolation WHERE year = {year}) as climate_min_y,
-                        (SELECT MAX(ST_Y(geometry))
+                        (SELECT MAX(ST_Y({sql_transform_to_utm("geometry")}))
                          FROM climate_percolation WHERE year = {year}) as climate_max_y
                 """).fetchone()
 
@@ -1512,8 +1512,8 @@ class NLES5ClimateProcessor:
                         SELECT 1 FROM agricultural_fields_spatial f, climate_percolation c
                         WHERE f.year = {year} AND c.year = {year}
                         AND ST_Intersects(
-                            ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
-                            ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), {buffer_size})
+                            ST_Centroid(f.geom),
+                            ST_Buffer({sql_transform_to_utm("c.geometry")}, {buffer_size})
                         )
                         LIMIT 1
                         )
@@ -1616,10 +1616,11 @@ class NLES5ClimateProcessor:
                 WHERE year = {year}
             """)
 
-            # Step 2: Get list of climate points with WKT format for easier handling
+            # Step 2: Get climate points as WKT in the field processing CRS.
+            # Field centroids are EPSG:25832, so all distances below are metres.
             climate_points = self.conn.execute(f"""
                 SELECT
-                    ST_AsText(geometry) as geom_wkt,
+                    ST_AsText({sql_transform_to_utm("geometry")}) as geom_wkt,
                     year,
                     perco_apr_aug_current, perco_sep_mar_current,
                     perco_apr_aug_previous, perco_sep_mar_previous,
@@ -1783,10 +1784,10 @@ class NLES5ClimateProcessor:
                     MAX(distance_to_climate) as max_distance,
                     AVG(distance_to_climate) as avg_distance,
                     -- Distribution metrics
-                    STDDEV(total_percolation) as percolation_stddev,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (
+                    COALESCE(STDDEV(total_percolation), 0.0) as percolation_stddev,
+                    COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (
                         ORDER BY total_percolation
-                    ) as percolation_median
+                    ), 0.0) as percolation_median
                 FROM {result_table}
                 WHERE total_percolation IS NOT NULL
             """).fetchone()
@@ -1948,7 +1949,7 @@ class NLES5ClimateProcessor:
                 CREATE OR REPLACE TABLE {tessellation_table} AS
                 SELECT
                     year,
-                    geometry AS climate_point,
+                    {sql_transform_to_utm("geometry")} AS climate_point,
                     perco_apr_aug_current,
                     perco_sep_mar_current,
                     perco_apr_aug_previous,
@@ -1960,10 +1961,10 @@ class NLES5ClimateProcessor:
                     0.0 AS avg_distance_to_climate,
                     1 AS grid_cells_count,
                     ST_MakeEnvelope(
-                        ST_X(geometry) - 5000,
-                        ST_Y(geometry) - 5000,
-                        ST_X(geometry) + 5000,
-                        ST_Y(geometry) + 5000
+                        ST_X({sql_transform_to_utm("geometry")}) - 5000,
+                        ST_Y({sql_transform_to_utm("geometry")}) - 5000,
+                        ST_X({sql_transform_to_utm("geometry")}) + 5000,
+                        ST_Y({sql_transform_to_utm("geometry")}) + 5000
                     ) AS tessellation_polygon
                 FROM {climate_table}
                 WHERE year = {year} AND geometry IS NOT NULL
@@ -1997,16 +1998,18 @@ class NLES5ClimateProcessor:
                         f.crop_code,
                         f.area_ha,
                         c.*,
-                        ST_Distance(ST_Centroid(f.geom), c.geometry)
+                        ST_Distance(ST_Centroid(f.geom), {sql_transform_to_utm("c.geometry")})
                             as distance_to_climate,
                         ROW_NUMBER() OVER (
                             PARTITION BY f.field_id
-                            ORDER BY ST_Distance(ST_Centroid(f.geom), c.geometry)
+                            ORDER BY ST_Distance(
+                                ST_Centroid(f.geom), {sql_transform_to_utm("c.geometry")}
+                            )
                         ) as climate_rank
                     FROM agricultural_fields_spatial f
                     JOIN {climate_table} c ON ST_Intersects(
-                        ST_Transform(ST_Centroid(f.geom), '{WGS84}', '{DANISH_UTM}'),
-                        ST_Buffer(ST_Transform(c.geometry, '{WGS84}', '{DANISH_UTM}'), 50000)
+                        ST_Centroid(f.geom),
+                        ST_Buffer({sql_transform_to_utm("c.geometry")}, 50000)
                     )
                     WHERE c.year = {target_year}
                 )
@@ -2016,7 +2019,7 @@ class NLES5ClimateProcessor:
                     crop_code,
                     area_ha,
                     year as climate_year,
-                    geometry as climate_point,
+                    {sql_transform_to_utm("geometry")} as climate_point,
                     perco_apr_aug_current,
                     perco_sep_mar_current,
                     perco_apr_aug_previous,

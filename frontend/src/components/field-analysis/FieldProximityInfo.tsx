@@ -1,7 +1,12 @@
 'use client';
 
-import { Home, School } from 'lucide-react';
 import type { FieldAnalysisData } from './types';
+import { ProximityList } from '@/components/field-analysis/ProximityList';
+import {
+  formatDistanceFromField,
+  parseDistanceM,
+  parseProximityList,
+} from '@/lib/proximity-parser';
 
 interface FieldProximityInfoProps {
   fieldData: FieldAnalysisData;
@@ -12,6 +17,14 @@ export function FieldProximityInfo({ fieldData }: FieldProximityInfoProps) {
     fieldData.residential_buildings_proximity ||
     fieldData.educational_facilities_proximity ||
     fieldData.water_distance_proximity;
+  const residential = parseProximityList(
+    fieldData.residential_buildings_proximity
+  );
+  const schools = parseProximityList(
+    fieldData.educational_facilities_proximity
+  );
+  const waterDistance = parseDistanceM(fieldData.water_distance_proximity);
+  const hasBuildingProximity = residential.length > 0 || schools.length > 0;
 
   return (
     <div className="mb-4">
@@ -19,35 +32,23 @@ export function FieldProximityInfo({ fieldData }: FieldProximityInfoProps) {
         Nærhedsanalyse
       </h3>
       <div className="space-y-1 text-sm">
-        {fieldData.residential_buildings_proximity && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground flex items-center">
-              <Home className="mr-1 h-4 w-4" />
-              Boliger:
-            </span>
-            <span className="text-xs font-medium">
-              {fieldData.residential_buildings_proximity}
-            </span>
-          </div>
+        <ProximityList
+          heading="Boliger inden for 100 m af marken (naboer – ikke ejer)"
+          entries={residential}
+        />
+        <ProximityList
+          heading="Skoler og daginstitutioner inden for 100 m"
+          entries={schools}
+        />
+        {waterDistance !== null && (
+          <p className="text-xs font-medium">
+            Vandløb/sø: {formatDistanceFromField(waterDistance)}
+          </p>
         )}
-        {fieldData.educational_facilities_proximity && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground flex items-center">
-              <School className="mr-1 h-4 w-4" />
-              Skoler:
-            </span>
-            <span className="text-xs font-medium">
-              {fieldData.educational_facilities_proximity}
-            </span>
-          </div>
-        )}
-        {fieldData.water_distance_proximity && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">🌊 Vand:</span>
-            <span className="text-xs font-medium">
-              {fieldData.water_distance_proximity}
-            </span>
-          </div>
+        {hasBuildingProximity && (
+          <p className="text-muted-foreground text-[11px]">
+            Adresserne er nabobygninger tæt på marken – ikke markens ejer.
+          </p>
         )}
         {!hasAny && (
           <div className="text-muted-foreground text-xs italic">

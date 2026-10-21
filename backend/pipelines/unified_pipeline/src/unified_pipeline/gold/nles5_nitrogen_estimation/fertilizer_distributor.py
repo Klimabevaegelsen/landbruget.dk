@@ -21,7 +21,9 @@ The algorithm follows the prioritized approach for organic fertilizer allocation
    - If organic fertilizer > 50% of total N-quota → distribute proportionally by N-quota
    - If organic fertilizer ≤ 50% of total N-quota → distribute up to 50% per crop by priority
 
-3. Mineral fertilizer distribution follows the same proportional allocation after organic.
+3. Reported fertilizer source components are allocated independently after organic:
+   commercial N reported for spring, commercial N reported for autumn, and grazing N.
+   No seasonal split is inferred from an annual commercial-N total.
 
 SOURCE:
 - N2023_62.md, Section 4.5 Gødningsfordeling, markniveau
@@ -71,6 +73,17 @@ class FieldFertilizerAllocation:
     organic_quota_fraction: float  # How much of N-quota comes from organic
     allocation_method: str  # 'proportional' or 'priority_based'
 
+    # Source-specific rates are kept separately so farm-level seasonal inputs
+    # are not replaced by an assumed split when they are joined back to fields.
+    grazing_n_allocated_kg: float = 0.0
+    mineral_n_spring_allocated_kg: float = 0.0
+    mineral_n_autumn_allocated_kg: float = 0.0
+    grazing_n_rate_kg_ha: float = 0.0
+    mineral_n_spring_rate_kg_ha: float = 0.0
+    mineral_n_autumn_rate_kg_ha: float = 0.0
+    reported_total_n_allocated_kg: float = 0.0
+    reported_total_n_rate_kg_ha: float = 0.0
+
 
 @dataclass
 class FarmFertilizerBudget:
@@ -81,6 +94,9 @@ class FarmFertilizerBudget:
     total_organic_n_kg: float
     total_mineral_n_kg: float
     total_n_kg: float
+    grazing_n_kg: float = 0.0
+    mineral_n_spring_kg: float = 0.0
+    mineral_n_autumn_kg: float = 0.0
 
 
 class NLES5FertilizerDistributor:
@@ -206,7 +222,8 @@ class NLES5FertilizerDistributor:
         self.log.debug(
             f"Distributing fertilizer for CVR {farm_budget.cvr_number}, "
             f"year {farm_budget.year}: {farm_budget.total_organic_n_kg:.1f} kg organic N, "
-            f"{farm_budget.total_mineral_n_kg:.1f} kg mineral N across {len(field_data)} fields"
+            f"{farm_budget.total_mineral_n_kg:.1f} kg mineral N and "
+            f"{farm_budget.grazing_n_kg:.1f} kg grazing N across {len(field_data)} fields"
         )
 
         # Step 1: Prepare field data with priorities and quotas
@@ -272,7 +289,11 @@ class NLES5FertilizerDistributor:
             organic_n_allocated = farm_budget.total_organic_n_kg * field_quota_fraction
 
             # Distribute mineral N proportionally
-            mineral_n_allocated = farm_budget.total_mineral_n_kg * field_quota_fraction
+            mineral_n_spring_allocated = farm_budget.mineral_n_spring_kg * field_quota_fraction
+            mineral_n_autumn_allocated = farm_budget.mineral_n_autumn_kg * field_quota_fraction
+            grazing_n_allocated = farm_budget.grazing_n_kg * field_quota_fraction
+            mineral_n_allocated = mineral_n_spring_allocated + mineral_n_autumn_allocated
+            reported_total_n_allocated = farm_budget.total_n_kg * field_quota_fraction
 
             allocation = FieldFertilizerAllocation(
                 field_id=field["field_id"],
@@ -285,7 +306,9 @@ class NLES5FertilizerDistributor:
                 total_n_quota_kg=field["n_quota_kg"],
                 organic_n_allocated_kg=organic_n_allocated,
                 mineral_n_allocated_kg=mineral_n_allocated,
-                total_n_allocated_kg=organic_n_allocated + mineral_n_allocated,
+                total_n_allocated_kg=organic_n_allocated
+                + mineral_n_allocated
+                + grazing_n_allocated,
                 organic_n_rate_kg_ha=organic_n_allocated / field["area_ha"]
                 if field["area_ha"] > 0
                 else 0,
@@ -296,6 +319,22 @@ class NLES5FertilizerDistributor:
                 if field["n_quota_kg"] > 0
                 else 0,
                 allocation_method="proportional",
+                grazing_n_allocated_kg=grazing_n_allocated,
+                mineral_n_spring_allocated_kg=mineral_n_spring_allocated,
+                mineral_n_autumn_allocated_kg=mineral_n_autumn_allocated,
+                grazing_n_rate_kg_ha=grazing_n_allocated / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
+                mineral_n_spring_rate_kg_ha=mineral_n_spring_allocated / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
+                mineral_n_autumn_rate_kg_ha=mineral_n_autumn_allocated / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
+                reported_total_n_allocated_kg=reported_total_n_allocated,
+                reported_total_n_rate_kg_ha=reported_total_n_allocated / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
             )
 
             allocations.append(allocation)
@@ -308,7 +347,9 @@ class NLES5FertilizerDistributor:
         """Distribute fertilizer by priority when organic ≤ 50%, up to 50% of each field's quota."""
         allocations = []
         remaining_organic_n = farm_budget.total_organic_n_kg
-        remaining_mineral_n = farm_budget.total_mineral_n_kg
+        remaining_mineral_n_spring = farm_budget.mineral_n_spring_kg
+        remaining_mineral_n_autumn = farm_budget.mineral_n_autumn_kg
+        remaining_grazing_n = farm_budget.grazing_n_kg
 
         # Initialize all fields with zero allocation
         for field in fields:
@@ -364,17 +405,27 @@ class NLES5FertilizerDistributor:
         total_remaining_quota = sum(
             field["n_quota_kg"] - field["organic_n_allocated"] for field in fields
         )
+        total_n_quota = sum(field["n_quota_kg"] for field in fields)
 
         for field in fields:
             if total_remaining_quota > 0:
                 remaining_quota_fraction = (
                     field["n_quota_kg"] - field["organic_n_allocated"]
                 ) / total_remaining_quota
-                mineral_allocated = remaining_mineral_n * remaining_quota_fraction
+                mineral_spring_allocated = remaining_mineral_n_spring * remaining_quota_fraction
+                mineral_autumn_allocated = remaining_mineral_n_autumn * remaining_quota_fraction
+                grazing_allocated = remaining_grazing_n * remaining_quota_fraction
             else:
-                mineral_allocated = 0
+                mineral_spring_allocated = 0
+                mineral_autumn_allocated = 0
+                grazing_allocated = 0
 
-            field["mineral_n_allocated"] = mineral_allocated
+            field["mineral_n_spring_allocated"] = mineral_spring_allocated
+            field["mineral_n_autumn_allocated"] = mineral_autumn_allocated
+            field["grazing_n_allocated"] = grazing_allocated
+            field["mineral_n_allocated"] = mineral_spring_allocated + mineral_autumn_allocated
+            field_quota_fraction = field["n_quota_kg"] / total_n_quota if total_n_quota > 0 else 0
+            field["reported_total_n_allocated"] = farm_budget.total_n_kg * field_quota_fraction
 
         # Step 4: Create allocation objects
         for field in fields:
@@ -389,7 +440,11 @@ class NLES5FertilizerDistributor:
                 total_n_quota_kg=field["n_quota_kg"],
                 organic_n_allocated_kg=field["organic_n_allocated"],
                 mineral_n_allocated_kg=field["mineral_n_allocated"],
-                total_n_allocated_kg=field["organic_n_allocated"] + field["mineral_n_allocated"],
+                total_n_allocated_kg=(
+                    field["organic_n_allocated"]
+                    + field["mineral_n_allocated"]
+                    + field["grazing_n_allocated"]
+                ),
                 organic_n_rate_kg_ha=field["organic_n_allocated"] / field["area_ha"]
                 if field["area_ha"] > 0
                 else 0,
@@ -400,6 +455,22 @@ class NLES5FertilizerDistributor:
                 if field["n_quota_kg"] > 0
                 else 0,
                 allocation_method="priority_based",
+                grazing_n_allocated_kg=field["grazing_n_allocated"],
+                mineral_n_spring_allocated_kg=field["mineral_n_spring_allocated"],
+                mineral_n_autumn_allocated_kg=field["mineral_n_autumn_allocated"],
+                grazing_n_rate_kg_ha=field["grazing_n_allocated"] / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
+                mineral_n_spring_rate_kg_ha=field["mineral_n_spring_allocated"] / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
+                mineral_n_autumn_rate_kg_ha=field["mineral_n_autumn_allocated"] / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
+                reported_total_n_allocated_kg=field["reported_total_n_allocated"],
+                reported_total_n_rate_kg_ha=field["reported_total_n_allocated"] / field["area_ha"]
+                if field["area_ha"] > 0
+                else 0,
             )
 
             allocations.append(allocation)
@@ -427,11 +498,16 @@ class NLES5FertilizerDistributor:
             SELECT
                 cvr_number,
                 year,
-                SUM(organic_n_hus * area_ha) as total_organic_n_kg,
-                SUM((mineral_n_foraar + mineral_n_eft + mineral_n_udb) * area_ha)
+                -- ``mineral_n_udb`` is the legacy NLES5 column name for N
+                -- deposited by grazing animals, not a proxy for mineral N.
+                SUM(organic_n_hus * harmoni_area_ha) as total_organic_n_kg,
+                SUM((mineral_n_foraar + mineral_n_eft) * harmoni_area_ha)
                     as total_mineral_n_kg,
+                SUM(mineral_n_udb * harmoni_area_ha) as grazing_n_kg,
+                SUM(mineral_n_foraar * harmoni_area_ha) as mineral_n_spring_kg,
+                SUM(mineral_n_eft * harmoni_area_ha) as mineral_n_autumn_kg,
                 -- Convert tonnes to kg
-                SUM(tn_t_ha * area_ha * 1000) as total_n_kg
+                SUM(tn_t_ha * harmoni_area_ha * 1000) as total_n_kg
             FROM fertilizer_accounts fa
             WHERE cvr_number IS NOT NULL
             GROUP BY cvr_number, year
@@ -475,7 +551,13 @@ class NLES5FertilizerDistributor:
             # Get farm budget
             budget_row = self.conn.execute(
                 """
-                SELECT total_organic_n_kg, total_mineral_n_kg, total_n_kg
+                SELECT
+                    total_organic_n_kg,
+                    total_mineral_n_kg,
+                    total_n_kg,
+                    grazing_n_kg,
+                    mineral_n_spring_kg,
+                    mineral_n_autumn_kg
                 FROM farm_fertilizer_budgets
                 WHERE cvr_number = ? AND year = ?
             """,
@@ -489,6 +571,9 @@ class NLES5FertilizerDistributor:
                     total_organic_n_kg=budget_row[0] or 0,
                     total_mineral_n_kg=budget_row[1] or 0,
                     total_n_kg=budget_row[2] or 0,
+                    grazing_n_kg=budget_row[3] or 0,
+                    mineral_n_spring_kg=budget_row[4] or 0,
+                    mineral_n_autumn_kg=budget_row[5] or 0,
                 )
 
                 # Apply distribution algorithm
@@ -515,9 +600,17 @@ class NLES5FertilizerDistributor:
                 total_n_quota_kg DECIMAL(10,2),
                 organic_n_allocated_kg DECIMAL(10,2),
                 mineral_n_allocated_kg DECIMAL(10,2),
+                grazing_n_allocated_kg DECIMAL(10,2),
+                mineral_n_spring_allocated_kg DECIMAL(10,2),
+                mineral_n_autumn_allocated_kg DECIMAL(10,2),
+                reported_total_n_allocated_kg DECIMAL(10,2),
                 total_n_allocated_kg DECIMAL(10,2),
                 organic_n_rate_kg_ha DECIMAL(8,2),
                 mineral_n_rate_kg_ha DECIMAL(8,2),
+                grazing_n_rate_kg_ha DECIMAL(8,2),
+                mineral_n_spring_rate_kg_ha DECIMAL(8,2),
+                mineral_n_autumn_rate_kg_ha DECIMAL(8,2),
+                reported_total_n_rate_kg_ha DECIMAL(8,2),
                 organic_quota_fraction DECIMAL(5,3),
                 allocation_method VARCHAR
             )
@@ -539,9 +632,17 @@ class NLES5FertilizerDistributor:
                     alloc.total_n_quota_kg,
                     alloc.organic_n_allocated_kg,
                     alloc.mineral_n_allocated_kg,
+                    alloc.grazing_n_allocated_kg,
+                    alloc.mineral_n_spring_allocated_kg,
+                    alloc.mineral_n_autumn_allocated_kg,
+                    alloc.reported_total_n_allocated_kg,
                     alloc.total_n_allocated_kg,
                     alloc.organic_n_rate_kg_ha,
                     alloc.mineral_n_rate_kg_ha,
+                    alloc.grazing_n_rate_kg_ha,
+                    alloc.mineral_n_spring_rate_kg_ha,
+                    alloc.mineral_n_autumn_rate_kg_ha,
+                    alloc.reported_total_n_rate_kg_ha,
                     alloc.organic_quota_fraction,
                     alloc.allocation_method,
                 )
@@ -551,7 +652,7 @@ class NLES5FertilizerDistributor:
             self.conn.executemany(
                 """
                 INSERT INTO distributed_fertilizer_data
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 values,
             )
@@ -564,15 +665,16 @@ class NLES5FertilizerDistributor:
             SELECT
                 f.*,
                 COALESCE(d.organic_n_rate_kg_ha, 0.0) as organic_n_hus,
-                -- Assume 40% spring
-                COALESCE(d.mineral_n_rate_kg_ha * 0.4, 0.0) as mineral_n_foraar,
-                -- Assume 10% autumn
-                COALESCE(d.mineral_n_rate_kg_ha * 0.1, 0.0) as mineral_n_eft,
-                -- Assume 50% growing season
-                COALESCE(d.mineral_n_rate_kg_ha * 0.5, 0.0) as mineral_n_udb,
-                -- Convert to tonnes/ha
+                COALESCE(d.mineral_n_spring_rate_kg_ha, 0.0) as mineral_n_foraar,
+                COALESCE(d.mineral_n_autumn_rate_kg_ha, 0.0) as mineral_n_eft,
+                COALESCE(d.grazing_n_rate_kg_ha, 0.0) as mineral_n_udb,
+                -- F_901 is the reported annual total. Its field allocation is
+                -- separate from the explicit seasonal components below and
+                -- must not be used to infer a season.
                 COALESCE(
-                    d.total_n_allocated_kg / NULLIF(f.area_ha, 0) / 1000, 0.0
+                    NULLIF(d.reported_total_n_rate_kg_ha, 0) / 1000,
+                    d.total_n_allocated_kg / NULLIF(f.area_ha, 0) / 1000,
+                    0.0
                 ) as tn_t_ha,
                 COALESCE(d.allocation_method, 'no_fertilizer_data')
                     as fertilizer_allocation_method,

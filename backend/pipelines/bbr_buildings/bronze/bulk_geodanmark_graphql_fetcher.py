@@ -324,10 +324,19 @@ class BulkGeoDanmarkGraphQLFetcher:
         last_error = None
 
         try:
+            columns = self.conn.execute(f"DESCRIBE SELECT * FROM ({union_query})").fetchall()
+            has_geometry = any(column[0] == "geometri" for column in columns)
+            output_query = (
+                f"SELECT * REPLACE (ST_SetCRS(geometri, 'EPSG:25832') AS geometri) "
+                f"FROM ({union_query})"
+                if has_geometry
+                else union_query
+            )
+
             for attempt in range(max_retries):
                 try:
                     self.conn.execute(f"""
-                        COPY ({union_query})
+                        COPY ({output_query})
                         TO '{output_file}' (FORMAT PARQUET)
                     """)
 
@@ -417,9 +426,17 @@ class BulkGeoDanmarkGraphQLFetcher:
                 union_parts.append(f"SELECT {select_clause} FROM read_parquet('{f}')")
 
             union_query = " UNION ALL ".join(union_parts)
+            columns = self.conn.execute(f"DESCRIBE SELECT * FROM ({union_query})").fetchall()
+            has_geometry = any(column[0] == "geometri" for column in columns)
+            output_query = (
+                f"SELECT * REPLACE (ST_SetCRS(geometri, 'EPSG:25832') AS geometri) "
+                f"FROM ({union_query})"
+                if has_geometry
+                else union_query
+            )
 
             self.conn.execute(f"""
-                COPY ({union_query})
+                COPY ({output_query})
                 TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet'
                 (FORMAT PARQUET)
             """)

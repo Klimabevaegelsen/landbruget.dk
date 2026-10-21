@@ -99,8 +99,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         super().__init__(config)
 
         # Initialize CVR API client
-        cvr_username = os.getenv("CVR_USERNAME", "Martin_Collignon_CVR_I_SKYEN")
-        cvr_password = os.getenv("CVR_PASSWORD", "3a37d029-9588-4c00-8a09-3d2901452d45")
+        cvr_username = os.getenv("CVR_USERNAME")
+        cvr_password = os.getenv("CVR_PASSWORD")
 
         self.cvr_api_client = CVRAPIClient(
             username=cvr_username,

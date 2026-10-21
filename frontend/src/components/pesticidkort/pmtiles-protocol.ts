@@ -15,7 +15,7 @@ export async function registerPmtilesProtocol() {
   if (!win.__pmtiles_protocol_registered) {
     sharedCache = new SharedPromiseCache(600);
     protocolInstance = new Protocol();
-    maplibregl.default.addProtocol('pmtiles', protocolInstance.tile);
+    maplibregl.addProtocol('pmtiles', protocolInstance.tile);
     win.__pmtiles_protocol_registered = true;
   }
 }

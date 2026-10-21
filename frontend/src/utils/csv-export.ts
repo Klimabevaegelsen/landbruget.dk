@@ -1,4 +1,8 @@
 import { FieldAnalysisData } from '@/components/field-analysis/types';
+import {
+  formatProximityListForCsv,
+  parseDistanceM,
+} from '@/lib/proximity-parser';
 
 /**
  * Convert field analysis data to CSV format
@@ -38,9 +42,9 @@ export function convertToCSV(fields: FieldAnalysisData[]): string {
     'BNBO Handlingskrævende (ha)',
     'BNBO Gennemført (ha)',
     'BNBO Status Kategorier',
-    'Boligbygninger Nærhed',
-    'Uddannelsesinstitutioner Nærhed',
-    'Vandafstand Nærhed',
+    'Boliger ≤100 m fra marken (naboer, ikke ejer)',
+    'Skoler/daginstitutioner ≤100 m fra marken',
+    'Afstand til vandløb/sø (m)',
     'Unikke Pesticidprodukter',
     'Delvis Dækning',
     'Pesticide Detaljer (kg/ha)',
@@ -82,9 +86,9 @@ export function convertToCSV(fields: FieldAnalysisData[]): string {
     field.bnbo_action_required_hectares?.toString() || '',
     field.bnbo_completed_hectares?.toString() || '',
     field.bnbo_status_categories || '',
-    field.residential_buildings_proximity || '',
-    field.educational_facilities_proximity || '',
-    field.water_distance_proximity || '',
+    formatProximityListForCsv(field.residential_buildings_proximity),
+    formatProximityListForCsv(field.educational_facilities_proximity),
+    parseDistanceM(field.water_distance_proximity)?.toString() ?? '',
     field.unique_pesticide_products?.toString() || '',
     field.is_partial_coverage ? 'Ja' : 'Nej',
     field.pesticides_kg_detail || '',

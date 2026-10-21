@@ -18,6 +18,13 @@ This index provides access to comprehensive documentation for all data pipelines
 
 ## Government Data Pipelines
 
+### 🧒 Child Receptors Pipeline - Children's Sensitive Sites
+**Data Sources**: Dagtilbudsregisteret, STIL Institutionsregisteret, BBR, GeoFA, OpenStreetMap
+
+Publishes a national EPSG:25832 point layer of daycares, schools, and playgrounds for pesticide exposure analysis.
+
+📖 **[Pipeline README](../backend/pipelines/child_receptors/README.md)**
+
 ### 🥇 Unified Pipeline - Core Danish Agricultural Data
 **Status**: 📝 Documentation needs major update  
 **Priority**: 🔴 HIGH - This is our primary data infrastructure  
@@ -80,6 +87,11 @@ Specialized tracking system for pig movements, complementing the CHR system with
 Maps PFAS "forever chemical" contamination from pesticide use across Danish agricultural areas using hexagonal grid analysis.
 
 📖 **[Excellent README](../backend/pipelines/h3_pfas_exposure_pipeline/README.md)** *(model for other pipelines)*
+
+### 👥 Population Exposure - People Near Agricultural Fields
+Estimates how many people live within cumulative distance bands of agricultural fields, nationally and by municipality, using Danmarks Statistik FOLK1A population totals allocated to BBR dwellings.
+
+The summary is published as JSON for the frontend under `pesticides/population-exposure/`.
 
 ### 🏢 BBR Buildings Pipeline - Farm Infrastructure  
 **Status**: 📝 Basic documentation, needs enhancement  
