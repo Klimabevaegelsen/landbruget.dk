@@ -580,7 +580,7 @@ class TestGeocodingToggle:
 
         # Should return data without geocoding
         assert result is not None
-        assert client.dawa_client is None
+        assert client.geocoding_client is None
 
     def test_geocoding_enabled(self):
         """Test that geocoding can be enabled."""
@@ -616,7 +616,7 @@ class TestGeocodingToggle:
         with (
             patch.dict("os.environ", {"CVR_USERNAME": "test", "CVR_PASSWORD": "test"}),
             patch(
-                "unified_pipeline.util.cached_dawa_api_client.CachedDAWAAPIClient"
+                "unified_pipeline.util.cached_geocoding_client.CachedGeocodingClient"
             ) as mock_dawa_class,
         ):
             mock_dawa_instance = Mock()
@@ -633,7 +633,7 @@ class TestGeocodingToggle:
 
         # Geocoding client should have been created and result should exist
         assert result is not None
-        assert client.dawa_client is not None
+        assert client.geocoding_client is not None
 
 
 class TestMunicipalityNameFormatting:

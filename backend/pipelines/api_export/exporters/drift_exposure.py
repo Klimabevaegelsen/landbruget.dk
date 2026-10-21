@@ -13,7 +13,8 @@ Per-tile record (compact):
   - uid:  BBR building_uuid
   - lat/lng: centroid, EPSG:4326, 6 decimals (~11 cm precision)
   - pct:  exposure_percentile rounded to 1 decimal
-  - dose: total_drift_dose_kg rounded to 4 decimals
+  - dose: total_drift_deposit_per_ha rounded to 4 decimals (relative index;
+    formulated products mix kg and L, so it is not a toxicological dose)
 
 Data source (R2):
 - gold/pesticide_drift_exposure_{y}_{y+1}/{ts}/pesticide_drift_exposure_{y}_{y+1}.parquet
@@ -192,6 +193,20 @@ class DriftExposureExporter(BaseExporter):
             logger.exception("Failed to load source parquets")
             return stats
 
+        has_deposit_column = self.conn.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'drift_exposure'
+              AND column_name = 'total_drift_deposit_per_ha'
+            """
+        ).fetchone()
+        if not has_deposit_column:
+            logger.warning(
+                "Drift parquet uses the legacy dose schema; skipping export until "
+                "the corrected deposit-per-ha output is available"
+            )
+            return stats
+
         self._ensure_spatial_loaded()
         self._ensure_geometry_column("drift_exposure", "geometry")
 
@@ -205,7 +220,7 @@ class DriftExposureExporter(BaseExporter):
                 ST_Y(ST_Centroid(geom_wgs84)) AS lat,
                 ST_X(ST_Centroid(geom_wgs84)) AS lng,
                 exposure_percentile,
-                total_drift_dose_kg,
+                total_drift_deposit_per_ha,
                 pesticide_year,
                 CAST(
                     FLOOR(((ST_X(ST_Centroid(geom_wgs84)) + 180.0) / 360.0) * POW(2, {DRIFT_TILE_ZOOM}))
@@ -235,7 +250,7 @@ class DriftExposureExporter(BaseExporter):
         summary = self.conn.execute("""
             SELECT
                 COUNT(*)::BIGINT AS total_buildings,
-                AVG(total_drift_dose_kg) AS national_avg_drift_dose_kg,
+                AVG(total_drift_deposit_per_ha) AS national_avg_drift_deposit,
                 MAX(pesticide_year) AS pesticide_year,
                 COUNT(DISTINCT (tile_x, tile_y))::BIGINT AS tile_count
             FROM drift_by_tile
@@ -262,7 +277,7 @@ class DriftExposureExporter(BaseExporter):
                     ROUND(lat, 6)::DOUBLE AS lat,
                     ROUND(lng, 6)::DOUBLE AS lng,
                     ROUND(exposure_percentile, 1)::DOUBLE AS pct,
-                    ROUND(total_drift_dose_kg, 4)::DOUBLE AS dose
+                    ROUND(total_drift_deposit_per_ha, 4)::DOUBLE AS dose
                 FROM drift_by_tile
                 WHERE tile_x = {tile_x}
                   AND tile_y = {tile_y}
@@ -276,7 +291,7 @@ class DriftExposureExporter(BaseExporter):
 
         index = {
             "pesticide_year": int(pesticide_year) if pesticide_year is not None else None,
-            "national_avg_drift_dose_kg": (
+            "national_avg_drift_deposit": (
                 round(float(national_avg), 6) if national_avg is not None else None
             ),
             "building_count": int(total_buildings),

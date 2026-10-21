@@ -1693,23 +1693,39 @@ class NLES5DataLoader:
             except Exception as e:
                 self.log.warning(f"Could not check evaporation variation: {e}")
 
-            # Create combined table with both datasets
-            # Since both tables have the same structure, just use precipitation data for now
-            # TODO: Implement proper spatial joining once we understand the spatial column structure
+            # Keep both parameter streams in the combined table. The climate processor
+            # pivots these rows by parameter_id and valid_time to calculate net
+            # percolation (precipitation - potential evaporation). Dropping the
+            # evaporation stream makes missing evaporation values coalesce to zero
+            # and silently turns percolation into precipitation.
             self.db.execute("""
                 CREATE OR REPLACE TABLE dmi_data AS
                 SELECT
                     *,
                     'precipitation' as data_type
                 FROM dmi_precipitation
+                UNION ALL BY NAME
+                SELECT
+                    *,
+                    'evaporation' as data_type
+                FROM dmi_evaporation
             """)
 
             combined_count = self.db.execute("SELECT COUNT(*) FROM dmi_data").fetchone()[0]
-            self.log.info(f"✅ Combined DMI data: {combined_count:,} rows")
+            parameter_counts = self.db.execute("""
+                SELECT parameter_id, COUNT(*)
+                FROM dmi_data
+                GROUP BY parameter_id
+                ORDER BY parameter_id
+            """).fetchall()
+            self.log.info(f"✅ Combined DMI data: {combined_count:,} rows ({parameter_counts})")
 
         except Exception as e:
-            self.log.warning(f"⚠️ Failed to combine DMI datasets, using precipitation only: {e}")
-            self.db.execute("CREATE OR REPLACE TABLE dmi_data AS SELECT * FROM dmi_precipitation")
+            # Both source tables were available when this method was called. Do not
+            # silently fall back to precipitation-only data: that would recreate the
+            # original bug and produce scientifically invalid percolation values.
+            self.log.error(f"⚠️ Failed to combine DMI datasets: {e}")
+            raise
 
     def _load_climate_data_for_years(self, years: list[int]) -> str:
         """

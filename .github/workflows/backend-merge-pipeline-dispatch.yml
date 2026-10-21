@@ -14,6 +14,9 @@ permissions:
 
 jobs:
   detect-backend-changes:
+    # Opt-out for merges that only touch CI wiring/shared files and must not re-run data pipelines:
+    # put "[skip dispatch]" in the (squash) commit message.
+    if: ${{ !contains(github.event.head_commit.message, '[skip dispatch]') }}
     runs-on: ubuntu-latest
     outputs:
       dispatch_targets: ${{ steps.detect.outputs.dispatch_targets }}
@@ -271,6 +274,10 @@ jobs:
 
           if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/pesticide_drift_exposure.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
             add_unified_source "pesticide_drift_exposure" "unified_pesticide_drift_exposure"
+          fi
+
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/population_exposure.py$|^backend/pipelines/unified_pipeline/src/unified_pipeline/bronze/dst_population.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "population_exposure" "unified_population_exposure"
           fi
 
           if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/arbejdstilsynet_inspections.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then

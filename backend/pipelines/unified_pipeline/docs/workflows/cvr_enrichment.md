@@ -30,7 +30,7 @@ This workflow collects data from these Danish government sources:
 | Source | Agency | Purpose | Data Type |
 |--------|--------|---------|-----------|
 | CVR Register | Danish Business Authority | Company registrations and details | REST API |
-| DAWA Address Service | Danish Agency for Data Supply | Address geocoding and validation | REST API |
+| Adressevælger | Not specified | Address geocoding | REST API |
 | Financial Documents | Danish Business Authority | Company financial reports | REST API |
 
 ### How We Collect the Data
@@ -42,10 +42,10 @@ This workflow collects data from these Danish government sources:
 - **Quality Controls**: Validation against official schemas, duplicate detection
 
 #### Address Geocoding
-- **Collection Method**: DAWA API for address standardization and coordinates
+- **Collection Method**: Adressevælger search and detail endpoints for address details and projected coordinates
 - **Frequency**: Real-time geocoding during processing
 - **Format**: Structured address components with coordinates
-- **Quality Controls**: Address validation, coordinate accuracy checks
+- **Quality Controls**: Strict postal-code matching and rejection of responses without usable coordinates
 
 ### Data Privacy and Compliance
 - **Personal Data**: Only processes publicly available business information
@@ -69,7 +69,7 @@ This workflow collects data from these Danish government sources:
 **Why**: Raw CVR data has inconsistencies and needs normalization
 
 **Specific transformations**:
-- **Address standardization**: Convert addresses to consistent format using DAWA
+- **Address geocoding**: Resolve CVR address IDs or strictly matched address text through Adressevælger
 - **Company name normalization**: Clean and standardize business names
 - **Industry classification**: Standardize NACE industry codes
 - **Data validation**: Check for completeness and accuracy
@@ -113,7 +113,7 @@ This workflow collects data from these Danish government sources:
 ### Resource Requirements
 - **Memory**: 8-16GB RAM for large company datasets
 - **Storage**: ~10GB temporary space for processing
-- **Network**: High-bandwidth for API calls to CVR and DAWA services
+- **Network**: API access to CVR and Adressevælger services
 
 ---
 
@@ -134,7 +134,7 @@ This workflow collects data from these Danish government sources:
 - **Timing delays**: New registrations may take 1-7 days to appear in CVR
 
 #### Quality Issues
-- **Address accuracy**: Rural addresses may have lower geocoding accuracy
+- **Coordinate accuracy**: Adressevælger does not provide coordinate accuracy metadata, so `coordinate_quality` is NULL
 - **Business classification**: Some companies may be misclassified regarding agricultural activities
 
 #### Methodological Limitations
@@ -214,7 +214,7 @@ registration_date | DATE | Date of registration | 2015-03-15
 ### Processing Infrastructure
 - **Platform**: GitHub Actions on Ubuntu runners
 - **Resources**: 16GB RAM, 4 CPU cores
-- **Dependencies**: CVR API access, DAWA API, Google Cloud Storage
+- **Dependencies**: CVR API access, Adressevælger API, Google Cloud Storage
 
 </details>
 

@@ -4,7 +4,7 @@ import { ReferenceList } from '@/components/methodology/reference-list';
 export function SectionReferences() {
   return (
     <section data-testid="section-references">
-      <SectionHeader id="references" number="6" title="Referencer" />
+      <SectionHeader id="references" number="7" title="Referencer" />
 
       <p>Nummererede referencer svarende til citatmarkeringer [N] i teksten.</p>
 

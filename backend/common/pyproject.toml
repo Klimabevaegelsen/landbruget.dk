@@ -8,6 +8,8 @@ dependencies = [
     "pydantic",
     "s3fs",
     "duckdb",
+    "pyproj>=3.7.2",
+    "requests>=2.31.0",
     "tenacity",
     "google-cloud-secret-manager>=2.30.0",
 ]

@@ -164,6 +164,25 @@ class TestGetDuckDBWithR2:
         finally:
             get_duckdb_with_r2.cache_clear()
 
+    @patch("common.storage.filesystem.setup_duckdb_cloud_auth", return_value=False)
+    @patch.dict(os.environ, {}, clear=True)
+    def test_reopens_closed_cached_duckdb_connection(self, _mock_setup_native):
+        """A closed cached connection is replaced before it is returned again."""
+        from common.storage.filesystem import get_duckdb_with_r2
+
+        get_duckdb_with_r2.cache_clear()
+        original = get_duckdb_with_r2()
+        original.close()
+
+        reopened = get_duckdb_with_r2()
+        try:
+            assert reopened is not original
+            assert reopened.execute("SELECT 1").fetchone() == (1,)
+        finally:
+            if reopened is not original:
+                reopened.close()
+            get_duckdb_with_r2.cache_clear()
+
     @patch.dict(os.environ, {}, clear=True)
     def test_no_credentials_falls_back_to_fsspec(self):
         """Without R2 credentials, should try fsspec registration."""

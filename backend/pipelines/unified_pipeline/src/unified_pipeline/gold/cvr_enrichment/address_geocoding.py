@@ -1,9 +1,8 @@
 """
 Address Geocoding Step - Step 5 of CVR Enrichment Pipeline
 
-This step enriches all addresses (from companies and P-numbers) with geometry
-information using the DAWA API and Datavask fallback, processing them in batches
-for parallel execution.
+This step enriches company and P-number addresses with geometry from Adressevælger,
+processing addresses in batches for parallel execution.
 """
 
 import json
@@ -14,7 +13,7 @@ from typing import Any, ClassVar
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
-from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
+from unified_pipeline.util.cached_geocoding_client import CachedGeocodingClient
 from unified_pipeline.util.timing import timed
 
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
@@ -26,7 +25,7 @@ class AddressGeocodingConfig(BaseJobConfig):
     name: str = "Address Geocoding"
     dataset: str = "cvr_enrichment"
     type: str = "address_geocoding"
-    description: str = "Enrich addresses with geometry via DAWA API"
+    description: str = "Enrich addresses with geometry via Adressevælger"
     frequency: str = "monthly"
     bucket: str = "landbruget-data"
 
@@ -79,8 +78,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
     This step:
     1. Loads company and P-number data from previous steps
     2. Extracts all addresses from both data sources
-    3. Enriches addresses with geometry via DAWA API
-    4. Falls back to Datavask API for failed geocoding
+    3. Enriches addresses with geometry via Adressevælger
+    4. Searches strictly by address text when an address ID lookup fails
     5. Saves geocoded addresses for data consolidation step
     """
 
@@ -93,8 +92,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         """
         super().__init__(config)
 
-        # Initialize cached DAWA API client
-        self.dawa_client = CachedDAWAAPIClient()
+        # Initialize cached Adressevælger client
+        self.geocoding_client = CachedGeocodingClient()
 
         self.log.info("Address geocoding step initialized with caching")
         self.log.info("📋 Configuration:")
@@ -120,7 +119,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Step 1: Load and extract addresses from company and P-number data
             address_extraction = self._extract_addresses_from_data()
 
-            # Step 2: Geocode addresses using DAWA API
+            # Step 2: Geocode addresses using Adressevælger
             geocoding_results = await self._geocode_addresses(address_extraction)
 
             # Step 3: Process and structure geocoded data
@@ -134,7 +133,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             self._update_pnumber_table_with_geocoding(processed_data)
 
             # Step 6: Save geocoding cache and log performance
-            self.dawa_client.cleanup()
+            self.geocoding_client.cleanup()
 
             self.log.info(
                 "Address geocoding completed successfully. "
@@ -146,7 +145,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             self.log.error(f"Address geocoding failed: {e}")
             # Ensure cache is saved even on failure
             try:
-                self.dawa_client.cleanup()
+                self.geocoding_client.cleanup()
             except Exception as cache_e:
                 self.log.warning(f"Failed to save geocoding cache: {cache_e}")
             raise
@@ -553,7 +552,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
     @timed(name="Geocoding addresses")
     async def _geocode_addresses(self, address_extraction: dict[str, Any]) -> dict[str, Any]:
         """
-        Geocode addresses using DAWA API with Datavask fallback.
+        Geocode by address ID, then use strict Adressevælger text search if needed.
 
         Args:
             address_extraction: Address extraction results
@@ -591,10 +590,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
             geocoded = None
 
-            # Try DAWA geocoding first if address has adresse_id
+            # Try Adressevælger by ID first when CVR provides an adresse_id.
             if addr.get("adresse_id"):
                 try:
-                    geocoded = self.dawa_client.geocode_address_by_id(addr["adresse_id"])
+                    geocoded = self.geocoding_client.geocode_address_by_id(addr["adresse_id"])
                     if geocoded:
                         geocoded_addr.update(
                             {
@@ -602,10 +601,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                                 "longitude": geocoded["longitude"],
                                 "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
                                 "srid": geocoded.get("srid", 4326),
-                                "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                                "geometry_wkt": self.geocoding_client.create_geometry_wkt(
                                     geocoded["latitude"], geocoded["longitude"]
                                 ),
-                                "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                                "geometry_geojson": self.geocoding_client.create_geometry_geojson(
                                     geocoded["latitude"], geocoded["longitude"]
                                 ),
                                 "coordinate_quality": geocoded.get("coordinate_quality"),
@@ -615,21 +614,18 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                             }
                         )
                         dawa_success += 1
-                        self.log.debug(f"DAWA geocoded: {addr.get('full_address')}")
+                        self.log.debug(f"Adressevælger geocoded: {addr.get('full_address')}")
                 except Exception as e:
-                    self.log.debug(f"DAWA geocoding failed for {addr.get('full_address')}: {e}")
+                    self.log.debug(
+                        f"Adressevælger geocoding failed for {addr.get('full_address')}: {e}"
+                    )
 
-            # Fallback to Datavask API if DAWA failed and we have address text
+            # Search by address text if the address ID lookup failed.
             if not geocoded and addr.get("full_address"):
                 try:
-                    # Reconstruct complete address with postal code and city
-                    complete_address = addr["full_address"]
-                    if addr.get("postal_code") and addr.get("city"):
-                        complete_address = (
-                            f"{addr['full_address']}, {addr['postal_code']} {addr['city']}"
-                        )
-
-                    geocoded = self.dawa_client.geocode_with_datavask(complete_address)
+                    geocoded = self.geocoding_client.geocode_free_text(
+                        addr["full_address"], addr.get("postal_code"), addr.get("city")
+                    )
                     if geocoded:
                         geocoded_addr.update(
                             {
@@ -637,10 +633,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                                 "longitude": geocoded["longitude"],
                                 "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
                                 "srid": geocoded.get("srid", 4326),
-                                "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                                "geometry_wkt": self.geocoding_client.create_geometry_wkt(
                                     geocoded["latitude"], geocoded["longitude"]
                                 ),
-                                "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                                "geometry_geojson": self.geocoding_client.create_geometry_geojson(
                                     geocoded["latitude"], geocoded["longitude"]
                                 ),
                                 "coordinate_quality": geocoded.get("coordinate_quality"),
@@ -649,16 +645,18 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                                 "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp"),
                             }
                         )
-                        # Update BFE fields if available from Datavask
+                        # Preserve floor and door when they are returned by the detail endpoint.
                         if geocoded.get("floor") is not None:
                             geocoded_addr["floor"] = geocoded["floor"]
                         if geocoded.get("door") is not None:
                             geocoded_addr["door"] = geocoded["door"]
 
                         datavask_success += 1
-                        self.log.debug(f"Datavask geocoded: {complete_address}")
+                        self.log.debug(f"Adressevælger geocoded: {addr['full_address']}")
                 except Exception as e:
-                    self.log.debug(f"Datavask geocoding failed for {addr.get('full_address')}: {e}")
+                    self.log.debug(
+                        f"Adressevælger geocoding failed for {addr.get('full_address')}: {e}"
+                    )
 
             # Mark as failed if no geocoding succeeded
             if not geocoded:
@@ -677,7 +675,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         self.log.info(
             f"Geocoding completed: "
-            f"DAWA: {dawa_success}, Datavask: {datavask_success}, Failed: {failed} "
+            f"By ID: {dawa_success}, Free text: {datavask_success}, Failed: {failed} "
             f"({summary['success_rate']:.1%} success rate)"
         )
 

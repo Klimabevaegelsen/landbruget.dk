@@ -14,6 +14,9 @@ Key patterns:
 """
 
 import logging
+from functools import lru_cache
+
+from pyproj import Transformer
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,18 @@ TARGET_CRS_STORAGE = WGS84
 # Process in EPSG:25832 throughout Bronze/Silver/Gold, transform to EPSG:4326 only at Supabase upload
 TARGET_CRS_PROCESSING = DANISH_UTM  # Use throughout pipeline processing
 TARGET_CRS_SUPABASE = WGS84  # Use ONLY at final Supabase upload
+
+
+@lru_cache(maxsize=1)
+def _utm32_to_wgs84_transformer() -> Transformer:
+    return Transformer.from_crs(DANISH_UTM, WGS84, always_xy=True)
+
+
+def utm32_to_wgs84(x: float, y: float) -> tuple[float, float]:
+    """Convert EPSG:25832 easting/northing to WGS84 longitude/latitude."""
+    longitude, latitude = _utm32_to_wgs84_transformer().transform(x, y)
+    return float(longitude), float(latitude)
+
 
 # =============================================================================
 # Denmark Bounding Boxes for CRS Detection

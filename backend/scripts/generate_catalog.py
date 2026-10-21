@@ -109,8 +109,8 @@ KNOWN_COLUMNS: dict[str, str] = {
     "gridcode": "Grid cell classification code used in wetland mapping.",
     # CVR financial
     "advertisement_protection": "Boolean: true if company has opted out of marketing contact.",
-    "dawa_enriched": "Boolean: true if address was successfully geocoded via DAWA (Danish Address Web API).",
-    "coordinate_quality": "Quality level of geocoded coordinates from DAWA.",
+    "dawa_enriched": "Boolean: true if the address was successfully geocoded via Adressevælger.",
+    "coordinate_quality": "NULL because Adressevælger does not provide coordinate accuracy.",
     # Timestamps
     "created_at": "Record creation timestamp (when pipeline processed this record).",
     "processed_at": "Pipeline processing timestamp.",

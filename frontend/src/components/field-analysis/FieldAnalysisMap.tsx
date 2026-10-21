@@ -951,7 +951,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       >
         <SearchBar
           onLocationSelect={handleLocationSelect}
-          placeholder="Søg efter adresser, byer, regioner..."
+          placeholder="Søg efter adresse..."
           className="w-full"
           onSearchStateChange={setIsSearchActive}
         />

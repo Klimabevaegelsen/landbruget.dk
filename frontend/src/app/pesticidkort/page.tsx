@@ -1,6 +1,11 @@
 /* oxlint-disable landbruget/require-test-coverage */
 import { Suspense } from 'react';
 import { PesticidkortApp } from '@/components/pesticidkort/PesticidkortApp';
+import { getCachedPopulationExposureSummary } from '@/lib/server-cache';
+import {
+  getHeadline,
+  type PopulationHeadline,
+} from '@/lib/population-exposure';
 import type { Metadata } from 'next';
 
 interface PageProps {
@@ -45,10 +50,20 @@ export async function generateMetadata({
   };
 }
 
-export default function PesticidkortPage() {
+export default async function PesticidkortPage() {
+  let populationHeadline: PopulationHeadline | null = null;
+
+  try {
+    populationHeadline = getHeadline(
+      await getCachedPopulationExposureSummary()
+    );
+  } catch {
+    populationHeadline = null;
+  }
+
   return (
     <Suspense>
-      <PesticidkortApp />
+      <PesticidkortApp populationHeadline={populationHeadline} />
     </Suspense>
   );
 }

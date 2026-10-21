@@ -62,7 +62,7 @@ class CVREnrichmentSharedConfig(BaseModel):
 
     # Address geocoding configuration
     enable_address_geocoding: bool = Field(
-        default=True, description="Whether to enable address geocoding via DAWA API"
+        default=True, description="Whether to enable address geocoding via Adressevælger"
     )
 
     geocoding_current_addresses_only: bool = Field(

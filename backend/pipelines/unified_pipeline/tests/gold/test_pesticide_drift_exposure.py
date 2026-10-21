@@ -1,7 +1,7 @@
 """Tests for pesticide drift exposure gold processor.
 
 Tests the Rautmann drift curve, wind direction weighting, meteorological
-region assignment, and end-to-end drift dose calculations.
+region assignment, and end-to-end drift deposit calculations.
 """
 
 from unittest.mock import AsyncMock, Mock
@@ -17,6 +17,7 @@ from unified_pipeline.gold.pesticide_drift_exposure import (
     PesticideDriftExposureGoldConfig,
     _build_direction_frequency_table,
     _load_data_file,
+    drift_deposit_per_ha,
     nearest_region_id,
     rautmann_drift_pct,
     wind_direction_weight,
@@ -90,40 +91,29 @@ class TestRautmannDriftFunction:
         assert rautmann_drift_pct(d) == expected
 
 
-class TestDriftDoseCalculation:
-    """Test the dose calculation: dose_kg = DosageQuantity × AllocatedArea × drift_pct / 100."""
+class TestDriftDepositPerHa:
+    """Test the seasonal formulated-product deposit per hectare calculation."""
 
-    def test_basic_dose(self):
-        """Field at 10m, 5ha, 2.0 L/ha → dose = 2.0 × 5 × 0.29/100 ≈ 0.029 kg."""
-        dosage = 2.0  # L/ha
-        area = 5.0  # ha
-        drift_pct = rautmann_drift_pct(10.0)  # ~0.29%
-        dose_kg = dosage * area * drift_pct / 100.0
-        assert abs(dose_kg - 0.029) < 0.005
+    def test_basic_deposit(self):
+        """10 L total on a 5 ha field at 10m is about 0.005746 L/ha."""
+        result = drift_deposit_per_ha(10.0, 5.0, 10.0)
+        assert result == pytest.approx(0.005746, abs=1e-4)
 
-    def test_dose_at_1m(self):
-        """Closest possible field: high drift."""
-        dosage = 1.0
-        area = 1.0
-        drift_pct = rautmann_drift_pct(1.0)
-        dose_kg = dosage * area * drift_pct / 100.0
-        assert abs(dose_kg - 0.0277) < 0.002
+    def test_deposit_halves_when_field_area_doubles(self):
+        small_field = drift_deposit_per_ha(10.0, 5.0, 10.0)
+        large_field = drift_deposit_per_ha(10.0, 10.0, 10.0)
+        assert large_field == pytest.approx(small_field / 2.0)
 
-    def test_dose_scales_with_area(self):
-        """Double the area → double the dose."""
-        drift_pct = rautmann_drift_pct(20.0)
-        dose_1ha = 1.0 * 1.0 * drift_pct / 100.0
-        dose_2ha = 1.0 * 2.0 * drift_pct / 100.0
-        assert abs(dose_2ha - 2 * dose_1ha) < 1e-10
+    def test_deposit_doubles_when_total_dosage_doubles(self):
+        one_application = drift_deposit_per_ha(10.0, 5.0, 10.0)
+        two_applications = drift_deposit_per_ha(20.0, 5.0, 10.0)
+        assert two_applications == pytest.approx(one_application * 2.0)
 
-    def test_mass_balance(self):
-        """Drift dose must be << applied dose (sanity)."""
-        dosage = 3.0  # L/ha
-        area = 100.0  # ha
-        applied_total = dosage * area  # 300 kg
-        # Even at 1m, drift is only ~2.8% of applied dose per unit area
-        drift_at_1m = dosage * area * rautmann_drift_pct(1.0) / 100.0
-        assert drift_at_1m < applied_total * 0.05  # drift < 5% of total
+    def test_zero_or_missing_area_inputs_return_zero(self):
+        assert drift_deposit_per_ha(10.0, 0.0, 10.0) == 0.0
+        assert drift_deposit_per_ha(None, 5.0, 10.0) == 0.0
+        assert drift_deposit_per_ha(10.0, None, 10.0) == 0.0
+        assert drift_deposit_per_ha(10.0, 5.0, None) == 0.0
 
 
 class TestNearestRegionId:

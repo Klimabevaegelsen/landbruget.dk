@@ -34,13 +34,13 @@ const FALLBACK_BURDEN_BUCKETS: { min: number; grade: PesticideGrade }[] = [
 
 /**
  * Map a drift-exposure percentile (0-100, higher = more exposed) to a grade.
- * Below p50, compare absolute drift dose to the national average to decide
+ * Below p50, compare the relative drift deposit index to its national average to decide
  * between TOP_50 and UNDER_AVG.
  */
 export function driftPercentileToGrade(
   percentile: number,
-  driftDoseKg: number,
-  nationalAvgDriftDoseKg: number | null
+  driftDeposit: number,
+  nationalAvgDriftDeposit: number | null
 ): GradeInfo {
   let grade: PesticideGrade;
   if (percentile >= 99) grade = 'TOP_1';
@@ -49,8 +49,8 @@ export function driftPercentileToGrade(
   else if (percentile >= 75) grade = 'TOP_25';
   else if (percentile >= 50) grade = 'TOP_50';
   else if (
-    nationalAvgDriftDoseKg !== null &&
-    driftDoseKg < nationalAvgDriftDoseKg
+    nationalAvgDriftDeposit !== null &&
+    driftDeposit < nationalAvgDriftDeposit
   )
     grade = 'UNDER_AVG';
   else grade = 'TOP_50';

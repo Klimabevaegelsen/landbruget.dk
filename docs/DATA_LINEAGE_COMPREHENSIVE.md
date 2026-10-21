@@ -443,7 +443,7 @@ Scraper Pipelines → Regulatory oversight and enforcement tracking
 
 **Privacy-Sensitive Data Handling**
 - **CPR Numbers**: Converted to UUIDs with consistent mapping
-- **Personal Addresses**: Removed from residential properties
+- **Residential Building Addresses**: BBR addresses of residential buildings within 100 m of fields are published in the field PMTiles (`residential_buildings_proximity`) and labelled in the UI as neighbouring buildings, not field owners.
 - **Farm-Level Data**: Aggregated where possible to protect individual operations
 - **PII Detection**: Automated detection and anonymization
 
