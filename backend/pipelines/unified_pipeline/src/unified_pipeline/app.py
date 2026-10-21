@@ -113,6 +113,10 @@ from unified_pipeline.gold.pesticide_proximity import (
     PesticideProximityGold,
     PesticideProximityGoldConfig,
 )
+from unified_pipeline.gold.population_exposure import (
+    PopulationExposureGold,
+    PopulationExposureGoldConfig,
+)
 from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
     PropertyCadastralMergeGoldConfig,
@@ -621,6 +625,13 @@ def execute(cli_config: cli_models.CliConfig) -> int:
                 # Requires gold pesticide_disaggregation and silver datasets:
                 # child_receptors, cadastral, fvm_marker
                 (ChildReceptorExposureGold, ChildReceptorExposureGoldConfig),
+            ],
+        },
+        cli_models.Source.population_exposure: {
+            cli_models.Stage.gold: [(PopulationExposureGold, PopulationExposureGoldConfig)],
+            cli_models.Stage.all: [
+                # Requires pesticide disaggregation and silver buildings, fields, and municipalities.
+                (PopulationExposureGold, PopulationExposureGoldConfig),
             ],
         },
         cli_models.Source.pesticide_compliance: {

@@ -9,6 +9,7 @@ import { ExploreMapView } from '@/components/pesticidkort/ExploreMapView';
 import { DisclaimerFooter } from '@/components/pesticidkort/DisclaimerFooter';
 import { DisclaimerModal } from '@/components/pesticidkort/DisclaimerModal';
 import type { AddressResult } from '@/components/pesticidkort/types';
+import type { PopulationHeadline } from '@/lib/population-exposure';
 import { DEFAULT_EXPOSURE_RADIUS_M } from '@/components/pesticidkort/exposure-utils';
 
 interface SearchState {
@@ -28,7 +29,11 @@ function parseUrlState(params: URLSearchParams) {
   return null;
 }
 
-export function PesticidkortApp() {
+interface PesticidkortAppProps {
+  populationHeadline?: PopulationHeadline | null;
+}
+
+export function PesticidkortApp({ populationHeadline }: PesticidkortAppProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const urlState = parseUrlState(searchParams);
@@ -85,6 +90,7 @@ export function PesticidkortApp() {
             <LandingHero
               onAddressSelect={handleAddressSelect}
               onExploreMap={handleExploreMap}
+              populationHeadline={populationHeadline}
             />
           </motion.div>
         )}

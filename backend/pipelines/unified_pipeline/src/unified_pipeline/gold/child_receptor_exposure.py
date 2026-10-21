@@ -1,4 +1,10 @@
-"""Yearly pesticide exposure metrics for child receptor sites."""
+"""Yearly pesticide exposure metrics for child receptor sites.
+
+Seasonal deposits sum ``DosageQuantity / field area_ha × drift_pct / 100``
+for each disaggregated record, with existing wind weighting applied afterward.
+Values are formulated product per ha (kg or L product/ha); mixed kg and L
+make them a relative index rather than a toxicological dose.
+"""
 
 import contextlib
 import os
@@ -119,11 +125,13 @@ def compute_child_receptor_exposure(
             cd.DosageQuantity,
             cd.AllocatedArea,
             cd.PesticideName,
+            f.area_ha AS field_area_ha,
             {field_geom_expr} AS field_geom_utm,
             ST_Centroid({field_geom_expr}) AS field_centroid_utm
         FROM {disaggregation_table} cd
         JOIN {field_table} f ON cd.field_uuid = f.field_uuid
         WHERE f.geometry IS NOT NULL
+          AND f.area_ha > 0
           AND cd.DosageQuantity IS NOT NULL
           AND cd.AllocatedArea > 0
     """)
@@ -132,6 +140,7 @@ def compute_child_receptor_exposure(
         CREATE OR REPLACE TABLE child_sprayed_fields AS
         SELECT
             field_uuid,
+            ANY_VALUE(field_area_ha) AS field_area_ha,
             ANY_VALUE(field_geom_utm) AS field_geom_utm,
             ANY_VALUE(field_centroid_utm) AS field_centroid_utm
         FROM drift_fields
@@ -243,9 +252,9 @@ def compute_child_receptor_exposure(
             {band_columns},
             sprayed_area_ha_within_250m DOUBLE,
             sprayed_area_ha_within_500m DOUBLE,
-            applied_kg_on_fields_within_500m DOUBLE,
+            applied_product_on_fields_within_500m DOUBLE,
             unique_pesticides_within_500m INTEGER,
-            drift_dose_kg DOUBLE,
+            drift_deposit_per_ha DOUBLE,
             max_single_drift_pct DOUBLE,
             wind_weighted BOOLEAN,
             top_pesticides VARCHAR,
@@ -356,9 +365,9 @@ def compute_child_receptor_exposure(
             SELECT
                 p.receptor_id,
                 d.PesticideName,
-                d.DosageQuantity * d.AllocatedArea AS applied_kg,
-                d.DosageQuantity * d.AllocatedArea * p.drift_pct / 100.0
-                    * {wind_expression} AS drift_dose_kg
+                d.DosageQuantity AS applied_product,
+                d.DosageQuantity / d.field_area_ha * p.drift_pct / 100.0
+                    * {wind_expression} AS drift_deposit_per_ha
             FROM batch_field_pairs p
             JOIN drift_fields d ON p.field_uuid = d.field_uuid
         """)
@@ -366,9 +375,9 @@ def compute_child_receptor_exposure(
             CREATE OR REPLACE TABLE batch_pesticide_metrics AS
             SELECT
                 receptor_id,
-                SUM(applied_kg) AS applied_kg_on_fields_within_500m,
+                SUM(applied_product) AS applied_product_on_fields_within_500m,
                 COUNT(DISTINCT PesticideName)::INTEGER AS unique_pesticides_within_500m,
-                SUM(drift_dose_kg) AS drift_dose_kg
+                SUM(drift_deposit_per_ha) AS drift_deposit_per_ha
             FROM batch_pesticide_pairs
             GROUP BY receptor_id
         """)
@@ -376,14 +385,14 @@ def compute_child_receptor_exposure(
             CREATE OR REPLACE TABLE batch_top_pesticides AS
             WITH pesticide_totals AS (
                 SELECT receptor_id, PesticideName,
-                       SUM(drift_dose_kg) AS pesticide_drift_dose_kg
+                       SUM(drift_deposit_per_ha) AS pesticide_drift_deposit_per_ha
                 FROM batch_pesticide_pairs
                 WHERE PesticideName IS NOT NULL
                 GROUP BY receptor_id, PesticideName
             ), ranked AS (
                 SELECT *, ROW_NUMBER() OVER (
                     PARTITION BY receptor_id
-                    ORDER BY pesticide_drift_dose_kg DESC, PesticideName
+                    ORDER BY pesticide_drift_deposit_per_ha DESC, PesticideName
                 ) AS pesticide_rank
                 FROM pesticide_totals
             )
@@ -392,8 +401,8 @@ def compute_child_receptor_exposure(
                 to_json(list(
                     struct_pack(
                         name := PesticideName,
-                        drift_dose_kg := pesticide_drift_dose_kg
-                    ) ORDER BY pesticide_drift_dose_kg DESC, PesticideName
+                        drift_deposit_per_ha := pesticide_drift_deposit_per_ha
+                    ) ORDER BY pesticide_drift_deposit_per_ha DESC, PesticideName
                 )) AS top_pesticides
             FROM ranked
             WHERE pesticide_rank <= 5
@@ -425,9 +434,9 @@ def compute_child_receptor_exposure(
                 {metric_band_columns},
                 COALESCE(fm.sprayed_area_ha_within_250m, 0.0),
                 COALESCE(fm.sprayed_area_ha_within_500m, 0.0),
-                COALESCE(pm.applied_kg_on_fields_within_500m, 0.0),
+                COALESCE(pm.applied_product_on_fields_within_500m, 0.0),
                 COALESCE(pm.unique_pesticides_within_500m, 0),
-                COALESCE(pm.drift_dose_kg, 0.0),
+                COALESCE(pm.drift_deposit_per_ha, 0.0),
                 fm.max_single_drift_pct,
                 {str(apply_wind_weighting).upper()} AS wind_weighted,
                 COALESCE(tp.top_pesticides, '[]') AS top_pesticides,
@@ -467,9 +476,9 @@ def compute_child_receptor_exposure(
         *(f"sprayed_fields_within_{band}m" for band in bands),
         "sprayed_area_ha_within_250m",
         "sprayed_area_ha_within_500m",
-        "applied_kg_on_fields_within_500m",
+        "applied_product_on_fields_within_500m",
         "unique_pesticides_within_500m",
-        "drift_dose_kg",
+        "drift_deposit_per_ha",
         "max_single_drift_pct",
         "wind_weighted",
         "top_pesticides",
@@ -480,8 +489,8 @@ def compute_child_receptor_exposure(
         SELECT
             {projection_columns},
             ROUND(PERCENT_RANK() OVER (
-                PARTITION BY receptor_type ORDER BY drift_dose_kg
-            ) * 100.0, 2) AS drift_dose_percentile,
+                PARTITION BY receptor_type ORDER BY drift_deposit_per_ha
+            ) * 100.0, 2) AS drift_deposit_percentile,
             utm_e,
             utm_n,
             lon,
@@ -555,7 +564,7 @@ class ChildReceptorExposureGoldConfig(BaseJobConfig):
     dataset: str = "child_receptor_exposure"
     type: str = "gold"
     description: str = (
-        "Nearest sprayed fields, sprayed area, and estimated pesticide drift dose "
+        "Nearest sprayed fields, sprayed area, and estimated pesticide drift deposit "
         "per child receptor"
     )
     frequency: str = "yearly"
@@ -664,7 +673,7 @@ class ChildReceptorExposureGold(BaseSource[ChildReceptorExposureGoldConfig], Gol
                 f"({wind_rose.get('period', 'unknown')} period)"
             )
         except FileNotFoundError:
-            self.log.warning("Wind rose data not found, falling back to unweighted drift dose")
+            self.log.warning("Wind rose data not found, falling back to unweighted drift deposit")
             self.config = self.config.model_copy(update={"enable_wind_weighting": False})
 
     async def _load_datasets(self) -> dict[str, Any] | None:
@@ -788,17 +797,17 @@ class ChildReceptorExposureGold(BaseSource[ChildReceptorExposureGoldConfig], Gol
                 ),
                 "sprayed_area_ha_within_250m: DOUBLE",
                 "sprayed_area_ha_within_500m: DOUBLE",
-                "applied_kg_on_fields_within_500m: DOUBLE",
+                "applied_product_on_fields_within_500m: DOUBLE (field-total formulated product, kg or L)",
                 "unique_pesticides_within_500m: INTEGER",
-                "drift_dose_kg: DOUBLE",
+                "drift_deposit_per_ha: DOUBLE (formulated product per ha; mixed kg/L, relative index)",
                 "max_single_drift_pct: DOUBLE",
                 "wind_weighted: BOOLEAN",
                 "top_pesticides: JSON string",
-                "drift_dose_percentile: DOUBLE (0-100, 2 decimals)",
+                "drift_deposit_percentile: DOUBLE (0-100, 2 decimals)",
                 "geometry: GEOMETRY (EPSG:4326)",
             ],
             "methodology": {
-                "drift_curve": "Rautmann power-law shared with pesticide_drift_exposure",
+                "drift_curve": "Rautmann power-law; per record DosageQuantity / field area_ha × drift% / 100",
                 "search_radius_m": self.config.search_radius_m,
                 "distance_bands_m": self.config.distance_bands_m,
                 "max_site_area_m2": self.config.max_site_area_m2,

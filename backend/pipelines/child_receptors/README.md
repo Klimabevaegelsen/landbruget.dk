@@ -16,6 +16,10 @@ From this directory, run `python main.py --layer all`. Use `--layer bronze` or `
 
 Bronze files and manifests are written under `bronze/child_receptors/{source}/{timestamp}/`. Silver Parquet and its QA report are written under `silver/child_receptors/{timestamp}/`. Silver uses the latest bronze run for each source when no timestamp is supplied.
 
+## Dagtilbudsregisteret in CI
+
+If STIL blocks the CI fetch, silver uses the latest earlier complete Dagtilbudsregisteret bronze run from local storage or R2. The manifest must be no more than 120 days old; otherwise silver stops so daycares are never omitted. Seed or refresh the bronze from a local machine with `cd backend/pipelines/child_receptors && python main.py --layer bronze --sources dagtilbud`.
+
 ## Known gaps
 
 - SFO is not in Dagtilbudsregisteret; school sites cover the school locations where SFO operates.

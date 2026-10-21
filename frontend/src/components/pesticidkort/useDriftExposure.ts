@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 
 export interface DriftExposureMatch {
   exposure_percentile: number;
-  drift_dose_kg: number;
-  national_avg_drift_dose_kg: number | null;
+  drift_deposit: number;
+  national_avg_drift_deposit: number | null;
   building_distance_m: number;
 }
 

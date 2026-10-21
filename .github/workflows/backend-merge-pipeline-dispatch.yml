@@ -276,6 +276,10 @@ jobs:
             add_unified_source "pesticide_drift_exposure" "unified_pesticide_drift_exposure"
           fi
 
+          if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/population_exposure.py$|^backend/pipelines/unified_pipeline/src/unified_pipeline/bronze/dst_population.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
+            add_unified_source "population_exposure" "unified_population_exposure"
+          fi
+
           if has_match "^backend/pipelines/unified_pipeline/src/unified_pipeline/gold/arbejdstilsynet_inspections.py$|${UNIFIED_SHARED_PATTERN}|${COMMON_SHARED_PATTERN}"; then
             add_unified_source "arbejdstilsynet_inspections" "unified_arbejdstilsynet_inspections"
           fi
