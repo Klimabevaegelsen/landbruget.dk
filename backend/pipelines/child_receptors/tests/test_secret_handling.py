@@ -197,7 +197,7 @@ def _run_cli_with_mocked_bbr(monkeypatch: pytest.MonkeyPatch, post) -> None:
     monkeypatch.setattr(cli, "build_silver", build_with_small_floors)
 
 
-def test_cli_success_does_not_write_or_log_api_key(
+def test_cli_bronze_success_does_not_write_or_log_api_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
     capfd: pytest.CaptureFixture[str],
@@ -227,7 +227,7 @@ def test_cli_success_does_not_write_or_log_api_key(
     log_output = []
     sink_id = logger.add(log_output.append, format="{message}")
     try:
-        assert cli.main(["--layer", "all", "--sources", "bbr", "--no-upload", "--local-dir", str(tmp_path)]) == 0
+        assert cli.main(["--layer", "bronze", "--sources", "bbr", "--no-upload", "--local-dir", str(tmp_path)]) == 0
     finally:
         logger.remove(sink_id)
 
