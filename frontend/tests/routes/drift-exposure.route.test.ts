@@ -25,7 +25,7 @@ describe('GET /api/drift-exposure', () => {
   it('returns index metadata when no tile is requested', async () => {
     const payload = {
       pesticide_year: 2024,
-      national_avg_drift_dose_kg: 1.23,
+      national_avg_drift_deposit: 1.23,
       building_count: 42,
       tile_zoom: 12,
       tile_count: 3,

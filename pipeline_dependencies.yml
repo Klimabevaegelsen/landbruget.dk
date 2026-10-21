@@ -229,7 +229,7 @@ pipelines:
       - generate_pmtiles
     outputs:
       - gold/pesticide_drift_exposure_{year}_{year+1}
-    notes: "Tier 1: Rautmann power-law drift curves. Tier 2 (future): wind-direction weighting from WRF wind roses."
+    notes: "Per-record deposit: DosageQuantity / field area_ha × drift% / 100. Tier 1: Rautmann power-law drift curves. Tier 2 (future): wind-direction weighting from WRF wind roses."
 
   child_receptor_exposure:
     workflow: unified_pipeline.yml # runs after drift exposure in pesticide-processing matrix

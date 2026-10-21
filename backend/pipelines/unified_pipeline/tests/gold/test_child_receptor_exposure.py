@@ -33,7 +33,7 @@ def _create_empty_pesticide_tables(conn):
             PesticideName VARCHAR
         )
     """)
-    conn.execute("CREATE TABLE fields (field_uuid VARCHAR, geometry GEOMETRY)")
+    conn.execute("CREATE TABLE fields (field_uuid VARCHAR, area_ha DOUBLE, geometry GEOMETRY)")
 
 
 def _create_synthetic_exposure_data(conn):
@@ -142,14 +142,14 @@ def _create_synthetic_exposure_data(conn):
     )
 
     conn.execute("""
-        CREATE TABLE fields (field_uuid VARCHAR, geometry GEOMETRY)
+        CREATE TABLE fields (field_uuid VARCHAR, area_ha DOUBLE, geometry GEOMETRY)
     """)
     conn.execute(
         """
         INSERT INTO fields VALUES
-            ('A', ST_MakeEnvelope(?, ?, ?, ?)),
-            ('B', ST_MakeEnvelope(?, ?, ?, ?)),
-            ('C', ST_MakeEnvelope(?, ?, ?, ?))
+            ('A', 1.0, ST_MakeEnvelope(?, ?, ?, ?)),
+            ('B', 1.0, ST_MakeEnvelope(?, ?, ?, ?)),
+            ('C', 1.0, ST_MakeEnvelope(?, ?, ?, ?))
     """,
         (
             base_easting + 40,
@@ -207,10 +207,10 @@ def test_site_selection_metrics_and_summary(spatial_connection):
                    sprayed_fields_within_30m, sprayed_fields_within_50m,
                    sprayed_fields_within_250m, sprayed_fields_within_500m,
                    sprayed_area_ha_within_250m, sprayed_area_ha_within_500m,
-                   applied_kg_on_fields_within_500m,
-                   unique_pesticides_within_500m, drift_dose_kg,
+                   applied_product_on_fields_within_500m,
+                   unique_pesticides_within_500m, drift_deposit_per_ha,
                    max_single_drift_pct, wind_weighted, top_pesticides,
-                   drift_dose_percentile, pesticide_year, field_year
+                   drift_deposit_percentile, pesticide_year, field_year
             FROM child_receptor_exposure_final
         """).fetchall()
     }
@@ -221,11 +221,9 @@ def test_site_selection_metrics_and_summary(spatial_connection):
     assert daycare[5:10] == (0, 1, 1, 1, 2)
     assert daycare[10] == pytest.approx(1.0)
     assert daycare[11] == pytest.approx(2.0)
-    assert daycare[12] == pytest.approx(35.0)
+    assert daycare[12] == pytest.approx(5.0)
     assert daycare[13] == 2
-    expected_dose = (
-        15.0 * rautmann_drift_pct(20.0) / 100.0 + 20.0 * rautmann_drift_pct(300.0) / 100.0
-    )
+    expected_dose = 3.0 * rautmann_drift_pct(20.0) / 100.0 + 2.0 * rautmann_drift_pct(300.0) / 100.0
     assert daycare[14] == pytest.approx(expected_dose)
     assert daycare[15] == pytest.approx(rautmann_drift_pct(20.0))
     assert daycare[16] is False
@@ -256,6 +254,41 @@ def test_site_selection_metrics_and_summary(spatial_connection):
     }
     assert summary["by_kommune_kode"]["0101"]["daycare"]["total"] == 1
     assert summary["by_kommune_kode"]["0102"]["school"]["total"] == 1
+
+
+def test_equal_application_rates_have_equal_deposit_for_different_field_sizes(spatial_connection):
+    conn = spatial_connection
+    _create_synthetic_exposure_data(conn)
+    conn.execute("""
+        INSERT INTO fields VALUES
+            ('D', 1.0, ST_MakeEnvelope(600040.0, 6199950.0, 600140.0, 6200050.0)),
+            ('E', 2.0, ST_MakeEnvelope(600040.0, 6199950.0, 600240.0, 6200050.0))
+    """)
+    conn.execute("""
+        INSERT INTO disaggregation VALUES
+            ('D', 1.0, 1.0, 'EqualRate'),
+            ('E', 2.0, 2.0, 'EqualRate')
+    """)
+
+    compute_child_receptor_exposure(
+        conn,
+        "receptors",
+        "cadastral",
+        "disaggregation",
+        "fields",
+        pesticide_year=2020,
+        enable_wind_weighting=False,
+        batch_size=2,
+    )
+
+    top_pesticides = json.loads(
+        conn.execute(
+            "SELECT top_pesticides FROM child_receptor_exposure_final WHERE receptor_id = 'R1'"
+        ).fetchone()[0]
+    )
+    equal_rate = next(pesticide for pesticide in top_pesticides if pesticide["name"] == "EqualRate")
+    expected = 2.0 * rautmann_drift_pct(20.0) / 100.0
+    assert equal_rate["drift_deposit_per_ha"] == pytest.approx(expected)
 
 
 def test_cadastral_wgs84_is_transformed_to_processing_crs(spatial_connection):
