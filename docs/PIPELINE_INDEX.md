@@ -88,6 +88,11 @@ Maps PFAS "forever chemical" contamination from pesticide use across Danish agri
 
 📖 **[Excellent README](../backend/pipelines/h3_pfas_exposure_pipeline/README.md)** *(model for other pipelines)*
 
+### 👥 Population Exposure - People Near Agricultural Fields
+Estimates how many people live within cumulative distance bands of agricultural fields, nationally and by municipality, using Danmarks Statistik FOLK1A population totals allocated to BBR dwellings.
+
+The summary is published as JSON for the frontend under `pesticides/population-exposure/`.
+
 ### 🏢 BBR Buildings Pipeline - Farm Infrastructure  
 **Status**: 📝 Basic documentation, needs enhancement  
 **Priority**: 🟡 MEDIUM  

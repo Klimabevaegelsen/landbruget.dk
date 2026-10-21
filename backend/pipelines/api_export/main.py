@@ -37,6 +37,7 @@ from exporters.homepage import HomepageExporter
 from exporters.municipalities import MunicipalitiesExporter
 from exporters.pesticide_bulk_dataset import PesticideBulkDatasetExporter
 from exporters.pesticides import PesticidesExporter
+from exporters.population_exposure import PopulationExposureExporter
 from exporters.search_index import SearchIndexExporter
 
 logging.basicConfig(
@@ -49,6 +50,7 @@ EXPORTERS = {
     "search": SearchIndexExporter,
     "municipalities": MunicipalitiesExporter,
     "drift_exposure": DriftExposureExporter,
+    "population_exposure": PopulationExposureExporter,
     "pesticides": PesticidesExporter,
     "pesticide_bulk": PesticideBulkDatasetExporter,
     "companies": CompanyProfilesExporter,

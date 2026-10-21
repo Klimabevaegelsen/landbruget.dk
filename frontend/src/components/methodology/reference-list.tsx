@@ -77,7 +77,7 @@ const REFS: ReactNode[] = [
     regeringen.dk.
   </>,
   <>
-    Bresson, M. et al. (2020). &ldquo;Assessment of residential exposures to
+    Teysseire, R. et al. (2020). &ldquo;Assessment of residential exposures to
     agricultural pesticides: A scoping review.&rdquo; <em>PLOS ONE</em> 15(4),
     e0232258.
   </>,
@@ -120,6 +120,22 @@ const REFS: ReactNode[] = [
     Guignet, D. et al. (2016). &ldquo;The Property Value Impacts of Groundwater
     Contamination: Agricultural Runoff and Private Wells.&rdquo; US EPA Working
     Paper 2015-05.
+  </>,
+  <>
+    Figueiredo, D. M. et al. (2019).{' '}
+    <em>
+      Research on exposure of residents to pesticides in the Netherlands (OBO
+      flower bulbs)
+    </em>
+    . RIVM, Utrecht University &amp; Wageningen University.
+  </>,
+  <>
+    Santé publique France &amp; ANSES (2025).{' '}
+    <em>
+      PestiRiv: étude nationale d&rsquo;exposition aux pesticides des riverains
+      de zones viticoles
+    </em>
+    .
   </>,
 ];
 

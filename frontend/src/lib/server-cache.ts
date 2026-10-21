@@ -53,6 +53,49 @@ type PesticideCompanyDetailsData = {
   [k: string]: unknown;
 };
 
+export interface PopulationBand {
+  band_m: number;
+  dwellings: number;
+  persons: number;
+  share_of_population: number;
+}
+
+export type PopulationExposureDefinition =
+  | 'treated_field'
+  | 'conventional_field'
+  | 'any_field';
+
+export interface PopulationExposureSummary {
+  schema_version: number;
+  generated_at: string;
+  pesticide_year: number;
+  field_year: number;
+  max_distance_m: number;
+  bands_m: number[];
+  population_source: {
+    provider: string;
+    table: string;
+    period: string;
+    total_population: number;
+    population_unallocated: number;
+  };
+  buildings: {
+    residential_buildings: number;
+    dwellings: number;
+    buildings_without_kommune: number;
+    dwellings_without_kommune: number;
+  };
+  national: Record<PopulationExposureDefinition, PopulationBand[]>;
+  municipalities: Array<{
+    code: string;
+    name: string;
+    population: number;
+    any_field: PopulationBand[];
+    conventional_field: PopulationBand[];
+    treated_field: PopulationBand[];
+  }>;
+}
+
 async function fetchR2Json<T>(path: string): Promise<T> {
   const url = `${DATA_URL}${path}`;
   const response = await fetch(url);
@@ -289,6 +332,15 @@ export const getCachedBurdenHistogram = unstable_cache(
   }
 );
 
+export const getCachedPopulationExposureSummary = unstable_cache(
+  () =>
+    fetchR2Json<PopulationExposureSummary>(
+      '/pesticides/population-exposure/summary.json'
+    ),
+  ['population-exposure-summary'],
+  { revalidate: 604800, tags: ['population-exposure'] }
+);
+
 export interface DriftExposureIndex {
   pesticide_year: number | null;
   national_avg_drift_deposit?: number | null;
@@ -330,6 +382,7 @@ export const invalidateAllCaches = async () => {
   revalidateTag('pesticide-analysis', 'page');
   revalidateTag('pesticide-company-details', 'page');
   revalidateTag('burden-histogram', 'page');
+  revalidateTag('population-exposure', 'page');
   revalidateTag('drift-exposure', 'page');
 };
 
