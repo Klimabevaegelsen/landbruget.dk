@@ -75,8 +75,8 @@ export function useReportBuilder({
     if (driftExposure) {
       grade = driftPercentileToGrade(
         driftExposure.exposure_percentile,
-        driftExposure.drift_dose_kg,
-        driftExposure.national_avg_drift_dose_kg
+        driftExposure.drift_deposit,
+        driftExposure.national_avg_drift_deposit
       );
       gradeStatus = 'ready';
     } else if (driftStatus === 'no_match') {

@@ -17,6 +17,21 @@ test.describe('Pesticidkort', () => {
   }) => {
     await page.goto('/pesticidkort');
 
+    const landingParagraph = page
+      .locator('main p')
+      .filter({ hasText: 'Se et estimat' });
+    await expect(landingParagraph).not.toContainText('4 millioner');
+
+    const populationHeadline = page.getByTestId('landing-population-headline');
+    if (await populationHeadline.count()) {
+      await expect(populationHeadline).toHaveText(
+        /Ca\. [\d.]+ danskere bor inden for \d+ meter/
+      );
+      await expect(
+        page.getByTestId('landing-population-method-link')
+      ).toHaveAttribute('href', '/pesticidanalyse/metode#befolkning');
+    }
+
     await expect(page.locator('h1')).toBeVisible();
 
     await expect(

@@ -13,7 +13,7 @@ supported-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-03T16:05:11.542425Z"
+exclude-newer = "2026-10-13T21:15:05.202338Z"
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
@@ -304,6 +304,7 @@ dependencies = [
     { name = "duckdb", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "landbruget-common", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "lxml", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pandas", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pyarrow", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pyogrio", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -330,6 +331,7 @@ requires-dist = [
     { name = "duckdb" },
     { name = "landbruget-common", editable = "backend/common" },
     { name = "lxml", specifier = ">=6.1.1,<6.2" },
+    { name = "pandas", specifier = ">=3.0.5" },
     { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "pydantic" },
     { name = "pyogrio", specifier = ">=0.13.0" },
@@ -2769,7 +2771,7 @@ requires-dist = [
     { name = "certifi", specifier = "~=2026.7.22" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "duckdb" },
-    { name = "ijson", specifier = "~=3.5.1" },
+    { name = "ijson", specifier = ">=3.5.1,<3.7.0" },
     { name = "landbruget-common", editable = "backend/common" },
     { name = "lxml", specifier = "~=6.1.1" },
     { name = "python-dotenv", specifier = ">=1.1.1,<1.3.0" },
@@ -2974,6 +2976,7 @@ dependencies = [
     { name = "pyarrow", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pydantic-settings", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+    { name = "pyproj", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pyreadr", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "python-dotenv", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "pytz", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -3015,6 +3018,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "pydantic" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "pyproj", specifier = ">=3.7.2" },
     { name = "pyreadr", specifier = ">=0.5.6" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "pytz", specifier = ">=2026.3.post1" },

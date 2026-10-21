@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { AddressAutocomplete } from '@/components/pesticidkort/AddressAutocomplete';
+import { formatApproxPersons } from '@/lib/population-exposure';
+import type { PopulationHeadline } from '@/lib/population-exposure';
 import {
   fadeSlideUp,
   staggerContainer,
@@ -14,11 +16,13 @@ import type { AddressResult } from '@/components/pesticidkort/types';
 interface LandingHeroProps {
   onAddressSelect: (result: AddressResult) => void;
   onExploreMap: () => void;
+  populationHeadline?: PopulationHeadline | null;
 }
 
 export function LandingHero({
   onAddressSelect,
   onExploreMap,
+  populationHeadline,
 }: LandingHeroProps) {
   const router = useRouter();
   const reducedMotion = useReducedMotion();
@@ -64,9 +68,33 @@ export function LandingHero({
           variants={fadeSlideUp}
           className="text-muted-foreground mt-3 max-w-md text-lg leading-relaxed"
         >
-          Over 4 millioner danskere bor inden for 1 km af en landbrugsmark. Se
-          et estimat af, hvilke pesticider der er rapporteret brugt nær din
+          {populationHeadline && (
+            <>
+              <span
+                data-testid="landing-population-headline"
+                className="tabular-nums"
+              >
+                Ca. {formatApproxPersons(populationHeadline.persons)} danskere
+                bor inden for {populationHeadline.bandM} meter af en mark med
+                rapporteret pesticidforbrug ({populationHeadline.pesticideYear}
+                ).
+              </span>{' '}
+            </>
+          )}
+          Se et estimat af, hvilke pesticider der er rapporteret brugt nær din
           adresse. Tallene er modellerede og kan afvige fra faktisk sprøjtning.
+          {populationHeadline && (
+            <>
+              {' '}
+              <Link
+                href="/pesticidanalyse/metode#befolkning"
+                data-testid="landing-population-method-link"
+                className="text-primary hover:text-foreground underline-offset-4 hover:underline"
+              >
+                Sådan har vi regnet
+              </Link>
+            </>
+          )}
         </motion.p>
 
         <motion.div variants={fadeSlideUp} className="mt-8 max-w-lg">
