@@ -15,7 +15,7 @@ const CACHE_HEADERS = {
 
 const EMPTY_DRIFT_EXPOSURE_INDEX = {
   pesticide_year: null,
-  national_avg_drift_dose_kg: null,
+  national_avg_drift_deposit: null,
   building_count: 0,
   tile_zoom: 12,
   tile_count: 0,

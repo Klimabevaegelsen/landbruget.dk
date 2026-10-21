@@ -1,5 +1,6 @@
 'use client';
 
+import '@/lib/maplibre-worker';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Map, { NavigationControl, MapRef } from '@vis.gl/react-maplibre';
 import { useMapTheme } from '@/hooks/useMapTheme';

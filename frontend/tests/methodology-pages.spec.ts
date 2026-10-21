@@ -79,6 +79,14 @@ for (const { path: pagePath, testId, heading } of METHODOLOGY_PAGES) {
 }
 
 test.describe('Methodology scrolly section', () => {
+  test('should include the population exposure methodology anchor', async ({
+    page,
+  }) => {
+    await page.goto('/pesticidanalyse/metode');
+
+    await expect(page.locator('#befolkning')).toBeAttached();
+  });
+
   test('should render scrolly steps on metode page', async ({ page }) => {
     await page.goto('/pesticidanalyse/metode');
 

@@ -12,7 +12,7 @@ Pipeline Steps:
 4. Data Consolidation - Consolidate Silver data into Gold format
 5. P-Number Fetching - Fetch P-number (production unit) data for additional addresses
 6. Financial Documents - Fetch and parse financial documents and XML data
-7. Address Geocoding - Enrich all addresses with geometry via DAWA API and apply primary address
+7. Address Geocoding - Enrich all addresses with geometry via Adressevælger and apply primary address
    selection
 
 Each step can be run independently and supports batch processing for

@@ -7,6 +7,11 @@ in Denmark based on:
   - Tier 2: Wind-direction weighting using 10-year WRF wind roses (10 Danish regions)
   - Monthly spray calendar for temporal alignment of drift with wind patterns
 
+For each disaggregated record, the receptor deposit is
+``DosageQuantity / field area_ha × drift_pct / 100``. The result is formulated
+product per hectare (kg or L product/ha); products mix kg and L, so this is a
+relative index rather than a toxicological dose.
+
 The Rautmann power-law for arable crops:
     drift_pct(d) = A × d^B
     A = 2.7593, B = -0.9778  (90th percentile, single application)
@@ -74,6 +79,18 @@ def rautmann_drift_pct(distance_m: float) -> float:
     """
     d = max(distance_m, MIN_DISTANCE_M)
     return RAUTMANN_A * (d**RAUTMANN_B)
+
+
+def drift_deposit_per_ha(dosage_quantity: float, field_area_ha: float, distance_m: float) -> float:
+    """Seasonal formulated-product deposit per ha at a receptor (kg or L product / ha).
+
+    Return 0.0 when the field area is not positive or any input is None.
+    """
+    if dosage_quantity is None or field_area_ha is None or distance_m is None:
+        return 0.0
+    if field_area_ha <= 0:
+        return 0.0
+    return dosage_quantity / field_area_ha * rautmann_drift_pct(distance_m) / 100.0
 
 
 def nearest_region_id(utm_e: float, utm_n: float) -> int:
@@ -148,6 +165,24 @@ def wind_direction_weight(
         bins_to_sum.add((idx_hi + offset) % 36)
 
     return sum(region_freq[b] for b in bins_to_sum)
+
+
+def wind_weight_for_location(
+    bearing_deg: float,
+    utm_e: float,
+    utm_n: float,
+    freq_table: dict[int, list[float]],
+) -> float:
+    """Return the wind-direction weight for a location and bearing.
+
+    The drift job uses this core to register its existing SQL UDF. Receptor
+    exposure also applies the same weight at the field-pair level.
+    """
+    region_id = nearest_region_id(utm_e, utm_n)
+    region_freq = freq_table.get(region_id)
+    if not region_freq:
+        return 1.0
+    return wind_direction_weight(bearing_deg, region_freq)
 
 
 class PesticideDriftExposureGoldConfig(BaseJobConfig):
@@ -365,11 +400,13 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                 cd.DosageQuantity,
                 cd.AllocatedArea,
                 cd.PesticideName,
+                f.area_ha AS field_area_ha,
                 {field_geom_expr} AS field_geom_utm,
                 ST_Centroid({field_geom_expr}) AS field_centroid_utm
             FROM current_disaggregation cd
             JOIN {field_table} f ON cd.field_uuid = f.field_uuid
             WHERE f.geometry IS NOT NULL
+              AND f.area_ha > 0
               AND cd.DosageQuantity IS NOT NULL
               AND cd.AllocatedArea > 0
         """)
@@ -408,7 +445,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                 address VARCHAR,
                 category_group VARCHAR,
                 pesticide_year INTEGER,
-                total_drift_dose_kg DOUBLE,
+                total_drift_deposit_per_ha DOUBLE,
                 contributing_fields INTEGER,
                 unique_pesticides INTEGER,
                 nearest_field_distance_m DOUBLE,
@@ -451,6 +488,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                     f.field_uuid,
                     f.DosageQuantity,
                     f.AllocatedArea,
+                    f.field_area_ha,
                     f.PesticideName,
                     ST_Distance(b.building_geom_utm, f.field_geom_utm) AS distance_m,
                     -- Bearing from building to field centroid (radians → degrees)
@@ -462,11 +500,11 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                     rautmann_drift_pct(
                         GREATEST(ST_Distance(b.building_geom_utm, f.field_geom_utm), {MIN_DISTANCE_M})
                     ) AS drift_pct,
-                    -- Drift-weighted dose (kg)
-                    f.DosageQuantity * f.AllocatedArea
+                    -- Seasonal formulated-product deposit per hectare at the receptor
+                    f.DosageQuantity / f.field_area_ha
                         * rautmann_drift_pct(
                             GREATEST(ST_Distance(b.building_geom_utm, f.field_geom_utm), {MIN_DISTANCE_M})
-                          ) / 100.0 AS drift_dose_kg
+                          ) / 100.0 AS drift_deposit_per_ha
                 FROM current_bldg_batch b
                 JOIN drift_fields f ON ST_DWithin(
                     b.building_geom_utm, f.field_geom_utm, {radius}
@@ -481,7 +519,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                     address,
                     category_group,
                     {year} AS pesticide_year,
-                    SUM(drift_dose_kg) AS total_drift_dose_kg,
+                    SUM(drift_deposit_per_ha) AS total_drift_deposit_per_ha,
                     COUNT(DISTINCT field_uuid) AS contributing_fields,
                     COUNT(DISTINCT PesticideName) AS unique_pesticides,
                     MIN(distance_m) AS nearest_field_distance_m,
@@ -513,7 +551,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                 CREATE OR REPLACE TABLE drift_exposure_final AS
                 SELECT
                     *,
-                    PERCENT_RANK() OVER (ORDER BY total_drift_dose_kg) * 100.0
+                    PERCENT_RANK() OVER (ORDER BY total_drift_deposit_per_ha) * 100.0
                         AS exposure_percentile
                 FROM drift_exposure
             """)
@@ -530,16 +568,16 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         if result_count > 0:
             stats = self.conn.execute("""
                 SELECT
-                    ROUND(AVG(total_drift_dose_kg), 6) AS avg_dose,
-                    ROUND(MEDIAN(total_drift_dose_kg), 6) AS median_dose,
-                    ROUND(MAX(total_drift_dose_kg), 4) AS max_dose,
+                    ROUND(AVG(total_drift_deposit_per_ha), 6) AS avg_deposit,
+                    ROUND(MEDIAN(total_drift_deposit_per_ha), 6) AS median_deposit,
+                    ROUND(MAX(total_drift_deposit_per_ha), 4) AS max_deposit,
                     ROUND(AVG(contributing_fields), 1) AS avg_fields,
                     ROUND(AVG(nearest_field_distance_m), 1) AS avg_nearest_m,
                     SUM(CASE WHEN wind_weighted THEN 1 ELSE 0 END) AS wind_weighted_count
                 FROM drift_exposure_final
             """).fetchone()
             self.log.info(
-                f"Drift stats: avg_dose={stats[0]}, median={stats[1]}, max={stats[2]}, "
+                f"Drift deposit per ha stats: avg={stats[0]}, median={stats[1]}, max={stats[2]}, "
                 f"avg_fields={stats[3]}, avg_nearest={stats[4]}m, "
                 f"wind_weighted={stats[5]:,}/{result_count:,}"
             )
@@ -559,11 +597,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
         freq_table = self.wind_freq_table
 
         def wind_weight_udf(bearing_deg: float, utm_e: float, utm_n: float) -> float:
-            rid = nearest_region_id(utm_e, utm_n)
-            freq = freq_table.get(rid)
-            if not freq:
-                return 1.0  # No data → neutral weight
-            return wind_direction_weight(bearing_deg, freq)
+            return wind_weight_for_location(bearing_deg, utm_e, utm_n, freq_table)
 
         self.conn.create_function("wind_weight", wind_weight_udf, [float, float, float], float)
 
@@ -600,7 +634,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                 address,
                 category_group,
                 pesticide_year,
-                total_drift_dose_kg,
+                total_drift_deposit_per_ha,
                 contributing_fields,
                 unique_pesticides,
                 nearest_field_distance_m,
@@ -621,7 +655,7 @@ class PesticideDriftExposureGold(BaseSource[PesticideDriftExposureGoldConfig], G
                 "address: VARCHAR (building address)",
                 "category_group: VARCHAR (residential/publicServices)",
                 "pesticide_year: INTEGER",
-                "total_drift_dose_kg: DOUBLE (sum of drift-weighted doses)",
+                "total_drift_deposit_per_ha: DOUBLE (seasonal formulated-product deposit per ha; mixed kg/L, relative index)",
                 "contributing_fields: INTEGER",
                 "unique_pesticides: INTEGER",
                 "nearest_field_distance_m: DOUBLE",

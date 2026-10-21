@@ -38,12 +38,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  let nationalAvgDriftDoseKg: number | null = null;
+  let nationalAvgDriftDeposit: number | null = null;
   let tileZoom = DEFAULT_DRIFT_TILE_ZOOM;
 
   try {
     const index = await getCachedDriftExposureIndex();
-    nationalAvgDriftDoseKg = index.national_avg_drift_dose_kg;
+    nationalAvgDriftDeposit =
+      index.national_avg_drift_deposit ??
+      index.national_avg_drift_dose_kg ??
+      null;
     tileZoom = index.tile_zoom ?? DEFAULT_DRIFT_TILE_ZOOM;
   } catch {}
 
@@ -88,8 +91,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     {
       exposure_percentile: nearest.pct,
-      drift_dose_kg: nearest.dose,
-      national_avg_drift_dose_kg: nationalAvgDriftDoseKg,
+      drift_deposit: nearest.dose,
+      national_avg_drift_deposit: nationalAvgDriftDeposit,
       building_distance_m: Math.round(nearestDist),
     },
     { headers: CACHE_HEADERS }

@@ -1,0 +1,143 @@
+{
+ "type": "FeatureCollection",
+ "crs": {
+  "type": "name",
+  "properties": {
+   "name": "urn:ogc:def:crs:EPSG::25832"
+  }
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "objekt_id": "7993bb56-e866-11ef-85f5-b3a8e5a00bbf",
+    "kommunekode": 185,
+    "statuskode": 3,
+    "status": "Gældende / Vedtaget",
+    "off_kode": 1,
+    "facil_ty_k": 1041,
+    "facil_ty": "Naturlegeplads",
+    "navn": "Kulturzonens Naturlegeplads"
+   },
+   "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [
+     [
+      725846.4224814365,
+      6166499.948562623
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "objekt_id": "79fb80d4-3460-11ef-8497-95e460fedeed",
+    "kommunekode": 376,
+    "statuskode": 3,
+    "status": "Gældende / Vedtaget",
+    "off_kode": 1,
+    "facil_ty_k": 1031,
+    "facil_ty": "Legeplads",
+    "navn": "Nysted Skole"
+   },
+   "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [
+     [
+      676768.7415842299,
+      6060523.442566986
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "objekt_id": "79fd2b9b-6800-461d-aa57-9bb60ea2b580",
+    "kommunekode": 999,
+    "statuskode": 3,
+    "status": "Gældende / Vedtaget",
+    "off_kode": 1,
+    "facil_ty_k": 1041,
+    "facil_ty": "Naturlegeplads",
+    "navn": "Søgård Skov"
+   },
+   "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [
+     [
+      527067.6287762835,
+      6087504.688171505
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "objekt_id": "7a6f5d45-0b44-4742-bf59-b9057497d78a",
+    "kommunekode": 999,
+    "statuskode": 3,
+    "status": "Gældende / Vedtaget",
+    "off_kode": 1,
+    "facil_ty_k": 1041,
+    "facil_ty": "Naturlegeplads",
+    "navn": "Femhøjsande Plantage                              "
+   },
+   "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [
+     [
+      456522.0,
+      6216220.0
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "objekt_id": "80a43d8a-f6ca-4872-a887-963fad14261b",
+    "kommunekode": 480,
+    "statuskode": 3,
+    "status": "Gældende / Vedtaget",
+    "off_kode": 1,
+    "facil_ty_k": 1031,
+    "facil_ty": "Legeplads",
+    "navn": "NatureMoves"
+   },
+   "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [
+     [
+      569033.0781430426,
+      6156830.659410389
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "objekt_id": "798af901-c6aa-40da-b9f4-9d247528ee6a",
+    "kommunekode": 710,
+    "statuskode": 3,
+    "status": "Gældende / Vedtaget",
+    "off_kode": 1,
+    "facil_ty_k": 1291,
+    "facil_ty": "Holdeplads",
+    "navn": "Handicap P-plads til Trækstien"
+   },
+   "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [
+     [
+      548751.8040888188,
+      6250146.329749251
+     ]
+    ]
+   }
+  }
+ ]
+}

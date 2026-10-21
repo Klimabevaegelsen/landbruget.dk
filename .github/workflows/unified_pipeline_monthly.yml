@@ -99,6 +99,7 @@ jobs:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      DATAFORDELER_API_KEY: ${{ secrets.DATAFORDELER_GRAPHQL_API_KEY }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -141,7 +142,7 @@ jobs:
           echo "✅ Sufficient disk space: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"
@@ -385,7 +386,7 @@ jobs:
           echo "✅ Sufficient disk space: ${AVAILABLE_GB}GB"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: "pip"

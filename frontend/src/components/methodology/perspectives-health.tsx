@@ -12,10 +12,10 @@ export function PerspectivesHealth() {
         title="Sundhed og afstandsanalyser"
       />
       <p>
-        Epidemiologiske studier viser konsekvent en sammenhæng mellem nærhed til
+        Flere epidemiologiske studier har fundet sammenhænge mellem nærhed til
         sprøjtede marker og sygdomme som Parkinsons og børnekræft
         <Sidenote number={18}>
-          Bresson et al. (2020), scoping review af 151 studier
+          Teysseire et al. (2020), scoping review af 151 studier
         </Sidenote>
         <Sidenote number={19}>Brouwer et al. (2022)</Sidenote>
         <Sidenote number={20}>Baldi et al. (2021)</Sidenote>. Ved at kombinere

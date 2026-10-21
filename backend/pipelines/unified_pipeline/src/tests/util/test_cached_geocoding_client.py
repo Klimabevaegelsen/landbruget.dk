@@ -1,7 +1,7 @@
 """
-Tests for Cached DAWA API Client.
+Tests for Cached Adressevaelger Client.
 
-Tests for: unified_pipeline/util/cached_dawa_api_client.py
+Tests for: unified_pipeline/util/cached_geocoding_client.py
 
 Covers:
 - Cache hits and misses
@@ -14,28 +14,28 @@ Covers:
 
 from unittest.mock import Mock, patch
 
-from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
+from unified_pipeline.util.cached_geocoding_client import CachedGeocodingClient
 
 
-class TestCachedDAWAAPIClient:
-    """Tests for cached DAWA API client initialization."""
+class TestCachedGeocodingClient:
+    """Tests for cached Adressevaelger client initialization."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_client_initialization(self, mock_cache, mock_dawa):
         """Test cached client initialization."""
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
 
-        assert client.dawa_client is not None
+        assert client.client is not None
         assert client.cache is not None
         assert client.stats["dawa_id_lookups"] == 0
         assert client.stats["dawa_id_cache_hits"] == 0
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_client_initialization_with_cache_version(self, mock_cache, mock_dawa):
         """Test client initialization with custom cache version."""
-        CachedDAWAAPIClient(cache_version=2)
+        CachedGeocodingClient(cache_version=2)
 
         # Verify cache version is passed
         mock_cache.assert_called_once_with(cache_version=2)
@@ -44,20 +44,20 @@ class TestCachedDAWAAPIClient:
 class TestCacheHitsAndMisses:
     """Tests for cache hit and miss scenarios."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_cache_hit_dawa_id(self, mock_cache_class, mock_dawa):
-        """Test cache hit for DAWA ID lookup."""
+        """Test cache hit for Adresse ID lookup."""
         # Mock cache to return cached result
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = {
+        mock_cache.lookup_by_address_id.return_value = {
             "latitude": 55.6761,
             "longitude": 12.5683,
             "cached": True,
         }
         mock_cache_class.return_value = mock_cache
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         result = client.geocode_address_by_id("test-id")
 
         # Should return cached result
@@ -70,19 +70,19 @@ class TestCacheHitsAndMisses:
         assert client.stats["dawa_id_cache_hits"] == 1
         assert client.stats["dawa_id_api_calls"] == 0
 
-        # DAWA API should not be called
+        # Adressevaelger should not be called
         mock_dawa.return_value.geocode_address_by_id.assert_not_called()
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_cache_miss_dawa_id(self, mock_cache_class, mock_dawa_class):
-        """Test cache miss for DAWA ID lookup."""
+        """Test cache miss for Adresse ID lookup."""
         # Mock cache to return None (cache miss)
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = None
+        mock_cache.lookup_by_address_id.return_value = None
         mock_cache_class.return_value = mock_cache
 
-        # Mock DAWA API to return result
+        # Mock Adressevaelger to return result
         mock_dawa = Mock()
         mock_dawa.geocode_address_by_id.return_value = {
             "latitude": 55.6761,
@@ -91,7 +91,7 @@ class TestCacheHitsAndMisses:
         }
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         result = client.geocode_address_by_id("test-id")
 
         # Should return API result
@@ -104,10 +104,10 @@ class TestCacheHitsAndMisses:
         assert client.stats["dawa_id_api_calls"] == 1
 
         # Result should be stored in cache
-        mock_cache.store_dawa_result.assert_called_once()
+        mock_cache.store_address_id_result.assert_called_once()
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_cache_hit_address_text(self, mock_cache_class, mock_dawa):
         """Test cache hit for address text lookup."""
         # Mock cache to return cached result
@@ -119,8 +119,8 @@ class TestCacheHitsAndMisses:
         }
         mock_cache_class.return_value = mock_cache
 
-        client = CachedDAWAAPIClient()
-        result = client.geocode_with_datavask("Rødkildevej 46, 2400 København NV")
+        client = CachedGeocodingClient()
+        result = client.geocode_free_text("Rødkildevej 46, 2400 København NV")
 
         # Should return cached result
         assert result is not None
@@ -131,8 +131,8 @@ class TestCacheHitsAndMisses:
         assert client.stats["address_text_cache_hits"] == 1
         assert client.stats["address_text_api_calls"] == 0
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_cache_miss_address_text(self, mock_cache_class, mock_dawa_class):
         """Test cache miss for address text lookup."""
         # Mock cache to return None (cache miss)
@@ -140,16 +140,16 @@ class TestCacheHitsAndMisses:
         mock_cache.lookup_by_address_text.return_value = None
         mock_cache_class.return_value = mock_cache
 
-        # Mock DAWA API to return result
+        # Mock Adressevaelger to return result
         mock_dawa = Mock()
-        mock_dawa.geocode_with_datavask.return_value = {
+        mock_dawa.geocode_free_text.return_value = {
             "latitude": 55.6761,
             "longitude": 12.5683,
         }
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
-        result = client.geocode_with_datavask("Rødkildevej 46")
+        client = CachedGeocodingClient()
+        result = client.geocode_free_text("Rødkildevej 46")
 
         # Should return API result
         assert result is not None
@@ -162,15 +162,35 @@ class TestCacheHitsAndMisses:
         # Result should be stored in cache
         mock_cache.store_address_text_result.assert_called_once()
 
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
+    def test_free_text_uses_full_address_as_cache_key(self, mock_cache_class, mock_client_class):
+        mock_cache = Mock()
+        mock_cache.lookup_by_address_text.return_value = None
+        mock_cache_class.return_value = mock_cache
+        mock_client = Mock()
+        mock_client.geocode_free_text.return_value = {"latitude": 55.6, "longitude": 12.5}
+        mock_client_class.return_value = mock_client
+
+        client = CachedGeocodingClient()
+        client.geocode_free_text("Rødkildevej 46", "2400", "København NV")
+
+        mock_cache.lookup_by_address_text.assert_called_once_with(
+            "Rødkildevej 46, 2400 København NV"
+        )
+        mock_client.geocode_free_text.assert_called_once_with(
+            "Rødkildevej 46", "2400", "København NV"
+        )
+
 
 class TestEmptyInputHandling:
     """Tests for handling empty/None inputs."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_geocode_empty_dawa_id(self, mock_cache_class, mock_dawa):
-        """Test geocoding with empty DAWA ID."""
-        client = CachedDAWAAPIClient()
+        """Test geocoding with empty Adresse ID."""
+        client = CachedGeocodingClient()
 
         result = client.geocode_address_by_id("")
         assert result is None
@@ -181,16 +201,16 @@ class TestEmptyInputHandling:
         # No cache lookups should happen
         assert client.stats["dawa_id_lookups"] == 0
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_geocode_empty_address_text(self, mock_cache_class, mock_dawa):
         """Test geocoding with empty address text."""
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
 
-        result = client.geocode_with_datavask("")
+        result = client.geocode_free_text("")
         assert result is None
 
-        result = client.geocode_with_datavask(None)
+        result = client.geocode_free_text(None)
         assert result is None
 
         # No cache lookups should happen
@@ -200,12 +220,12 @@ class TestEmptyInputHandling:
 class TestPerformanceStatistics:
     """Tests for performance statistics tracking."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_get_performance_stats(self, mock_cache_class, mock_dawa):
         """Test performance statistics calculation."""
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = {"latitude": 55.6, "longitude": 12.5}
+        mock_cache.lookup_by_address_id.return_value = {"latitude": 55.6, "longitude": 12.5}
         mock_cache.get_cache_stats.return_value = {
             "dawa_id_cache_entries": 100,
             "address_text_cache_entries": 50,
@@ -213,7 +233,7 @@ class TestPerformanceStatistics:
         }
         mock_cache_class.return_value = mock_cache
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
 
         # Simulate some lookups
         client.geocode_address_by_id("id1")  # Hit
@@ -226,13 +246,13 @@ class TestPerformanceStatistics:
         assert stats["dawa_id_cache_hit_rate"] == 100.0
         assert stats["total_cache_entries"] == 150
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_cache_hit_rate_calculation(self, mock_cache_class, mock_dawa_class):
         """Test cache hit rate calculation."""
         # Mix of hits and misses
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.side_effect = [
+        mock_cache.lookup_by_address_id.side_effect = [
             {"latitude": 55.6, "longitude": 12.5},  # Hit
             None,  # Miss
             {"latitude": 55.7, "longitude": 12.6},  # Hit
@@ -249,7 +269,7 @@ class TestPerformanceStatistics:
         mock_dawa.geocode_address_by_id.return_value = {"latitude": 55.8, "longitude": 12.7}
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
 
         # 4 lookups: 2 hits, 2 misses
         client.geocode_address_by_id("id1")
@@ -263,12 +283,12 @@ class TestPerformanceStatistics:
         assert stats["dawa_id_cache_hits"] == 2
         assert stats["dawa_id_cache_hit_rate"] == 50.0
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_log_performance_summary(self, mock_cache_class, mock_dawa):
         """Test performance summary logging."""
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = {"latitude": 55.6, "longitude": 12.5}
+        mock_cache.lookup_by_address_id.return_value = {"latitude": 55.6, "longitude": 12.5}
         mock_cache.get_cache_stats.return_value = {
             "dawa_id_cache_entries": 100,
             "address_text_cache_entries": 50,
@@ -276,7 +296,7 @@ class TestPerformanceStatistics:
         }
         mock_cache_class.return_value = mock_cache
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         client.geocode_address_by_id("id1")
 
         # Should not raise exception
@@ -286,22 +306,22 @@ class TestPerformanceStatistics:
 class TestGeometryHelpers:
     """Tests for geometry helper functions (delegated to DAWA client)."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_create_geometry_wkt(self, mock_cache_class, mock_dawa_class):
         """Test WKT geometry creation."""
         mock_dawa = Mock()
         mock_dawa.create_geometry_wkt.return_value = "POINT(12.5683 55.6761)"
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         wkt = client.create_geometry_wkt(55.6761, 12.5683)
 
         assert wkt == "POINT(12.5683 55.6761)"
         mock_dawa.create_geometry_wkt.assert_called_once_with(55.6761, 12.5683)
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_create_geometry_geojson(self, mock_cache_class, mock_dawa_class):
         """Test GeoJSON geometry creation."""
         mock_dawa = Mock()
@@ -311,7 +331,7 @@ class TestGeometryHelpers:
         }
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         geojson = client.create_geometry_geojson(55.6761, 12.5683)
 
         assert geojson["type"] == "Point"
@@ -321,8 +341,8 @@ class TestGeometryHelpers:
 class TestContextManager:
     """Tests for context manager functionality."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_context_manager_enter_exit(self, mock_cache_class, mock_dawa):
         """Test context manager protocol."""
         mock_cache = Mock()
@@ -333,7 +353,7 @@ class TestContextManager:
         }
         mock_cache_class.return_value = mock_cache
 
-        with CachedDAWAAPIClient() as client:
+        with CachedGeocodingClient() as client:
             assert client is not None
             # Use the client
             client.geocode_address_by_id("test-id")
@@ -341,8 +361,8 @@ class TestContextManager:
         # Cleanup should be called on exit
         mock_cache.cleanup.assert_called_once()
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_context_manager_with_exception(self, mock_cache_class, mock_dawa):
         """Test context manager cleanup happens even with exception."""
         mock_cache = Mock()
@@ -354,7 +374,7 @@ class TestContextManager:
         mock_cache_class.return_value = mock_cache
 
         try:
-            with CachedDAWAAPIClient():
+            with CachedGeocodingClient():
                 raise ValueError("Test exception")
         except ValueError:
             pass
@@ -366,8 +386,8 @@ class TestContextManager:
 class TestCleanup:
     """Tests for cleanup and resource management."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_cleanup_logs_performance(self, mock_cache_class, mock_dawa):
         """Test cleanup logs performance summary."""
         mock_cache = Mock()
@@ -378,14 +398,14 @@ class TestCleanup:
         }
         mock_cache_class.return_value = mock_cache
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         client.cleanup()
 
         # Should call cache cleanup
         mock_cache.cleanup.assert_called_once()
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_cleanup_saves_cache(self, mock_cache_class, mock_dawa):
         """Test cleanup saves cache to cloud storage."""
         mock_cache = Mock()
@@ -396,7 +416,7 @@ class TestCleanup:
         }
         mock_cache_class.return_value = mock_cache
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         client.cleanup()
 
         # Cache cleanup should be called (which saves to cloud storage)
@@ -406,12 +426,12 @@ class TestCleanup:
 class TestCacheStorage:
     """Tests for cache storage behavior."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_successful_result_stored_in_cache(self, mock_cache_class, mock_dawa_class):
         """Test that successful API results are stored in cache."""
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = None  # Cache miss
+        mock_cache.lookup_by_address_id.return_value = None  # Cache miss
         mock_cache_class.return_value = mock_cache
 
         mock_dawa = Mock()
@@ -421,88 +441,88 @@ class TestCacheStorage:
         }
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         result = client.geocode_address_by_id("test-id")
 
         # Result should be stored
-        mock_cache.store_dawa_result.assert_called_once_with("test-id", result)
+        mock_cache.store_address_id_result.assert_called_once_with("test-id", result)
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_null_result_not_stored_in_cache(self, mock_cache_class, mock_dawa_class):
         """Test that null API results are not stored in cache."""
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = None  # Cache miss
+        mock_cache.lookup_by_address_id.return_value = None  # Cache miss
         mock_cache_class.return_value = mock_cache
 
         mock_dawa = Mock()
         mock_dawa.geocode_address_by_id.return_value = None  # API returns None
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         client.geocode_address_by_id("test-id")
 
         # Null result should not be stored
-        mock_cache.store_dawa_result.assert_not_called()
+        mock_cache.store_address_id_result.assert_not_called()
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
-    def test_datavask_result_stored_with_source(self, mock_cache_class, mock_dawa_class):
-        """Test that Datavask results are stored with correct source."""
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
+    def test_free_text_result_stored_with_source(self, mock_cache_class, mock_dawa_class):
+        """Test that text geocoding results are stored with the correct source."""
         mock_cache = Mock()
         mock_cache.lookup_by_address_text.return_value = None  # Cache miss
         mock_cache_class.return_value = mock_cache
 
         mock_dawa = Mock()
-        mock_dawa.geocode_with_datavask.return_value = {
+        mock_dawa.geocode_free_text.return_value = {
             "latitude": 55.6761,
             "longitude": 12.5683,
         }
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
-        client.geocode_with_datavask("Rødkildevej 46")
+        client = CachedGeocodingClient()
+        client.geocode_free_text("Rødkildevej 46")
 
-        # Result should be stored with 'datavask' source
+        # Result should be stored with 'adressevaelger' source
         call_args = mock_cache.store_address_text_result.call_args
-        assert call_args[0][2] == "datavask"
+        assert call_args[0][2] == "adressevaelger"
 
 
 class TestAPIFailureHandling:
     """Tests for handling API failures."""
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_api_exception_returns_none(self, mock_cache_class, mock_dawa_class):
         """Test that API exceptions return None gracefully."""
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = None  # Cache miss
+        mock_cache.lookup_by_address_id.return_value = None  # Cache miss
         mock_cache_class.return_value = mock_cache
 
         mock_dawa = Mock()
         mock_dawa.geocode_address_by_id.side_effect = Exception("API error")
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         result = client.geocode_address_by_id("test-id")
 
         # Should return None instead of raising exception
         assert result is None
 
-    @patch("unified_pipeline.util.cached_dawa_api_client.DAWAAPIClient")
-    @patch("unified_pipeline.util.cached_dawa_api_client.GeocodingCache")
+    @patch("unified_pipeline.util.cached_geocoding_client.AdressevaelgerClient")
+    @patch("unified_pipeline.util.cached_geocoding_client.GeocodingCache")
     def test_failed_result_not_cached(self, mock_cache_class, mock_dawa_class):
         """Test that failed API calls don't cache None results."""
         mock_cache = Mock()
-        mock_cache.lookup_by_dawa_id.return_value = None  # Cache miss
+        mock_cache.lookup_by_address_id.return_value = None  # Cache miss
         mock_cache_class.return_value = mock_cache
 
         mock_dawa = Mock()
         mock_dawa.geocode_address_by_id.side_effect = Exception("API error")
         mock_dawa_class.return_value = mock_dawa
 
-        client = CachedDAWAAPIClient()
+        client = CachedGeocodingClient()
         client.geocode_address_by_id("test-id")
 
         # Failed result should not be stored in cache
-        mock_cache.store_dawa_result.assert_not_called()
+        mock_cache.store_address_id_result.assert_not_called()

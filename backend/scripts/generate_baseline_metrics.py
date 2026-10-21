@@ -109,7 +109,7 @@ DATASET_CONFIGS = {
     "dagi_kommuner": {
         "storage_path": "silver/dagi_kommuner",
         "area_column": None,
-        "identifier_columns": ["kommunekode"],
+        "identifier_columns": ["code"],
         "geometry_column": "geometry",
     },
     # ==================== SILVER - Subsidies ====================

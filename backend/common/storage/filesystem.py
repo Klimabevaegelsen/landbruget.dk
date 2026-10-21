@@ -49,7 +49,7 @@ def get_r2_filesystem() -> s3fs.S3FileSystem:
 
 
 @lru_cache(maxsize=1)
-def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
+def _get_cached_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
     """Get DuckDB connection with R2 configured (native TYPE r2 secret)."""
     conn = duckdb.connect()
 
@@ -79,6 +79,21 @@ def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
             logger.warning(f"Failed to register s3fs with DuckDB: {e}")
 
     return conn
+
+
+def get_duckdb_with_r2() -> duckdb.DuckDBPyConnection:
+    """Return a cached R2-configured connection, recreating it if it was closed."""
+    conn = _get_cached_duckdb_with_r2()
+    try:
+        conn.execute("SELECT 1")
+    except duckdb.ConnectionException:
+        _get_cached_duckdb_with_r2.cache_clear()
+        conn = _get_cached_duckdb_with_r2()
+    return conn
+
+
+# Preserve the cache reset hook used by tests and long-lived connection owners.
+get_duckdb_with_r2.cache_clear = _get_cached_duckdb_with_r2.cache_clear  # type: ignore[attr-defined]
 
 
 def setup_duckdb_cloud_auth(conn: duckdb.DuckDBPyConnection) -> bool:

@@ -16,12 +16,14 @@ pipelines:
       - field_area_analysis
       - field_production
       - pesticide_disaggregation
+      - population_exposure
       - generate_pmtiles
     paths:
       - backend/pipelines/unified_pipeline/**
       - backend/common/**
     outputs:
       - silver/cadastral
+      - silver/dagi_kommuner
       - silver/agricultural_fields
       - silver/fvm_marker_{year}
       - silver/bnbo_status_dissolved
@@ -78,11 +80,22 @@ pipelines:
     downstream:
       - pesticide_proximity
       - pesticide_drift_exposure
+      - population_exposure
       - generate_pmtiles
     paths:
       - backend/pipelines/bbr_buildings/**
     outputs:
       - silver/bbr_buildings
+
+  child_receptors_pipeline:
+    workflow: child_receptors_pipeline.yml
+    description: "National daycare, school, and playground receptor points for pesticide exposure analysis"
+    downstream:
+      - child_receptor_exposure
+    paths:
+      - backend/pipelines/child_receptors/**
+    outputs:
+      - silver/child_receptors
 
   chr_pipeline:
     workflow: chr_pipeline.yml
@@ -160,6 +173,8 @@ pipelines:
     downstream:
       - pesticide_proximity
       - pesticide_drift_exposure
+      - child_receptor_exposure
+      - population_exposure
       - pesticide_compliance
       - h3_pfas_analysis
     outputs:
@@ -218,7 +233,33 @@ pipelines:
       - generate_pmtiles
     outputs:
       - gold/pesticide_drift_exposure_{year}_{year+1}
-    notes: "Tier 1: Rautmann power-law drift curves. Tier 2 (future): wind-direction weighting from WRF wind roses."
+    notes: "Per-record deposit: DosageQuantity / field area_ha × drift% / 100. Tier 1: Rautmann power-law drift curves. Tier 2 (future): wind-direction weighting from WRF wind roses."
+
+  child_receptor_exposure:
+    workflow: unified_pipeline.yml # runs after drift exposure in pesticide-processing matrix
+    description: "Sprayed-field proximity, area, and estimated drift dose at child receptor sites"
+    upstream:
+      - pesticide_disaggregation # gold/pesticide_disaggregation_{Y}_{Y+1}
+      - unified_pipeline # silver/fvm_marker_{year+1}, silver/cadastral
+      - child_receptors_pipeline # silver/child_receptors
+    downstream: []
+    outputs:
+      - gold/child_receptor_exposure_{year}_{year+1}
+
+  population_exposure:
+    workflow: unified_pipeline.yml
+    description: "Estimated population living near agricultural fields by distance and field definition"
+    upstream:
+      - pesticide_disaggregation # gold/pesticide_disaggregation_{Y}_{Y+1}
+      - unified_pipeline # silver/fvm_marker_{year+1}, silver/dagi_kommuner
+      - bbr_buildings_pipeline # silver/bbr_buildings
+    external_inputs:
+      - "Danmarks Statistik StatBank FOLK1A (latest quarter)"
+    downstream:
+      - api_export
+    outputs:
+      - gold/population_exposure_{year}_{year+1}/{timestamp}/population_exposure_buildings_{year}_{year+1}.parquet
+      - gold/population_exposure_{year}_{year+1}/{timestamp}/summary_{year}_{year+1}.json
 
   pesticide_compliance:
     workflow: pesticide_compliance_matrix.yml
@@ -259,6 +300,7 @@ pipelines:
       - cvr_enrichment # gold/cvr_enrichment (search index, company profiles)
       - field_production # gold/field_production (homepage rankings, municipality data)
       - pesticide_disaggregation # gold/pesticide_disaggregation (pesticide analysis)
+      - population_exposure # gold/population_exposure_{year}_{year+1}/summary_{year}_{year+1}.json
       - worker_safety # gold/worker_safety
       - work_permits # gold/work_permits
     downstream: []
@@ -266,6 +308,7 @@ pipelines:
       - backend/pipelines/api_export/**
     outputs:
       - R2 api/v1/*.json (homepage, search, companies, municipalities, pesticides)
+      - R2 pesticides/population-exposure/*.json
     notes: "Replaces Supabase edge functions. Runs after gold-layer pipelines complete."
 
   # ── TIER 3: Terminal ──

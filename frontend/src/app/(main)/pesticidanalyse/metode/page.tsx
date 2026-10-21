@@ -1,5 +1,7 @@
 import { Metadata } from 'next';
 import { MethodologyPageContent } from '@/components/methodology/methodology-page-content';
+import { getCachedPopulationExposureSummary } from '@/lib/server-cache';
+import type { PopulationExposureSummary } from '@/lib/server-cache';
 
 export const metadata: Metadata = {
   title: 'Metode: Pesticidanalyse | Landbruget.dk',
@@ -13,10 +15,20 @@ export const metadata: Metadata = {
   },
 };
 
-export default function MethodologyPage() {
+export default async function MethodologyPage() {
+  let populationExposureSummary: PopulationExposureSummary | null = null;
+
+  try {
+    populationExposureSummary = await getCachedPopulationExposureSummary();
+  } catch {
+    populationExposureSummary = null;
+  }
+
   return (
     <div className="bg-primary/[0.02] min-h-screen">
-      <MethodologyPageContent />
+      <MethodologyPageContent
+        populationExposureSummary={populationExposureSummary}
+      />
     </div>
   );
 }

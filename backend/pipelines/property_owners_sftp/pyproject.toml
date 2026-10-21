@@ -9,13 +9,13 @@ authors = [
     { name = "Landbruget.dk Team" },
 ]
 dependencies = [
-    "pyarrow>=25.0.0",
+    "pyarrow>=25.0.1",
     "pyproj>=3.7.2",
     "shapely>=2.0.0",
     "ijson>=3.5.1",
     "s3fs",
-    "google-cloud-secret-manager>=2.29.0",
-    "google-cloud-storage>=3.12.1",
+    "google-cloud-secret-manager>=2.30.0",
+    "google-cloud-storage>=3.13.1",
     "python-dotenv>=1.0.0",
     "duckdb",
     "landbruget-common",

@@ -39,6 +39,22 @@ This workflow collects data from the Danish Agricultural Agency WFS service:
 | **Grassland Subsidies** | Grassland management subsidies | 2019-2024 (6 years) | ~20K per year |
 | **Environmental Subsidies** | Environmental subsidies | 2019-2023 (5 years) | ~15K per year |
 
+### Early-year CVR provenance
+
+The public FVM WFS is the source of Marker geometries and published
+attributes. It does **not** provide a complete field-level CVR in the early
+Marker layers (before 2016). For field years 2005, 2007, and 2008--2014, the
+silver job may complete an absent or truncated CVR from a separate historical
+Fællesskema/IMK administrative extract. The source files are SAS-generated
+`MARKER_<year>.xlsx` workbooks in the
+[Fields archive](https://drive.google.com/drive/folders/1RXaLAwJtAq_rJJJEgh7N3TMvnjlVE9Z0).
+They are converted to Parquet and joined to the WFS Marker records on
+mark-block number plus field number.
+
+The archive was received through *aktindsigt*. Its workbook metadata does not
+identify a publisher or request reference. It is not reproducible from the
+public WFS/ZIP releases alone, and it has no file for 2015.
+
 ### Data Collection Process
 
 #### WFS Service Integration
@@ -122,7 +138,8 @@ This workflow collects data from the Danish Agricultural Agency WFS service:
 - **Spatial Deduplication**: Identifies and handles duplicate or overlapping fields
 
 #### CVR Collection Integration
-- **Company Extraction**: Automatic extraction of CVR numbers from field data
+- **Company Extraction**: Automatic extraction of CVR numbers where present in
+  the public layer or supplied by the documented historical administrative extract
 - **CVR Validation**: Validation and standardization of company registration numbers
 - **Agricultural Business Mapping**: Links fields to agricultural businesses for analysis
 

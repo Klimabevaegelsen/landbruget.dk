@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Pesticide application data in the European Union is typically reported at company or regional level, limiting field-level environmental risk assessment. We present a method that matches company-level spray journal records to individual georeferenced agricultural fields by exploiting a shared administrative identifier (the Danish CVR company number) and crop code, with proportional dose allocation within a configurable area tolerance (default ±2%). Validated across 14 years of Danish government data (2010--2023), the method achieves 92.7% matching coverage in 2020, sustaining ≥90% from 2018 onward. Matching coverage measures the fraction of records successfully linked to georeferenced fields --- not allocation accuracy: only 19.6% of matched records receive unambiguous single-field allocations, while 80.4% are distributed proportionally across multiple fields. Tolerance sensitivity analysis reveals that relaxing tolerance from 0% to 0.5% produces the largest coverage gain (37--48% to 72--87%), identifying area rounding in spray journal reporting as the dominant mismatch source. The method requires no machine learning and produces auditable allocations, but the proportional dose distribution step relies on an unvalidated uniform-intensity assumption. All input data are Danish government administrative records; spray journal data was obtained through freedom of information requests and all other sources are publicly available.
+Pesticide application data in the European Union is typically reported at company or regional level, limiting field-level environmental risk assessment. We present a method that matches company-level spray journal records to individual georeferenced agricultural fields by exploiting a shared administrative identifier (the Danish CVR company number) and crop code, with proportional dose allocation within a configurable area tolerance (default ±2%). Validated across 14 years of Danish government data (2010--2023), the method achieves 92.7% matching coverage in 2020, sustaining ≥90% from 2018 onward. Matching coverage measures the fraction of records successfully linked to georeferenced fields --- not allocation accuracy: only 19.6% of matched records receive unambiguous single-field allocations, while 80.4% are distributed proportionally across multiple fields. Tolerance sensitivity analysis reveals that relaxing tolerance from 0% to 0.5% produces the largest coverage gain (37--48% to 72--87%), identifying area rounding in spray journal reporting as the dominant mismatch source. The method requires no machine learning and produces auditable allocations, but the proportional dose distribution step relies on an unvalidated uniform-intensity assumption. Input data are Danish government administrative records: spray journal data and the early-year field-CVR extract were obtained through freedom of information requests, while later FVM Marker layers are publicly available.
 
 **Keywords:** pesticide disaggregation, spatial resolution, area matching, Danish agriculture, field-level analysis, spray journal, administrative data linkage
 
@@ -36,7 +36,7 @@ None of these approaches exploit direct farm-identity linkage between applicatio
 
 ### 1.3 Contribution
 
-Denmark possesses two government datasets that, combined, provide the direct linkage that existing methods lack. The Sprøjtejournal (SJI) system requires all professional users managing more than 10 hectares to report pesticide applications annually, identifying each company by CVR number and crop code [Miljøstyrelsen, 2024]. The FVM Marker dataset provides georeferenced field boundaries using the same CVR and crop code classification [Landbrugsstyrelsen, 2024].
+Denmark possesses two government datasets that, combined, provide the direct linkage that existing methods lack. The Sprøjtejournal (SJI) system requires all professional users managing more than 10 hectares to report pesticide applications annually, identifying each company by CVR number and crop code [Miljøstyrelsen, 2024]. The FVM Marker dataset provides georeferenced field boundaries and crop classifications; for early years, the CVR linkage is supplied by a separate historical Fællesskema/IMK administrative extract rather than by the public Marker WFS itself [Landbrugsstyrelsen, 2024].
 
 This paper makes three contributions: (1) a data integration methodology that matches company-level pesticide records to individual fields using shared administrative identifiers, with proportional dose allocation and per-record quality scores; (2) empirical characterization across 14 years (2010--2023), demonstrating matching coverage exceeding 90% from 2018 onward; and (3) tolerance sensitivity analysis identifying area rounding as the dominant mismatch source. The pipeline is open-source, underlying the landbruget.dk transparency platform.
 
@@ -50,7 +50,7 @@ The SJI system is maintained by Miljøstyrelsen under the Danish Pesticide Actio
 
 ### 2.2 Field boundary data (FVM Marker)
 
-Published by Landbrugsstyrelsen via WFS at geodata.fvm.dk, FVM Marker contains 600,000--740,000 georeferenced field records per year. Each record includes: field identifier, CVR number, Fællesskema crop code, field area (hectares), organic farming indicator, and polygon geometry in EPSG:25832. The crop code system has been stable across the study period, with no wholesale reclassification.
+Published by Landbrugsstyrelsen via WFS at geodata.fvm.dk, FVM Marker contains 600,000--740,000 georeferenced field records per year. It provides field identifiers, Fællesskema crop codes, field area (hectares), and polygon geometry; CVR is natively available from 2016 onward. For field years 2005, 2007, and 2008--2014, we complete incomplete CVRs from a separate historical Fællesskema/IMK administrative extract. The SAS-generated source workbooks contain CVR, mark-block number, field number, crop, and area, and are joined to Marker on mark-block number plus field number. The archive was received through *aktindsigt*, does not retain a publisher or request reference in its workbook metadata, is not reproducible from the public WFS/ZIP layers alone, and does not cover 2015. The crop code system has been stable across the study period, with no wholesale reclassification.
 
 ### 2.3 Supporting datasets
 
@@ -61,7 +61,7 @@ The BMD pesticide product registry (bmd.mst.dk) provides product attributes incl
 | Source | Authority | Temporal range | Spatial resolution | Access |
 |--------|-----------|----------------|--------------------|--------|
 | SJI | Miljøstyrelsen | 2010--2023 | Company + crop | FOI request |
-| FVM Marker | Landbrugsstyrelsen | 2011--2024 | Individual field | geodata.fvm.dk (open) |
+| FVM Marker | Landbrugsstyrelsen | 2008--2024 | Individual field | WFS open; early CVR completion (2005, 2007, 2008--2014) from historical administrative extract |
 | BMD | Miljøstyrelsen | Continuously updated | Product level | bmd.mst.dk (open) |
 | BBR | SDFI | Continuously updated | Individual building | bbr.dk (open) |
 | GEUS VP4 | GEUS | 1981--2025 | Borehole | DOI: 10.22008/FK2/IHVDXL |
@@ -269,7 +269,7 @@ The method's principal limitation is the approximately 8--10% residual of record
 
 ## Data Availability Statement
 
-Input data are Danish government administrative records. Spray journal data (SJI) was obtained through freedom of information requests (*aktindsigt*) to Miljøstyrelsen and is not publicly available. Field boundary data (FVM Marker) is publicly available via geodata.fvm.dk. The BMD pesticide registry is at bmd.mst.dk. The GEUS VP4 dataset is accessible via DOI: 10.22008/FK2/IHVDXL. The pipeline and validation script are open-source at [repository URL].
+Input data are Danish government administrative records. Spray journal data (SJI) was obtained through freedom of information requests (*aktindsigt*) to Miljøstyrelsen and is not publicly available. Field-boundary geometries and published attributes are available through FVM Marker at geodata.fvm.dk. The early-year field-CVR completion files (2005, 2007, and 2008--2014) are separate historical Fællesskema/IMK extracts received through *aktindsigt*, retained in the [Fields archive](https://drive.google.com/drive/folders/1RXaLAwJtAq_rJJJEgh7N3TMvnjlVE9Z0), and not reproducible from the public WFS alone. The BMD pesticide registry is at bmd.mst.dk. The GEUS VP4 dataset is accessible via DOI: 10.22008/FK2/IHVDXL. The pipeline and validation script are open-source at [repository URL].
 
 ---
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { DynamicDataTable } from '@/components/table/dynamic-table';
 import { ColumnDef } from '@tanstack/react-table';
+import { DataTableFeatures } from '@/components/table/table-features';
 import { Building2, ExternalLink } from 'lucide-react';
 import { RankingItem } from '@/lib/rankings';
 import { getCategoryColor, getCategoryLabel } from '@/lib/category-utils';
@@ -31,7 +32,7 @@ export function IndividualRankingTable({
   const [isNavigating, setIsNavigating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const columns: ColumnDef<RankingItem>[] = [
+  const columns: ColumnDef<DataTableFeatures, RankingItem>[] = [
     {
       accessorKey: 'rank',
       header: 'Rang',

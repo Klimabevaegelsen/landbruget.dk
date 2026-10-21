@@ -26,6 +26,7 @@ export function featureToFieldSummary(
     ),
     other_applications: Number(props.other_applications ?? 0),
     other_products_detail: optionalString(props.other_products_detail),
+    cvr_number: optionalString(props.cvr_number),
     residential_buildings_proximity: optionalString(
       props.residential_buildings_proximity
     ),
