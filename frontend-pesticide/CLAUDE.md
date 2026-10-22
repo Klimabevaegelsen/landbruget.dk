@@ -17,7 +17,7 @@ npm run format:check  # oxfmt --check
 
 ## Architecture
 
-- **MapLibre GL** (`^5.6.1`) + **PMTiles** (`^3.2.1`) for base map tiles
+- **MapLibre GL** (`^6.15.0`) + **PMTiles** (`^3.2.1`) for base map tiles
 - **Zustand v5** for state management (6 stores — much heavier than main frontend)
 - **Framer Motion** (`^11.11.0`) for animations
 - **Chroma.js** (`^3.1.0`) for color scales

@@ -89,18 +89,25 @@ const loadMapLibreAndPMTiles = async () => {
     import('pmtiles'),
   ]);
 
+  maplibregl.setWorkerUrl(
+    new URL(
+      'maplibre-gl/dist/maplibre-gl-worker.mjs',
+      import.meta.url
+    ).toString()
+  );
+
   console.log('✅ MapLibre and PMTiles loaded successfully');
 
   // Register PMTiles protocol
   let protocolRegistered = false;
   if (!protocolRegistered) {
     const protocol = new Protocol();
-    maplibregl.default.addProtocol('pmtiles', protocol.tile);
+    maplibregl.addProtocol('pmtiles', protocol.tile);
     protocolRegistered = true;
     console.log('✅ PMTiles protocol registered');
   }
 
-  return maplibregl.default;
+  return maplibregl;
 };
 
 interface PMTilesMapProps {

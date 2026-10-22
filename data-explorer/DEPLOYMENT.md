@@ -653,12 +653,13 @@ chmod +x scripts/test-deployment.sh
 Access via: [Vercel Dashboard](https://vercel.com/dashboard) → Your Project → Analytics
 
 **Key Metrics to Monitor**:
-| Metric | Target | Alert Threshold |
-|--------|--------|-----------------|
-| Uptime | 99.9% | < 99% |
-| P95 Response Time | < 1s | > 3s |
-| Error Rate | < 0.1% | > 1% |
-| Build Success Rate | 100% | < 95% |
+
+| Metric             | Target | Alert Threshold |
+| ------------------ | ------ | --------------- |
+| Uptime             | 99.9%  | < 99%           |
+| P95 Response Time  | < 1s   | > 3s            |
+| Error Rate         | < 0.1% | > 1%            |
+| Build Success Rate | 100%   | < 95%           |
 
 ### Cloudflare Analytics
 
@@ -891,20 +892,22 @@ Estimated usage for 1,000 active users:
 ### Scaling Costs
 
 **At 10,000 active users**:
-| Resource | Monthly Cost |
-|----------|--------------|
-| Vercel (Pro) | $20-50 |
-| Cloudflare R2 | $5-10 |
-| Gemini API | $50-100 |
-| **Total** | **$75-160/month** |
+
+| Resource      | Monthly Cost      |
+| ------------- | ----------------- |
+| Vercel (Pro)  | $20-50            |
+| Cloudflare R2 | $5-10             |
+| Gemini API    | $50-100           |
+| **Total**     | **$75-160/month** |
 
 **At 100,000 active users**:
-| Resource | Monthly Cost |
-|----------|--------------|
-| Vercel (Enterprise) | $500-1,000 |
-| Cloudflare R2 | $50-100 |
-| Gemini API | $500-1,000 |
-| **Total** | **$1,050-2,100/month** |
+
+| Resource            | Monthly Cost           |
+| ------------------- | ---------------------- |
+| Vercel (Enterprise) | $500-1,000             |
+| Cloudflare R2       | $50-100                |
+| Gemini API          | $500-1,000             |
+| **Total**           | **$1,050-2,100/month** |
 
 ---
 

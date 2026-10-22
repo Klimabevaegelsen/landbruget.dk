@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useMemo } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+maplibregl.setWorkerUrl(
+  new URL("maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).toString(),
+);
 
 interface MapViewProps {
   data: Record<string, unknown>[];
