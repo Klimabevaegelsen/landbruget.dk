@@ -13,7 +13,7 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 exclude-newer = "7 days"
-exclude-newer-package = { certifi = false, coverage = false, pypdf = false, click = false, geopandas = false, google-api-python-client = false, google-auth = false, pyarrow = false, pyogrio = false }
+exclude-newer-package = { aiohttp = false, certifi = false, coverage = false, httplib2 = false, idna = false, multidict = false, oauthlib = false, pillow = false, pyasn1 = false, pygments = false, pypdf = false, python-dotenv = false, soupsieve = false, urllib3 = false, virtualenv = false, click = false, geopandas = false, google-api-python-client = false, google-auth = false, pyarrow = false, pyogrio = false }
 environments = [
     "sys_platform == 'darwin' and python_version >= '3.11' and python_version < '3.13'",
     "sys_platform == 'linux' and python_version >= '3.11' and python_version < '3.13'",
@@ -26,6 +26,7 @@ constraint-dependencies = [
     "s3fs>=2026.3.0",
     "ruff>=0.15.10",
     "ty>=0.0.29",
+    "soupsieve<3",
 ]
 
 [tool.uv.workspace]
