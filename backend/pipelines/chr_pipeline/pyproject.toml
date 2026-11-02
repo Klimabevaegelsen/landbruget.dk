@@ -13,7 +13,7 @@ dependencies = [
     "certifi>=2026.10.19",
     "click>=8.4.2",
     "lxml>=6.1.1,<6.2",
-    "xmlsec==1.3.17",
+    "xmlsec==1.3.18",
     "s3fs",
     "python-dotenv>=1.1.1,<1.3.0",
     "cryptography>=50.0.0",
